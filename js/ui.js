@@ -1,4 +1,16 @@
 (() => {
+  const sideNav = document.querySelector(".side-nav");
+  if (sideNav && !sideNav.querySelector('a[href="quiz-generator.html"]')) {
+    const quizLink = document.createElement("a");
+    quizLink.className = "nav-item";
+    quizLink.href = "quiz-generator.html";
+    quizLink.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/><path d="m15 11 1.5 1.5L19 10"/></svg>';
+    quizLink.append("Quiz Generator");
+    const schedulerLink = sideNav.querySelector('a[href="topic-scheduler.html"]');
+    if (schedulerLink) schedulerLink.after(quizLink);
+    else sideNav.append(quizLink);
+  }
+
   const drawer = document.getElementById("drawer");
   const menuBtn = document.getElementById("menuBtn");
   if (drawer && menuBtn) {

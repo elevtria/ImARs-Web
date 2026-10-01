@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Quiz Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/quiz-generator.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <button class="icon-btn" id="menuBtn" type="button" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+          </button>
+          <span class="page-title">Quiz Generator</span>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn bell" type="button" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" /><path d="M9.5 17a2.5 2.5 0 0 0 5 0" /></svg>
+            <span class="dot"></span>
+          </button>
+          <span class="sy-chip">SY 2026–27</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content quiz-content">
+      <section class="hero quiz-hero">
+        <div>
+          <p class="quiz-eyebrow">TEACHER TOOLS</p>
+          <h1>Quiz Generator</h1>
+          <p>Create a quiz from your learning material, review every AI suggestion, and edit it before learners can access it.</p>
+        </div>
+        <button class="ghost-btn" id="openLibrary" type="button">My quizzes <span class="quiz-library-count" id="libraryCount">0</span></button>
+      </section>
+
+      <div class="quiz-view-tabs" role="tablist" aria-label="Quiz generator views">
+        <button class="quiz-view-tab active" id="createTab" type="button" role="tab" aria-selected="true">Create a quiz</button>
+        <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
+      </div>
+
+      <section id="createView" class="quiz-view">
+        <ol class="quiz-stepper" aria-label="Quiz creation progress">
+          <li class="active" data-step-indicator="setup"><span>1</span><b>Set up</b></li>
+          <i aria-hidden="true"></i>
+          <li data-step-indicator="review"><span>2</span><b>Review AI questions</b></li>
+          <i aria-hidden="true"></i>
+          <li data-step-indicator="editor"><span>3</span><b>Edit and publish</b></li>
+        </ol>
+
+        <section class="quiz-step-pane" id="setupStep">
+          <div class="quiz-panel-heading">
+            <div><span class="quiz-section-tag">STEP 1</span><h2>Set up your quiz</h2><p>Choose one section and tell AI what kind of questions to create.</p></div>
+          </div>
+
+          <div class="quiz-setup-grid">
+            <div class="quiz-upload-column">
+              <label class="quiz-field-label" for="quizFile">Learning material</label>
+              <label class="quiz-dropzone" id="quizDropzone" for="quizFile" tabindex="0">
+                <input id="quizFile" type="file" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
+                <span class="quiz-upload-icon" aria-hidden="true">
+                  <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
+                </span>
+                <strong>Drop a file here or <span>browse</span></strong>
+              <small>PDF, DOCX, or PPTX · save older PPT files as PPTX or PDF first</small>
+              </label>
+              <div class="quiz-file-selected" id="selectedFileRow" hidden>
+                <span class="quiz-file-type" id="fileTypeBadge">PDF</span>
+                <span class="quiz-file-name" id="selectedFileName"></span>
+                <button class="quiz-icon-action" id="removeFile" type="button" aria-label="Remove uploaded file">×</button>
+              </div>
+              <p class="quiz-help-text" id="uploadHelp">Your learning content is sent to our AI service to generate questions. ImARs does not save the original file.</p>
+            </div>
+
+            <div class="quiz-config-column">
+              <div class="quiz-field">
+                <label class="quiz-field-label" for="quizTitle">Quiz title</label>
+                <input class="quiz-input" id="quizTitle" type="text" maxlength="90" placeholder="e.g. Matter and its properties" />
+              </div>
+              <div class="quiz-field">
+                <label class="quiz-field-label" for="quizSection">Section</label>
+                <select class="quiz-input" id="quizSection" required></select>
+                <small class="quiz-field-hint">The quiz will appear in this section. No lesson link is needed.</small>
+              </div>
+              <div class="quiz-settings-row">
+                <div class="quiz-field">
+                  <label class="quiz-field-label" for="questionCount">Number of questions <span class="quiz-limit">Max 50</span></label>
+                  <div class="quiz-stepper-input"><button type="button" data-count-change="-1" aria-label="Decrease question count">−</button><input class="quiz-input" id="questionCount" type="number" min="1" max="50" value="10" inputmode="numeric"/><button type="button" data-count-change="1" aria-label="Increase question count">+</button></div>
+                </div>
+                <div class="quiz-field">
+                  <span class="quiz-field-label">Difficulty</span>
+                  <div class="quiz-choice-row" id="difficultyChoices" role="group" aria-label="Difficulty">
+                    <button type="button" class="quiz-choice" data-difficulty="Easy" aria-pressed="false">Easy</button>
+                    <button type="button" class="quiz-choice selected" data-difficulty="Medium" aria-pressed="true">Medium</button>
+                    <button type="button" class="quiz-choice" data-difficulty="Hard" aria-pressed="false">Hard</button>
+                  </div>
+                </div>
+              </div>
+              <fieldset class="quiz-field quiz-type-field">
+                <legend class="quiz-field-label">Question type</legend>
+                <div class="quiz-type-options">
+                  <label class="quiz-type-option selected"><input type="radio" name="questionType" value="multiple-choice" checked /><span class="quiz-type-icon">A</span><span><b>Multiple choice</b><small>Choose one correct answer</small></span></label>
+                  <label class="quiz-type-option"><input type="radio" name="questionType" value="true-false" /><span class="quiz-type-icon quiz-type-icon-tf">T/F</span><span><b>True or false</b><small>Choose true or false</small></span></label>
+                </div>
+              </fieldset>
+            </div>
+          </div>
+
+          <div class="quiz-panel-footer">
+            <span class="quiz-lock-note"><span aria-hidden="true">◉</span> New quizzes start as drafts and stay locked until you choose to release them.</span>
+            <button class="primary-btn quiz-primary" id="generateQuiz" type="button"><span>Generate quiz</span></button>
+          </div>
+          <p class="quiz-status" id="setupStatus" role="status" aria-live="polite"></p>
+        </section>
+
+        <section class="quiz-step-pane" id="reviewStep" hidden>
+          <div class="quiz-panel-heading quiz-review-heading">
+            <div><span class="quiz-section-tag">STEP 2</span><h2>Review AI suggestions</h2><p>Accept the questions you want. You can edit them on the next screen.</p></div>
+            <span class="quiz-demo-badge"><i></i> AI generated · review before saving</span>
+          </div>
+          <div class="quiz-review-summary" id="reviewSummary"></div>
+          <div class="quiz-demo-note" id="demoNotice"><b>Review carefully:</b> AI-generated questions and answers can contain mistakes.</div>
+          <div class="quiz-suggestions" id="suggestionsList"></div>
+          <div class="quiz-review-footer">
+            <button class="btn-ghost" id="discardAll" type="button">Discard all</button>
+            <div><span id="acceptedCount">0 accepted</span><button class="primary-btn quiz-primary" id="acceptAll" type="button">Accept all (0) <span aria-hidden="true">→</span></button></div>
+          </div>
+        </section>
+
+        <section class="quiz-step-pane" id="editorStep" hidden>
+          <div class="quiz-panel-heading quiz-editor-heading">
+            <div><span class="quiz-section-tag">STEP 3</span><h2>Edit your quiz</h2><p>Review wording and answers before you save or release the quiz.</p></div>
+            <span class="quiz-editor-meta" id="editorMeta"></span>
+          </div>
+          <div class="quiz-editor-toolbar">
+            <div class="quiz-field quiz-editor-title-field"><label class="quiz-field-label" for="editorTitle">Quiz title</label><input class="quiz-input" id="editorTitle" type="text" maxlength="90" /></div>
+            <div class="quiz-editor-section"><span class="quiz-field-label">Section</span><b id="editorSectionName"></b></div>
+          </div>
+          <div class="quiz-demo-note" id="editorDemoNotice"><b>Review carefully:</b> Check every question and correct answer before saving.</div>
+          <div class="quiz-question-editor-list" id="questionEditorList"></div>
+          <button class="quiz-add-question" id="addQuestion" type="button"><span>＋</span> Add question <small id="questionLimitText">0 / 50</small></button>
+
+          <section class="quiz-availability-card">
+            <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose how this quiz becomes available in its section.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
+            <div class="quiz-release-options">
+              <label class="quiz-release-option selected"><input type="radio" name="availability" value="draft" checked /><span class="quiz-release-radio"></span><span><b>Save as draft</b><small>Only you can see it. It stays locked for learners.</small></span></label>
+              <label class="quiz-release-option"><input type="radio" name="availability" value="now" /><span class="quiz-release-radio"></span><span><b>Available now</b><small>Learners in this section can open it after you save.</small></span></label>
+              <label class="quiz-release-option"><input type="radio" name="availability" value="scheduled" /><span class="quiz-release-radio"></span><span><b>Schedule</b><small>Keep it locked until a date and time.</small></span></label>
+            </div>
+            <div class="quiz-schedule-fields" id="scheduleFields" hidden><label class="quiz-field-label" for="availableAt">Available starting</label><input class="quiz-input" id="availableAt" type="datetime-local" /><small>Uses your device’s local time.</small></div>
+          </section>
+
+          <div class="quiz-editor-footer">
+            <button class="btn-ghost" id="backToReview" type="button">← Back to review</button>
+            <button class="primary-btn quiz-primary" id="saveQuiz" type="button">Save quiz</button>
+          </div>
+          <p class="quiz-status" id="editorStatus" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+
+      <section id="libraryView" class="quiz-view" hidden>
+        <div class="quiz-library-heading"><div><span class="quiz-section-tag">YOUR QUIZZES</span><h2>Quiz library</h2><p>Manage drafts, scheduled quizzes, and quizzes available to learners.</p></div><button class="primary-btn quiz-primary" id="newQuizFromLibrary" type="button">＋ Create quiz</button></div>
+        <p class="quiz-status" id="libraryStatus" role="status" aria-live="polite"></p>
+        <div id="quizLibraryList" class="quiz-library-list"></div>
+        <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false">
+    <div class="quiz-generation-card" role="status" aria-live="polite" aria-atomic="true">
+      <img class="quiz-generation-logo" src="assets/imars-loader-transparent.png" alt="" aria-hidden="true" />
+      <p class="quiz-generation-title" id="quizGenerationTitle">Generating your quiz</p>
+      <p class="quiz-generation-detail" id="quizGenerationDetail">Please wait while we prepare your questions.</p>
+      <span class="quiz-generation-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+  </div>
+
+  <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <div class="brand"><img class="brand-mark" src="assets/imars-logo.png" alt="ImARs logo" /><div><strong>ImARs</strong><small>Teacher Portal</small></div></div>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg>Dashboard</a>
+        <a class="nav-item" href="topic-scheduler.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>Topic Scheduler</a>
+        <a class="nav-item active" href="quiz-generator.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/><path d="m15 11 1.5 1.5L19 10"/></svg>Quiz Generator</a>
+        <a class="nav-item" href="analytics.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Analytics</a>
+        <a class="nav-item" href="student-records.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>Student Records</a>
+        <a class="nav-item" href="batch-upload.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5m-4 4 4-4 4 4M4 19h16"/></svg>Batch Upload</a>
+        <a class="nav-item" href="offline-sync.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8M20 4v4h-4M20 12a8 8 0 0 1-13.7 5.6L4 16M4 20v-4h4"/></svg>Offline sync &amp; AR Markers</a>
+        <a class="nav-item" href="scan-qr-ar.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>Scan QR / AR</a>
+        <a class="nav-item" href="teacher-manual.html"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>Teacher Manual</a>
+      </nav>
+      <div class="side-user"><div class="user-avatar">MR</div><div class="user-meta"><strong>Ma'am Reyes</strong><small>Science · Gr. 8 Mali...</small></div><div class="account"><button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button><div class="account-menu" id="accountMenu" hidden><a href="login.html">Log out</a></div></div></div>
+    </div>
+  </aside>
+  <script src="js/ui.js"></script>
+  <script type="module" src="js/quiz-generator.js"></script>
+</body>
+</html>
