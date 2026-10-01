@@ -40,15 +40,8 @@
       <section class="hero">
         <div>
           <h1>Class Analytics</h1>
-          <p>Performance overview — Term 2 · All Sections (<span id="studentCount">6</span> students)</p>
+          <p>Performance overview — Term 2 · <span id="sectionSummary">All Sections</span> (<span id="studentCount">6</span> students)</p>
         </div>
-        <label class="select-wrap">
-          <select id="sectionFilter" aria-label="Filter by section">
-            <option value="all">All Sections</option>
-            <option value="malinao">Grade 8 – Malinao</option>
-          </select>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </label>
       </section>
 
       <section class="card section">
@@ -85,8 +78,18 @@
       </section>
 
       <section class="section" style="padding: 8px 4px 20px;">
-        <div class="section-head">
+        <div class="section-head performance-head">
           <h2>Individual Student Performance</h2>
+        </div>
+        <div class="performance-controls">
+          <label class="select-wrap">
+            <select id="sectionFilter" aria-label="Filter by section">
+              <option value="all">All Sections</option>
+              <option value="malinao">Grade 8 – Malinao</option>
+              <option value="sampaguita">Grade 8 – Sampaguita</option>
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
           <label class="search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7" />
@@ -95,176 +98,21 @@
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
           </label>
         </div>
-        <div class="students" id="studentGrid">
-          <article class="student-card card" data-name="ana cruz" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">AC</div>
-              <div>
-                <strong>Ana Cruz</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="230.7 289.03" />
-                </svg>
-                <div class="mini-label"><strong>80%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="289.03 289.03" />
-                </svg>
-                <div class="mini-label"><strong>100%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+20%</b></div>
-          </article>
-
-          <article class="student-card card" data-name="brian doe" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">BD</div>
-              <div>
-                <strong>Brian Doe</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="173.4 289.03" />
-                </svg>
-                <div class="mini-label"><strong>60%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="260.1 289.03" />
-                </svg>
-                <div class="mini-label"><strong>90%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+30%</b></div>
-          </article>
-
-          <article class="student-card card" data-name="carla martinez" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">CM</div>
-              <div>
-                <strong>Carla Martinez</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="202.3 289.03" />
-                </svg>
-                <div class="mini-label"><strong>70%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="231.2 289.03" />
-                </svg>
-                <div class="mini-label"><strong>80%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+10%</b></div>
-          </article>
-
-          <article class="student-card card" data-name="daniel reyes" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">DR</div>
-              <div>
-                <strong>Daniel Reyes</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="144.5 289.03" />
-                </svg>
-                <div class="mini-label"><strong>50%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="260.1 289.03" />
-                </svg>
-                <div class="mini-label"><strong>90%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+40%</b></div>
-          </article>
-
-          <article class="student-card card" data-name="erika santos" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">ES</div>
-              <div>
-                <strong>Erika Santos</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="260.1 289.03" />
-                </svg>
-                <div class="mini-label"><strong>90%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="289.03 289.03" />
-                </svg>
-                <div class="mini-label"><strong>100%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+10%</b></div>
-          </article>
-
-          <article class="student-card card" data-name="francis lim" data-section="malinao">
-            <div class="student-head">
-              <div class="avatar">FL</div>
-              <div>
-                <strong>Francis Lim</strong>
-                <small>Grade 8 – Malinao</small>
-              </div>
-            </div>
-            <div class="progress-pair">
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#3b82f6" stroke-dasharray="115.6 289.03" />
-                </svg>
-                <div class="mini-label"><strong>40%</strong><span>Pre-Test</span></div>
-              </div>
-              <span class="arrow">→</span>
-              <div class="mini-wrap mini-donut">
-                <svg viewBox="0 0 120 120">
-                  <circle class="track" cx="60" cy="60" r="46" />
-                  <circle class="bar" cx="60" cy="60" r="46" stroke="#22c55e" stroke-dasharray="202.3 289.03" />
-                </svg>
-                <div class="mini-label"><strong>70%</strong><span>Post-Test</span></div>
-              </div>
-            </div>
-            <div class="improve"><span>Improvement</span><b>+30%</b></div>
-          </article>
-
-          <p class="empty" id="emptyState">No students match that search.</p>
+        <div class="performance-table-wrap">
+          <table class="performance-table" id="studentGrid">
+            <thead>
+              <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Improvement</th></tr>
+            </thead>
+            <tbody>
+              <tr class="student-row" data-name="ana cruz" data-section="malinao"><th scope="row"><span class="table-avatar">AC</span>Ana Cruz</th><td>Grade 8 – Malinao</td><td>80%</td><td>100%</td><td><span class="improvement-value">+20%</span></td></tr>
+              <tr class="student-row" data-name="brian doe" data-section="malinao"><th scope="row"><span class="table-avatar">BD</span>Brian Doe</th><td>Grade 8 – Malinao</td><td>60%</td><td>90%</td><td><span class="improvement-value">+30%</span></td></tr>
+              <tr class="student-row" data-name="carla martinez" data-section="malinao"><th scope="row"><span class="table-avatar">CM</span>Carla Martinez</th><td>Grade 8 – Malinao</td><td>70%</td><td>80%</td><td><span class="improvement-value">+10%</span></td></tr>
+              <tr class="student-row" data-name="daniel reyes" data-section="malinao"><th scope="row"><span class="table-avatar">DR</span>Daniel Reyes</th><td>Grade 8 – Malinao</td><td>50%</td><td>90%</td><td><span class="improvement-value">+40%</span></td></tr>
+              <tr class="student-row" data-name="erika santos" data-section="malinao"><th scope="row"><span class="table-avatar">ES</span>Erika Santos</th><td>Grade 8 – Malinao</td><td>90%</td><td>100%</td><td><span class="improvement-value">+10%</span></td></tr>
+              <tr class="student-row" data-name="francis lim" data-section="malinao"><th scope="row"><span class="table-avatar">FL</span>Francis Lim</th><td>Grade 8 – Malinao</td><td>40%</td><td>70%</td><td><span class="improvement-value">+30%</span></td></tr>
+              <tr class="empty-row" id="emptyState" hidden><td colspan="5">No students match that search.</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
