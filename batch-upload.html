@@ -52,6 +52,7 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </span>
         </label>
+        <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button">＋ Add Section</button>
       </section>
 
       <div class="banner">
@@ -127,8 +128,10 @@
           <h3 id="dropTitle">Drag &amp; drop your Excel file here</h3>
           <p id="dropHint">or click to browse · .xlsx, .csv supported</p>
           <button class="btn-purple" id="browseBtn" type="button">Browse File</button>
+          <button class="btn-green import-btn" id="importBtn" type="button" hidden>Confirm Import</button>
         </div>
       </div>
+      <p class="upload-status" id="uploadStatus" aria-live="polite" hidden></p>
       <input class="file-input" id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
     </main>
   </div>
@@ -200,6 +203,29 @@
       <p>Point the camera at a lesson marker to open the AR module.</p>
       <div class="qr-box">QR / AR Scanner</div>
       <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
+    </div>
+  </div>
+  <div class="modal" id="sectionModal">
+    <form class="modal-card section-form" id="sectionForm" role="dialog" aria-modal="true" aria-labelledby="sectionModalTitle">
+      <h3 id="sectionModalTitle">Add a class section</h3>
+      <p>Create a section option for student uploads.</p>
+      <label for="newSectionName">Section name</label>
+      <input id="newSectionName" name="sectionName" type="text" maxlength="60" placeholder="e.g. Grade 8 – Sampaguita" required />
+      <div class="modal-actions">
+        <button class="btn-ghost" id="cancelAddSection" type="button">Cancel</button>
+        <button class="btn-green" type="submit">Add Section</button>
+      </div>
+    </form>
+  </div>
+  <div class="modal" id="importModal">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
+      <h3 id="importModalTitle">Confirm student import</h3>
+      <p id="importSummary"></p>
+      <p class="prototype-note">This prototype confirms the upload flow. It does not save student rows to a school database.</p>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="cancelImport" type="button">Cancel</button>
+        <button class="btn-green" id="confirmImport" type="button">Confirm Import</button>
+      </div>
     </div>
   </div>
   <script src="js/ui.js"></script>
