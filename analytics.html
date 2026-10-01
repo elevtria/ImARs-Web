@@ -40,38 +40,41 @@
       <section class="hero">
         <div>
           <h1>Class Analytics</h1>
-          <p>Performance overview — Term 2 · <span id="sectionSummary">All Sections</span> (<span id="studentCount">6</span> students)</p>
+          <p>Performance overview — Term 1 · <span id="sectionSummary">Loading...</span> (<span id="studentCount">0</span> students)</p>
         </div>
       </section>
 
       <section class="card section">
         <h2>Overall Class Average</h2>
         <div class="overall">
-          <div class="donut" aria-label="89 percent post-test average">
+          <div class="donut" aria-label="post-test average">
             <svg viewBox="0 0 120 120">
               <circle class="track" cx="60" cy="60" r="46" />
-              <circle class="bar" cx="60" cy="60" r="46" stroke="#81A2C1" stroke-dasharray="256.7 289.03" />
+              <!-- Added id="donutRing" for the SVG math -->
+              <circle id="donutRing" class="bar" cx="60" cy="60" r="46" stroke="#81A2C1" stroke-dasharray="0 289.03" />
             </svg>
             <div class="donut-label">
-              <strong>89%</strong>
+              <!-- Added id="donutValue" -->
+              <strong id="donutValue">0%</strong>
               <span>post-test avg</span>
             </div>
           </div>
           <div class="meters">
             <div class="meter-row">
               <span>Pre-Test Average</span>
-              <b>65%</b>
-              <div class="track"><div class="fill blue" style="width:65%"></div></div>
+              <!-- Added IDs for values and fill widths -->
+              <b id="overallPreVal">0%</b>
+              <div class="track"><div id="overallPreFill" class="fill blue" style="width:0%"></div></div>
             </div>
             <div class="meter-row">
               <span>Post-Test Average</span>
-              <b class="c-green">89%</b>
-              <div class="track"><div class="fill green" style="width:89%"></div></div>
+              <b class="c-green" id="overallPostVal">0%</b>
+              <div class="track"><div id="overallPostFill" class="fill green" style="width:0%"></div></div>
             </div>
             <div class="meter-row">
               <span>Average Improvement</span>
-              <b class="c-purple">24%</b>
-              <div class="track"><div class="fill purple" style="width:24%"></div></div>
+              <b class="c-purple" id="overallImpVal">0%</b>
+              <div class="track"><div id="overallImpFill" class="fill purple" style="width:0%"></div></div>
             </div>
           </div>
         </div>
@@ -85,8 +88,6 @@
           <label class="select-wrap">
             <select id="sectionFilter" aria-label="Filter by section">
               <option value="all">All Sections</option>
-              <option value="malinao">Grade 8 – Malinao</option>
-              <option value="sampaguita">Grade 8 – Sampaguita</option>
             </select>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </label>
@@ -103,19 +104,15 @@
             <thead>
               <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Improvement</th></tr>
             </thead>
-            <tbody>
-              <tr class="student-row" data-name="ana cruz" data-section="malinao"><th scope="row"><span class="table-avatar">AC</span>Ana Cruz</th><td>Grade 8 – Malinao</td><td>80%</td><td>100%</td><td><span class="improvement-value">+20%</span></td></tr>
-              <tr class="student-row" data-name="brian doe" data-section="malinao"><th scope="row"><span class="table-avatar">BD</span>Brian Doe</th><td>Grade 8 – Malinao</td><td>60%</td><td>90%</td><td><span class="improvement-value">+30%</span></td></tr>
-              <tr class="student-row" data-name="carla martinez" data-section="malinao"><th scope="row"><span class="table-avatar">CM</span>Carla Martinez</th><td>Grade 8 – Malinao</td><td>70%</td><td>80%</td><td><span class="improvement-value">+10%</span></td></tr>
-              <tr class="student-row" data-name="daniel reyes" data-section="malinao"><th scope="row"><span class="table-avatar">DR</span>Daniel Reyes</th><td>Grade 8 – Malinao</td><td>50%</td><td>90%</td><td><span class="improvement-value">+40%</span></td></tr>
-              <tr class="student-row" data-name="erika santos" data-section="malinao"><th scope="row"><span class="table-avatar">ES</span>Erika Santos</th><td>Grade 8 – Malinao</td><td>90%</td><td>100%</td><td><span class="improvement-value">+10%</span></td></tr>
-              <tr class="student-row" data-name="francis lim" data-section="malinao"><th scope="row"><span class="table-avatar">FL</span>Francis Lim</th><td>Grade 8 – Malinao</td><td>40%</td><td>70%</td><td><span class="improvement-value">+30%</span></td></tr>
+            <!-- Added id="studentTableBody" and cleared out hardcoded students -->
+            <tbody id="studentTableBody">
               <tr class="empty-row" id="emptyState" hidden><td colspan="5">No students match that search.</td></tr>
             </tbody>
           </table>
         </div>
       </section>
 
+      <!-- Topics Section omitted from JS generation for now to focus on the main stats -->
       <section class="card section">
         <h2>Topic Completion Rate</h2>
         <div class="topics">
@@ -231,7 +228,9 @@
       <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
     </div>
   </div>
+  
   <script src="js/ui.js"></script>
-  <script src="js/analytics.js"></script>
+  <!-- Updated to type="module" -->
+  <script type="module" src="js/analytics.js"></script>
 </body>
 </html>

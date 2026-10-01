@@ -9,6 +9,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="js/tailwind.config.js"></script>
+  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -54,8 +56,22 @@
             <span class="corner tr"></span>
             <span class="corner bl"></span>
             <span class="corner br"></span>
-            <video id="camera" autoplay playsinline muted></video>
-            <div class="finder-copy">
+            
+            <!-- NEW AR SCENE CONTAINER (Hidden by default) -->
+            <div id="ar-container" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: none;">
+              <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;" vr-mode-ui="enabled: false">
+                
+                <!-- The AR Marker (Using the default 'Hiro' marker for testing) -->
+                <a-marker preset="hiro" id="lesson-marker">
+                  <!-- A 3D object that appears on the marker. Replace with your GLTF model later -->
+                  <a-box position="0 0.5 0" material="color: #7c3aed;" animation="property: rotation; to: 0 360 0; loop: true; dur: 3000"></a-box>
+                </a-marker>
+                
+                <a-entity camera></a-entity>
+              </a-scene>
+            </div>
+
+            <div class="finder-copy" id="finderCopy">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7289" stroke-width="1.8" style="margin:0 auto 8px;">
                 <rect x="4" y="4" width="7" height="7" rx="1.2" />
                 <rect x="13" y="4" width="7" height="7" rx="1.2" />
@@ -72,26 +88,9 @@
 
       <section class="recent-card">
         <h2>Recent Scans</h2>
-        <div class="scan-row">
-          <div>
-            <strong>Cell Structure</strong>
-            <small>2 hours ago</small>
-          </div>
-          <span class="tag tag-ar">AR</span>
-        </div>
-        <div class="scan-row">
-          <div>
-            <strong>Photosynthesis</strong>
-            <small>Yesterday 2:14 PM</small>
-          </div>
-          <span class="tag tag-qr">QR</span>
-        </div>
-        <div class="scan-row">
-          <div>
-            <strong>Human Organ Systems</strong>
-            <small>Sep 20, 2026</small>
-          </div>
-          <span class="tag tag-ar">AR</span>
+        <!-- Replaced hardcoded scans with an empty container for JS injection -->
+        <div id="recentScansList">
+          <p class="muted center" style="margin-top: 20px;">Loading recent scans...</p>
         </div>
       </section>
     </main>
@@ -157,7 +156,9 @@
       </div>
     </div>
   </aside>
+
   <script src="js/ui.js"></script>
-  <script src="js/scan-qr-ar.js"></script>
+  <!-- Updated to module to support Firebase -->
+  <script type="module" src="js/scan-qr-ar.js"></script>
 </body>
 </html>

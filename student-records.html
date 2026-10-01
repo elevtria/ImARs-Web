@@ -51,127 +51,12 @@
         </label>
       </section>
 
-      <article class="record" data-name="ana cruz">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">AC</div>
-            <div>
-              <strong>Ana Cruz</strong>
-              <small>Grade 8 – Malinao · Last active Sep 20, 2026</small>
-            </div>
-          </div>
-          <span class="overall">94% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">142 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">89 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">80%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">100%</b></div>
-        </div>
-        <div class="bar" aria-label="94 percent overall"><i style="width:94%"></i></div>
-      </article>
+      <!-- Dynamic Student Records Container -->
+      <div id="recordsContainer">
+        <!-- Records will be injected here by JS -->
+      </div>
 
-      <article class="record" data-name="brian doe">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">BD</div>
-            <div>
-              <strong>Brian Doe</strong>
-              <small>Grade 8 – Malinao · Last active Sep 19, 2026</small>
-            </div>
-          </div>
-          <span class="overall">78% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">98 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">67 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">60%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">90%</b></div>
-        </div>
-        <div class="bar" aria-label="78 percent overall"><i style="width:78%"></i></div>
-      </article>
-
-      <article class="record" data-name="carla martinez">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">CM</div>
-            <div>
-              <strong>Carla Martinez</strong>
-              <small>Grade 8 – Malinao · Last active Sep 21, 2026</small>
-            </div>
-          </div>
-          <span class="overall">78% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">115 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">80 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">70%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">80%</b></div>
-        </div>
-        <div class="bar" aria-label="78 percent overall"><i style="width:78%"></i></div>
-      </article>
-
-      <article class="record" data-name="daniel reyes">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">DR</div>
-            <div>
-              <strong>Daniel Reyes</strong>
-              <small>Grade 8 – Malinao · Last active Sep 22, 2026</small>
-            </div>
-          </div>
-          <span class="overall">82% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">200 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">140 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">50%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">90%</b></div>
-        </div>
-        <div class="bar" aria-label="82 percent overall"><i style="width:82%"></i></div>
-      </article>
-
-      <article class="record" data-name="erika santos">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">ES</div>
-            <div>
-              <strong>Erika Santos</strong>
-              <small>Grade 8 – Malinao · Last active Sep 18, 2026</small>
-            </div>
-          </div>
-          <span class="overall">96% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">150 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">92 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">90%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">100%</b></div>
-        </div>
-        <div class="bar" aria-label="96 percent overall"><i style="width:96%"></i></div>
-      </article>
-
-      <article class="record" data-name="francis lim">
-        <div class="record-head">
-          <div class="student">
-            <div class="avatar">FL</div>
-            <div>
-              <strong>Francis Lim</strong>
-              <small>Grade 8 – Malinao · Last active Sep 17, 2026</small>
-            </div>
-          </div>
-          <span class="overall">58% overall</span>
-        </div>
-        <div class="stats">
-          <div class="stat"><span>AR Time</span><b class="c-pink">88 min</b></div>
-          <div class="stat"><span>Module Time</span><b class="c-cyan">54 min</b></div>
-          <div class="stat"><span>Pre-Test</span><b class="c-amber">40%</b></div>
-          <div class="stat"><span>Post-Test</span><b class="c-green">70%</b></div>
-        </div>
-        <div class="bar" aria-label="58 percent overall"><i style="width:58%"></i></div>
-      </article>
-
-      <p class="empty" id="emptyState">No students match that search.</p>
+      <p class="empty" id="emptyState" hidden>No students match that search.</p>
     </main>
   </div>
 
@@ -244,7 +129,9 @@
       <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
     </div>
   </div>
+
   <script src="js/ui.js"></script>
-  <script src="js/student-records.js"></script>
+  <!-- Script converted to module -->
+  <script type="module" src="js/student-records.js"></script>
 </body>
 </html>
