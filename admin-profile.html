@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>ImARs · Admin Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin-dashboard.css" />
+  <link rel="stylesheet" href="css/admin-profile.css" />
+</head>
+<body>
+  <header class="admin-topbar">
+    <div class="admin-topbar-inner">
+      <div class="admin-topbar-left">
+        <button class="menu-button" id="adminMenuButton" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="adminNavigation">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <span class="current-page">Admin Profile</span>
+      </div>
+      <div class="admin-topbar-right">
+        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
+          <span class="notification-dot" aria-hidden="true"></span>
+        </button>
+        <span class="admin-year">Admin · SY 2026–27</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="admin-drawer" id="adminNavigation" aria-hidden="true">
+    <div class="admin-drawer-panel" role="navigation" aria-label="Admin portal">
+      <div class="admin-drawer-heading">
+        <div class="drawer-brand"><img class="admin-brand-mark" src="assets/imars-logo.png" alt="" /><div><strong>ImARs</strong><small>School Admin</small></div></div>
+        <button class="drawer-close" id="adminDrawerClose" type="button" aria-label="Close navigation">×</button>
+      </div>
+      <nav class="admin-side-nav">
+        <a class="admin-nav-link" href="admin-dashboard.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="admin-nav-link" href="manage-teachers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="admin-nav-link active" href="admin-profile.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
+      </nav>
+      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
+    </div>
+  </aside>
+
+  <main class="dashboard-content profile-content">
+    <section class="profile-heading">
+      <div><h1>Admin Profile</h1><p>Your account information and settings</p></div>
+      <button class="edit-profile-button" id="editProfileButton" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+        Edit Profile
+      </button>
+    </section>
+
+    <section class="profile-card" aria-label="Administrator profile summary">
+      <div class="profile-banner"></div>
+      <div class="profile-summary">
+        <div class="profile-avatar" id="profileInitials">DS</div>
+        <h2 id="profileName">Dr. Maria Santos</h2>
+        <p><span id="profileRole">School Administrator</span> · <span id="profileSchool">Malinao National High School</span></p>
+        <small>Admin since June 1, 2026</small>
+      </div>
+    </section>
+
+    <section class="profile-info-card" aria-labelledby="accountInfoTitle">
+      <h2 id="accountInfoTitle">Account Information</h2>
+      <dl class="profile-info-grid">
+        <div><dt>Full Name</dt><dd id="infoName">Dr. Maria Santos</dd></div>
+        <div><dt>Email</dt><dd id="infoEmail">admin@arlearn.edu.ph</dd></div>
+        <div><dt>School</dt><dd id="infoSchool">Malinao National High School</dd></div>
+        <div><dt>Role</dt><dd id="infoRole">School Administrator</dd></div>
+        <div><dt>Department</dt><dd id="infoDepartment">Science &amp; Technology</dd></div>
+        <div><dt>Phone</dt><dd id="infoPhone">+63 912 345 6789</dd></div>
+      </dl>
+    </section>
+
+    <section class="profile-session-card" aria-labelledby="sessionTitle">
+      <h2 id="sessionTitle">Session</h2>
+      <a class="profile-logout-button" href="login.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>Log Out</a>
+    </section>
+  </main>
+
+  <dialog class="profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
+    <form id="profileForm" method="dialog">
+      <div class="profile-dialog-heading"><div><h2 id="profileDialogTitle">Edit Profile</h2><p>Preview only · changes are not saved to Firebase.</p></div><button class="profile-dialog-close" id="closeProfileDialog" type="button" aria-label="Close">×</button></div>
+      <label>Full Name<input name="name" required value="Dr. Maria Santos" /></label>
+      <label>Email<input name="email" type="email" required value="admin@arlearn.edu.ph" /></label>
+      <label>School<input name="school" required value="Malinao National High School" /></label>
+      <label>Department<input name="department" required value="Science &amp; Technology" /></label>
+      <label>Phone<input name="phone" type="tel" value="+63 912 345 6789" /></label>
+      <div class="profile-dialog-actions"><button class="profile-cancel-button" id="cancelProfileEdit" type="button">Cancel</button><button class="profile-save-button" type="submit">Save Preview</button></div>
+    </form>
+  </dialog>
+
+  <button class="help-button" type="button" aria-label="Help">?</button>
+  <script src="js/admin-dashboard.js"></script>
+  <script src="js/admin-profile.js"></script>
+</body>
+</html>

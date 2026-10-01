@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Student Records</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <button class="icon-btn" id="menuBtn" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <span class="page-title">Student Records</span>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn bell" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+              <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+            </svg>
+            <span class="dot"></span>
+          </button>
+          <span class="sy-chip">SY 2026–27</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="hero">
+        <div>
+          <h1>Student Records</h1>
+          <p>Overall performance · AR &amp; module engagement</p>
+        </div>
+        <label class="search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.2-3.2" />
+          </svg>
+          <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
+        </label>
+      </section>
+
+      <article class="record" data-name="ana cruz">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">AC</div>
+            <div>
+              <strong>Ana Cruz</strong>
+              <small>Grade 8 – Malinao · Last active Sep 20, 2026</small>
+            </div>
+          </div>
+          <span class="overall">94% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">142 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">89 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">80%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">100%</b></div>
+        </div>
+        <div class="bar" aria-label="94 percent overall"><i style="width:94%"></i></div>
+      </article>
+
+      <article class="record" data-name="brian doe">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">BD</div>
+            <div>
+              <strong>Brian Doe</strong>
+              <small>Grade 8 – Malinao · Last active Sep 19, 2026</small>
+            </div>
+          </div>
+          <span class="overall">78% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">98 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">67 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">60%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">90%</b></div>
+        </div>
+        <div class="bar" aria-label="78 percent overall"><i style="width:78%"></i></div>
+      </article>
+
+      <article class="record" data-name="carla martinez">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">CM</div>
+            <div>
+              <strong>Carla Martinez</strong>
+              <small>Grade 8 – Malinao · Last active Sep 21, 2026</small>
+            </div>
+          </div>
+          <span class="overall">78% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">115 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">80 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">70%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">80%</b></div>
+        </div>
+        <div class="bar" aria-label="78 percent overall"><i style="width:78%"></i></div>
+      </article>
+
+      <article class="record" data-name="daniel reyes">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">DR</div>
+            <div>
+              <strong>Daniel Reyes</strong>
+              <small>Grade 8 – Malinao · Last active Sep 22, 2026</small>
+            </div>
+          </div>
+          <span class="overall">82% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">200 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">140 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">50%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">90%</b></div>
+        </div>
+        <div class="bar" aria-label="82 percent overall"><i style="width:82%"></i></div>
+      </article>
+
+      <article class="record" data-name="erika santos">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">ES</div>
+            <div>
+              <strong>Erika Santos</strong>
+              <small>Grade 8 – Malinao · Last active Sep 18, 2026</small>
+            </div>
+          </div>
+          <span class="overall">96% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">150 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">92 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">90%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">100%</b></div>
+        </div>
+        <div class="bar" aria-label="96 percent overall"><i style="width:96%"></i></div>
+      </article>
+
+      <article class="record" data-name="francis lim">
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">FL</div>
+            <div>
+              <strong>Francis Lim</strong>
+              <small>Grade 8 – Malinao · Last active Sep 17, 2026</small>
+            </div>
+          </div>
+          <span class="overall">58% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">88 min</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">54 min</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">40%</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">70%</b></div>
+        </div>
+        <div class="bar" aria-label="58 percent overall"><i style="width:58%"></i></div>
+      </article>
+
+      <p class="empty" id="emptyState">No students match that search.</p>
+    </main>
+  </div>
+
+  <button class="help" id="helpBtn" aria-label="Help">?</button>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <div class="brand">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+        <div>
+          <strong>ImARs</strong>
+          <small>Teacher Portal</small>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="topic-scheduler.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          Topic Scheduler
+        </a>
+        <a class="nav-item" href="analytics.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          Analytics
+        </a>
+        <a class="nav-item active" href="student-records.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
+          Student Records
+        </a>
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
+        <a class="nav-item" href="offline-sync.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
+          Offline sync &amp; AR Markers
+        </a>
+        <a class="nav-item" href="scan-qr-ar.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
+          Scan QR / AR
+        </a>
+        <a class="nav-item" href="teacher-manual.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
+          Teacher Manual
+        </a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">MR</div>
+        <div class="user-meta">
+          <strong>Ma'am Reyes</strong>
+          <small>Science · Gr. 8 Mali...</small>
+        </div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <a href="login.html">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="modal" id="scanModal">
+    <div class="modal-card">
+      <h3>Scan QR / AR</h3>
+      <p>Point the camera at a lesson marker to open the AR module.</p>
+      <div class="qr-box">QR / AR Scanner</div>
+      <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
+    </div>
+  </div>
+  <script src="js/ui.js"></script>
+  <script src="js/student-records.js"></script>
+</body>
+</html>

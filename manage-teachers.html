@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>ImARs · Manage Teachers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin-dashboard.css" />
+  <link rel="stylesheet" href="css/manage-teachers.css" />
+</head>
+<body>
+  <header class="admin-topbar">
+    <div class="admin-topbar-inner">
+      <div class="admin-topbar-left">
+        <button class="menu-button" id="adminMenuButton" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="adminNavigation">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <span class="current-page">Manage Teachers</span>
+      </div>
+      <div class="admin-topbar-right">
+        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
+          <span class="notification-dot" aria-hidden="true"></span>
+        </button>
+        <span class="admin-year">Admin · SY 2026–27</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="admin-drawer" id="adminNavigation" aria-hidden="true">
+    <div class="admin-drawer-panel" role="navigation" aria-label="Admin portal">
+      <div class="admin-drawer-heading">
+        <div class="drawer-brand"><img class="admin-brand-mark" src="assets/imars-logo.png" alt="" /><div><strong>ImARs</strong><small>School Admin</small></div></div>
+        <button class="drawer-close" id="adminDrawerClose" type="button" aria-label="Close navigation">×</button>
+      </div>
+      <nav class="admin-side-nav">
+        <a class="admin-nav-link" href="admin-dashboard.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="admin-nav-link active" href="manage-teachers.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
+      </nav>
+      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
+    </div>
+  </aside>
+
+  <main class="dashboard-content manage-content">
+    <section class="manage-heading">
+      <div>
+        <h1>Manage Teachers</h1>
+        <p id="teacherSummary">3 active · 4 total</p>
+      </div>
+      <div class="manage-tools">
+        <label class="teacher-search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <input id="teacherSearch" type="search" placeholder="Search teacher..." aria-label="Search teachers" />
+        </label>
+        <button class="add-teacher-button" id="addTeacherButton" type="button">
+          <span aria-hidden="true">+</span> Add Teacher
+        </button>
+      </div>
+    </section>
+
+    <section class="teacher-metrics" aria-label="Teacher and class totals">
+      <article class="teacher-metric"><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">3</strong></div></article>
+      <article class="teacher-metric"><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">1</strong></div></article>
+      <article class="teacher-metric"><span class="metric-accent sections-accent"></span><div><small>Total Sections</small><strong id="sectionCount">6</strong></div></article>
+      <article class="teacher-metric"><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">155</strong></div></article>
+    </section>
+
+    <section class="teacher-list" id="teacherList" aria-label="Teacher accounts"></section>
+    <p class="no-teachers" id="noTeachers" hidden>No teachers match your search.</p>
+  </main>
+
+  <dialog class="teacher-dialog" id="teacherDialog" aria-labelledby="dialogTitle">
+    <form id="teacherForm" method="dialog">
+      <div class="dialog-heading">
+        <div><h2 id="dialogTitle">Add Teacher</h2><p>Preview only · changes are not saved to Firebase.</p></div>
+        <button class="dialog-close" id="closeTeacherDialog" type="button" aria-label="Close">×</button>
+      </div>
+      <label>Teacher name<input name="name" required placeholder="e.g. Alex Reyes" /></label>
+      <label>Email address<input name="email" type="email" required placeholder="name@school.edu" /></label>
+      <label>Subject<input name="subject" required placeholder="e.g. Science" /></label>
+      <label>Sections <small>Separate section names with commas.</small><input name="sections" placeholder="Grade 8 – Malinao, Grade 8 – Sampaguita" /></label>
+      <div class="dialog-actions">
+        <button class="cancel-button" id="cancelTeacherDialog" type="button">Cancel</button>
+        <button class="add-teacher-button" type="submit">Add Teacher</button>
+      </div>
+    </form>
+  </dialog>
+
+  <button class="help-button" type="button" aria-label="Help">?</button>
+  <script src="js/admin-dashboard.js"></script>
+  <script src="js/manage-teachers.js"></script>
+</body>
+</html>

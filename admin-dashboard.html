@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>ImARs · Admin Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/admin-dashboard.css" />
+</head>
+<body>
+  <header class="admin-topbar">
+    <div class="admin-topbar-inner">
+      <div class="admin-topbar-left">
+        <button class="menu-button" id="adminMenuButton" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="adminNavigation">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <span class="current-page">Overview</span>
+      </div>
+      <div class="admin-topbar-right">
+        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
+          <span class="notification-dot" aria-hidden="true"></span>
+        </button>
+        <span class="admin-year">Admin · SY 2026–27</span>
+      </div>
+    </div>
+  </header>
+
+  <aside class="admin-drawer" id="adminNavigation" aria-hidden="true">
+    <div class="admin-drawer-panel" role="navigation" aria-label="Admin portal">
+      <div class="admin-drawer-heading">
+        <div class="drawer-brand"><img class="admin-brand-mark" src="assets/imars-logo.png" alt="" /><div><strong>ImARs</strong><small>School Admin</small></div></div>
+        <button class="drawer-close" id="adminDrawerClose" type="button" aria-label="Close navigation">×</button>
+      </div>
+      <nav class="admin-side-nav">
+        <a class="admin-nav-link active" href="admin-dashboard.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="admin-nav-link" href="manage-teachers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
+      </nav>
+      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
+    </div>
+  </aside>
+
+  <main class="dashboard-content">
+    <section class="page-intro">
+      <div>
+        <h1>Admin Overview</h1>
+        <p>School-wide performance · AR Learning Platform · SY 2026–27</p>
+      </div>
+    </section>
+
+    <section class="metric-grid" aria-label="School summary">
+      <article class="metric-card">
+        <span class="metric-label purple">Total Teachers</span>
+        <strong class="metric-value">3</strong>
+        <span class="metric-note">4 registered</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label cyan">Total Students</span>
+        <strong class="metric-value">155</strong>
+        <span class="metric-note">Across all sections</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label green">School Avg Post-Test</span>
+        <strong class="metric-value">85%</strong>
+        <span class="metric-note">Up from 63% pre-test</span>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label pink">Total AR Hours</span>
+        <strong class="metric-value">1095h</strong>
+        <span class="metric-note">All teachers combined</span>
+      </article>
+    </section>
+
+    <section class="panel learning-panel" aria-labelledby="learningTitle">
+      <h2 id="learningTitle">School-Wide Learning Gain</h2>
+      <div class="learning-content">
+        <div class="learning-ring" role="img" aria-label="85 percent school average post-test score">
+          <div class="ring-center"><strong>85%</strong><span>school avg</span></div>
+        </div>
+        <div class="learning-metrics">
+          <div class="learning-row">
+            <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan">63%</strong></div>
+            <div class="meter"><i class="pre-meter" style="width:63%"></i></div>
+          </div>
+          <div class="learning-row">
+            <div class="learning-meta"><span>School Post-Test Average</span><strong class="green">85%</strong></div>
+            <div class="meter"><i class="post-meter" style="width:85%"></i></div>
+          </div>
+          <div class="learning-row">
+            <div class="learning-meta"><span>Average Improvement</span><strong class="purple">22%</strong></div>
+            <div class="meter"><i class="gain-meter" style="width:22%"></i></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel teacher-panel" aria-labelledby="teacherTitle">
+      <div class="panel-heading">
+        <h2 id="teacherTitle">Teacher Performance Snapshot</h2>
+        <span class="teacher-count">4 teachers</span>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Teacher</th>
+              <th scope="col">Students</th>
+              <th scope="col">Avg Pre</th>
+              <th scope="col">Avg Post</th>
+              <th scope="col">AR Hours</th>
+              <th scope="col">Gain</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="teacher-cell"><span class="teacher-avatar">MR</span><span><strong>Ma’am Reyes</strong><small>Science · Grade 8 – Malinao, Grade 8 – Sampaguita</small></span></div></td>
+              <td>42</td><td>65%</td><td class="post-score">88%</td><td>320h</td><td><span class="gain-chip">+23%</span></td>
+            </tr>
+            <tr>
+              <td><div class="teacher-cell"><span class="teacher-avatar">SB</span><span><strong>Sir Bautista</strong><small>Science · Grade 8 – Rosal</small></span></div></td>
+              <td>38</td><td>60%</td><td class="post-score">82%</td><td>275h</td><td><span class="gain-chip">+22%</span></td>
+            </tr>
+            <tr>
+              <td><div class="teacher-cell"><span class="teacher-avatar">MS</span><span><strong>Ma’am Santos</strong><small>Biology · Grade 9 – Narra, Grade 9 – Acacia</small></span></div></td>
+              <td>45</td><td>58%</td><td class="post-score">79%</td><td>290h</td><td><span class="gain-chip">+21%</span></td>
+            </tr>
+            <tr>
+              <td><div class="teacher-cell"><span class="teacher-avatar">SL</span><span><strong>Sir Lim</strong><small>Physics · Grade 10 – Molave</small></span></div></td>
+              <td>30</td><td>70%</td><td class="post-score">91%</td><td>210h</td><td><span class="gain-chip">+21%</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <button class="help-button" type="button" aria-label="Help">?</button>
+  <script src="js/admin-dashboard.js"></script>
+</body>
+</html>

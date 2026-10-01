@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Teacher Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body class="login-page min-h-screen bg-mist text-slate-900 font-sans grid place-items-center p-6">
+  <main class="w-full max-w-[440px] bg-white rounded-3xl shadow-[0_8px_24px_rgba(28,20,60,0.05)] p-8">
+    <div class="flex items-center gap-3 mb-6">
+      <img class="brand-mark login-brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+      <div>
+        <strong class="block text-lg font-extrabold">ImARs</strong>
+        <small class="block mt-0.5 text-slate-400 text-[13px]">Teacher Portal</small>
+      </div>
+    </div>
+    <h1 class="text-[28px] tracking-tight font-extrabold mb-1.5">Welcome back</h1>
+    <p class="text-slate-500 text-[15px] mb-6">Log in to continue to your class dashboard.</p>
+    <form id="loginForm">
+      <div class="mb-3.5">
+        <label for="teacherId" class="block text-[13px] font-bold text-slate-500 mb-2">Teacher ID</label>
+        <input id="teacherId" name="teacherId" type="text" autocomplete="username" placeholder="Enter Teacher ID" required
+          class="w-full border border-periwinkle bg-mist rounded-[14px] py-3 px-3.5 text-[15px] text-slate-900 outline-none focus:border-steel focus:bg-white focus:ring-4 focus:ring-steel/25" />
+      </div>
+      <div class="mb-3.5">
+        <label for="password" class="block text-[13px] font-bold text-slate-500 mb-2">Password</label>
+        <div class="relative">
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter password" required
+            class="w-full border border-periwinkle bg-mist rounded-[14px] py-3 px-3.5 pr-12 text-[15px] text-slate-900 outline-none focus:border-steel focus:bg-white focus:ring-4 focus:ring-steel/25" />
+          <button id="togglePassword" type="button" aria-label="Show password"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 grid place-items-center rounded-lg text-steel hover:bg-periwinkle/60">
+            <svg id="eyeOpen" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg id="eyeOff" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-6.5 0-10-8-10-8a18.45 18.45 0 0 1 5.06-5.94" />
+              <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19" />
+              <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+              <line x1="1" y1="1" x2="23" y2="23" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <p class="hidden text-red-600 text-[13px] font-semibold mb-3" id="error">Please enter your ID and password.</p>
+      <button class="w-full border-0 rounded-full py-3.5 px-4 bg-gold text-slate-900 font-extrabold text-[15px] cursor-pointer shadow-[0_8px_18px_rgba(254,183,5,0.35)] hover:bg-[#e5a404]" type="submit">Log in</button>
+    </form>
+    <p class="mt-4 text-center text-slate-400 text-[13px]">Use your teacher account to access Grade 6 Pintong Gubat</p>
+    <span class="mt-4 block w-full text-center text-steel font-bold text-[13px]">SY 2026–27</span>
+  </main>
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

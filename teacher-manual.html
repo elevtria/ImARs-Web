@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Teacher Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <button class="icon-btn" id="menuBtn" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <span class="page-title">Teacher Manual</span>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn bell" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+              <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+            </svg>
+            <span class="dot"></span>
+          </button>
+          <span class="sy-chip">SY 2026–27</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" id="manual">
+      <section class="manual-sheet manual-sheet-setup">
+        <div class="manual-cover">
+          <div class="manual-cover-main">
+            <div class="manual-kicker"><span>ImARs · TEACHER FIELD GUIDE</span><span>SY 2026–27</span></div>
+            <section class="hero manual-hero">
+              <div>
+                <h1>Teacher Manual</h1>
+                <p>Your quick visual guide to planning lessons, using AR, and checking class progress.</p>
+              </div>
+              <div class="manual-stamp" aria-label="ImARs Learning Platform">
+                <img class="manual-stamp-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+                <span><b>ImARs</b><small>LEARN · SCAN · GROW</small></span>
+              </div>
+            </section>
+            <div class="manual-meta-row"><span>3 TERMS</span><i></i><span>4 TOPICS EACH</span><i></i><span>AR-READY SCIENCE</span></div>
+          </div>
+          <div class="manual-cover-actions">
+            <button class="banner-btn" id="downloadPdf" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+              Save as PDF
+            </button>
+            <button class="banner-btn manual-print-btn" id="printManual" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V4h12v5"/><rect x="6" y="13" width="12" height="8" rx="1.5"/><path d="M6 17H4a2 2 0 0 1-2-2V9h20v6a2 2 0 0 1-2 2h-2"/></svg>
+              Print Guide
+            </button>
+          </div>
+        </div>
+
+        <div class="manual-sheet-heading">
+          <span class="manual-section-chip">01 · GET READY</span>
+          <div><h2>Set up your classroom</h2><p>Start with your teacher account, student roster, and term schedule.</p></div>
+          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
+        </div>
+
+        <div class="manual-setup-grid">
+          <aside class="manual-feature-card">
+            <span class="manual-feature-kicker">START WITH YOUR CLASS</span>
+            <div class="manual-feature-art" aria-hidden="true"><span class="art-card art-card-back"></span><span class="art-card art-card-front"><b>AR</b><i></i><i></i><i></i></span><span class="art-spark">✦</span></div>
+            <h3>Set up your class.<br />Plan with confidence.</h3>
+            <p>Use the Teacher ID and password assigned to your account. If you need access, contact your school administrator.</p>
+            <a class="manual-link" href="batch-upload.html">Open Batch Upload <span aria-hidden="true">↗</span></a>
+            <a class="manual-link" href="topic-scheduler.html">Open Topic Scheduler <span aria-hidden="true">↗</span></a>
+          </aside>
+
+          <div class="manual-step-stack">
+            <article class="manual-step-card">
+              <span class="manual-step-number">1</span>
+              <div><span class="manual-step-kicker">ACCOUNT ACCESS</span><h3>Sign in</h3><p>Open the portal and enter your teacher credentials.</p></div>
+              <span class="manual-step-icon" aria-hidden="true">↗</span>
+            </article>
+            <article class="manual-step-card">
+              <span class="manual-step-number">2</span>
+              <div><span class="manual-step-kicker">SECTION</span><h3>Choose the class section</h3><p>Pick an existing option in “Upload to section.” Use that exact section name in the spreadsheet. If it is missing, ask your school administrator; this page cannot create sections.</p></div>
+              <span class="manual-step-icon" aria-hidden="true">＋</span>
+            </article>
+            <article class="manual-step-card">
+              <span class="manual-step-number">3</span>
+              <div><span class="manual-step-kicker">ROSTER TEMPLATE</span><h3>Enter one student per row</h3><p>Use the template columns exactly: Student Name, Section, LRN, Email. Keep the Section value identical to the dropdown choice.</p></div>
+              <span class="manual-step-icon" aria-hidden="true">▤</span>
+            </article>
+            <article class="manual-step-card">
+              <span class="manual-step-number">4</span>
+              <div><span class="manual-step-kicker">FILE SELECTION</span><h3>Choose the CSV or Excel file</h3><p>Drag it into the upload area or choose Browse File. The current page only previews the selected filename; it does not yet import student rows.</p></div>
+              <span class="manual-step-icon" aria-hidden="true">↑</span>
+            </article>
+            <div class="manual-note"><b>Current limit</b><span>Batch Upload has no create-section or confirm-import action yet. A selected file is not saved as student records.</span></div>
+          </div>
+        </div>
+        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE</span><span>01 <i></i> 02</span></div>
+      </section>
+
+      <section class="manual-sheet manual-sheet-teach">
+        <div class="manual-sheet-heading manual-sheet-heading-light">
+          <span class="manual-section-chip">02 · TEACH &amp; REVIEW</span>
+          <div><h2>Bring each lesson to life</h2><p>Scan a marker, keep activities moving, and use student results to plan next steps.</p></div>
+          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
+        </div>
+
+        <div class="manual-tool-grid">
+          <article class="manual-tool-card manual-tool-blue">
+            <div class="manual-tool-icon" aria-hidden="true">⌂</div><span class="manual-step-kicker">01 · DASHBOARD</span>
+            <h3>Check your class overview</h3>
+            <p>The dashboard shows your greeting, class details, student count, term overview, and learning summaries when linked class data is available.</p>
+          </article>
+          <article class="manual-tool-card manual-tool-yellow">
+            <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">02 · TOPIC SCHEDULER</span>
+            <h3>Set dates and lock topics</h3>
+            <p>Expand one of the three terms, choose a date for each topic, and use the lock icon to prevent edits. Setting a date marks that topic Done.</p>
+            <a class="manual-link" href="topic-scheduler.html">Open Topic Scheduler <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="manual-tool-card manual-tool-green">
+            <div class="manual-tool-icon" aria-hidden="true">◎</div><span class="manual-step-kicker">03 · SCAN AR</span>
+            <h3>Open the camera view</h3>
+            <p>Allow camera access, choose <b>Scan AR</b>, and point the camera at a printed marker. In this build the page opens the camera, but marker recognition and 3D launch are not connected yet.</p>
+            <div class="manual-mini-target" aria-hidden="true"><span></span><i></i></div>
+          </article>
+          <article class="manual-tool-card manual-tool-blue">
+            <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">04 · SCAN QR</span>
+            <h3>Use the QR camera mode</h3>
+            <p>Choose <b>Scan QR</b> and allow camera access. QR recognition and opening a student record are not connected in this build.</p>
+            <div class="manual-mini-qr" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </article>
+          <article class="manual-tool-card manual-tool-yellow">
+            <div class="manual-tool-icon" aria-hidden="true">↓</div><span class="manual-step-kicker">05 · OFFLINE READY</span>
+            <h3>Download marker packs</h3>
+            <p>Open Offline sync &amp; AR Markers and download a topic ZIP or all 24 marker images. The local progress report tracks download requests.</p>
+            <a class="manual-link" href="offline-sync.html">Open marker downloads <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="manual-tool-card manual-tool-green">
+            <div class="manual-tool-icon" aria-hidden="true">↗</div><span class="manual-step-kicker">06 · CHECK PROGRESS</span>
+            <h3>Find student and class reports</h3>
+            <p>Student Records has a name search. Analytics has name and section filters with pre/post-test comparisons. These pages currently show sample data.</p>
+            <a class="manual-link" href="student-records.html">Open Student Records <span aria-hidden="true">↗</span></a>
+            <a class="manual-link manual-link-secondary" href="analytics.html">Open Analytics <span aria-hidden="true">↗</span></a>
+          </article>
+        </div>
+
+        <div class="manual-bottom-band">
+          <div><span class="manual-step-kicker">IF SOMETHING DOESN’T WORK</span><h3>Try these quick checks</h3></div>
+          <ul>
+            <li>Allow camera access before using either scan mode.</li>
+            <li>For roster work, use the exact template headers and section name.</li>
+            <li>Ask the administrator about missing sections or student imports.</li>
+          </ul>
+          <a class="manual-support" href="mailto:support@arlearn.edu.ph">Need help? Contact support ↗</a>
+        </div>
+        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE</span><span>02 <i></i> 02</span></div>
+      </section>
+    </main>
+  </div>
+
+  <button class="help" id="helpBtn" aria-label="Help">?</button>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <div class="brand">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+        <div>
+          <strong>ImARs</strong>
+          <small>Teacher Portal</small>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="topic-scheduler.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          Topic Scheduler
+        </a>
+        <a class="nav-item" href="analytics.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          Analytics
+        </a>
+        <a class="nav-item" href="student-records.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
+          Student Records
+        </a>
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
+        <a class="nav-item" href="offline-sync.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
+          Offline sync &amp; AR Markers
+        </a>
+        <a class="nav-item" href="scan-qr-ar.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
+          Scan QR / AR
+        </a>
+        <a class="nav-item active" href="teacher-manual.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
+          Teacher Manual
+        </a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">MR</div>
+        <div class="user-meta">
+          <strong>Ma'am Reyes</strong>
+          <small>Science · Gr. 8 Mali...</small>
+        </div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <a href="login.html">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <script src="js/ui.js"></script>
+  <script src="js/teacher-manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Batch Upload</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <button class="icon-btn" id="menuBtn" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <span class="page-title">Batch Upload</span>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn bell" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+              <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+            </svg>
+            <span class="dot"></span>
+          </button>
+          <span class="sy-chip">SY 2026–27</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="hero">
+        <div>
+          <h1>Student Batch Upload</h1>
+          <p>Import multiple students at once using an Excel template</p>
+        </div>
+        <label class="section-pick">
+          <span>Upload to section:</span>
+          <span class="select-wrap">
+            <select id="sectionSelect" aria-label="Upload to section">
+              <option value="Grade 8 – Malinao">Grade 8 – Malinao</option>
+              <option value="Grade 8 – Sampaguita">Grade 8 – Sampaguita</option>
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
+        </label>
+      </section>
+
+      <div class="banner">
+        <div class="banner-left">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 8v4l2.5 1.5" />
+          </svg>
+          <span>Uploading students to: <b id="sectionName">Grade 8 – Malinao</b></span>
+        </div>
+        <small id="existingCount">(6 existing students)</small>
+      </div>
+
+      <section class="card">
+        <div class="template">
+          <div class="sheet-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="4" y="3" width="16" height="18" rx="2" />
+              <path d="M8 8h8M8 12h8M8 16h5" />
+            </svg>
+          </div>
+          <div>
+            <h2>Download Excel Template</h2>
+            <p>Use the official template to ensure correct column format. Include: Student Name, Section, LRN, Email.</p>
+            <div class="btn-row">
+              <button class="btn-green" id="dlXlsx" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                Download Template (.xlsx)
+              </button>
+              <button class="btn-ghost" id="dlCsv" type="button">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>
+                Download (.csv)
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Required Columns</h2>
+        <div class="cols">
+          <div class="col">
+            <em>Col A</em>
+            <strong>Student Name</strong>
+            <span>e.g. Ana Cruz</span>
+          </div>
+          <div class="col">
+            <em>Col B</em>
+            <strong>Section</strong>
+            <span>e.g. Grade 8 – Malinao</span>
+          </div>
+          <div class="col">
+            <em>Col C</em>
+            <strong>LRN</strong>
+            <span>e.g. 123456789012</span>
+          </div>
+          <div class="col">
+            <em>Col D</em>
+            <strong>Email</strong>
+            <span>e.g. ana@school.edu</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="drop" id="dropZone" role="button" tabindex="0" aria-label="Upload student file">
+        <div>
+          <div class="drop-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 16V6M8 10l4-4 4 4" />
+              <path d="M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </div>
+          <h3 id="dropTitle">Drag &amp; drop your Excel file here</h3>
+          <p id="dropHint">or click to browse · .xlsx, .csv supported</p>
+          <button class="btn-purple" id="browseBtn" type="button">Browse File</button>
+        </div>
+      </div>
+      <input class="file-input" id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+    </main>
+  </div>
+
+  <button class="help" id="helpBtn" aria-label="Help">?</button>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <div class="brand">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+        <div>
+          <strong>ImARs</strong>
+          <small>Teacher Portal</small>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="topic-scheduler.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          Topic Scheduler
+        </a>
+        <a class="nav-item" href="analytics.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          Analytics
+        </a>
+        <a class="nav-item" href="student-records.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
+          Student Records
+        </a>
+        <a class="nav-item active" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
+        <a class="nav-item" href="offline-sync.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
+          Offline sync &amp; AR Markers
+        </a>
+        <a class="nav-item" href="scan-qr-ar.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
+          Scan QR / AR
+        </a>
+        <a class="nav-item" href="teacher-manual.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
+          Teacher Manual
+        </a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">MR</div>
+        <div class="user-meta">
+          <strong>Ma'am Reyes</strong>
+          <small>Science · Gr. 8 Mali...</small>
+        </div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <a href="login.html">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="modal" id="scanModal">
+    <div class="modal-card">
+      <h3>Scan QR / AR</h3>
+      <p>Point the camera at a lesson marker to open the AR module.</p>
+      <div class="qr-box">QR / AR Scanner</div>
+      <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
+    </div>
+  </div>
+  <script src="js/ui.js"></script>
+  <script src="js/batch-upload.js"></script>
+</body>
+</html>

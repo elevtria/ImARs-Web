@@ -1,0 +1,44 @@
+.analytics-content { padding-top: 26px; }
+.analytics-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 20px; }
+.analytics-heading h1 { margin: 0; color: #172b49; font-size: clamp(25px, 2.4vw, 30px); line-height: 1.25; font-weight: 700; letter-spacing: -.04em; }
+.analytics-heading p { margin: 4px 0 0; color: #647a99; font-size: 14px; }
+.view-switch { display: inline-flex; flex: 0 0 auto; gap: 3px; padding: 4px; border: 1px solid #e4eaf3; border-radius: 13px; background: #fff; }
+.view-switch button { min-height: 36px; padding: 0 15px; border: 0; border-radius: 10px; color: #637691; background: transparent; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.view-switch button.selected { color: #fff; background: #7048ff; box-shadow: 0 2px 6px rgba(112,72,255,.18); }
+.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.teacher-analytics-card { display: flex; min-height: 292px; flex-direction: column; align-items: center; padding: 19px 17px 13px; border: 1px solid #e5ebf3; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(21,43,75,.05), 0 6px 16px rgba(21,43,75,.025); text-align: center; }
+.analytics-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #fff; background: var(--teacher-color); font-size: 9px; font-weight: 700; }
+.analytics-teacher-name { margin: 11px 0 3px; color: #1a2e4b; font-size: 13px; font-weight: 700; }
+.analytics-teacher-sections { min-height: 16px; color: #8494ac; font-size: 10px; }
+.analytics-donut { display: grid; width: 108px; height: 108px; flex: 0 0 auto; place-items: center; margin: 12px 0 5px; border-radius: 50%; background: conic-gradient(var(--teacher-color) 0 var(--score), #e4eaf2 var(--score) 100%); transform: rotate(0deg); }
+.analytics-donut-inner { display: grid; width: 77px; height: 77px; place-items: center; border-radius: 50%; background: #fff; }
+.analytics-donut-inner span { color: #1b304e; font-size: 19px; font-weight: 700; letter-spacing: -.04em; }
+.analytics-post-score { color: #1b304e; font-size: 22px; font-weight: 700; line-height: 1.15; }
+.analytics-post-label { margin-top: 3px; color: #8796ad; font-size: 10px; }
+.analytics-card-footer { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 9px; border-top: 1px solid #f0f3f7; color: #8494ac; font-size: 10px; text-align: left; }
+.analytics-card-footer strong { color: #283d5c; font-weight: 700; }
+.teacher-gain { color: #10b981; font-weight: 700; white-space: nowrap; }
+
+.section-analytics { display: grid; gap: 14px; }
+.section-analytics[hidden] { display: none; }
+.section-analytics-card { min-height: 138px; padding: 18px 20px 16px; border: 1px solid #e5ebf3; border-radius: 17px; background: #fff; box-shadow: 0 1px 2px rgba(21,43,75,.05), 0 6px 16px rgba(21,43,75,.025); }
+.section-title-row { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
+.section-color-dot { width: 11px; height: 11px; flex: 0 0 auto; border-radius: 50%; background: var(--section-color); }
+.section-title-row h2 { margin: 0; color: #1c304d; font-size: 16px; font-weight: 700; }
+.section-student-count { margin-left: 3px; color: #8796ad; font-size: 11px; }
+.section-improvement { margin-left: auto; padding: 5px 10px; border-radius: 999px; color: #08a779; background: #e8faf4; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.section-meter + .section-meter { margin-top: 11px; }
+.section-meter-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; color: #263d5e; font-size: 12px; font-weight: 500; }
+.section-meter-head strong { color: var(--section-color); font-size: 12px; font-weight: 700; }
+.section-meter-track { height: 10px; overflow: hidden; border-radius: 99px; background: #edf1f6; }
+.section-meter-track i { display: block; height: 100%; border-radius: inherit; background: #12a8df; }
+.section-meter.post .section-meter-track i { background: var(--section-color); }
+
+@media (max-width: 620px) {
+  .analytics-heading { align-items: flex-start; flex-direction: column; }
+  .view-switch { align-self: stretch; }
+  .view-switch button { flex: 1; }
+  .analytics-grid { grid-template-columns: 1fr; gap: 10px; }
+  .teacher-analytics-card { min-height: 270px; }
+  .section-analytics-card { padding: 15px 13px; }
+}

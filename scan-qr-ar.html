@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Scan QR / AR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          <button class="icon-btn" id="menuBtn" aria-label="Open menu">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <span class="page-title">Scan QR / AR</span>
+        </div>
+        <div class="topbar-right">
+          <button class="icon-btn bell" aria-label="Notifications">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+              <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+            </svg>
+            <span class="dot"></span>
+          </button>
+          <span class="sy-chip">SY 2026–27</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="intro">
+        <h1>Scan QR / AR Code</h1>
+        <p>Scan a QR code to start or scan AR to launch the 3D viewer</p>
+      </section>
+
+      <div class="tabs" role="tablist">
+        <button type="button" class="active" data-mode="qr">Scan QR</button>
+        <button type="button" data-mode="ar">Scan AR</button>
+      </div>
+
+      <section class="scan-card">
+        <div class="viewfinder-wrap">
+          <div class="viewfinder" id="viewfinder">
+            <span class="corner tl"></span>
+            <span class="corner tr"></span>
+            <span class="corner bl"></span>
+            <span class="corner br"></span>
+            <video id="camera" autoplay playsinline muted></video>
+            <div class="finder-copy">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7289" stroke-width="1.8" style="margin:0 auto 8px;">
+                <rect x="4" y="4" width="7" height="7" rx="1.2" />
+                <rect x="13" y="4" width="7" height="7" rx="1.2" />
+                <rect x="4" y="13" width="7" height="7" rx="1.2" />
+                <path d="M13 13h3v3h-3zM20 13v7M13 20h7" />
+              </svg>
+              <span id="finderHint">Point camera at QR code</span>
+            </div>
+          </div>
+        </div>
+        <button class="cam-btn" id="camBtn" type="button">Place Camera / Open Device Camera</button>
+        <p class="status" id="camStatus"></p>
+      </section>
+
+      <section class="recent-card">
+        <h2>Recent Scans</h2>
+        <div class="scan-row">
+          <div>
+            <strong>Cell Structure</strong>
+            <small>2 hours ago</small>
+          </div>
+          <span class="tag tag-ar">AR</span>
+        </div>
+        <div class="scan-row">
+          <div>
+            <strong>Photosynthesis</strong>
+            <small>Yesterday 2:14 PM</small>
+          </div>
+          <span class="tag tag-qr">QR</span>
+        </div>
+        <div class="scan-row">
+          <div>
+            <strong>Human Organ Systems</strong>
+            <small>Sep 20, 2026</small>
+          </div>
+          <span class="tag tag-ar">AR</span>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <button class="help" id="helpBtn" aria-label="Help">?</button>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <div class="brand">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+        <div>
+          <strong>ImARs</strong>
+          <small>Teacher Portal</small>
+        </div>
+      </div>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="topic-scheduler.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          Topic Scheduler
+        </a>
+        <a class="nav-item" href="analytics.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          Analytics
+        </a>
+        <a class="nav-item" href="student-records.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
+          Student Records
+        </a>
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
+        <a class="nav-item" href="offline-sync.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
+          Offline sync &amp; AR Markers
+        </a>
+        <a class="nav-item active" href="scan-qr-ar.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
+          Scan QR / AR
+        </a>
+        <a class="nav-item" href="teacher-manual.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
+          Teacher Manual
+        </a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">MR</div>
+        <div class="user-meta">
+          <strong>Ma'am Reyes</strong>
+          <small>Science · Gr. 8 Mali...</small>
+        </div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <a href="login.html">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <script src="js/ui.js"></script>
+  <script src="js/scan-qr-ar.js"></script>
+</body>
+</html>
