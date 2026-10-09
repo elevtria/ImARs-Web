@@ -177,6 +177,16 @@ a { text-decoration: none; color: inherit; }
   font-size: 15px;
 }
 
+.record-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.record-controls .select-wrap { min-width: 190px; }
+.record-controls .search { min-width: 250px; }
+
 .scheduler-sync-status {
   font-size: 12px !important;
 }
@@ -1119,6 +1129,7 @@ td {
 
 .improve b { color: #3d8b63; font-weight: 800; }
 
+.empty:not([hidden]) { display: block; }
 .empty {
   display: none;
   grid-column: 1 / -1;
@@ -1921,6 +1932,8 @@ label {
 @media (max-width: 820px) {
   .stats, .modules, .students, .topics { grid-template-columns: 1fr; }
   .hero { flex-direction: column; }
+  .record-controls { width: 100%; flex-direction: column; align-items: stretch; }
+  .record-controls .select-wrap, .record-controls .search { width: 100%; min-width: 0; }
   .section-pick { flex-wrap: wrap; }
   .hero h1, .intro h1 { font-size: 26px; }
   .content { padding: 20px 16px 88px; }

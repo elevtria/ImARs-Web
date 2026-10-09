@@ -19,22 +19,28 @@ const db = getFirestore(app);
 const recordsContainer = document.getElementById("recordsContainer");
 const emptyState = document.getElementById("emptyState");
 const searchInput = document.getElementById("studentSearch");
+const sectionFilter = document.getElementById("sectionFilter");
 
 let dynamicCards = [];
 
-// Client-Side Searching for dynamically loaded cards
-searchInput.addEventListener("input", (e) => {
-  const q = e.target.value.trim().toLowerCase();
+const applyFilters = () => {
+  const searchTerm = searchInput.value.trim().toLowerCase();
+  const selectedSection = sectionFilter.value;
   let shown = 0;
-  
+
   dynamicCards.forEach((card) => {
-    const visible = card.dataset.name.includes(q);
+    const matchesName = card.dataset.name.includes(searchTerm);
+    const matchesSection = !selectedSection || card.dataset.section === selectedSection;
+    const visible = matchesName && matchesSection;
     card.classList.toggle("hidden", !visible);
     if (visible) shown += 1;
   });
-  
+
   emptyState.hidden = shown > 0;
-});
+};
+
+searchInput.addEventListener("input", applyFilters);
+sectionFilter.addEventListener("change", applyFilters);
 
 // Firebase Loading Logic
 onAuthStateChanged(auth, async (user) => {
@@ -53,14 +59,23 @@ onAuthStateChanged(auth, async (user) => {
       const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
       const classSnap = await getDocs(classQ);
       
-      if (classSnap.empty) return;
-      
+      if (classSnap.empty) {
+        emptyState.textContent = "No sections were found for your account.";
+        emptyState.hidden = false;
+        return;
+      }
+
       recordsContainer.innerHTML = "";
+      sectionFilter.innerHTML = '<option value="">All Sections</option>';
 
       for (const classDoc of classSnap.docs) {
           const classCode = classDoc.id;
           const sectionName = classDoc.data().SectionName || classCode;
-          
+          const sectionOption = document.createElement("option");
+          sectionOption.value = classCode;
+          sectionOption.textContent = "Grade 6 – " + sectionName;
+          sectionFilter.appendChild(sectionOption);
+
           const studentQ = query(collection(db, "users"), where("role", "==", "student"), where("classCode", "==", classCode));
           const studentSnap = await getDocs(studentQ);
           
@@ -121,6 +136,7 @@ onAuthStateChanged(auth, async (user) => {
               const card = document.createElement("article");
               card.className = "record";
               card.dataset.name = sName.toLowerCase();
+              card.dataset.section = classCode;
               
               card.innerHTML = `
                 <div class="record-head">
@@ -148,9 +164,8 @@ onAuthStateChanged(auth, async (user) => {
       
       // Update DOM cache array to make the search filter function work
       dynamicCards = Array.from(document.querySelectorAll(".record"));
-      if (dynamicCards.length === 0) {
-        emptyState.hidden = false;
-      }
+      emptyState.textContent = "No students match the selected section or search.";
+      applyFilters();
     }
   } catch (error) {
     console.error("Error loading student records:", error);

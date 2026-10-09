@@ -42,13 +42,23 @@
           <h1>Student Records</h1>
           <p>Overall performance · AR &amp; module engagement</p>
         </div>
-        <label class="search">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.2-3.2" />
-          </svg>
-          <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
-        </label>
+        <div class="record-controls">
+          <div class="select-wrap">
+            <select id="sectionFilter" aria-label="Filter students by section">
+              <option value="">All Sections</option>
+            </select>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </div>
+          <label class="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.2-3.2" />
+            </svg>
+            <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
+          </label>
+        </div>
       </section>
 
       <!-- Dynamic Student Records Container -->
@@ -106,10 +116,10 @@
         </a>
       </nav>
       <div class="side-user">
-        <div class="user-avatar">MR</div>
+        <div class="user-avatar">T</div>
         <div class="user-meta">
-          <strong>Ma'am Reyes</strong>
-          <small>Science · Gr. 8 Mali...</small>
+          <strong>Teacher</strong>
+          <small>Teacher account</small>
         </div>
         <div class="account">
           <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
@@ -133,5 +143,6 @@
   <script src="js/ui.js"></script>
   <!-- Script converted to module -->
   <script type="module" src="js/student-records.js"></script>
+  <script type="module" src="js/teacher-nav.js"></script>
 </body>
 </html>

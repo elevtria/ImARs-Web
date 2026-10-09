@@ -53,7 +53,7 @@ if (user) {
       const teacherId = teacherDoc.id; 
 
       const teacherName = userData.displayName || "Teacher";
-      document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} 👋`;
+      document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} !`;
 
       const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
       const classSnap = await getDocs(classQ);
@@ -152,9 +152,9 @@ if (user) {
                   studentsWithArTime++;
               }
               
-              // Format row data for this student
-              const sPreStr = sPreCount > 0 ? `${(sPreSum / sPreCount).toFixed(1)}/5` : "N/A";
-              const sPostStr = sPostCount > 0 ? `${(sPostSum / sPostCount).toFixed(1)}/10` : "N/A";
+              // Format row data for this student as whole numbers (integers)
+              const sPreStr = sPreCount > 0 ? `${Math.round(sPreSum / sPreCount)}/5` : "N/A";
+              const sPostStr = sPostCount > 0 ? `${Math.round(sPostSum / sPostCount)}/10` : "N/A";
               const sPostStyle = sPostCount > 0 ? "score-up" : "muted-cell"; // Make it green if they have a score
               
               // ADDED: Format AR Time string for the table
@@ -185,9 +185,9 @@ if (user) {
               studentTableBody.appendChild(tr);
           }
 
-          // Finalize Global Class Averages
-          const avgPre = preTestCount > 0 ? (totalPreTestSum / preTestCount).toFixed(1) : "0.0";
-          const avgPost = postTestCount > 0 ? (totalPostTestSum / postTestCount).toFixed(1) : "0.0";
+          // Finalize Global Class Averages as whole numbers (integers)
+          const avgPre = preTestCount > 0 ? Math.round(totalPreTestSum / preTestCount) : 0;
+          const avgPost = postTestCount > 0 ? Math.round(totalPostTestSum / postTestCount) : 0;
           
           // ADDED: Calculate overall average AR Time
           const avgArTime = studentsWithArTime > 0 ? Math.round(totalClassArTime / studentsWithArTime) : 0;
