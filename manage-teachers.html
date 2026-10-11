@@ -77,7 +77,7 @@
   <dialog class="teacher-dialog" id="teacherDialog" aria-labelledby="dialogTitle">
     <form id="teacherForm" method="dialog">
       <div class="dialog-heading">
-        <div><h2 id="dialogTitle">Add Teacher</h2><p>Preview only · changes are not saved to Firebase.</p></div>
+        <div><h2 id="dialogTitle">Add Teacher</h2><p>Add a new teacher to Firebase</p></div>
         <button class="dialog-close" id="closeTeacherDialog" type="button" aria-label="Close">×</button>
       </div>
       <label>Teacher name<input name="name" required placeholder="e.g. Alex Reyes" /></label>
@@ -92,7 +92,6 @@
   </dialog>
 
   <button class="help-button" type="button" aria-label="Help">?</button>
-  <script src="js/admin-dashboard.js"></script>
-  <script src="js/manage-teachers.js"></script>
+  <script type="module" src="js/manage-teachers.js"></script>
 </body>
 </html>

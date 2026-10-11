@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ImARs · Scan QR / AR</title>
+  <title>ImARs · Scan QR</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="js/tailwind.config.js"></script>
-  <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <!-- Lightweight Web QR Code Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -23,7 +23,7 @@
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <span class="page-title">Scan QR / AR</span>
+          <span class="page-title">Scan QR</span>
         </div>
         <div class="topbar-right">
           <button class="icon-btn bell" aria-label="Notifications">
@@ -40,36 +40,20 @@
 
     <main class="content">
       <section class="intro">
-        <h1>Scan QR / AR Code</h1>
-        <p>Scan a QR code to start or scan AR to launch the 3D viewer</p>
+        <h1>Scan QR Code</h1>
+        <p>Scan a student's Grade QR code using your camera or upload a QR image to sync grades</p>
       </section>
-
-      <div class="tabs" role="tablist">
-        <button type="button" class="active" data-mode="qr">Scan QR</button>
-        <button type="button" data-mode="ar">Scan AR</button>
-      </div>
 
       <section class="scan-card">
         <div class="viewfinder-wrap">
-          <div class="viewfinder" id="viewfinder">
-            <span class="corner tl"></span>
-            <span class="corner tr"></span>
-            <span class="corner bl"></span>
-            <span class="corner br"></span>
+          <div class="viewfinder" id="viewfinder" style="overflow: hidden; position: relative;">
+            <span class="corner tl" style="z-index: 10;"></span>
+            <span class="corner tr" style="z-index: 10;"></span>
+            <span class="corner bl" style="z-index: 10;"></span>
+            <span class="corner br" style="z-index: 10;"></span>
             
-            <!-- NEW AR SCENE CONTAINER (Hidden by default) -->
-            <div id="ar-container" style="width: 100%; height: 100%; position: absolute; top: 0; left: 0; display: none;">
-              <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix;" vr-mode-ui="enabled: false">
-                
-                <!-- The AR Marker (Using the default 'Hiro' marker for testing) -->
-                <a-marker preset="hiro" id="lesson-marker">
-                  <!-- A 3D object that appears on the marker. Replace with your GLTF model later -->
-                  <a-box position="0 0.5 0" material="color: #7c3aed;" animation="property: rotation; to: 0 360 0; loop: true; dur: 3000"></a-box>
-                </a-marker>
-                
-                <a-entity camera></a-entity>
-              </a-scene>
-            </div>
+            <!-- QR Camera Feed Container -->
+            <div id="qr-reader" style="width: 100%; height: 100%; position: absolute; inset: 0; display: none;"></div>
 
             <div class="finder-copy" id="finderCopy">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6b7289" stroke-width="1.8" style="margin:0 auto 8px;">
@@ -82,19 +66,85 @@
             </div>
           </div>
         </div>
+
         <button class="cam-btn" id="camBtn" type="button">Place Camera / Open Device Camera</button>
+        
+        <div style="margin-top: 10px; text-align: center;">
+          <label for="qrFileInput" class="inline-block text-xs font-bold text-steel hover:underline cursor-pointer">
+            Or upload a QR code screenshot / image
+          </label>
+          <input id="qrFileInput" type="file" accept="image/*" class="hidden" />
+        </div>
+
         <p class="status" id="camStatus"></p>
       </section>
 
       <section class="recent-card">
         <h2>Recent Scans</h2>
-        <!-- Replaced hardcoded scans with an empty container for JS injection -->
         <div id="recentScansList">
           <p class="muted center" style="margin-top: 20px;">Loading recent scans...</p>
         </div>
       </section>
     </main>
   </div>
+
+  <!-- Student Grade QR Result Pop-up Modal -->
+  <dialog id="qrResultModal" class="fixed inset-0 m-auto border-0 rounded-3xl p-0 w-[calc(100%-2rem)] max-w-[420px] bg-white shadow-2xl backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm">
+    <div class="p-7 text-slate-900">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div id="modalStudentInitials" class="w-12 h-12 rounded-full bg-steel text-white font-extrabold text-lg grid place-items-center">
+            TS
+          </div>
+          <div>
+            <h3 id="modalStudentName" class="text-xl font-extrabold leading-tight">Test Student</h3>
+            <p id="modalStudentId" class="text-xs font-semibold text-slate-400">ID: 0026271000</p>
+          </div>
+        </div>
+        <button id="closeQrModalBtn" type="button" aria-label="Close modal"
+          class="w-8 h-8 rounded-full grid place-items-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 text-lg font-bold cursor-pointer">
+          ×
+        </button>
+      </div>
+
+      <!-- Sync Status Pill -->
+      <div id="modalSyncBadge" class="mb-4 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-2">
+        <span>✓</span>
+        <span id="modalSyncText">Synced to Student Records &amp; Analytics</span>
+      </div>
+
+      <!-- Grade Cards Grid -->
+      <div class="grid grid-cols-3 gap-2.5 mb-4">
+        <div class="bg-mist rounded-2xl p-3 text-center border border-slate-100">
+          <span class="block text-[11px] font-bold text-slate-400 uppercase">Pre-Test</span>
+          <strong id="modalPreScore" class="text-xl font-extrabold text-amber-500">40%</strong>
+        </div>
+        <div class="bg-mist rounded-2xl p-3 text-center border border-slate-100">
+          <span class="block text-[11px] font-bold text-slate-400 uppercase">Post-Test</span>
+          <strong id="modalPostScore" class="text-xl font-extrabold text-emerald-600">60%</strong>
+        </div>
+        <div class="bg-mist rounded-2xl p-3 text-center border border-slate-100">
+          <span class="block text-[11px] font-bold text-slate-400 uppercase">Gain</span>
+          <strong id="modalGainScore" class="text-xl font-extrabold text-indigo-600">+20%</strong>
+        </div>
+      </div>
+
+      <p id="modalLessonsNote" class="text-xs text-slate-500 text-center mb-5">
+        Completed Lessons: 1 · Section updated
+      </p>
+
+      <div class="flex gap-2.5">
+        <button id="scanAnotherBtn" type="button"
+          class="w-1/2 rounded-full py-2.5 px-4 border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 cursor-pointer">
+          Scan Another
+        </button>
+        <a href="student-records.html"
+          class="w-1/2 rounded-full py-2.5 px-4 bg-steel text-white font-extrabold text-xs text-center grid place-items-center hover:opacity-95 no-underline">
+          View Student Records
+        </a>
+      </div>
+    </div>
+  </dialog>
 
   <button class="help" id="helpBtn" aria-label="Help">?</button>
 
@@ -134,7 +184,7 @@
         </a>
         <a class="nav-item active" href="scan-qr-ar.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Scan QR / AR
+          Scan QR
         </a>
         <a class="nav-item" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
@@ -158,7 +208,6 @@
   </aside>
 
   <script src="js/ui.js"></script>
-  <!-- Updated to module to support Firebase -->
   <script type="module" src="js/scan-qr-ar.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
 </body>

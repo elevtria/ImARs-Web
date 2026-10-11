@@ -42,7 +42,13 @@
         <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
         <a class="admin-nav-link active" href="admin-profile.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
       </nav>
-      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
+      <div class="admin-side-user">
+        <span class="admin-side-avatar" id="drawerInitials">DS</span>
+        <span>
+          <strong id="drawerName">Dr. Maria Santos</strong>
+          <small id="drawerRole">School Administrator</small>
+        </span>
+      </div>
     </div>
   </aside>
 
@@ -59,44 +65,55 @@
       <div class="profile-banner"></div>
       <div class="profile-summary">
         <div class="profile-avatar" id="profileInitials">DS</div>
-        <h2 id="profileName">Dr. Maria Santos</h2>
-        <p><span id="profileRole">School Administrator</span> · <span id="profileSchool">Malinao National High School</span></p>
-        <small>Admin since June 1, 2026</small>
+        <h2 id="profileName">Loading...</h2>
+        <p><span id="profileRole">School Administrator</span> · <span id="profileSchool">Pintong Gubat Elementary School</span></p>
+        <small id="profileJoined">Admin since June 1, 2026</small>
       </div>
     </section>
 
     <section class="profile-info-card" aria-labelledby="accountInfoTitle">
       <h2 id="accountInfoTitle">Account Information</h2>
       <dl class="profile-info-grid">
-        <div><dt>Full Name</dt><dd id="infoName">Dr. Maria Santos</dd></div>
-        <div><dt>Email</dt><dd id="infoEmail">admin@arlearn.edu.ph</dd></div>
-        <div><dt>School</dt><dd id="infoSchool">Malinao National High School</dd></div>
+        <div><dt>Full Name</dt><dd id="infoName">Loading...</dd></div>
+        <div><dt>Email</dt><dd id="infoEmail">Loading...</dd></div>
+        <div><dt>School</dt><dd id="infoSchool">Pintong Gubat Elementary School</dd></div>
         <div><dt>Role</dt><dd id="infoRole">School Administrator</dd></div>
         <div><dt>Department</dt><dd id="infoDepartment">Science &amp; Technology</dd></div>
-        <div><dt>Phone</dt><dd id="infoPhone">+63 912 345 6789</dd></div>
+        <div><dt>Phone</dt><dd id="infoPhone">Not provided</dd></div>
       </dl>
     </section>
 
     <section class="profile-session-card" aria-labelledby="sessionTitle">
       <h2 id="sessionTitle">Session</h2>
-      <a class="profile-logout-button" href="login.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>Log Out</a>
+      <a class="profile-logout-button" id="logoutButton" href="login.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
+        Log Out
+      </a>
     </section>
   </main>
 
   <dialog class="profile-dialog" id="profileDialog" aria-labelledby="profileDialogTitle">
     <form id="profileForm" method="dialog">
-      <div class="profile-dialog-heading"><div><h2 id="profileDialogTitle">Edit Profile</h2><p>Preview only · changes are not saved to Firebase.</p></div><button class="profile-dialog-close" id="closeProfileDialog" type="button" aria-label="Close">×</button></div>
-      <label>Full Name<input name="name" required value="Dr. Maria Santos" /></label>
-      <label>Email<input name="email" type="email" required value="admin@arlearn.edu.ph" /></label>
-      <label>School<input name="school" required value="Malinao National High School" /></label>
-      <label>Department<input name="department" required value="Science &amp; Technology" /></label>
-      <label>Phone<input name="phone" type="tel" value="+63 912 345 6789" /></label>
-      <div class="profile-dialog-actions"><button class="profile-cancel-button" id="cancelProfileEdit" type="button">Cancel</button><button class="profile-save-button" type="submit">Save Preview</button></div>
+      <div class="profile-dialog-heading">
+        <div>
+          <h2 id="profileDialogTitle">Edit Profile</h2>
+          <p>Update your administrator details in Firebase.</p>
+        </div>
+        <button class="profile-dialog-close" id="closeProfileDialog" type="button" aria-label="Close">×</button>
+      </div>
+      <label>Full Name<input name="name" id="inputName" required /></label>
+      <label>Email<input name="email" id="inputEmail" type="email" required /></label>
+      <label>School<input name="school" id="inputSchool" required /></label>
+      <label>Department<input name="department" id="inputDepartment" required /></label>
+      <label>Phone<input name="phone" id="inputPhone" type="tel" /></label>
+      <div class="profile-dialog-actions">
+        <button class="profile-cancel-button" id="cancelProfileEdit" type="button">Cancel</button>
+        <button class="profile-save-button" id="saveProfileBtn" type="submit">Save Changes</button>
+      </div>
     </form>
   </dialog>
 
   <button class="help-button" type="button" aria-label="Help">?</button>
-  <script src="js/admin-dashboard.js"></script>
-  <script src="js/admin-profile.js"></script>
+  <script type="module" src="js/admin-profile.js"></script>
 </body>
 </html>

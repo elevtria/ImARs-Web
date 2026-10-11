@@ -112,48 +112,21 @@
         </div>
       </section>
 
-      <!-- Topics Section omitted from JS generation for now to focus on the main stats -->
+<!-- Topic Completion Rate Section -->
       <section class="card section">
-        <h2>Topic Completion Rate</h2>
-        <div class="topics">
-          <div class="topic">
-            <div class="mini-wrap" style="width:128px;height:128px;margin:0 auto 10px;position:relative;">
-              <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg);">
-                <circle class="track" cx="60" cy="60" r="46" fill="none" stroke="#eef1f6" stroke-width="12" />
-                <circle cx="60" cy="60" r="46" fill="none" stroke="#81A2C1" stroke-width="12" stroke-linecap="round" stroke-dasharray="254.3 289.03" />
-              </svg>
-            </div>
-            <strong>88%</strong>
-            <span>Cell Structure</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+          <h2 style="margin: 0;">Topic Completion Rate</h2>
+          <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
+            <button type="button" class="term-tab-btn active" data-term="all" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">All Terms</button>
+            <button type="button" class="term-tab-btn" data-term="term_01" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
+            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
+            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
-          <div class="topic">
-            <div class="mini-wrap" style="width:128px;height:128px;margin:0 auto 10px;position:relative;">
-              <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg);">
-                <circle class="track" cx="60" cy="60" r="46" fill="none" stroke="#eef1f6" stroke-width="12" />
-                <circle cx="60" cy="60" r="46" fill="none" stroke="#81A2C1" stroke-width="12" stroke-linecap="round" stroke-dasharray="219.7 289.03" />
-              </svg>
-            </div>
-            <strong>76%</strong>
-            <span>Photosynthesis</span>
-          </div>
-          <div class="topic">
-            <div class="mini-wrap" style="width:128px;height:128px;margin:0 auto 10px;position:relative;">
-              <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg);">
-                <circle class="track" cx="60" cy="60" r="46" fill="none" stroke="#eef1f6" stroke-width="12" />
-              </svg>
-            </div>
-            <strong>0%</strong>
-            <span>Human Organ Systems</span>
-          </div>
-          <div class="topic">
-            <div class="mini-wrap" style="width:128px;height:128px;margin:0 auto 10px;position:relative;">
-              <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg);">
-                <circle class="track" cx="60" cy="60" r="46" fill="none" stroke="#eef1f6" stroke-width="12" />
-              </svg>
-            </div>
-            <strong>0%</strong>
-            <span>DNA &amp; Genetics</span>
-          </div>
+        </div>
+        <div class="topics" id="topicsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
+          <p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">
+            Loading topic analytics...
+          </p>
         </div>
       </section>
     </main>
