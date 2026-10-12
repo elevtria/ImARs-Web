@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 
@@ -94,10 +94,29 @@ onAuthStateChanged(auth, async (user) => {
     window.location.href = "login.html";
     return;
   }
-  updateAdminSidebar(user);
-  initAdminIdleTimeout(auth);
 
   try {
+    // STRICT ROLE GUARD: Verify the logged-in user is actually an Admin
+    const currentUserSnap = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
+    if (currentUserSnap.empty) {
+      await signOut(auth);
+      window.location.href = "login.html";
+      return;
+    }
+
+    const currentUserData = currentUserSnap.docs[0].data();
+    const currentUserRole = String(currentUserData.role || "").toLowerCase();
+
+    if (currentUserRole !== "admin") {
+      // If a Teacher or Student tries to open admin-dashboard.html, sign them out immediately
+      await signOut(auth);
+      window.location.href = "login.html";
+      return;
+    }
+
+    updateAdminSidebar(user);
+    initAdminIdleTimeout(auth);
+
     // 1. Fetch Teachers
     const teacherQ = query(collection(db, "users"), where("role", "==", "teacher"));
     const teacherSnap = await getDocs(teacherQ);

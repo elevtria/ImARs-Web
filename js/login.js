@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -53,21 +53,42 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     const userDocRef = doc(db, "users", rawId);
     const userDocSnap = await getDoc(userDocRef);
 
-    let authEmail = "";
-
-    if (userDocSnap.exists()) {
-      const userData = userDocSnap.data();
-      if (userData.providedEmail || userData.email) {
-        authEmail = userData.providedEmail || userData.email;
-      } else {
-        authEmail = rawId + "@imars.edu";
-      }
-    } else {
+    if (!userDocSnap.exists()) {
       showError("Teacher ID not found in database.");
       return;
     }
 
-    await signInWithEmailAndPassword(auth, authEmail, password);
+    const userData = userDocSnap.data();
+    const userRole = String(userData.role || "").toLowerCase();
+
+    // STRICT ROLE CHECK: Block Admins and Students from Teacher Sign-In
+    if (userRole === "admin") {
+      await signOut(auth);
+      showError("Access denied: Administrator accounts cannot sign in here. Please use the Admin Login.");
+      return;
+    }
+    if (userRole !== "teacher") {
+      await signOut(auth);
+      showError("Access denied: Only Teacher accounts can sign in here.");
+      return;
+    }
+
+    const authEmail = userData.providedEmail || userData.email || `${rawId}@imars.edu`;
+
+    const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
+
+    // Double-check role by UID after authentication just in case
+    const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
+    const uidSnap = await getDocs(uidQuery);
+    if (!uidSnap.empty) {
+      const verifiedRole = String(uidSnap.docs[0].data().role || "").toLowerCase();
+      if (verifiedRole !== "teacher") {
+        await signOut(auth);
+        showError("Access denied: This account is not a Teacher account.");
+        return;
+      }
+    }
+
     window.location.href = "index.html";
   } catch (err) {
     showError("Invalid ID or password. Please try again.");
@@ -146,8 +167,11 @@ if (adminForm) {
 
         if (adminDocSnap.exists()) {
           const data = adminDocSnap.data();
-          if (data.role && data.role !== "admin" && data.role !== "teacher") {
-            showAdminError("Unauthorized: This account does not have admin privileges.");
+          const role = String(data.role || "").toLowerCase();
+          // STRICT ROLE CHECK: Only allow "admin" role
+          if (role !== "admin") {
+            await signOut(auth);
+            showAdminError("Unauthorized: Only Administrator accounts can access the Admin Portal.");
             return;
           }
           authEmail = data.providedEmail || data.email || `${adminId}@imars.edu`;
@@ -160,13 +184,15 @@ if (adminForm) {
       // Sign in with Firebase Auth
       const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
 
-      // Optional: Check if user exists in `users` collection and is not a student
+      // Verify by UID that the signed-in user is strictly an admin
       const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
       const uidSnap = await getDocs(uidQuery);
       if (!uidSnap.empty) {
         const userData = uidSnap.docs[0].data();
-        if (userData.role === "student") {
-          showAdminError("Access denied: Students cannot access the Admin Portal.");
+        const role = String(userData.role || "").toLowerCase();
+        if (role !== "admin") {
+          await signOut(auth);
+          showAdminError("Access denied: Only Administrator accounts can access the Admin Portal.");
           return;
         }
       }
@@ -176,12 +202,9 @@ if (adminForm) {
 
       // Redirect to Admin Dashboard!
       window.location.href = "admin-dashboard.html";
-
-      // Redirect to Admin Dashboard!
-      window.location.href = "admin-dashboard.html";
     } catch (err) {
       console.error("Admin Login Error:", err.message);
-      showAdminError("Your session expired due to 10 minutes of inactivity. Please sign in again.");
+      showAdminError("Invalid Admin credentials. Please try again.");
     } finally {
       if (adminSubmitBtn) {
         adminSubmitBtn.disabled = false;
@@ -196,7 +219,7 @@ const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get("reason") === "timeout") {
   if (adminModal) {
     adminModal.showModal();
-    showAdminError("Your session expired due to 30 minutes of inactivity. Please sign in again.");
+    showAdminError("Your session expired due to 10 minutes of inactivity. Please sign in again.");
   }
   // Clean up URL bar
   window.history.replaceState({}, document.title, window.location.pathname);

@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -47,10 +48,19 @@ if (user) {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
     const userSnap = await getDocs(userQ);
 
-    if (!userSnap.empty) {
-      const teacherDoc = userSnap.docs[0];
-      const userData = teacherDoc.data();
-      const teacherId = teacherDoc.id; 
+  if (!userSnap.empty) {
+   const teacherDoc = userSnap.docs[0];
+   const userData = teacherDoc.data();
+   const userRole = String(userData.role || "").toLowerCase();
+
+   // If an Admin or Student session tries to load the Teacher Dashboard, sign them out immediately
+   if (userRole !== "teacher") {
+     await signOut(auth);
+     window.location.href = "login.html";
+     return;
+   }
+
+   const teacherId = teacherDoc.id;
 
       const teacherName = userData.displayName || "Teacher";
       document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} !`;

@@ -2002,3 +2002,9 @@ label {
   .manual-tool-card { min-height: 78mm; }
   .manual-sheet-footer { margin-top: 4mm; }
 }
+
+/* Hide the notification bell icon across all Teacher Portal pages */
+.topbar-right .bell,
+.icon-btn.bell {
+  display: none !important;
+}
