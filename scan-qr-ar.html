@@ -129,9 +129,16 @@
         </div>
       </div>
 
-      <p id="modalLessonsNote" class="text-xs text-slate-500 text-center mb-5">
+      <p id="modalLessonsNote" class="text-xs text-slate-500 text-center mb-3">
         Completed Lessons: 1 · Section updated
       </p>
+
+      <!-- NEW: Scrollable Detailed Scores List -->
+      <div class="mb-5 p-3 bg-slate-50 border border-slate-100 rounded-xl max-h-[140px] overflow-y-auto text-xs text-slate-600">
+        <div id="modalDetailedScoresList">
+          <!-- JS will inject the detailed Term/Lesson breakdown here -->
+        </div>
+      </div>
 
       <div class="flex gap-2.5">
         <button id="scanAnotherBtn" type="button"
