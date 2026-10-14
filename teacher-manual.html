@@ -37,22 +37,22 @@
       </div>
     </header>
 
-    <main class="content" id="manual">
-      <section class="manual-sheet manual-sheet-setup">
+    <main class="content manual-page" id="manual">
+      <section class="manual-sheet manual-sheet-setup" aria-labelledby="setupHeading">
         <div class="manual-cover">
           <div class="manual-cover-main">
             <div class="manual-kicker"><span>ImARs · TEACHER FIELD GUIDE</span><span>SY 2026–27</span></div>
             <section class="hero manual-hero">
               <div>
                 <h1>Teacher Manual</h1>
-                <p>Your quick visual guide to planning lessons, using AR, and checking class progress.</p>
+                <p>Set up your class, prepare lessons and quizzes, sync offline results, and review student progress.</p>
               </div>
               <div class="manual-stamp" aria-label="ImARs Learning Platform">
                 <img class="manual-stamp-mark" src="assets/imars-logo.png" alt="ImARs logo" />
-                <span><b>ImARs</b><small>LEARN · SCAN · GROW</small></span>
+                <span><b>ImARs</b><small>PLAN · SYNC · REVIEW</small></span>
               </div>
             </section>
-            <div class="manual-meta-row"><span>3 TERMS</span><i></i><span>4 TOPICS EACH</span><i></i><span>AR-READY SCIENCE</span></div>
+            <div class="manual-meta-row"><span>GRADE 6 SCIENCE</span><i aria-hidden="true"></i><span>3 TERMS · 12 TOPICS</span><i aria-hidden="true"></i><span>UPDATED OCTOBER 2026</span></div>
           </div>
           <div class="manual-cover-actions">
             <button class="banner-btn" id="downloadPdf" type="button">
@@ -68,103 +68,153 @@
 
         <div class="manual-sheet-heading">
           <span class="manual-section-chip">01 · GET READY</span>
-          <div><h2>Set up your classroom</h2><p>Start with your teacher account, student roster, and term schedule.</p></div>
+          <div><h2 id="setupHeading">Set up your classroom</h2><p>Sign in, check your class, and import your student roster.</p></div>
           <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
 
         <div class="manual-setup-grid">
           <aside class="manual-feature-card">
-            <span class="manual-feature-kicker">START WITH YOUR CLASS</span>
-            <div class="manual-feature-art" aria-hidden="true"><span class="art-card art-card-back"></span><span class="art-card art-card-front"><b>AR</b><i></i><i></i><i></i></span><span class="art-spark">✦</span></div>
-            <h3>Set up your class.<br />Plan with confidence.</h3>
-            <p>Use the Teacher ID and password assigned to your account. If you need access, contact your school administrator.</p>
-            <a class="manual-link" href="batch-upload.html">Open Batch Upload <span aria-hidden="true">↗</span></a>
-            <a class="manual-link" href="topic-scheduler.html">Open Topic Scheduler <span aria-hidden="true">↗</span></a>
+            <span class="manual-feature-kicker">YOUR TEACHER ACCOUNT</span>
+            <h3>Start with your<br />class overview.</h3>
+            <p>Sign in with your assigned Teacher ID and password. Use the password eye to show or hide what you type. Ask your school administrator if you need account access.</p>
+            <p>The Dashboard shows your linked class, student count, lesson overview, and available learning results. Use the menu to open each teacher tool.</p>
+            <p><b>Scanning here is for QR offline sync.</b> It reads students’ Grade QR codes to transfer results. The teacher website does not scan AR markers or launch AR activities.</p>
+            <a class="manual-link" href="index.html">Open Dashboard <span aria-hidden="true">↗</span></a>
+            <a class="manual-link" href="#syncHeading">Read the QR sync steps <span aria-hidden="true">↓</span></a>
           </aside>
 
           <div class="manual-step-stack">
             <article class="manual-step-card">
               <span class="manual-step-number">1</span>
-              <div><span class="manual-step-kicker">ACCOUNT ACCESS</span><h3>Sign in</h3><p>Open the portal and enter your teacher credentials.</p></div>
+              <div><span class="manual-step-kicker">BATCH UPLOAD</span><h3>Choose the destination section</h3><p>Open Batch Upload and select “Upload to section.” Use Add Section if needed; the new section is saved to your teacher account.</p></div>
               <span class="manual-step-icon" aria-hidden="true">↗</span>
             </article>
             <article class="manual-step-card">
               <span class="manual-step-number">2</span>
-              <div><span class="manual-step-kicker">SECTION</span><h3>Choose or add a class section</h3><p>Pick an option in “Upload to section,” or choose Add Section to create a new option for this browser. Use that exact section name in the spreadsheet.</p></div>
+              <div><span class="manual-step-kicker">OFFICIAL TEMPLATE</span><h3>Fill in one student per row</h3><p>Download the Excel or CSV template. Keep these columns in order: <b>First Name, Last Name, Student ID, Email.</b> Replace the example students with your roster.</p></div>
               <span class="manual-step-icon" aria-hidden="true">＋</span>
             </article>
             <article class="manual-step-card">
               <span class="manual-step-number">3</span>
-              <div><span class="manual-step-kicker">ROSTER TEMPLATE</span><h3>Enter one student per row</h3><p>Use the template columns exactly: Student Name, Section, LRN, Email. Keep the Section value identical to the dropdown choice.</p></div>
+              <div><span class="manual-step-kicker">REVIEW THE IMPORT</span><h3>Upload and check the preview</h3><p>Drag in a .xlsx or .csv file, or choose Browse File. Select Confirm Import, then check the student count, names, IDs, and destination section.</p></div>
               <span class="manual-step-icon" aria-hidden="true">▤</span>
             </article>
             <article class="manual-step-card">
               <span class="manual-step-number">4</span>
-              <div><span class="manual-step-kicker">FILE SELECTION</span><h3>Choose and confirm the file</h3><p>Drag a CSV or Excel file into the upload area or choose Browse File, then select Confirm Import and review the target section before confirming.</p></div>
+              <div><span class="manual-step-kicker">SAVE YOUR ROSTER</span><h3>Confirm and wait for success</h3><p>Select Confirm Import in the dialog to save the students. Wait for the success message, then open Student Records to check the selected section.</p></div>
               <span class="manual-step-icon" aria-hidden="true">↑</span>
             </article>
-            <div class="manual-note"><b>Prototype limit</b><span>Sections added here are saved in this browser. The confirmation flow is a preview only; uploaded rows are not saved as student records.</span></div>
+            <div class="manual-note"><b>Student IDs</b><span>Keep existing IDs, including leading zeros. A blank ID creates a new ID; importing an existing ID updates that student. The dropdown sets the section for every row.</span></div>
+            <a class="manual-link" href="batch-upload.html">Open Batch Upload <span aria-hidden="true">↗</span></a>
           </div>
         </div>
-        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE</span><span>01 <i></i> 02</span></div>
+        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · CLASS SETUP</span><span>01 <i aria-hidden="true"></i> 03</span></div>
       </section>
 
-      <section class="manual-sheet manual-sheet-teach">
+      <section class="manual-sheet manual-sheet-teach" aria-labelledby="prepareHeading">
         <div class="manual-sheet-heading manual-sheet-heading-light">
-          <span class="manual-section-chip">02 · TEACH &amp; REVIEW</span>
-          <div><h2>Bring each lesson to life</h2><p>Scan a marker, keep activities moving, and use student results to plan next steps.</p></div>
+          <span class="manual-section-chip">02 · PREPARE</span>
+          <div><h2 id="prepareHeading">Plan lessons and prepare activities</h2><p>Manage lesson access, review quizzes, and download classroom markers.</p></div>
           <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
-
         <div class="manual-tool-grid">
           <article class="manual-tool-card manual-tool-blue">
-            <div class="manual-tool-icon" aria-hidden="true">⌂</div><span class="manual-step-kicker">01 · DASHBOARD</span>
-            <h3>Check your class overview</h3>
-            <p>The dashboard shows your greeting, class details, student count, term overview, and learning summaries when linked class data is available.</p>
-          </article>
-          <article class="manual-tool-card manual-tool-yellow">
-            <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">02 · TOPIC SCHEDULER</span>
-            <h3>Set dates and lock topics</h3>
-            <p>Expand one of the three terms, choose a date for each topic, and use the lock icon to prevent edits. Setting a date marks that topic Done.</p>
+            <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">TOPIC SCHEDULER · DATES</span>
+            <h3>Schedule lesson access</h3>
+            <p>Expand a term and choose Set date. A future date locks the topic until that day; choosing today unlocks it now. Save and wait for confirmation. Clear the date to cancel the schedule while keeping its current availability.</p>
+            <p>Term counts and Year Progress show <b>unlocked topics</b>. Scheduled topics count when their release date arrives. Check student reports for actual lesson completion.</p>
             <a class="manual-link" href="topic-scheduler.html">Open Topic Scheduler <span aria-hidden="true">↗</span></a>
           </article>
+          <article class="manual-tool-card manual-tool-yellow">
+            <div class="manual-tool-icon" aria-hidden="true">▣</div><span class="manual-step-kicker">TOPIC SCHEDULER · LOCKS</span>
+            <h3>Control topic availability</h3>
+            <p>Use a topic’s lock button, or Lock All / Unlock All for a term. A manual lock or unlock clears the scheduled date and updates the availability count. To release a locked topic later, set a new date after locking it.</p>
+            <p>Wait for the saved/connected status. These are shared lesson settings, so coordinate changes with other teachers.</p>
+          </article>
           <article class="manual-tool-card manual-tool-green">
-            <div class="manual-tool-icon" aria-hidden="true">◎</div><span class="manual-step-kicker">03 · SCAN AR</span>
-            <h3>Open the camera view</h3>
-            <p>Allow camera access, choose <b>Scan AR</b>, and point the camera at a printed marker. In this build the page opens the camera, but marker recognition and 3D launch are not connected yet.</p>
-            <div class="manual-mini-target" aria-hidden="true"><span></span><i></i></div>
+            <div class="manual-tool-icon" aria-hidden="true">＋</div><span class="manual-step-kicker">QUIZ GENERATOR · SETUP</span>
+            <h3>Create questions from a lesson</h3>
+            <p>Upload a PDF, DOCX, or PPTX up to 10 MB. Convert legacy PowerPoint files to PPTX or PDF first. Add a title, choose your section, and select 1–50 questions, difficulty, and multiple choice or true/false.</p>
+            <p>Select Generate quiz. Your learning content is sent to the AI service to create questions.</p>
+            <a class="manual-link" href="quiz-generator.html">Open Quiz Generator <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-blue">
-            <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">04 · SCAN QR</span>
-            <h3>Use the QR camera mode</h3>
-            <p>Choose <b>Scan QR</b> and allow camera access. QR recognition and opening a student record are not connected in this build.</p>
-            <div class="manual-mini-qr" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="manual-tool-icon" aria-hidden="true">✓</div><span class="manual-step-kicker">QUIZ GENERATOR · REVIEW</span>
+            <h3>Check every question and answer</h3>
+            <p>Accept the suggestions you want or discard unsuitable ones. In the editor, correct the wording, answer choices, and correct answer. Add or remove questions as needed, keeping the quiz within 50 questions.</p>
+            <p>Review accuracy and suitability for your class before saving or making the quiz available.</p>
           </article>
           <article class="manual-tool-card manual-tool-yellow">
-            <div class="manual-tool-icon" aria-hidden="true">↓</div><span class="manual-step-kicker">05 · OFFLINE READY</span>
-            <h3>Download marker packs</h3>
-            <p>Open Offline sync &amp; AR Markers and download a topic ZIP or all 24 marker images. The local progress report tracks download requests.</p>
-            <a class="manual-link" href="offline-sync.html">Open marker downloads <span aria-hidden="true">↗</span></a>
+            <div class="manual-tool-icon" aria-hidden="true">◷</div><span class="manual-step-kicker">QUIZ GENERATOR · SAVE</span>
+            <h3>Choose when a quiz is available</h3>
+            <p>Choose Save as draft to keep it locked, Available now to mark it available for the selected section, or Schedule for a future date and time. Scheduling uses your device’s local time.</p>
+            <p>Select Save quiz and check the confirmation in My quizzes. Use Edit to revise a saved quiz or Delete to remove it.</p>
           </article>
           <article class="manual-tool-card manual-tool-green">
-            <div class="manual-tool-icon" aria-hidden="true">↗</div><span class="manual-step-kicker">06 · CHECK PROGRESS</span>
-            <h3>Find student and class reports</h3>
-            <p>Student Records has a name search. Analytics has name and section filters with pre/post-test comparisons. These pages currently show sample data.</p>
-            <a class="manual-link" href="student-records.html">Open Student Records <span aria-hidden="true">↗</span></a>
-            <a class="manual-link manual-link-secondary" href="analytics.html">Open Analytics <span aria-hidden="true">↗</span></a>
+            <div class="manual-tool-icon" aria-hidden="true">↓</div><span class="manual-step-kicker">OFFLINE SYNC &amp; AR MARKERS</span>
+            <h3>Prepare marker files before class</h3>
+            <p>Download a topic ZIP or all markers, extract the images, and prepare them for the student AR app. The teacher portal provides the files; AR activities run in the student app.</p>
+            <p>Progress tracks download requests. Check that the ZIP actually downloaded. Export Report saves a CSV of marker download status, separate from student grades.</p>
+            <a class="manual-link" href="offline-sync.html">Open marker downloads <span aria-hidden="true">↗</span></a>
           </article>
         </div>
+        <div class="manual-note"><b>Before going offline</b><span>Sign in and download the files you need while connected. Marker download progress can sync to your teacher account; the ZIP files still need to be downloaded on each device. Roster imports, quiz generation, and saving results need an internet connection.</span></div>
+        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · LESSON PREPARATION</span><span>02 <i aria-hidden="true"></i> 03</span></div>
+      </section>
 
-        <div class="manual-bottom-band">
-          <div><span class="manual-step-kicker">IF SOMETHING DOESN’T WORK</span><h3>Try these quick checks</h3></div>
-          <ul>
-            <li>Allow camera access before using either scan mode.</li>
-            <li>For roster work, use the exact template headers and section name.</li>
-            <li>Ask the administrator about missing sections or student imports.</li>
-          </ul>
-          <a class="manual-support" href="mailto:support@arlearn.edu.ph">Need help? Contact support ↗</a>
+      <section class="manual-sheet manual-sheet-teach" aria-labelledby="syncHeading">
+        <div class="manual-sheet-heading manual-sheet-heading-light">
+          <span class="manual-section-chip">03 · SYNC &amp; REVIEW</span>
+          <div><h2 id="syncHeading">Sync offline results with a Grade QR code</h2><p>Use the student’s results QR code, then review the saved records.</p></div>
+          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
-        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE</span><span>02 <i></i> 02</span></div>
+        <div class="manual-note manual-sync-note"><b>QR offline sync only</b><span>The portal scanner transfers students’ offline learning results. It does not scan printed AR markers or open 3D lessons. Keep the teacher device online to save the results to the class records.</span></div>
+        <div class="manual-tool-grid">
+          <article class="manual-tool-card manual-tool-blue">
+            <div class="manual-tool-icon" aria-hidden="true">1</div><span class="manual-step-kicker">SCAN OR UPLOAD</span>
+            <h3>Read the student’s Grade QR</h3>
+            <p>Ask the student to display their Grade QR code from the student app. Open Scan QR (Offline Sync), choose Open Device Camera, allow camera access, and hold the full QR code inside the frame.</p>
+            <p>Alternatively, choose “Or upload a QR code screenshot / image” and select a clear image of the Grade QR code.</p>
+            <a class="manual-link" href="scan-qr-ar.html">Open QR offline sync <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="manual-tool-card manual-tool-yellow">
+            <div class="manual-tool-icon" aria-hidden="true">2</div><span class="manual-step-kicker">CHECK THE RESULT</span>
+            <h3>Confirm the student and sync status</h3>
+            <p>The result dialog shows the student’s name and ID, pre/post-test averages, learning gain, and a lesson breakdown. Check the identity and wait for <b>“All Terms &amp; Lessons Synced!”</b> before treating the transfer as saved.</p>
+            <p>Recent Scans lists recent QR activity. Reopen Student Records or Analytics to load the updated results.</p>
+          </article>
+          <article class="manual-tool-card manual-tool-green">
+            <div class="manual-tool-icon" aria-hidden="true">3</div><span class="manual-step-kicker">RETRY OR CONTINUE</span>
+            <h3>Finish one student at a time</h3>
+            <p>If the dialog says “Displayed from QR (Offline Mode),” saving was not confirmed. Reconnect and scan or upload the Grade QR again, then check for the success message.</p>
+            <p>Close the result or choose Scan Another. The camera stops after a successful read; open it again or upload the next student’s QR image.</p>
+          </article>
+          <article class="manual-tool-card manual-tool-blue">
+            <div class="manual-tool-icon" aria-hidden="true">▤</div><span class="manual-step-kicker">STUDENT RECORDS</span>
+            <h3>Review each learner</h3>
+            <p>Search by student name and filter by section. Each record shows available AR time, module time, pre/post-test results, overall score, and last activity.</p>
+            <p>“N/A” or missing time means the relevant data is not available. A Grade QR transfers test results; it does not supply AR or module time.</p>
+            <a class="manual-link" href="student-records.html">Open Student Records <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="manual-tool-card manual-tool-yellow">
+            <div class="manual-tool-icon" aria-hidden="true">↗</div><span class="manual-step-kicker">ANALYTICS</span>
+            <h3>Compare progress across lessons</h3>
+            <p>Review overall pre/post-test averages and improvement. Search names or filter sections in the student table; use the term tabs for topic completion rates.</p>
+            <p>The table includes students with paired pre/post-test results. Its name and section filters apply to the table, while the overview remains a combined summary.</p>
+            <a class="manual-link" href="analytics.html">Open Analytics <span aria-hidden="true">↗</span></a>
+          </article>
+          <article class="manual-tool-card manual-tool-green">
+            <div class="manual-tool-icon" aria-hidden="true">?</div><span class="manual-step-kicker">QUICK CHECKS</span>
+            <h3>Resolve common problems</h3>
+            <ul class="manual-checklist">
+              <li><b>Camera blocked:</b> allow camera access, or upload a QR image.</li>
+              <li><b>QR unreadable:</b> improve lighting, keep the whole code visible, or crop closer without cutting its edges.</li>
+              <li><b>Missing data:</b> check your account, section, connection, and sync confirmation.</li>
+              <li><b>Still stuck:</b> contact your school administrator with the page name and error message.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · OFFLINE RESULTS &amp; REPORTS</span><span>03 <i aria-hidden="true"></i> 03</span></div>
       </section>
     </main>
   </div>
@@ -207,7 +257,7 @@
         </a>
         <a class="nav-item" href="scan-qr-ar.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Scan QR / AR
+          Scan QR (Offline Sync)
         </a>
         <a class="nav-item active" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>

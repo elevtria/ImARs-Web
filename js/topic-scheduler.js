@@ -3,11 +3,12 @@ import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/
 import {
   collection,
   doc,
-  getDocs,
   getFirestore,
+  onSnapshot,
   updateDoc,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate } from "./topic-availability.js";
 
 const THEMES = ["yellow", "green", "blue"];
 const FILLS = ["fill-yellow", "fill-green", "fill-blue"];
@@ -18,30 +19,30 @@ const DEFAULT_TERMS = [
     name: "Term 1",
     open: false,
     topics: [
-      { title: "Diagrams and Flowcharts, Processes of Changes of State", date: "", done: false, locked: false },
-      { title: "Physical and Chemical Change", date: "", done: false, locked: false },
-      { title: "Mixtures and Separation Techniques", date: "", done: false, locked: false },
-      { title: "The Circulatory System", date: "", done: false, locked: false }
+      { title: "Diagrams and Flowcharts, Processes of Changes of State", date: "", locked: false },
+      { title: "Physical and Chemical Change", date: "", locked: false },
+      { title: "Mixtures and Separation Techniques", date: "", locked: false },
+      { title: "The Circulatory System", date: "", locked: false }
     ]
   },
   {
     name: "Term 2",
     open: true,
     topics: [
-      { title: "Food Webs", date: "", done: false, locked: false },
-      { title: "Simple Machines", date: "", done: false, locked: false },
-      { title: "Properties of Water and Sound Waves", date: "", done: false, locked: false },
-      { title: "Longitudinal and Transverse Waves", date: "", done: false, locked: false }
+      { title: "Food Webs", date: "", locked: false },
+      { title: "Simple Machines", date: "", locked: false },
+      { title: "Properties of Water and Sound Waves", date: "", locked: false },
+      { title: "Longitudinal and Transverse Waves", date: "", locked: false }
     ]
   },
   {
     name: "Term 3",
     open: false,
     topics: [
-      { title: "Longitudinal and Transverse Waves", date: "", done: false, locked: false },
-      { title: "Volcanic Activity and Safety", date: "", done: false, locked: false },
-      { title: "Motions of the Earth", date: "", done: false, locked: false },
-      { title: "Constellations", date: "", done: false, locked: false }
+      { title: "Longitudinal and Transverse Waves", date: "", locked: false },
+      { title: "Volcanic Activity and Safety", date: "", locked: false },
+      { title: "Motions of the Earth", date: "", locked: false },
+      { title: "Constellations", date: "", locked: false }
     ]
   }
 ];
@@ -74,15 +75,8 @@ const saveUiState = () => {
   localStorage.setItem(key, JSON.stringify(terms.map(({ open }) => ({ open }))));
 };
 
-const doneCount = (term) => term.topics.filter((topic) => topic.done).length;
-const isTopicLocked = (topic) => topic.locked && !(topic.date && topic.date <= todayISO());
-const lockedCount = (term) => term.topics.filter(isTopicLocked).length;
-
-const termStatus = (index) => {
-  const done = doneCount(terms[index]);
-  if (done === terms[index].topics.length) return { label: "Completed", cls: "st-completed" };
-  return { label: "Active", cls: "st-active" };
-};
+const isTopicLocked = (topic) => topicAvailability(topic).locked;
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
 const formatDate = (iso) => {
   if (!iso) return "Set date";
@@ -99,9 +93,9 @@ const calIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" str
 function render() {
   const root = document.getElementById("terms");
   root.innerHTML = terms.map((term, ti) => {
-    const done = doneCount(term);
-    const locked = lockedCount(term);
-    const status = termStatus(ti);
+    const availability = termAvailability(term);
+    const { unlocked, locked, total } = availability;
+    const status = isReady ? availability : { label: "Waiting for data", cls: "st-upcoming" };
     const theme = THEMES[ti];
     const allLocked = locked === term.topics.length;
     return `
@@ -115,17 +109,19 @@ function render() {
             </div>
           </div>
           <div class="term-head-right">
-            <span>${done}/${term.topics.length} done</span>
+            <span>${isReady ? unlocked : "—"}/${total} unlocked</span>
             <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </div>
         </button>
         <div class="term-body">
-          ${term.topics.map((topic, ki) => `
+          ${term.topics.map((topic, ki) => {
+            const state = isReady ? topicAvailability(topic) : { label: "Waiting", cls: "pill-pending" };
+            return `
             <div class="topic-row">
               <div class="topic-left">
                 <div class="topic-num">${ki + 1}</div>
                 <div>
-                  <h3>${topic.title}</h3>
+                  <h3>${escapeHtml(topic.title)}</h3>
                   <small>AR Module · Pre &amp; Post Test</small>
                 </div>
               </div>
@@ -133,15 +129,15 @@ function render() {
                 <button class="date-btn ${topic.date ? "has-date" : ""}" type="button" data-date="${ti}-${ki}" ${!isReady || isSaving ? "disabled" : ""}>
                   ${calIcon} ${formatDate(topic.date)}
                 </button>
-                <span class="pill ${topic.done ? "pill-done" : "pill-pending"}">${topic.done ? "Done" : "Pending"}</span>
+                <span class="pill ${state.cls}">${state.label}</span>
                 <button class="lock-btn ${isTopicLocked(topic) ? "locked" : ""}" type="button" data-lock="${ti}-${ki}" aria-label="${isTopicLocked(topic) ? "Unlock" : "Lock"} topic" ${!isReady || isSaving ? "disabled" : ""}>
                   ${lockIcon(isTopicLocked(topic))}
                 </button>
               </div>
             </div>
-          `).join("")}
+          `; }).join("")}
           <div class="term-foot">
-            <span>${done}/${term.topics.length} topics completed · ${locked} locked</span>
+            <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "Waiting for lesson availability"}</span>
             <button class="lock-all" type="button" data-lockall="${ti}" ${!isReady || isSaving ? "disabled" : ""}>
               ${lockIcon(!allLocked)}
               ${allLocked ? "Unlock All" : "Lock All"}
@@ -153,14 +149,15 @@ function render() {
   }).join("");
 
   document.getElementById("yearProgress").innerHTML = terms.map((term, ti) => {
-    const pct = Math.round((doneCount(term) / term.topics.length) * 100);
+    const availability = termAvailability(term);
+    const pct = isReady ? availability.percent : 0;
     return `
       <div class="year-col">
         <div class="year-meta">
           <span>${term.name}</span>
-          <span>${pct}%</span>
+          <span>${isReady ? `${pct}%` : "—"}</span>
         </div>
-        <div class="bar"><i class="${FILLS[ti]}" style="width:${pct}%"></i></div>
+        <div class="bar" role="progressbar" aria-label="${term.name} unlocked topics" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${isReady ? `${availability.unlocked} of ${availability.total} topics unlocked` : "Waiting for data"}"><i class="${FILLS[ti]}" style="width:${pct}%"></i></div>
       </div>
     `;
   }).join("");
@@ -192,39 +189,55 @@ function sortLessons(docs) {
   });
 }
 
-async function loadScheduleFromFirestore() {
+let stopScheduleListeners = [];
+let scheduleGeneration = 0;
+
+function watchScheduleFromFirestore(generation) {
   setSyncStatus("Loading lesson schedule from Firebase…");
-  const loadedTerms = await Promise.all(TERM_IDS.map(async (termId, termIndex) => {
+  const snapshots = Array(TERM_IDS.length).fill(null);
+  const showLoadError = (error, termIndex) => {
+    if (generation !== scheduleGeneration) return;
+    snapshots[termIndex] = null;
+    isReady = false;
+    render();
+    console.error("Unable to load Topic Scheduler from Firebase:", error);
+    setSyncStatus(error.code === "permission-denied"
+      ? "Firebase denied access. Check the teacher Firestore rules."
+      : `Could not load schedule: ${error.message}`, "error");
+  };
+
+  stopScheduleListeners = TERM_IDS.map((termId, termIndex) => {
     const lessonsRef = collection(db, "terms", termId, "lessons");
-    const snapshot = await getDocs(lessonsRef);
-    const lessonDocs = sortLessons(snapshot.docs);
-
-    if (lessonDocs.length !== DEFAULT_TERMS[termIndex].topics.length) {
-      throw new Error(`${DEFAULT_TERMS[termIndex].name} needs 4 lesson documents in terms/${termId}/lessons; found ${lessonDocs.length}.`);
-    }
-
-    return {
-      ...terms[termIndex],
-      topics: DEFAULT_TERMS[termIndex].topics.map((topic, topicIndex) => {
-        const lessonDoc = lessonDocs[topicIndex];
-        const data = lessonDoc.data();
-        const date = typeof data.scheduledDate === "string" ? data.scheduledDate : "";
-        return {
-          ...topic,
-          docId: lessonDoc.id,
-          date,
-          done: Boolean(date),
-          locked: data.isLocked === true
-        };
-      })
-    };
-  }));
-
-  terms = loadedTerms;
-  isReady = true;
-  saveUiState();
-  render();
-  setSyncStatus("Connected · changes save to Firebase", "success");
+    return onSnapshot(lessonsRef, { includeMetadataChanges: true }, (snapshot) => {
+      if (generation !== scheduleGeneration) return;
+      try {
+        const lessonDocs = sortLessons(snapshot.docs);
+        if (lessonDocs.length !== DEFAULT_TERMS[termIndex].topics.length) {
+          throw new Error(`${DEFAULT_TERMS[termIndex].name} needs 4 lesson documents in terms/${termId}/lessons; found ${lessonDocs.length}.`);
+        }
+        snapshots[termIndex] = snapshot;
+        terms[termIndex].topics = DEFAULT_TERMS[termIndex].topics.map((topic, topicIndex) => {
+          const lessonDoc = lessonDocs[topicIndex];
+          const data = lessonDoc.data();
+          return {
+            ...topic,
+            title: typeof data.title === "string" && data.title.trim() ? data.title : topic.title,
+            docId: lessonDoc.id,
+            date: typeof data.scheduledDate === "string" ? data.scheduledDate : "",
+            locked: data.isLocked === true
+          };
+        });
+        isReady = snapshots.every(Boolean);
+        render();
+        if (isReady && !isSaving) {
+          const cached = snapshots.some((item) => item.metadata.fromCache);
+          setSyncStatus(cached ? "Showing cached schedule · waiting for Firebase" : "Connected · changes save to Firebase", cached ? "" : "success");
+        }
+      } catch (error) {
+        showLoadError(error, termIndex);
+      }
+    }, (error) => showLoadError(error, termIndex));
+  });
 }
 
 function lessonRef(termIndex, topicIndex) {
@@ -233,7 +246,10 @@ function lessonRef(termIndex, topicIndex) {
   return doc(db, "terms", TERM_IDS[termIndex], "lessons", lessonId);
 }
 
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
+  const generation = ++scheduleGeneration;
+  stopScheduleListeners.forEach((stop) => stop());
+  stopScheduleListeners = [];
   isReady = false;
   render();
   if (!user) {
@@ -241,23 +257,8 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  try {
-    await loadScheduleFromFirestore();
-  } catch (error) {
-    console.error("Unable to load Topic Scheduler from Firebase:", error);
-    setSyncStatus(error.code === "permission-denied"
-      ? "Firebase denied access. Check the teacher Firestore rules."
-      : `Could not load schedule: ${error.message}`, "error");
-  }
+  watchScheduleFromFirestore(generation);
 });
-
-function todayISO() {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 document.getElementById("terms").addEventListener("click", async (event) => {
   const toggle = event.target.closest("[data-toggle]");
@@ -280,15 +281,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     render();
     setSyncStatus("Saving lesson access setting…");
     try {
-      const lockUpdate = { isLocked: nextLocked };
-      // A manual lock cancels an old scheduled release so it stays locked until unlocked again.
-      if (nextLocked) lockUpdate.scheduledDate = "";
-      await updateDoc(lessonRef(termIndex, topicIndex), lockUpdate);
-      topic.locked = nextLocked;
-      if (nextLocked) {
-        topic.date = "";
-        topic.done = false;
-      }
+      await updateDoc(lessonRef(termIndex, topicIndex), manualAccessUpdate(nextLocked));
       setSyncStatus("Connected · changes save to Firebase", "success");
     } catch (error) {
       console.error("Unable to save lesson lock:", error);
@@ -311,18 +304,9 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     try {
       const batch = writeBatch(db);
       term.topics.forEach((_, topicIndex) => {
-        batch.update(lessonRef(termIndex, topicIndex), nextLocked
-          ? { isLocked: true, scheduledDate: "" }
-          : { isLocked: false });
+        batch.update(lessonRef(termIndex, topicIndex), manualAccessUpdate(nextLocked));
       });
       await batch.commit();
-      term.topics.forEach((topic) => {
-        topic.locked = nextLocked;
-        if (nextLocked) {
-          topic.date = "";
-          topic.done = false;
-        }
-      });
       setSyncStatus("Connected · changes save to Firebase", "success");
     } catch (error) {
       console.error("Unable to update all lesson locks:", error);
@@ -363,18 +347,12 @@ document.getElementById("dateSave").onclick = async () => {
   const { termIndex, topicIndex } = dateTarget;
   const topic = terms[termIndex].topics[topicIndex];
   const scheduledDate = dateInput.value;
-  const wasAvailable = !isTopicLocked(topic);
   isSaving = true;
   render();
   setSyncStatus("Saving lesson date…");
   try {
-    const dateUpdate = { scheduledDate };
-    // Scheduling an already available lesson must not make it unavailable again.
-    if (wasAvailable) dateUpdate.isLocked = false;
+    const dateUpdate = scheduledAccessUpdate(scheduledDate, topic);
     await updateDoc(lessonRef(termIndex, topicIndex), dateUpdate);
-    topic.date = scheduledDate;
-    if (wasAvailable) topic.locked = false;
-    topic.done = Boolean(scheduledDate);
     closeDate();
     setSyncStatus("Connected · changes save to Firebase", "success");
   } catch (error) {
@@ -398,3 +376,8 @@ function scheduleMidnightRefresh() {
   }, Math.max(1000, nextMidnight.getTime() - Date.now()));
 }
 scheduleMidnightRefresh();
+
+// Refresh overdue releases when returning to a tab that was suspended overnight.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) render();
+});

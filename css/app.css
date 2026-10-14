@@ -192,6 +192,7 @@ a { text-decoration: none; color: inherit; }
 }
 .scheduler-sync-status[data-state="success"] { color: #328b63; }
 .scheduler-sync-status[data-state="error"] { color: #b54747; }
+.scheduler-progress-copy { margin: 6px 0 16px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
 .scan-btn, .primary-btn, .btn-purple, .cam-btn, .login-btn {
   display: inline-flex;
@@ -808,7 +809,7 @@ td {
 
 .year-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 18px;
 }
 
@@ -1785,7 +1786,7 @@ td {
 .manual-feature-kicker { color: #e8f1f8; }
 .manual-feature-card h3 { position: relative; z-index: 1; margin-top: 14px; font-size: 22px; font-weight: 900; line-height: 1.12; letter-spacing: -0.04em; }
 .manual-feature-card p { position: relative; z-index: 1; margin-top: 10px; color: rgba(255,255,255,.88); font-size: 12px; line-height: 1.55; }
-.manual-feature-card .manual-link { position: relative; z-index: 1; margin-top: 15px; color: #fff4d1; }
+.manual-feature-card .manual-link { position: relative; z-index: 1; display: flex; margin-top: 15px; color: #fff4d1; }
 .manual-feature-art { position: relative; width: 100%; height: 84px; margin-top: 14px; }
 .art-card { position: absolute; display: block; width: 112px; height: 68px; border: 3px solid rgba(255,255,255,.8); border-radius: 10px; background: #f2f6fb; box-shadow: 0 8px 18px rgba(44,58,79,.18); }
 .art-card-back { top: 8px; left: 48px; transform: rotate(9deg); background: #ffe39a; }
@@ -1802,17 +1803,20 @@ td {
 .manual-step-card:nth-child(4) .manual-step-number { background: var(--gold); color: #503a13; }
 .manual-step-card .manual-step-kicker { color: #5b7fa0; font-size: 8px; }
 .manual-step-card h3 { margin: 2px 0 2px; color: var(--ink); font-size: 14px; font-weight: 900; }
-.manual-step-card p { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.manual-step-card p { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .manual-step-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: #edf2f8; color: #3f5c78; font-size: 17px; font-weight: 900; }
-.manual-note { display: flex; gap: 10px; padding: 10px 13px; border-radius: 12px; background: #fff7df; color: #6d5b35; font-size: 10px; line-height: 1.45; }
+.manual-note { display: flex; gap: 10px; padding: 10px 13px; border-radius: 12px; background: #fff7df; color: #6d5b35; font-size: 12px; line-height: 1.5; }
 .manual-note b { flex: 0 0 auto; color: #966500; }
+.manual-tool-grid + .manual-note { margin-top: 12px; }
+.manual-sync-note { margin-bottom: 14px; }
+#manual h2 { scroll-margin-top: 92px; }
 .manual-sheet-footer { margin-top: 15px; padding: 9px 6px 0; border-top: 1px solid var(--line); color: #7d8b9c; font-size: 8px; }
 .manual-sheet-footer > span:last-child { display: flex; align-items: center; gap: 8px; }
 .manual-sheet-footer i { width: 20px; height: 1px; background: #bfc8e2; }
 .manual-sheet-heading-light { padding-top: 8px; }
 .manual-sheet-teach .manual-section-chip { background: #e9eef7; color: #3f5c78; }
 .manual-tool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
-.manual-tool-card { position: relative; overflow: hidden; min-height: 250px; padding: 16px 15px; border: 1px solid var(--line); border-radius: 15px; background: #fff; }
+.manual-tool-card { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 250px; padding: 16px 15px; border: 1px solid var(--line); border-radius: 15px; background: #fff; }
 .manual-tool-card::before { position: absolute; top: 0; right: 0; left: 0; height: 5px; background: var(--steel); content: ""; }
 .manual-tool-yellow::before { background: var(--gold); }
 .manual-tool-blue::before { background: var(--sky); }
@@ -1823,10 +1827,11 @@ td {
 .manual-tool-green .manual-tool-icon { background: #edf2f8; color: #3f5c78; }
 .manual-tool-card .manual-step-kicker { color: #5b7fa0; font-size: 8px; }
 .manual-tool-card h3 { margin: 6px 0; color: var(--ink); font-size: 15px; font-weight: 900; line-height: 1.2; }
-.manual-tool-card p { color: #5b6e84; font-size: 11px; line-height: 1.5; }
+.manual-tool-card p, .manual-checklist { color: #5b6e84; font-size: 12px; line-height: 1.5; }
+.manual-tool-card p + p { margin-top: 8px; }
+.manual-checklist { display: grid; gap: 6px; padding-left: 16px; list-style: disc; }
 .manual-tool-card p b { color: var(--ink); }
-.manual-tool-card .manual-link { position: absolute; bottom: 15px; left: 15px; color: #3f6f94; font-size: 10px; }
-.manual-tool-card .manual-link-secondary { bottom: 35px; }
+.manual-tool-card .manual-link { margin-top: auto; padding-top: 12px; color: #3f6f94; font-size: 11px; }
 .manual-link { display: inline-flex; align-items: center; gap: 8px; color: #3f6f94; font-size: 11px; font-weight: 900; }
 .manual-link span { font-size: 15px; transition: transform .16s ease; }
 .manual-link:hover span { transform: translate(2px, -2px); }
@@ -1842,6 +1847,10 @@ td {
 .manual-bottom-band h3 { margin-top: 3px; color: var(--ink); font-size: 13px; font-weight: 900; }
 .manual-bottom-band ul { display: grid; gap: 4px; padding-left: 15px; color: #5b6e84; font-size: 9px; line-height: 1.35; }
 .manual-support { color: #3f6f94; font-size: 9px; font-weight: 900; white-space: nowrap; }
+.manual-export-sheet { width: 1120px; margin: 0; box-shadow: none; }
+.manual-export-sheet .manual-cover { grid-template-columns: 1fr; }
+.manual-export-sheet .manual-hero { flex-direction: row; }
+.manual-export-sheet .manual-hero h1 { font-size: 40px; }
 .sync-cloud-status { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 .login-page {
@@ -1864,6 +1873,11 @@ td {
 .login-card .brand { padding: 0; margin-bottom: 22px; }
 .login-card .brand-mark { width: 48px; height: 48px; font-size: 16px; }
 .login-brand-mark { display: block; }
+
+/* Keep the password eye centered when shared button hover/active styles apply. */
+#togglePassword {
+  transform: translateY(-50%);
+}
 
 .login-card h1 {
   font-size: 28px;
@@ -1958,30 +1972,33 @@ label {
   .guide-banner { padding: 22px 18px; }
   .guide-banner h2 { font-size: 18px; }
   #manual.manual-page { padding: 16px 12px 88px; }
-  .manual-sheet { margin-bottom: 18px; padding: 11px; border-radius: 19px; }
-  .manual-cover { grid-template-columns: 1fr; padding: 17px; }
-  .manual-cover-actions { grid-template-columns: 1fr 1fr; }
-  .manual-hero { flex-direction: row; }
-  .manual-setup-grid { grid-template-columns: 1fr; }
-  .manual-feature-card { min-height: 0; }
-  .manual-tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .manual-bottom-band { grid-template-columns: 1fr 1.5fr; }
-  .manual-support { grid-column: 1 / -1; }
+  .manual-page .manual-sheet { margin-bottom: 18px; padding: 11px; border-radius: 19px; }
+  .manual-page .manual-cover { grid-template-columns: 1fr; padding: 17px; }
+  .manual-page .manual-cover-actions { grid-template-columns: 1fr 1fr; }
+  .manual-page .manual-hero { flex-direction: row; }
+  .manual-page .manual-setup-grid { grid-template-columns: 1fr; }
+  .manual-page .manual-feature-card { min-height: 0; }
+  .manual-page .manual-tool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-page .manual-bottom-band { grid-template-columns: 1fr 1.5fr; }
+  .manual-page .manual-support { grid-column: 1 / -1; }
 }
 
 @media (max-width: 520px) {
-  .manual-hero { align-items: flex-start; }
-  .manual-stamp { gap: 7px; }
-  .manual-stamp-mark { width: 40px; height: 40px; }
-  .manual-stamp small { font-size: 7px; }
-  .manual-kicker { font-size: 8px; }
-  .manual-meta-row { flex-wrap: wrap; font-size: 8px; }
-  .manual-sheet-heading { align-items: flex-start; flex-wrap: wrap; }
-  .manual-sheet-heading > div { flex: 1 1 75%; }
-  .manual-heading-doodle { display: none; }
-  .manual-tool-grid { grid-template-columns: 1fr; }
-  .manual-tool-card { min-height: 215px; }
-  .manual-bottom-band { grid-template-columns: 1fr; }
+  .manual-page .manual-hero { align-items: flex-start; flex-wrap: wrap; }
+  .manual-page .manual-note { flex-direction: column; gap: 4px; }
+  .manual-page .manual-step-card { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+  .manual-page .manual-step-icon { display: none; }
+  .manual-page .manual-stamp { gap: 7px; }
+  .manual-page .manual-stamp-mark { width: 40px; height: 40px; }
+  .manual-page .manual-stamp small { font-size: 7px; }
+  .manual-page .manual-kicker { font-size: 8px; }
+  .manual-page .manual-meta-row { flex-wrap: wrap; font-size: 8px; }
+  .manual-page .manual-sheet-heading { align-items: flex-start; flex-wrap: wrap; }
+  .manual-page .manual-sheet-heading > div { flex: 1 1 75%; }
+  .manual-page .manual-heading-doodle { display: none; }
+  .manual-page .manual-tool-grid { grid-template-columns: 1fr; }
+  .manual-page .manual-tool-card { min-height: 215px; }
+  .manual-page .manual-bottom-band { grid-template-columns: 1fr; }
 }
 
 @page manualGuide { size: landscape; margin: 9mm; }
@@ -1993,13 +2010,14 @@ label {
   .guide-banner { box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .chapter { break-inside: avoid; box-shadow: none; border: 1px solid var(--line); }
   #manual.manual-page { page: manualGuide; max-width: none; padding: 0; }
-  .manual-sheet { min-height: 185mm; margin: 0; padding: 7mm; border-radius: 12px; box-shadow: none; break-inside: avoid; break-after: page; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .manual-sheet { min-height: 0; margin: 0; padding: 4mm; border-radius: 12px; box-shadow: none; break-inside: avoid; break-after: page; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .manual-sheet:last-child { break-after: auto; }
   .manual-cover { padding: 5mm 6mm; }
   .manual-hero { margin: 3mm 0; }
   .manual-sheet-heading { padding: 5mm 2mm 4mm; }
-  .manual-feature-card { min-height: 105mm; }
-  .manual-tool-card { min-height: 78mm; }
+  .manual-feature-card { min-height: 0; }
+  .manual-tool-card { min-height: 0; }
+  .manual-tool-card p, .manual-checklist, .manual-step-card p, .manual-note { font-size: 11px; }
   .manual-sheet-footer { margin-top: 4mm; }
 }
 
