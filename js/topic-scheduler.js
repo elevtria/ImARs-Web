@@ -4,10 +4,10 @@ import {
   collection,
   doc,
   getFirestore,
-  onSnapshot,
+  onSnapshotWithLoading as onSnapshot,
   updateDoc,
   writeBatch
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+} from "./firebase-data.js";
 import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate } from "./topic-availability.js";
 
 const THEMES = ["yellow", "green", "blue"];

@@ -40,6 +40,7 @@ export async function onRequestPost({ request, env }) {
 
     const requestBody = {
       input,
+      store: false,
       response_format: {
         type: "text",
         mime_type: "application/json",
@@ -80,12 +81,12 @@ export async function onRequestPost({ request, env }) {
         return jsonResponse({ error: "The question-generation service is busy or its usage limit has been reached. Please try again later." }, 429);
       }
       if (geminiResponse.status === 400) {
-        return jsonResponse({ error: "The question-generation service rejected the request (HTTP 400). Check the local server window for details." }, 422);
+        return jsonResponse({ error: "The question-generation service rejected the request (HTTP 400). Please try a smaller or different learning file." }, 422);
       }
       if (geminiResponse.status === 401 || geminiResponse.status === 403) {
         return jsonResponse({ error: "The question-generation service could not authenticate. Check its secret setting." }, 503);
       }
-      return jsonResponse({ error: "The question-generation service returned an error (HTTP " + geminiResponse.status + "). Check the local server window for details." }, 502);
+      return jsonResponse({ error: "The question-generation service returned an error (HTTP " + geminiResponse.status + "). Please try again later." }, 502);
     }
 
     const outputText = getOutputText(result);
@@ -94,7 +95,7 @@ export async function onRequestPost({ request, env }) {
         status: result.status || "unknown",
         steps: Array.isArray(result.steps) ? result.steps.map((step) => ({ type: step.type, status: step.status })) : []
       });
-      return jsonResponse({ error: "The question-generation service returned no questions. Check the local server window for details." }, 502);
+      return jsonResponse({ error: "The question-generation service returned no questions. Please try again or use a different learning file." }, 502);
     }
 
     let generated;
@@ -102,7 +103,7 @@ export async function onRequestPost({ request, env }) {
       generated = JSON.parse(outputText);
     } catch {
       console.error("[Quiz Generator] Gemini output was not valid JSON");
-      return jsonResponse({ error: "The question-generation service returned an unexpected response. Check the local server window for details." }, 502);
+      return jsonResponse({ error: "The question-generation service returned an unexpected response. Please try again." }, 502);
     }
 
     const questions = validateGeneratedQuestions(generated.questions, body.questionCount, body.questionType);
@@ -112,7 +113,7 @@ export async function onRequestPost({ request, env }) {
         actualCount: Array.isArray(generated.questions) ? generated.questions.length : null,
         questionType: body.questionType
       });
-      return jsonResponse({ error: "The question-generation service did not return complete questions in the requested format. Check the local server window for details." }, 502);
+      return jsonResponse({ error: "The question-generation service did not return complete questions in the requested format. Please try generating the quiz again." }, 502);
     }
     return jsonResponse({ questions });
   } catch (error) {

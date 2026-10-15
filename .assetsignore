@@ -7,3 +7,11 @@ functions/**
 wrangler.jsonc
 .gitignore
 .assetsignore
+.vs/**
+.vscode/**
+docs/**
+tests/**
+scripts/**
+package.json
+package-lock.json
+_split_assets.py

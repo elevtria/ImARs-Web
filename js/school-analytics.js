@@ -1,3 +1,4 @@
+import { getDocs as getBackgroundDocs } from "./firebase-data.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
@@ -6,8 +7,8 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+  getDocsWithLoading as getDocs
+} from "./firebase-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -293,12 +294,12 @@ async function updateAdminSidebar(user) {
     let adminData = null;
 
     // 1. Try matching by Auth UID
-    const uidSnap = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
+    const uidSnap = await getBackgroundDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
     if (!uidSnap.empty) {
       adminData = uidSnap.docs[0].data();
     } else {
       // 2. Fallback: Query any user with role == "admin" (like ADMIN1)
-      const roleSnap = await getDocs(query(collection(db, "users"), where("role", "==", "admin")));
+      const roleSnap = await getBackgroundDocs(query(collection(db, "users"), where("role", "==", "admin")));
       if (!roleSnap.empty) {
         adminData = roleSnap.docs[0].data();
       }
