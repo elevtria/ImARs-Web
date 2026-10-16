@@ -1,15 +1,17 @@
+// Update with the all-markers ZIP hash when publishing replacement images.
+const markerVersion = "76f0d2ca0d6c";
 const markerPacks = [
-  { term: 1, topic: "Circulatory system", file: "term-1-circulatory-system.zip", markers: 3, bytes: 3774599 },
-  { term: 1, topic: "Mixture and separation", file: "term-1-mixture-and-separation.zip", markers: 4, bytes: 3095183 },
-  { term: 1, topic: "Changes of state", file: "term-1-changes-of-state.zip", markers: 3, bytes: 2681021 },
-  { term: 1, topic: "Physical and Chemical changes", file: "term-1-physical-and-chemical-changes.zip", markers: 4, bytes: 3095183 },
-  { term: 2, topic: "Longitudinal and transverse waves", file: "term-2-longitudinal-and-transverse-waves.zip", markers: 3, bytes: 2594598 },
-  { term: 2, topic: "Properties of water and sound", file: "term-2-properties-of-water-and-sound.zip", markers: 2, bytes: 2284498 },
-  { term: 2, topic: "Simple machine", file: "term-2-simple-machine.zip", markers: 6, bytes: 1635345 },
-  { term: 2, topic: "Food web", file: "term-2-food-web.zip", markers: 1, bytes: 1220753 },
-  { term: 3, topic: "Longitudinal and transverse waves", file: "term-3-longitudinal-and-transverse-waves.zip", markers: 3, bytes: 2594598 },
-  { term: 3, topic: "Constellation", file: "term-3-constellation.zip", markers: 1, bytes: 734038 },
-  { term: 3, topic: "Motion of the Earth", file: "term-3-motion-of-the-earth.zip", markers: 2, bytes: 767022 },
+  { term: 1, topic: "Circulatory system", file: "term-1-circulatory-system.zip", markers: 3, bytes: 3774600 },
+  { term: 1, topic: "Mixture and separation", file: "term-1-mixture-and-separation.zip", markers: 4, bytes: 3088183 },
+  { term: 1, topic: "Changes of state", file: "term-1-changes-of-state.zip", markers: 3, bytes: 2737197 },
+  { term: 1, topic: "Physical and Chemical changes", file: "term-1-physical-and-chemical-changes.zip", markers: 4, bytes: 3088183 },
+  { term: 2, topic: "Longitudinal and transverse waves", file: "term-2-longitudinal-and-transverse-waves.zip", markers: 3, bytes: 2587088 },
+  { term: 2, topic: "Properties of water and sound", file: "term-2-properties-of-water-and-sound.zip", markers: 2, bytes: 2272943 },
+  { term: 2, topic: "Simple machine", file: "term-2-simple-machine.zip", markers: 6, bytes: 1674540 },
+  { term: 2, topic: "Food web", file: "term-2-food-web.zip", markers: 1, bytes: 1167357 },
+  { term: 3, topic: "Longitudinal and transverse waves", file: "term-3-longitudinal-and-transverse-waves.zip", markers: 3, bytes: 2587088 },
+  { term: 3, topic: "Constellation", file: "term-3-constellation.zip", markers: 1, bytes: 734039 },
+  { term: 3, topic: "Motion of the Earth", file: "term-3-motion-of-the-earth.zip", markers: 2, bytes: 767023 },
   { term: 3, topic: "Volcanic", file: "term-3-volcanic.zip", markers: 1, bytes: 458043 }
 ];
 
@@ -64,7 +66,7 @@ markerPacks.forEach((pack) => {
     <span class="chip term-${pack.term}">Term ${pack.term}</span>
     <span class="size">${formatSize(pack.bytes)}</span>
     <span class="chip ready" data-status>${wasDownloaded ? "Download requested" : "Ready"}</span>
-    <span class="action"><a class="btn-green" href="assets/markers/${pack.file}" download data-download>Download ZIP</a></span>
+    <span class="action"><a class="btn-green" href="assets/markers/${pack.file}?v=${markerVersion}" download data-download>Download ZIP</a></span>
   `;
   rowsRoot.appendChild(row);
 });
@@ -252,7 +254,7 @@ rowsRoot.addEventListener("click", (event) => {
 document.getElementById("downloadAll").addEventListener("click", () => {
   markDownloaded(markerPacks.map((pack) => pack.file));
   const link = document.createElement("a");
-  link.href = "assets/markers/all-3d-markers.zip";
+  link.href = `assets/markers/all-3d-markers.zip?v=${markerVersion}`;
   link.download = "all-3d-markers.zip";
   link.click();
 });

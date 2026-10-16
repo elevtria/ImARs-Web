@@ -6,12 +6,12 @@ import {
   collection, 
   query, 
   where, 
-  getDocs, 
+  getDocsWithLoading as getDocs,
   doc, 
-  getDoc, 
+  getDocWithLoading as getDoc,
   setDoc, 
   serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+} from "./firebase-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",

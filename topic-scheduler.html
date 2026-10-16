@@ -10,6 +10,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="js/tailwind.config.js"></script>
   <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body>
   <div class="app">
@@ -40,7 +41,7 @@
       <section class="hero">
         <div>
           <h1>Topic Scheduler</h1>
-          <p>3 terms · 4 topics each · Set dates and lock to prevent changes</p>
+          <p>3 terms · 4 topics each · Schedule release dates and control student access</p>
           <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite">Connecting to Firebase…</p>
         </div>
       </section>
@@ -49,6 +50,7 @@
 
       <section class="progress-card">
         <h2>Year Progress</h2>
+        <p class="scheduler-progress-copy">Based on topics currently unlocked for learners.</p>
         <div class="year-grid" id="yearProgress"></div>
       </section>
     </main>
@@ -92,7 +94,7 @@
         </a>
         <a class="nav-item" href="scan-qr-ar.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Scan QR / AR
+          Scan QR (Offline Sync)
         </a>
         <a class="nav-item" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
@@ -118,8 +120,10 @@
   <div class="modal" id="dateModal">
     <div class="modal-card">
       <h3 id="dateTitle">Set date</h3>
-      <p>Choose when this AR module should be taught. Locked topics cannot be changed.</p>
+      <p>A future date locks this topic until that day. Choose today to unlock it now. A manual lock or unlock replaces the schedule.</p>
+      <label for="dateInput">Available starting</label>
       <input type="date" id="dateInput" />
+      <p class="scheduler-progress-copy">Leave the date empty to cancel the schedule and keep its current availability.</p>
       <div class="modal-actions">
         <button class="ghost" id="dateCancel" type="button">Cancel</button>
         <button class="primary-btn" id="dateSave" type="button">Save date</button>
@@ -129,8 +133,8 @@
 
   <div class="modal" id="scanModal">
     <div class="modal-card">
-      <h3>Scan QR / AR</h3>
-      <p>Point the camera at a lesson marker to open the AR module.</p>
+      <h3>Scan QR (Offline Sync)</h3>
+      <p>Scan a student's Grade QR code to sync offline learning results.</p>
       <div style="height:180px;border-radius:16px;border:2px dashed #A4B8D9;display:grid;place-items:center;color:#81A2C1;font-weight:700;background:#E2E3E7;margin-bottom:16px;">QR / AR Scanner</div>
       <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
     </div>
