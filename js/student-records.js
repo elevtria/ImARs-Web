@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -174,25 +174,33 @@ onAuthStateChanged(auth, async (user) => {
           card.dataset.name = sName.toLowerCase();
           card.dataset.section = classCode;
           
-          card.innerHTML = `
-            <div class="record-head">
-              <div class="student">
-                <div class="avatar">${initials}</div>
-                <div>
-                  <strong>${sName}</strong>
-                  <small>Grade 6 – ${sectionName} · ${dateStr}</small>
-                </div>
+      card.innerHTML = `
+        <div class="record-head">
+          <div class="student">
+            <div class="avatar">${initials}</div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <strong>${sName}</strong>
+                <button type="button" class="edit-student-btn" style="background: none; border: none; cursor: pointer; color: #64748b;" 
+                        data-id="${studentDoc.id}" 
+                        data-name="${sName.replace(/"/g, '&quot;')}" 
+                        data-email="${(sData.email || "").replace(/"/g, '&quot;')}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
               </div>
-              <span class="overall">${overallPercent}% overall</span>
+              <small>Grade 6 – ${sectionName} · ${dateStr}</small>
             </div>
-            <div class="stats">
-              <div class="stat"><span>AR Time</span><b class="c-pink">${arTimeStr}</b></div>
-              <div class="stat"><span>Module Time</span><b class="c-cyan">${moduleTimeStr}</b></div>
-              <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
-              <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
-            </div>
-            <div class="bar" aria-label="${overallPercent} percent overall"><i style="width:${overallPercent}%"></i></div>
-          `;
+          </div>
+          <span class="overall">${overallPercent}% overall</span>
+        </div>
+        <div class="stats">
+          <div class="stat"><span>AR Time</span><b class="c-pink">${arTimeStr}</b></div>
+          <div class="stat"><span>Module Time</span><b class="c-cyan">${moduleTimeStr}</b></div>
+          <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
+          <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
+        </div>
+        <div class="bar" aria-label="${overallPercent} percent overall"><i style="width:${overallPercent}%"></i></div>
+      `;
           
           recordsContainer.appendChild(card);
         }
@@ -205,5 +213,52 @@ onAuthStateChanged(auth, async (user) => {
     }
   } catch (error) {
     console.error("Error loading student records:", error);
+  }
+});
+
+// --- Edit Profile Logic ---
+const editModal = document.getElementById("editStudentModal");
+const editForm = document.getElementById("editStudentForm");
+const idInput = document.getElementById("editStudentId");
+const nameInput = document.getElementById("editFullName");
+const emailInput = document.getElementById("editEmail");
+const saveBtn = document.getElementById("saveEditBtn");
+
+document.getElementById("cancelEditBtn").addEventListener("click", () => editModal.classList.remove("open"));
+
+// Use event delegation so it works on dynamically generated cards
+recordsContainer.addEventListener("click", (e) => {
+  const btn = e.target.closest(".edit-student-btn");
+  if (!btn) return;
+  
+  idInput.value = btn.dataset.id;
+  nameInput.value = btn.dataset.name;
+  emailInput.value = btn.dataset.email;
+  editModal.classList.add("open");
+});
+
+editForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving...";
+
+  try {
+    const studentRef = doc(db, "users", idInput.value);
+    await updateDoc(studentRef, {
+      displayName: nameInput.value.trim(),
+      fullName: nameInput.value.trim(),
+      email: emailInput.value.trim().toLowerCase(),
+      providedEmail: emailInput.value.trim().toLowerCase()
+    });
+    
+    editModal.classList.remove("open");
+    // Reload the page to reflect the fresh data in the UI
+    window.location.reload();
+  } catch (err) {
+    console.error("Error updating student:", err);
+    alert("Failed to update student profile.");
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save Changes";
   }
 });

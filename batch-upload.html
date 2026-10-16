@@ -132,6 +132,33 @@
           <button class="btn-green import-btn" id="importBtn" type="button" hidden>Confirm Import</button>
         </div>
       </div>
+
+          <!-- Add this directly below the dropZone div -->
+      <section class="card" id="previewSection" hidden style="margin-top: 1.5rem;">
+        <div class="progress-head">
+          <div>
+            <h2>Data Validation & Preview</h2>
+            <p id="previewSummary">0 valid records, 0 errors found.</p>
+          </div>
+          <button class="btn-green" id="confirmPreviewBtn" type="button" disabled>Confirm Valid Records</button>
+        </div>
+        <div style="overflow-x: auto; margin-top: 1rem; max-height: 400px; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9rem; white-space: nowrap;">
+            <thead style="background: #f8fafc; position: sticky; top: 0;">
+              <tr style="border-bottom: 2px solid #e2e8f0;">
+                <th style="padding: 12px 8px;">Row</th>
+                <th style="padding: 12px 8px;">First Name</th>
+                <th style="padding: 12px 8px;">Last Name</th>
+                <th style="padding: 12px 8px;">Student ID</th>
+                <th style="padding: 12px 8px;">Email</th>
+                <th style="padding: 12px 8px;">Validation Status</th>
+              </tr>
+            </thead>
+            <tbody id="previewTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+      
       <p class="upload-status" id="uploadStatus" aria-live="polite" hidden></p>
       <input class="file-input" id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
     </main>
