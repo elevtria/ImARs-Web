@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, query, where, getDocsWithLoading as getDocs } from "./firebase-data.js";
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -90,6 +91,10 @@ onAuthStateChanged(auth, async (user) => {
         
         for (const studentDoc of studentSnap.docs) {
           const sData = studentDoc.data();
+          
+          // EXPERT REVISION: Hide soft-deleted students from the active UI
+          if (sData.active === false) continue;
+          
           const sName = sData.displayName || "Unknown Student";
           
           // Generate Initials
@@ -181,11 +186,20 @@ onAuthStateChanged(auth, async (user) => {
             <div>
               <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <strong>${sName}</strong>
+                
+                <!-- Existing Edit Button -->
                 <button type="button" class="edit-student-btn" style="background: none; border: none; cursor: pointer; color: #64748b;" 
                         data-id="${studentDoc.id}" 
                         data-name="${sName.replace(/"/g, '&quot;')}" 
                         data-email="${(sData.email || "").replace(/"/g, '&quot;')}">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                
+                <!-- NEW Soft Delete Button -->
+                <button type="button" class="delete-student-btn" style="background: none; border: none; cursor: pointer; color: #ef4444;" 
+                        data-id="${studentDoc.id}" 
+                        data-name="${sName.replace(/"/g, '&quot;')}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                 </button>
               </div>
               <small>Grade 6 – ${sectionName} · ${dateStr}</small>
@@ -226,15 +240,37 @@ const saveBtn = document.getElementById("saveEditBtn");
 
 document.getElementById("cancelEditBtn").addEventListener("click", () => editModal.classList.remove("open"));
 
-// Use event delegation so it works on dynamically generated cards
-recordsContainer.addEventListener("click", (e) => {
-  const btn = e.target.closest(".edit-student-btn");
-  if (!btn) return;
-  
-  idInput.value = btn.dataset.id;
-  nameInput.value = btn.dataset.name;
-  emailInput.value = btn.dataset.email;
-  editModal.classList.add("open");
+// Use event delegation for both Edit and Soft Delete buttons
+recordsContainer.addEventListener("click", async (e) => {
+  const editBtn = e.target.closest(".edit-student-btn");
+  if (editBtn) {
+    idInput.value = editBtn.dataset.id;
+    nameInput.value = editBtn.dataset.name;
+    emailInput.value = editBtn.dataset.email;
+    editModal.classList.add("open");
+    return;
+  }
+
+  // Soft Delete Logic
+  const delBtn = e.target.closest(".delete-student-btn");
+  if (delBtn) {
+    const stuId = delBtn.dataset.id;
+    const stuName = delBtn.dataset.name;
+    
+    // Confirm before archiving
+    if (confirm(`Are you sure you want to archive ${stuName}?\n\nThis performs a soft delete. Their data is kept for recovery but hidden from this list.`)) {
+      try {
+        await updateDoc(doc(db, "users", stuId), {
+          active: false,
+          deletedAt: new Date()
+        });
+        window.location.reload(); // Refresh to hide the card
+      } catch (err) {
+        console.error("Error archiving student:", err);
+        alert("Failed to archive student.");
+      }
+    }
+  }
 });
 
 editForm.addEventListener("submit", async (e) => {

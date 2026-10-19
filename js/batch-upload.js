@@ -540,7 +540,6 @@ confirmImportBtn.addEventListener("click", async () => {
       };
 
       if (isNewStudent) {
-        studentDocData.isRegistered = false;
         studentDocData.completedQuizzes = {};
         studentDocData.gamification = {
           badgeCounts: {
