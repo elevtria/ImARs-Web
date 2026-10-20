@@ -5,3 +5,7 @@ node_modules/
 dist/
 .vs/
 .vscode/.vs/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/

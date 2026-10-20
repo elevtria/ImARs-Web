@@ -15,3 +15,7 @@ scripts/**
 package.json
 package-lock.json
 _split_assets.py
+server/**
+workers/**
+wrangler.web-auth.jsonc
+security/**

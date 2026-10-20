@@ -45,45 +45,39 @@ export function createLoadingTracker(render, { delayMs = 0, schedule = setTimeou
   };
 }
 
-let overlay;
+let indicator;
 let hideScheduled = false;
 function renderLoading({ active, message }) {
   if (!active) {
-    if (!overlay) return;
-    // Keep sequential reads in the same frame from closing and reopening the dialog.
+    if (!indicator) return;
+    // Keep sequential reads in the same frame from flickering the status message.
     if (hideScheduled) return;
     hideScheduled = true;
     requestAnimationFrame(() => {
       hideScheduled = false;
-      if (tracker.pendingCount || !overlay) return;
-      overlay.close();
-      overlay.hidden = true;
-      overlay.setAttribute("aria-busy", "false");
+      if (tracker.pendingCount || !indicator) return;
+      indicator.hidden = true;
     });
     return;
   }
-  if (!overlay) {
-    overlay = document.createElement("dialog");
-    overlay.id = "appLoadingOverlay";
-    overlay.className = "app-loading-overlay";
-    overlay.setAttribute("aria-labelledby", "appLoadingTitle");
-    overlay.setAttribute("aria-describedby", "appLoadingDetail");
-    overlay.innerHTML = `
-      <div class="app-loading-card" role="status" aria-live="polite" aria-atomic="true">
+  if (!indicator) {
+    indicator = document.createElement("div");
+    indicator.id = "appLoadingIndicator";
+    indicator.className = "app-loading-indicator";
+    indicator.setAttribute("role", "status");
+    indicator.setAttribute("aria-live", "polite");
+    indicator.setAttribute("aria-atomic", "true");
+    indicator.hidden = true;
+    indicator.innerHTML = `
+      <div class="app-loading-card">
         <img class="app-loading-logo" alt="" aria-hidden="true" />
         <p class="app-loading-title" id="appLoadingTitle"></p>
-        <p class="app-loading-detail" id="appLoadingDetail"></p>
-        <span class="app-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       </div>`;
-    overlay.querySelector("img").src = new URL("../assets/imars-loader-transparent.png", import.meta.url).href;
-    overlay.addEventListener("cancel", (event) => event.preventDefault());
-    document.body.append(overlay);
+    indicator.querySelector("img").src = new URL("../assets/imars-loader-transparent.png", import.meta.url).href;
+    document.body.append(indicator);
   }
-  overlay.querySelector("#appLoadingTitle").textContent = message?.title || "Loading your data";
-  overlay.querySelector("#appLoadingDetail").textContent = message?.detail || "Please wait while we fetch the latest information.";
-  overlay.hidden = false;
-  overlay.setAttribute("aria-busy", "true");
-  if (!overlay.open) overlay.showModal();
+  indicator.querySelector("#appLoadingTitle").textContent = message?.title || "Loading your data…";
+  indicator.hidden = false;
 }
 
 const tracker = createLoadingTracker(renderLoading, { delayMs: 150 });

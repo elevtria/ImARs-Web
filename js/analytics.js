@@ -1,12 +1,16 @@
+import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
+import { showTeacherView } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { 
-  getFirestore, 
-  collection, 
-  query, 
-  where, 
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
   getDocsWithLoading as getDocs
 } from "./firebase-data.js";
+import { loadClassReports } from "./teacher-report-data.js";
+import { createPagePerformance } from "./page-performance.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -51,7 +55,7 @@ const filterStudents = () => {
     const matchesName = row.dataset.name.includes(queryText);
     const matchesSection = selectedSection === "all" || row.dataset.section === selectedSection;
     const visible = matchesName && matchesSection;
-    
+
     if (visible) {
       row.style.display = "";
       shown += 1;
@@ -63,7 +67,7 @@ const filterStudents = () => {
   if (studentCount) studentCount.textContent = shown;
   const selectedText = sectionFilter?.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
   if (sectionSummary) sectionSummary.textContent = selectedSection === "all" ? "All Sections" : selectedText;
-  
+
   if (empty) {
     empty.hidden = shown > 0;
     if (shown === 0 && studentGrid) studentGrid.appendChild(empty);
@@ -78,7 +82,7 @@ function renderTopics(baseStudents) {
   if (!topicsContainer) return;
   topicsContainer.innerHTML = "";
 
-  const filteredTopics = allTopicStats.filter((t) => 
+  const filteredTopics = allTopicStats.filter((t) =>
     currentTermFilter === "all" || t.termId === currentTermFilter
   );
 
@@ -127,25 +131,32 @@ termButtons.forEach((btn) => {
   });
 });
 
-// Main Firebase Logic
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
 
+onAuthStateChanged(auth, async user => {
+  if (!user) { window.location.href = "login.html"; return; }
+  const timing = createPagePerformance("Analytics");
+  const terms = ["term_01", "term_02", "term_03"];
   try {
-    // 1. Fetch Curriculum Topic Titles from all 3 terms using COMPOSITE KEYS
-    const topicStatsMap = new Map();
-    const terms = ["term_01", "term_02", "term_03"];
-
-    for (const termId of terms) {
-      try {
-        const termLessonsSnap = await getDocs(collection(db, "terms", termId, "lessons"));
+    await showTeacherView({ app, user, page: "analytics",
+      load: ({ background }) => timing.data(async () => {
+        const readDocs = background ? quietDocs : getDocs;
+        const [profile, curriculum] = await Promise.all([
+          readDocs(query(collection(db, "users"), where("uid", "==", user.uid))),
+          Promise.all(terms.map(termId => readDocs(collection(db, "terms", termId, "lessons"))))
+        ]);
+        const teacherId = profile.docs[0]?.id;
+        if (!teacherId || String(profile.docs[0].data().role || "").toLowerCase() !== "teacher") throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
+        const classes = await readDocs(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
+        return { curriculum, sections: await loadClassReports(db, classes.docs, terms, readDocs) };
+      }),
+      render: ({ curriculum, sections }) => timing.render(() => {
+        const topicStatsMap = new Map();
+        for (const [index, termLessonsSnap] of curriculum.entries()) {
+        const termId = terms[index];
         termLessonsSnap.forEach((lDoc) => {
           const lData = lDoc.data();
           const title = lData.title || lData.name || lDoc.id;
-          
+
           // COMPOSITE KEY prevents term_03 from overwriting term_01 & term_02
           const compositeKey = `${termId}_${lDoc.id}`;
 
@@ -157,189 +168,160 @@ onAuthStateChanged(auth, async (user) => {
             completedCount: 0
           });
         });
-      } catch (err) {
-        console.warn(`Could not load lessons for ${termId}:`, err);
-      }
     }
+      let totalClassPrePercentageSum = 0;
+      let totalClassPostPercentageSum = 0;
+      let totalStudentTestsCount = 0;
+      let totalEnrolledStudents = 0;
 
-    // 2. Resolve Teacher
-    let teacherId = null;
-    const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
-    const userSnap = await getDocs(userQ);
-
-    if (!userSnap.empty) {
-      teacherId = userSnap.docs[0].id;
-    } else {
-      const allTeachers = await getDocs(query(collection(db, "users"), where("role", "==", "teacher")));
-      if (!allTeachers.empty) {
-        teacherId = allTeachers.docs[0].id;
-      }
-    }
-
-    if (!teacherId) return;
-
-    // 3. Fetch Classes
-    let classSnap = await getDocs(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
-    if (classSnap.empty) {
-      classSnap = await getDocs(collection(db, "classes"));
-    }
-
-    let totalClassPrePercentageSum = 0;
-    let totalClassPostPercentageSum = 0;
-    let totalStudentTestsCount = 0;
-    let totalEnrolledStudents = 0;
-
-    if (sectionFilter) sectionFilter.innerHTML = '<option value="all">All Sections</option>';
-    if (studentGrid) {
-      studentGrid.innerHTML = "";
-      if (empty) studentGrid.appendChild(empty);
-    }
-
-    // 4. Process Classes and Students
-    for (const classDoc of classSnap.docs) {
-      const classCode = classDoc.id;
-      const cData = classDoc.data();
-      const sectionName = cData.SectionName || cData.sectionName || cData.name || classCode;
-
-      if (sectionFilter) {
-        const opt = document.createElement("option");
-        opt.value = classCode;
-        opt.textContent = `Grade 6 – ${sectionName}`;
-        sectionFilter.appendChild(opt);
+      const selectedSection = sectionFilter?.value;
+      if (sectionFilter) sectionFilter.innerHTML = '<option value="all">All Sections</option>';
+      if (studentGrid) {
+        studentGrid.innerHTML = "";
+        if (empty) studentGrid.appendChild(empty);
       }
 
-      let studentSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student"), where("classCode", "==", classCode)));
-      if (studentSnap.empty) {
-        studentSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-      }
+      // 4. Process Classes and Students
+      const rows = document.createDocumentFragment();
+      for (const { classDoc, students } of sections) {
+        const classCode = classDoc.id;
+        const cData = classDoc.data();
+        const sectionName = cData.SectionName || cData.sectionName || cData.name || classCode;
 
-      for (const studentDoc of studentSnap.docs) {
-        totalEnrolledStudents++;
-        const sData = studentDoc.data();
-        const sName = sData.displayName || sData.fullName || "Student";
+        if (sectionFilter) {
+          const opt = document.createElement("option");
+          opt.value = classCode;
+          opt.textContent = `Grade 6 – ${sectionName}`;
+          sectionFilter.appendChild(opt);
+        }
 
-        const nameParts = sName.split(" ");
-        let initials = nameParts[0] ? nameParts[0][0] : "?";
-        if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
+        for (const { studentDoc, results } of students) {
+          totalEnrolledStudents++;
+          const sData = studentDoc.data();
+          const sName = sData.displayName || sData.fullName || "Student";
 
-        let studentPreSum = 0;
-        let studentPostSum = 0;
-        let testCount = 0;
+          const nameParts = sName.split(" ");
+          let initials = nameParts[0] ? nameParts[0][0] : "?";
+          if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
 
-        // Check tests across all active terms
-        for (const termId of terms) {
-          const lessonsRef = collection(db, "users", studentDoc.id, "test_results", termId, "lessons");
-          const lessonsSnap = await getDocs(lessonsRef);
+          let studentPreSum = 0;
+          let studentPostSum = 0;
+          let testCount = 0;
 
-          lessonsSnap.forEach((lessonDoc) => {
-            const tData = lessonDoc.data();
-            const compositeKey = `${termId}_${lessonDoc.id}`;
+          // Check tests across all active terms
+          for (const { termId, lessonsSnap } of results) {
+            lessonsSnap.forEach((lessonDoc) => {
+              const tData = lessonDoc.data();
+              const compositeKey = `${termId}_${lessonDoc.id}`;
 
-            // Check completion for the matching term & lesson
-            if (topicStatsMap.has(compositeKey)) {
-              if (tData.isPostTestCompleted || tData.completed) {
-                topicStatsMap.get(compositeKey).completedCount++;
+              // Check completion for the matching term & lesson
+              if (topicStatsMap.has(compositeKey)) {
+                if (tData.isPostTestCompleted || tData.completed) {
+                  topicStatsMap.get(compositeKey).completedCount++;
+                }
+              } else if (tData.isPostTestCompleted || tData.completed) {
+                // Fallback if document has customized title
+                const fallbackTitle = tData.topicTitle || tData.title || lessonDoc.id;
+                topicStatsMap.set(compositeKey, {
+                  key: compositeKey,
+                  lessonId: lessonDoc.id,
+                  termId: termId,
+                  name: fallbackTitle,
+                  completedCount: 1
+                });
               }
-            } else if (tData.isPostTestCompleted || tData.completed) {
-              // Fallback if document has customized title
-              const fallbackTitle = tData.topicTitle || tData.title || lessonDoc.id;
-              topicStatsMap.set(compositeKey, {
-                key: compositeKey,
-                lessonId: lessonDoc.id,
-                termId: termId,
-                name: fallbackTitle,
-                completedCount: 1
-              });
-            }
 
-            // Aggregate test scores
-            if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0 && tData.isPostTestCompleted && tData.postTestTotalQuestions > 0) {
-              const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
-              const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
-              const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
+              // Aggregate test scores
+              if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0 && tData.isPostTestCompleted && tData.postTestTotalQuestions > 0) {
+                const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
+                const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
+                const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
 
-              studentPreSum += prePercent;
-              studentPostSum += postPercent;
-              testCount++;
-            }
-          });
-        }
+                studentPreSum += prePercent;
+                studentPostSum += postPercent;
+                testCount++;
+              }
+            });
+          }
 
-        if (testCount > 0) {
-          const avgPre = Math.round(studentPreSum / testCount);
-          const avgPost = Math.round(studentPostSum / testCount);
-          const improvement = avgPost - avgPre;
+          if (testCount > 0) {
+            const avgPre = Math.round(studentPreSum / testCount);
+            const avgPost = Math.round(studentPostSum / testCount);
+            const improvement = avgPost - avgPre;
 
-          totalClassPrePercentageSum += avgPre;
-          totalClassPostPercentageSum += avgPost;
-          totalStudentTestsCount++;
+            totalClassPrePercentageSum += avgPre;
+            totalClassPostPercentageSum += avgPost;
+            totalStudentTestsCount++;
 
-          const tr = document.createElement("tr");
-          tr.className = "student-row";
-          tr.dataset.name = sName.toLowerCase();
-          tr.dataset.section = classCode;
+            const tr = document.createElement("tr");
+            tr.className = "student-row";
+            tr.dataset.name = sName.toLowerCase();
+            tr.dataset.section = classCode;
 
-          const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
-          const impSign = improvement > 0 ? "+" : "";
+            const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
+            const impSign = improvement > 0 ? "+" : "";
 
-          tr.innerHTML = `
-            <th scope="row"><span class="table-avatar">${initials.toUpperCase()}</span>${sName}</th>
-            <td>Grade 6 – ${sectionName}</td>
-            <td>${avgPre}%</td>
-            <td>${avgPost}%</td>
-            <td><span class="improvement-value ${impClass}">${impSign}${improvement}%</span></td>
-          `;
+            tr.innerHTML = `
+              <th scope="row"><span class="table-avatar">${initials.toUpperCase()}</span>${sName}</th>
+              <td>Grade 6 – ${sectionName}</td>
+              <td>${avgPre}%</td>
+              <td>${avgPost}%</td>
+              <td><span class="improvement-value ${impClass}">${impSign}${improvement}%</span></td>
+            `;
 
-          if (studentGrid) studentGrid.appendChild(tr);
+            rows.appendChild(tr);
+          }
         }
       }
-    }
 
-    if (studentGrid) {
-      dynamicRows = Array.from(studentGrid.querySelectorAll(".student-row"));
-    }
-    filterStudents();
-
-    // 5. Update Overall Class Averages
-    if (totalStudentTestsCount > 0) {
-      const finalPre = Math.round(totalClassPrePercentageSum / totalStudentTestsCount);
-      const finalPost = Math.round(totalClassPostPercentageSum / totalStudentTestsCount);
-      const finalImp = finalPost - finalPre;
-
-      const preVal = document.getElementById("overallPreVal");
-      const preFill = document.getElementById("overallPreFill");
-      if (preVal) preVal.textContent = `${finalPre}%`;
-      if (preFill) preFill.style.width = `${finalPre}%`;
-
-      const postVal = document.getElementById("overallPostVal");
-      const postFill = document.getElementById("overallPostFill");
-      if (postVal) postVal.textContent = `${finalPost}%`;
-      if (postFill) postFill.style.width = `${finalPost}%`;
-
-      const impVal = document.getElementById("overallImpVal");
-      const impFill = document.getElementById("overallImpFill");
-      if (impVal) impVal.textContent = `${finalImp >= 0 ? "+" : ""}${finalImp}%`;
-      if (impFill) impFill.style.width = `${Math.min(100, Math.abs(finalImp))}%`;
-
-      const donutLabel = document.getElementById("donutValue");
-      if (donutLabel) donutLabel.textContent = `${finalPost}%`;
-
-      const donutRing = document.getElementById("donutRing");
-      if (donutRing) {
-        const donutFillAmount = (finalPost / 100) * 289.03;
-        donutRing.setAttribute("stroke-dasharray", `${donutFillAmount} 289.03`);
+      if (studentGrid) {
+        studentGrid.appendChild(rows);
+        dynamicRows = Array.from(studentGrid.querySelectorAll(".student-row"));
       }
-    }
+      if (sectionFilter && Array.from(sectionFilter.options).some(option => option.value === selectedSection)) sectionFilter.value = selectedSection;
+      filterStudents();
 
-    // 6. Store topics globally and render
-    allTopicStats = Array.from(topicStatsMap.values());
-    window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
-    renderTopics(window.totalStudentsBase);
+      // 5. Update Overall Class Averages
+      {
+        const finalPre = totalStudentTestsCount ? Math.round(totalClassPrePercentageSum / totalStudentTestsCount) : 0;
+        const finalPost = totalStudentTestsCount ? Math.round(totalClassPostPercentageSum / totalStudentTestsCount) : 0;
+        const finalImp = finalPost - finalPre;
 
+        const preVal = document.getElementById("overallPreVal");
+        const preFill = document.getElementById("overallPreFill");
+        if (preVal) preVal.textContent = `${finalPre}%`;
+        if (preFill) preFill.style.width = `${finalPre}%`;
+
+        const postVal = document.getElementById("overallPostVal");
+        const postFill = document.getElementById("overallPostFill");
+        if (postVal) postVal.textContent = `${finalPost}%`;
+        if (postFill) postFill.style.width = `${finalPost}%`;
+
+        const impVal = document.getElementById("overallImpVal");
+        const impFill = document.getElementById("overallImpFill");
+        if (impVal) impVal.textContent = `${finalImp >= 0 ? "+" : ""}${finalImp}%`;
+        if (impFill) impFill.style.width = `${Math.min(100, Math.abs(finalImp))}%`;
+
+        const donutLabel = document.getElementById("donutValue");
+        if (donutLabel) donutLabel.textContent = `${finalPost}%`;
+
+        const donutRing = document.getElementById("donutRing");
+        if (donutRing) {
+          const donutFillAmount = (finalPost / 100) * 289.03;
+          donutRing.setAttribute("stroke-dasharray", `${donutFillAmount} 289.03`);
+        }
+      }
+
+      // 6. Store topics globally and render
+      allTopicStats = Array.from(topicStatsMap.values());
+      window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
+      renderTopics(window.totalStudentsBase);
+      }),
+      painted: cacheHit => timing.finish("loaded", { cacheHit })
+    });
   } catch (error) {
     console.error("Error loading analytics:", error);
-    if (topicsContainer) {
-      topicsContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #ef4444; padding: 20px;">Error loading topic rates.</p>`;
-    }
+    if (topicsContainer) topicsContainer.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #ef4444; padding: 20px;">Error loading topic rates.</p>';
+    timing.finish("error");
   }
 });

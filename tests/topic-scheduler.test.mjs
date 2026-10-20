@@ -35,6 +35,8 @@ function scheduler() {
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },
     getApps: () => [], initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
+    prepareTeacherCache: () => ({ get: () => null, put() {}, invalidate() {} }),
+    encodeView: value => value, decodeView: value => value,
     collection: (_, ...path) => path, doc: (_, ...path) => path,
     onAuthStateChanged: (_, callback) => { authChanged = callback; },
     onSnapshot: (ref, _, callback) => {

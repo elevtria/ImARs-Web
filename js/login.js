@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { webProtectionEnabled, protectedWebLogin, closeWebSession } from "./web-login.js";
+import { getAuth, signInWithEmailAndPassword, signOut } from "./firebase-auth.js";
 import { getFirestore, doc, getDocWithLoading as getDoc, collection, query, where, getDocsWithLoading as getDocs } from "./firebase-data.js";
 
 const firebaseConfig = {
@@ -50,6 +51,13 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   }
 
   try {
+    if (await webProtectionEnabled()) {
+      const email = await protectedWebLogin(rawId, password, "teacher");
+      try { await signInWithEmailAndPassword(auth, email, password); }
+      catch (error) { await closeWebSession(); throw error; }
+      window.location.href = "index.html";
+      return;
+    }
     const userDocRef = doc(db, "users", rawId);
     const userDocSnap = await getDoc(userDocRef);
 
@@ -91,7 +99,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 
     window.location.href = "index.html";
   } catch (err) {
-    showError("Invalid ID or password. Please try again.");
+    showError(err.userMessage || "Invalid ID or password. Please try again.");
     console.error("Firebase Login Error:", err.message);
   }
 });
@@ -158,6 +166,14 @@ if (adminForm) {
     }
 
     try {
+      if (await webProtectionEnabled()) {
+        const email = await protectedWebLogin(rawInput, password, "admin");
+        try { await signInWithEmailAndPassword(auth, email, password); }
+        catch (error) { await closeWebSession(); throw error; }
+        localStorage.setItem("imars_admin_last_active", String(Date.now()));
+        window.location.href = "admin-dashboard.html";
+        return;
+      }
       let authEmail = rawInput;
 
       // If the admin typed an ID (no '@' symbol), look it up in Firestore
@@ -204,7 +220,7 @@ if (adminForm) {
       window.location.href = "admin-dashboard.html";
     } catch (err) {
       console.error("Admin Login Error:", err.message);
-      showAdminError("Invalid Admin credentials. Please try again.");
+      showAdminError(err.userMessage || "Invalid Admin credentials. Please try again.");
     } finally {
       if (adminSubmitBtn) {
         adminSubmitBtn.disabled = false;
@@ -216,6 +232,14 @@ if (adminForm) {
 
 // --- HANDLE AUTO-LOGOUT REDIRECT & TIMESTAMP RESET ---
 const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get("reason") === "web-session") {
+  const message = document.getElementById("error");
+  if (message) {
+    message.classList.remove("hidden");
+    message.innerText = "Your website session ended. Please sign in again to continue.";
+    message.style.display = "block";
+  }
+}
 if (urlParams.get("reason") === "timeout") {
   if (adminModal) {
     adminModal.showModal();

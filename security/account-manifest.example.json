@@ -1,0 +1,5 @@
+[
+  { "uid": "actual-admin-auth-uid", "profileId": "ADMIN1000", "role": "admin", "active": true, "authEmail": "admin@example.test" },
+  { "uid": "actual-teacher-auth-uid", "profileId": "TEACH1000", "role": "teacher", "active": true, "authEmail": "teacher@example.test" },
+  { "uid": "actual-student-auth-uid", "profileId": "0026271000", "role": "student", "active": true, "authEmail": "student@example.test" }
+]

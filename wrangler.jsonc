@@ -2,5 +2,24 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "imars-web",
   "compatibility_date": "2026-10-01",
-  "pages_build_output_dir": "./dist"
+  "pages_build_output_dir": "./dist",
+  // Deploy wrangler.web-auth.jsonc to this Cloudflare account before the next
+  // production Pages deployment. Adding this binding does not enable login
+  // protection or change Firebase rules.
+  "env": {
+    "production": {
+      "durable_objects": {
+        "bindings": [{
+          "name": "WEB_LOGIN_STATE",
+          "class_name": "WebLoginState",
+          "script_name": "imars-web-auth"
+        }]
+      }
+    },
+    // Preview must use its own state Worker when security testing is configured.
+    // Never share production session state with preview deployments.
+    "preview": {
+      "durable_objects": { "bindings": [] }
+    }
+  }
 }

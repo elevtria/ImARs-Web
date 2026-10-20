@@ -1,4 +1,7 @@
-import { getDocs as getBackgroundDocs } from "./firebase-data.js";
+import { loadAdminReports } from "./admin-report-data.js";
+import { showAdminView } from "./admin-view.js";
+import { createPagePerformance } from "./page-performance.js";
+import { webProtectionEnabled } from "./web-login.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
@@ -61,6 +64,9 @@ const dialog = document.getElementById("teacherDialog");
 const form = document.getElementById("teacherForm");
 
 let teachers = [];
+let adminReady = false;
+let webLocksEnabled = false;
+webProtectionEnabled().then(value => { webLocksEnabled = value; render(); }).catch(() => {});
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -127,12 +133,13 @@ function render() {
           <div class="teacher-stat"><small>Post-Test</small><strong>${teacher.post}%</strong></div>
           <div class="teacher-stat"><small>AR hrs</small><strong>${teacher.hours}</strong></div>
           <div class="teacher-actions">
-            <button class="record-action ${teacher.active ? "deactivate" : "activate"}" type="button" data-toggle-id="${teacher.id}" aria-label="${teacher.active ? "Deactivate" : "Activate"} ${escapeHtml(teacher.name)}" title="${teacher.active ? "Deactivate" : "Activate"}">
+            ${webLocksEnabled ? `<button class="record-action activate" type="button" ${adminReady ? "" : "disabled"} data-unlock-web-id="${escapeHtml(teacher.schoolId || teacher.id)}" aria-label="Unlock web login for ${escapeHtml(teacher.name)}" title="Unlock web login"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 8 0m-5 8v2"/></svg></button>` : ""}
+            <button class="record-action ${teacher.active ? "deactivate" : "activate"}" type="button" ${adminReady ? "" : "disabled"} data-toggle-id="${teacher.id}" aria-label="${teacher.active ? "Deactivate" : "Activate"} ${escapeHtml(teacher.name)}" title="${teacher.active ? "Deactivate" : "Activate"}">
               ${teacher.active
                 ? `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg>`
                 : `<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>`}
             </button>
-            <button class="record-action delete" type="button" data-delete-id="${teacher.id}" aria-label="Remove ${escapeHtml(teacher.name)}" title="Remove teacher">
+            <button class="record-action delete" type="button" ${adminReady ? "" : "disabled"} data-delete-id="${teacher.id}" aria-label="Remove ${escapeHtml(teacher.name)}" title="Remove teacher">
               <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5"/></svg>
             </button>
           </div>
@@ -154,159 +161,22 @@ function render() {
   if (noTeachers) noTeachers.hidden = visible.length !== 0;
 }
 
-// Fetch Teachers & Student Metrics from Firestore
-async function loadTeachersFromDB() {
-  try {
-    if (list) list.innerHTML = `<p style="padding: 24px; color: #64748b; text-align: center;">Loading teachers...</p>`;
-
-    // 1. Fetch Teachers
-    const teacherQ = query(collection(db, "users"), where("role", "==", "teacher"));
-    const teacherSnap = await getDocs(teacherQ);
-
-    const teacherMap = new Map();
-
-    teacherSnap.forEach((docSnap) => {
-      const data = docSnap.data();
-      let joinedDate = "Recently";
-      if (data.createdAt && typeof data.createdAt.toDate === "function") {
-        joinedDate = data.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      } else if (data.joined) {
-        joinedDate = data.joined;
-      }
-
-      let parsedSections = [];
-      if (Array.isArray(data.sections)) {
-        parsedSections = data.sections;
-      } else if (data.section) {
-        parsedSections = [data.section];
-      }
-
-      teacherMap.set(docSnap.id, {
-        id: docSnap.id,
-        schoolId: data.schoolId || docSnap.id, // Stores TEACH1000, etc.
-        name: data.fullName || data.name || data.displayName || "Teacher",
-        email: data.providedEmail || data.email || "No email",
-        subject: data.subject || "Science",
-        joined: joinedDate,
-        sections: parsedSections,
-        active: data.active !== false && data.status !== "inactive",
-        students: 0,
-        prePctSum: 0,
-        preCount: 0,
-        postPctSum: 0,
-        postCount: 0,
-        arMinutes: 0
-      });
-    });
-
-    // 2. Fetch Students & Associate Performance
-    const studentQ = query(collection(db, "users"), where("role", "==", "student"));
-    const studentSnap = await getDocs(studentQ);
-
-    for (const studentDoc of studentSnap.docs) {
-      const studentId = studentDoc.id;
-      const sData = studentDoc.data();
-      const assignedTeacherId = sData.teacherId || sData.adviserId || sData.teacher;
-
-      let teacherObj = null;
-      if (assignedTeacherId && teacherMap.has(assignedTeacherId)) {
-        teacherObj = teacherMap.get(assignedTeacherId);
-      } else if (teacherMap.size > 0) {
-        // Fallback for demo/testing if students aren't explicitly assigned
-        teacherObj = teacherMap.values().next().value;
-      }
-
-      if (teacherObj) {
-        teacherObj.students++;
-      }
-
-      const lessonsRef = collection(db, "users", studentId, "test_results", "term_01", "lessons");
-      const lessonsSnap = await getDocs(lessonsRef);
-
-      lessonsSnap.forEach((lDoc) => {
-        const tData = lDoc.data();
-        if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0 && teacherObj) {
-          teacherObj.prePctSum += (tData.preTestScore / tData.preTestTotalQuestions) * 100;
-          teacherObj.preCount++;
-        }
-        if (tData.isPostTestCompleted && tData.postTestTotalQuestions > 0 && teacherObj) {
-          const score = tData.postTestScore !== undefined 
-            ? tData.postTestScore 
-            : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
-          teacherObj.postPctSum += (score / tData.postTestTotalQuestions) * 100;
-          teacherObj.postCount++;
-        }
-        if (tData.arTimeMinutes && teacherObj) {
-          teacherObj.arMinutes += tData.arTimeMinutes;
-        }
-      });
-    }
-
-    // 3. Compute final metrics
-    teachers = Array.from(teacherMap.values()).map((t) => {
-      const pre = t.preCount > 0 ? Math.round(t.prePctSum / t.preCount) : 0;
-      const post = t.postCount > 0 ? Math.round(t.postPctSum / t.postCount) : 0;
-      const hours = t.arMinutes >= 60 ? `${Math.round(t.arMinutes / 60)}h` : `${t.arMinutes}m`;
-      return { ...t, pre, post, hours };
-    });
-
-    render();
-  } catch (err) {
-    console.error("Error fetching teachers:", err);
-    if (list) list.innerHTML = `<p style="padding: 24px; color: #ef4444; text-align: center;">Error loading teachers. Check console.</p>`;
-  }
-}
-
-// Helper: Load Admin Info into the Sidebar Drawer
-async function updateAdminSidebar(user) {
-  const avatarEl = document.querySelector(".admin-side-avatar");
-  const nameEl = document.querySelector(".admin-side-user strong");
-  const roleEl = document.querySelector(".admin-side-user small");
-
-  if (!avatarEl && !nameEl) return;
-
-  try {
-    let adminData = null;
-
-    // 1. Try matching by Auth UID
-    const uidSnap = await getBackgroundDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-    if (!uidSnap.empty) {
-      adminData = uidSnap.docs[0].data();
-    } else {
-      // 2. Fallback: Query any user with role == "admin" (like ADMIN1)
-      const roleSnap = await getBackgroundDocs(query(collection(db, "users"), where("role", "==", "admin")));
-      if (!roleSnap.empty) {
-        adminData = roleSnap.docs[0].data();
-      }
-    }
-
-    if (adminData) {
-      const name = adminData.displayName || adminData.fullName || adminData.name || "Admin";
-      const role = adminData.roleLabel || "School Administrator";
-      
-      const parts = name.trim().split(/\s+/).filter(Boolean);
-      const filtered = parts.filter((p) => !/^(dr\.|mr\.|ms\.|mrs\.|sir|ma'am)$/i.test(p));
-      const target = filtered.length > 0 ? filtered : parts;
-      const initials = target.slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "AD";
-
-      if (avatarEl) avatarEl.textContent = initials;
-      if (nameEl) nameEl.textContent = name;
-      if (roleEl) roleEl.textContent = role;
-    }
-  } catch (err) {
-    console.error("Error updating sidebar admin profile:", err);
-  }
-}
-
-// Authentication Check
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
-  updateAdminSidebar(user);
+// Reuse the shared school report when moving between admin pages.
+const addTeacherButton = document.getElementById("addTeacherButton");
+if (addTeacherButton) addTeacherButton.disabled = true;
+onAuthStateChanged(auth, async user => {
+  adminReady = false;
+  if (!user) { window.location.href = "login.html"; return; }
   initAdminIdleTimeout(auth);
-  loadTeachersFromDB();
+  const timing = createPagePerformance("Manage Teachers");
+  try {
+    await showAdminView({ app, user, page: "reports",
+      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
+      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      render: report => timing.render(() => { teachers = report.teachers; render(); }),
+      painted: cacheHit => timing.finish("loaded", { cacheHit })
+    });
+  } catch (error) { timing.finish("error"); console.error("Error fetching teachers:", error); }
 });
 
 // Search input
@@ -315,6 +185,21 @@ if (search) search.addEventListener("input", render);
 // Toggle & Delete actions
 if (list) {
   list.addEventListener("click", async (event) => {
+    if (!adminReady || !auth.currentUser) return;
+    const unlock = event.target.closest("[data-unlock-web-id]");
+    if (unlock) {
+      const identifier = unlock.dataset.unlockWebId;
+      if (!window.confirm(`Restore web login for ${identifier}? This clears their failed-attempt history. Mobile access is unchanged.`)) return;
+      unlock.disabled = true;
+      try {
+        const response = await fetch("/api/web-auth/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Unable to restore web login.");
+        alert(`Web login restored for ${identifier}.`);
+      } catch (error) { alert(error.message); }
+      finally { unlock.disabled = false; }
+      return;
+    }
     // 1. Toggle Active / Inactive
     const toggleButton = event.target.closest("[data-toggle-id]");
     if (toggleButton) {
@@ -371,6 +256,7 @@ if (dialog) {
 if (form) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!adminReady || !auth.currentUser) return;
     const formData = new FormData(form);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim().toLowerCase();

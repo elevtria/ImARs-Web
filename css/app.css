@@ -1131,6 +1131,7 @@ td {
 .improve b { color: #3d8b63; font-weight: 800; }
 
 .empty:not([hidden]) { display: block; }
+.view-data-status { margin: 0 0 12px; color: #64748b; font-size: 12px; }
 .empty {
   display: none;
   grid-column: 1 / -1;
@@ -1772,7 +1773,6 @@ td {
 .manual-section-chip { flex: 0 0 auto; padding: 8px 11px; border-radius: 999px; background: #fff4d1; color: #a06c00; font-size: 9px; font-weight: 900; letter-spacing: 0.09em; }
 .manual-sheet-heading h2 { color: var(--ink); font-size: 22px; font-weight: 900; letter-spacing: -0.04em; }
 .manual-sheet-heading p { margin-top: 3px; color: var(--muted); font-size: 12px; }
-.manual-heading-doodle { margin-left: auto; color: var(--manual-accent); font-size: 32px; line-height: 1; }
 .manual-setup-grid { display: grid; grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.45fr); gap: 14px; }
 .manual-feature-card {
   position: relative;
@@ -1995,7 +1995,6 @@ label {
   .manual-page .manual-meta-row { flex-wrap: wrap; font-size: 8px; }
   .manual-page .manual-sheet-heading { align-items: flex-start; flex-wrap: wrap; }
   .manual-page .manual-sheet-heading > div { flex: 1 1 75%; }
-  .manual-page .manual-heading-doodle { display: none; }
   .manual-page .manual-tool-grid { grid-template-columns: 1fr; }
   .manual-page .manual-tool-card { min-height: 215px; }
   .manual-page .manual-bottom-band { grid-template-columns: 1fr; }

@@ -1,14 +1,11 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
+import { showAdminView } from "./admin-view.js";
+import { createPagePerformance } from "./page-performance.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 import { 
   getFirestore, 
-  collection, 
-  query, 
-  where, 
-  getDocsWithLoading as getDocs,
   doc, 
-  getDocWithLoading as getDoc,
   setDoc, 
   serverTimestamp 
 } from "./firebase-data.js";
@@ -56,7 +53,9 @@ const profileForm = document.getElementById("profileForm");
 const saveProfileBtn = document.getElementById("saveProfileBtn");
 const logoutButton = document.getElementById("logoutButton");
 
-let activeAdminDocId = "ADMIN1000";
+let activeAdminDocId = null;
+const editProfileButton = document.getElementById("editProfileButton");
+if (editProfileButton) editProfileButton.disabled = true;
 
 const getInitials = (name) => {
   if (!name) return "AD";
@@ -87,6 +86,8 @@ let joinedText = "Admin since recently";
       day: "numeric",
       year: "numeric"
     });
+  } else if (data.createdAt instanceof Date) {
+    joinedText = "Admin since " + data.createdAt.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   } else if (data.createdAt && typeof data.createdAt === "string") {
     // 3. Uses string date if createdAt was typed as a string in Firestore
     joinedText = `Admin since ${data.createdAt}`;
@@ -122,6 +123,8 @@ let joinedText = "Admin since recently";
   if (drawerName) drawerName.textContent = name;
   if (drawerRole) drawerRole.textContent = roleLabel;
 
+  // A quiet refresh must not overwrite an edit already in progress.
+  if (profileDialog?.open) return;
   // Pre-fill Edit Form Inputs
   document.getElementById("inputName").value = name;
   document.getElementById("inputEmail").value = email;
@@ -130,56 +133,19 @@ let joinedText = "Admin since recently";
   document.getElementById("inputPhone").value = phone;
 }
 
-// --- LOAD ADMIN FROM FIRESTORE ---
-async function loadAdminProfile(user) {
-  try {
-    // 1. Check by UID first
-    const uidQuery = query(collection(db, "users"), where("uid", "==", user.uid));
-    const uidSnap = await getDocs(uidQuery);
-
-    if (!uidSnap.empty) {
-      const docSnap = uidSnap.docs[0];
-      activeAdminDocId = docSnap.id;
-      updateProfileUI(docSnap.data());
-      return;
-    }
-
-    // 2. Check ADMIN1000 directly
-    const defaultAdminSnap = await getDoc(doc(db, "users", "ADMIN1000"));
-    if (defaultAdminSnap.exists()) {
-      activeAdminDocId = "ADMIN1000";
-      updateProfileUI(defaultAdminSnap.data());
-      return;
-    }
-
-    // 3. Fallback: Query any user with role == "admin"
-    const roleQuery = query(collection(db, "users"), where("role", "==", "admin"));
-    const roleSnap = await getDocs(roleQuery);
-    if (!roleSnap.empty) {
-      const docSnap = roleSnap.docs[0];
-      activeAdminDocId = docSnap.id;
-      updateProfileUI(docSnap.data());
-      return;
-    }
-
-    // 4. If no admin document exists yet, initialize default profile with signed-in user's email
-    updateProfileUI({
-      displayName: user.displayName || "Dr. Maria Santos",
-      providedEmail: user.email || "admin@imars.edu"
-    });
-  } catch (err) {
-    console.error("Error loading admin profile:", err);
-  }
-}
-
-// --- AUTH STATE LISTENER ---
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
+onAuthStateChanged(auth, async user => {
+  activeAdminDocId = null;
+  if (editProfileButton) editProfileButton.disabled = true;
+  if (!user) { window.location.href = "login.html"; return; }
   initAdminIdleTimeout(auth);
-  loadAdminProfile(user);
+  const timing = createPagePerformance("Admin Profile");
+  try {
+    await showAdminView({ app, user, page: "profile",
+      verified: id => { activeAdminDocId = id; if (editProfileButton) editProfileButton.disabled = false; },
+      render: (_, profile) => timing.render(() => updateProfileUI(profile)),
+      painted: cacheHit => timing.finish("loaded", { cacheHit })
+    });
+  } catch (error) { timing.finish("error"); console.error("Error loading admin profile:", error); }
 });
 
 // --- DIALOG CONTROLS ---
@@ -196,6 +162,7 @@ if (profileDialog) {
 if (profileForm) {
   profileForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!activeAdminDocId || !auth.currentUser) return;
     const values = new FormData(profileForm);
     const name = String(values.get("name") || "").trim();
     const email = String(values.get("email") || "").trim();

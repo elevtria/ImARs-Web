@@ -6,12 +6,14 @@ import {
   query, 
   where, 
   getDocsWithLoading as getDocs,
+  getDocs as quietDocs,
   doc, 
   setDoc, 
   updateDoc, 
   arrayUnion, 
   serverTimestamp 
 } from "./firebase-data.js";
+import { showTeacherView } from "./teacher-view.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -89,27 +91,19 @@ function updateSelectedSection() {
 sectionSelect.addEventListener("change", updateSelectedSection);
 
 // --- LOAD TEACHER SECTIONS & STUDENT COUNTS FROM FIRESTORE ---
-async function loadSectionsFromDB(user) {
+async function loadSectionsFromDB(user, { background = false } = {}) {
+  const read = background ? quietDocs : getDocs;
   try {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
-    const userSnap = await getDocs(userQ);
+    const userSnap = await read(userQ);
 
-    let teacherData = {};
-    if (!userSnap.empty) {
-      currentTeacherId = userSnap.docs[0].id;
-      teacherData = userSnap.docs[0].data();
-    } else {
-      const fallbackSnap = await getDocs(query(collection(db, "users"), where("role", "==", "teacher")));
-      if (!fallbackSnap.empty) {
-        currentTeacherId = fallbackSnap.docs[0].id;
-        teacherData = fallbackSnap.docs[0].data();
-      }
-    }
+    const teacher = userSnap.docs.find(entry => String(entry.data().role || "").toLowerCase() === "teacher");
+    if (!teacher) throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
+    const teacherId = teacher.id;
+    const teacherData = teacher.data();
 
-    if (!currentTeacherId) return;
-
-    const classQ = query(collection(db, "classes"), where("teacherId", "==", currentTeacherId));
-    const classSnap = await getDocs(classQ);
+    const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
+    const classSnap = await read(classQ);
 
     const loadedSections = [];
 
@@ -123,7 +117,7 @@ async function loadSectionsFromDB(user) {
         where("role", "==", "student"),
         where("classCode", "==", classDoc.id)
       );
-      const stuSnap = await getDocs(stuQ);
+      const stuSnap = await read(stuQ);
 
       loadedSections.push({
         classCode: classDoc.id,
@@ -153,7 +147,7 @@ async function loadSectionsFromDB(user) {
 
       await setDoc(doc(db, "classes", newClassCode), {
         SectionName: rawSection,
-        teacherId: currentTeacherId,
+        teacherId,
         gradeLevel: "Grade 6",
         createdAt: serverTimestamp()
       }, { merge: true });
@@ -167,10 +161,10 @@ async function loadSectionsFromDB(user) {
     }
   }
 
-    sections = loadedSections;
-    renderSections();
+    return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
+    throw err;
   }
 }
 
@@ -179,7 +173,9 @@ onAuthStateChanged(auth, (user) => {
     window.location.href = "login.html";
     return;
   }
-  loadSectionsFromDB(user);
+  showTeacherView({ app, user, page: "batch-upload", load: options => loadSectionsFromDB(user, options),
+    render: data => { currentTeacherId = data.teacherId; sections = data.sections; renderSections(); }
+  }).catch(error => { uploadStatus.hidden = false; uploadStatus.textContent = "Could not load your sections. Please refresh to try again."; console.error(error); });
 });
 
 // --- OFFICIAL TEMPLATE DOWNLOADS (First Name, Last Name, Student ID, Email) ---

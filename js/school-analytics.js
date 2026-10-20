@@ -1,14 +1,10 @@
-import { getDocs as getBackgroundDocs } from "./firebase-data.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
-import { 
-  getFirestore, 
-  collection, 
-  query, 
-  where, 
-  getDocsWithLoading as getDocs
-} from "./firebase-data.js";
+import { getFirestore } from "./firebase-data.js";
+import { loadAdminReports } from "./admin-report-data.js";
+import { showAdminView } from "./admin-view.js";
+import { createPagePerformance } from "./page-performance.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -86,130 +82,12 @@ const getInitials = (name) => {
 
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
-// --- MAIN ANALYTICS LOADER ---
-async function loadSchoolAnalytics() {
-  if (teacherContainer) {
-    teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">Loading teacher analytics...</p>`;
-  }
-  if (sectionContainer) {
-    sectionContainer.innerHTML = `<p style="text-align: center; color: #64748b; padding: 32px;">Loading section analytics...</p>`;
-  }
-
-  try {
-    // 1. Fetch Teachers
-    const teacherQ = query(collection(db, "users"), where("role", "==", "teacher"));
-    const teacherSnap = await getDocs(teacherQ);
-
-    const teacherMap = new Map();
-    let teacherColorIdx = 0;
-
-    teacherSnap.forEach((docSnap) => {
-      const data = docSnap.data();
-      const teacherName = data.displayName || data.fullName || data.name || "Teacher";
-
-      let sectionsText = "General Science";
-      if (Array.isArray(data.sections) && data.sections.length > 0) {
-        sectionsText = data.sections.join(", ");
-      } else if (data.section) {
-        sectionsText = data.section;
-      }
-
-      teacherMap.set(docSnap.id, {
-        id: docSnap.id,
-        schoolId: data.schoolId || docSnap.id,
-        name: teacherName,
-        initials: getInitials(teacherName),
-        sections: sectionsText,
-        color: cardColors[teacherColorIdx % cardColors.length],
-        prePctSum: 0,
-        preCount: 0,
-        postPctSum: 0,
-        postCount: 0
-      });
-      teacherColorIdx++;
-    });
-
-    // 2. Fetch Students & Aggregate by Teacher and by Section
-    const studentQ = query(collection(db, "users"), where("role", "==", "student"));
-    const studentSnap = await getDocs(studentQ);
-
-    const sectionMap = new Map();
-    let sectionColorIdx = 0;
-
-for (const studentDoc of studentSnap.docs) {
-      const sData = studentDoc.data();
-
-      // 1. Check for assigned teacher
-      const assignedTeacherId = sData.teacherId || sData.adviserId || sData.teacher;
-      let teacherObj = null;
-      if (assignedTeacherId && teacherMap.has(assignedTeacherId)) {
-        teacherObj = teacherMap.get(assignedTeacherId);
-      } else if (teacherMap.size > 0) {
-        teacherObj = teacherMap.values().next().value;
-      }
-
-      // 2. Resolve section name from student document or fallback to teacher's section
-      let sectionName = sData.section || sData.gradeSection || sData.sectionName || sData.className;
-
-      if (!sectionName && sData.grade && sData.section) {
-        sectionName = `Grade ${sData.grade} – ${sData.section}`;
-      } else if (!sectionName && teacherObj && teacherObj.sections && teacherObj.sections !== "General Science") {
-        sectionName = teacherObj.sections.split(",")[0].trim();
-      } else if (!sectionName) {
-        sectionName = "Grade 6 – Section A";
-      }
-
-      // 3. Register section if seen for the first time
-      if (!sectionMap.has(sectionName)) {
-        sectionMap.set(sectionName, {
-          name: sectionName,
-          students: 0,
-          color: cardColors[sectionColorIdx % cardColors.length],
-          prePctSum: 0,
-          preCount: 0,
-          postPctSum: 0,
-          postCount: 0
-        });
-        sectionColorIdx++;
-      }
-
-      const secObj = sectionMap.get(sectionName);
-      secObj.students++;
-
-      // 4. Query student lessons
-      const lessonsRef = collection(db, "users", studentDoc.id, "test_results", "term_01", "lessons");
-      const lessonsSnap = await getDocs(lessonsRef);
-
-      lessonsSnap.forEach((lDoc) => {
-        const tData = lDoc.data();
-
-        // Pre-test
-        if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0) {
-          const prePct = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
-          if (teacherObj) {
-            teacherObj.prePctSum += prePct;
-            teacherObj.preCount++;
-          }
-          secObj.prePctSum += prePct;
-          secObj.preCount++;
-        }
-
-        // Post-test
-        if (tData.isPostTestCompleted && tData.postTestTotalQuestions > 0) {
-          const score = tData.postTestScore !== undefined 
-            ? tData.postTestScore 
-            : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
-          
-          const postPct = (score / tData.postTestTotalQuestions) * 100;
-          if (teacherObj) {
-            teacherObj.postPctSum += postPct;
-            teacherObj.postCount++;
-          }
-          secObj.postPctSum += postPct;
-          secObj.postCount++;
-        }
-      });
-    }
+function renderSchoolAnalytics(report) {
+    const teacherMap = new Map(report.teachers.map((teacher, index) => [teacher.id, {
+      ...teacher, name: teacher.analyticsName, initials: getInitials(teacher.analyticsName),
+      sections: teacher.analyticsSections, color: cardColors[index % cardColors.length]
+    }]));
+    const sectionMap = new Map(report.sections.map((section, index) => [section.name, { ...section, color: cardColors[index % cardColors.length] }]));
 
     // 3. Render Teachers Analytics Cards
     if (teacherContainer) {
@@ -275,63 +153,19 @@ for (const studentDoc of studentSnap.docs) {
       }
     }
 
-  } catch (error) {
-    console.error("Error loading analytics data:", error);
-    if (teacherContainer) teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #ef4444; padding: 32px;">Failed to load analytics data.</p>`;
-    if (sectionContainer) sectionContainer.innerHTML = `<p style="text-align: center; color: #ef4444; padding: 32px;">Failed to load section data.</p>`;
-  }
 }
 
-// Helper: Load Admin Info into the Sidebar Drawer
-async function updateAdminSidebar(user) {
-  const avatarEl = document.querySelector(".admin-side-avatar");
-  const nameEl = document.querySelector(".admin-side-user strong");
-  const roleEl = document.querySelector(".admin-side-user small");
-
-  if (!avatarEl && !nameEl) return;
-
-  try {
-    let adminData = null;
-
-    // 1. Try matching by Auth UID
-    const uidSnap = await getBackgroundDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-    if (!uidSnap.empty) {
-      adminData = uidSnap.docs[0].data();
-    } else {
-      // 2. Fallback: Query any user with role == "admin" (like ADMIN1)
-      const roleSnap = await getBackgroundDocs(query(collection(db, "users"), where("role", "==", "admin")));
-      if (!roleSnap.empty) {
-        adminData = roleSnap.docs[0].data();
-      }
-    }
-
-    if (adminData) {
-      const name = adminData.displayName || adminData.fullName || adminData.name || "Admin";
-      const role = adminData.roleLabel || "School Administrator";
-      
-      const parts = name.trim().split(/\s+/).filter(Boolean);
-      const filtered = parts.filter((p) => !/^(dr\.|mr\.|ms\.|mrs\.|sir|ma'am)$/i.test(p));
-      const target = filtered.length > 0 ? filtered : parts;
-      const initials = target.slice(0, 2).map((part) => part[0] || "").join("").toUpperCase() || "AD";
-
-      if (avatarEl) avatarEl.textContent = initials;
-      if (nameEl) nameEl.textContent = name;
-      if (roleEl) roleEl.textContent = role;
-    }
-  } catch (err) {
-    console.error("Error updating sidebar admin profile:", err);
-  }
-}
-
-// Authentication Check
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
+onAuthStateChanged(auth, async user => {
+  if (!user) { window.location.href = "login.html"; return; }
   initAdminIdleTimeout(auth);
-  loadSchoolAnalytics();
-  updateAdminSidebar(user);
+  const timing = createPagePerformance("School Analytics");
+  try {
+    await showAdminView({ app, user, page: "reports",
+      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      render: report => timing.render(() => renderSchoolAnalytics(report)),
+      painted: cacheHit => timing.finish("loaded", { cacheHit })
+    });
+  } catch (error) { timing.finish("error"); console.error("Error loading analytics data:", error); }
 });
 
 setAnalyticsView("teachers");

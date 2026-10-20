@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cacheStaticAssets } from "./cache-static-assets.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = resolve(root, "dist");
@@ -20,6 +21,8 @@ for (const name of publicPaths) {
   });
 }
 
+const cached = await cacheStaticAssets(output, pages);
+
 let files = 0;
 let largest = 0;
 async function validateDirectory(directory) {
@@ -38,3 +41,4 @@ async function validateDirectory(directory) {
 }
 await validateDirectory(output);
 console.log(`Built ${pages.length} pages and ${files} public files in dist. Largest file: ${(largest / 1024 / 1024).toFixed(1)} MiB.`);
+console.log(`Versioned ${cached.count} public assets at ${cached.prefix}; HTML and API caching policies are unchanged.`);

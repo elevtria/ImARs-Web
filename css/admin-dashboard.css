@@ -64,6 +64,13 @@ button { cursor: pointer; }
   font-weight: 700;
   white-space: nowrap;
 }
+.school-year-control { position: relative; }
+.school-year-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+select.admin-year { min-height: 38px; padding-right: 10px; border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+select.admin-year:focus-visible { outline: 3px solid rgba(77, 134, 176, .45); outline-offset: 3px; }
+select.admin-year:disabled { opacity: .7; cursor: wait; }
+.school-year-status { position: absolute; top: calc(100% + 3px); right: 0; width: max-content; max-width: min(270px, 80vw); color: #3f5c78; font-size: 11px; line-height: 1.35; text-align: right; }
+.school-year-status.error { color: #b42318; }
 
 .dashboard-content { width: min(1180px, 100%); margin: 0 auto; padding: 34px 22px 68px; }
 .page-intro { margin: 0 0 22px; }
@@ -172,3 +179,4 @@ td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-siz
 @media (prefers-reduced-motion: reduce) {
   .admin-drawer, .admin-drawer-panel { transition: none; }
 }
+.view-data-status { margin: 0 0 12px; color: #64748b; font-size: 12px; }
