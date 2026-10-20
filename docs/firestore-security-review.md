@@ -14,6 +14,28 @@ on every document before August 4, 2027. Firebase Authentication in the login UI
 does not restrict a direct database request under this rule. At the deadline,
 this rule stops allowing client requests; it does not delete existing data.
 
+## Browser protections — October 20, 2026
+
+The website escapes database names, titles, scan labels and teacher document IDs
+before including them in generated HTML. The existing Pages middleware applies a
+Content Security Policy that blocks inline scripts, HTML event handlers, string
+evaluation, plugins and framing by other websites. Existing inline chart styles
+and the current Firebase, QR, spreadsheet and PDF libraries remain permitted.
+Local browser checks cover blocked scripts and successful PDF rendering; these
+checks use synthetic data and do not access production student records.
+
+The Firebase web configuration remains public because the browser Firebase SDK
+requires it. It is not a database password, and hiding it would not enforce data
+access. Private Gemini and service-account credentials belong only in encrypted
+server secrets; no service-account private key or hardcoded private API secret
+was found in the public source scan. Review the Firebase key's API restrictions
+in Google Cloud separately, particularly to ensure it cannot call paid AI APIs.
+
+These browser protections do not replace Firestore rules. The last rules supplied
+by the owner permit public database access, and the account gateway/rules rollout
+below is still pending. No production rules or security activation flags are
+changed by the browser protections.
+
 ## Website operations to preserve
 
 | Feature | Firestore paths and operations | Source |

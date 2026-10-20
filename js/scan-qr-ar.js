@@ -1,4 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { escapeHtml } from "./teacher-view.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { 
   getFirestore, 
@@ -152,7 +153,7 @@ async function processScannedQR(decodedText) {
 
     detailedHtml += `
       <div class="mb-2 last:mb-0">
-        <strong>${tLabel}, ${lLabel}</strong><br>
+        <strong>${escapeHtml(tLabel)}, ${escapeHtml(lLabel)}</strong><br>
         Pre-Test: <span class="text-amber-500 font-bold">${pScore}</span> | 
         Post-Test: <span class="text-emerald-600 font-bold">${poScore}</span>
       </div>`;
@@ -391,7 +392,7 @@ async function loadRecentScans() {
       const rowHTML = `
         <div class="scan-row">
           <div>
-            <strong>${moduleName}</strong>
+            <strong>${escapeHtml(moduleName)}</strong>
             <small>${timeString}</small>
           </div>
           <span class="tag tag-qr">QR</span>

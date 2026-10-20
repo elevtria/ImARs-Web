@@ -5,12 +5,45 @@ import { WebLoginState, default as privateWorker } from "../workers/web-auth-wor
 import { authApi, protectWebsite, signSession, webSession } from "../server/web-auth.js";
 import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } from "../server/web-session.js";
 import { accountAccess } from "../server/account-access.js";
+import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
 
 const accounts = [
   { id: "TEACH1000", uid: "teacher-a", email: "teacher@example.test", role: "teacher" },
   { id: "TEACH1001", uid: "teacher-b", email: "other@example.test", role: "teacher" },
   { id: "ADMIN1000", uid: "admin-a", email: "admin@example.test", role: "admin" }
 ];
+
+test("security headers protect HTML and API responses without changing their content or cache/session headers", async () => {
+  for (const [path, status, type, body] of [
+    ["/login", 200, "text/html", "<h1>Login</h1>"],
+    ["/api/generate-quiz", 401, "application/json", '{"error":"Sign in"}']
+  ]) {
+    const response = await onRequest({ request: new Request(`https://imars.example.test${path}`), env: {},
+      next: async () => new Response(body, { status, headers: { "Content-Type": type, "Cache-Control": "no-store", "Set-Cookie": "existing=value; Secure; HttpOnly" } }) });
+    assert.equal(response.status, status);
+    assert.equal(await response.text(), body);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.match(response.headers.get("Set-Cookie"), /existing=value/);
+    assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+    const scriptPolicy = CONTENT_SECURITY_POLICY.split(";").map(rule => rule.trim()).find(rule => rule.startsWith("script-src "));
+    assert.ok(!scriptPolicy.includes("'unsafe-inline'") && !scriptPolicy.includes("'unsafe-eval'"));
+    assert.ok(CONTENT_SECURITY_POLICY.includes("script-src-attr 'none'"));
+    assert.ok(CONTENT_SECURITY_POLICY.includes("object-src 'none'"));
+    assert.equal(response.headers.get("X-Content-Type-Options"), "nosniff");
+    assert.equal(response.headers.get("X-Frame-Options"), "DENY");
+    assert.match(response.headers.get("Permissions-Policy"), /camera=\(self\)/);
+  }
+});
+
+test("security headers also cover redirects from protected routes", async () => {
+  const app = fixture();
+  const response = await onRequest({ request: new Request("https://imars.example.test/admin-dashboard"), env: app.env,
+    next: async () => { throw new Error("An unauthenticated request must not open the page"); } });
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "/login?reason=web-session");
+  assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+});
+
 function fixture() {
   let time = Date.now(), verifications = 0, outage = false, wrongUid = false;
   const stores = new Map(), actors = new Map();

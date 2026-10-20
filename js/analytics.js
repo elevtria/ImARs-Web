@@ -1,5 +1,5 @@
 import { getDocs as quietDocs } from "./firebase-data.js";
-import { showTeacherView } from "./teacher-view.js";
+import { showTeacherView, escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
@@ -109,8 +109,8 @@ function renderTopics(baseStudents) {
         </svg>
       </div>
       <strong style="font-size: 1.25rem; display: block;">${completionRate}%</strong>
-      <span style="display:inline-block; font-size: 0.72rem; font-weight: 700; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 9999px; margin-bottom: 4px;">${termTag}</span>
-      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: #374151;">${stat.name}</span>
+      <span style="display:inline-block; font-size: 0.72rem; font-weight: 700; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 9999px; margin-bottom: 4px;">${escapeHtml(termTag)}</span>
+      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: #374151;">${escapeHtml(stat.name)}</span>
     `;
     topicsContainer.appendChild(topicEl);
   });
@@ -262,8 +262,8 @@ onAuthStateChanged(auth, async user => {
             const impSign = improvement > 0 ? "+" : "";
 
             tr.innerHTML = `
-              <th scope="row"><span class="table-avatar">${initials.toUpperCase()}</span>${sName}</th>
-              <td>Grade 6 – ${sectionName}</td>
+              <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
+              <td>Grade 6 – ${escapeHtml(sectionName)}</td>
               <td>${avgPre}%</td>
               <td>${avgPost}%</td>
               <td><span class="improvement-value ${impClass}">${impSign}${improvement}%</span></td>

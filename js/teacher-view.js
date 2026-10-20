@@ -1,6 +1,12 @@
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { decodeView, encodeView, teacherViewCache } from "./view-cache.js";
 
+export function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[character]));
+}
+
 const watched = new WeakSet();
 export function prepareTeacherCache(app, user) {
   const auth = getAuth(app);

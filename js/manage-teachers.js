@@ -110,7 +110,7 @@ function render() {
   if (!list) return;
 
   list.innerHTML = visible.map((teacher) => `
-    <article class="teacher-record" data-teacher-id="${teacher.id}">
+    <article class="teacher-record" data-teacher-id="${escapeHtml(teacher.id)}">
       <div class="teacher-record-top">
         <div class="teacher-profile">
           <span class="record-avatar ${teacher.active ? "" : "inactive"}">${escapeHtml(initials(teacher.name))}</span>
@@ -133,12 +133,12 @@ function render() {
           <div class="teacher-stat"><small>AR hrs</small><strong>${teacher.hours}</strong></div>
           <div class="teacher-actions">
             ${webLocksEnabled ? `<button class="record-action activate" type="button" ${adminReady ? "" : "disabled"} data-unlock-web-id="${escapeHtml(teacher.schoolId || teacher.id)}" aria-label="Unlock web login for ${escapeHtml(teacher.name)}" title="Unlock web login"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 8 0m-5 8v2"/></svg></button>` : ""}
-            <button class="record-action ${teacher.active ? "deactivate" : "activate"}" type="button" ${adminReady ? "" : "disabled"} data-toggle-id="${teacher.id}" aria-label="${teacher.active ? "Deactivate" : "Activate"} ${escapeHtml(teacher.name)}" title="${teacher.active ? "Deactivate" : "Activate"}">
+            <button class="record-action ${teacher.active ? "deactivate" : "activate"}" type="button" ${adminReady ? "" : "disabled"} data-toggle-id="${escapeHtml(teacher.id)}" aria-label="${teacher.active ? "Deactivate" : "Activate"} ${escapeHtml(teacher.name)}" title="${teacher.active ? "Deactivate" : "Activate"}">
               ${teacher.active
                 ? `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg>`
                 : `<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>`}
             </button>
-            <button class="record-action delete" type="button" ${adminReady ? "" : "disabled"} data-delete-id="${teacher.id}" aria-label="Remove ${escapeHtml(teacher.name)}" title="Remove teacher">
+            <button class="record-action delete" type="button" ${adminReady ? "" : "disabled"} data-delete-id="${escapeHtml(teacher.id)}" aria-label="Remove ${escapeHtml(teacher.name)}" title="Remove teacher">
               <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5"/></svg>
             </button>
           </div>

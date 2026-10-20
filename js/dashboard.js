@@ -1,5 +1,5 @@
 import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
-import { showTeacherView } from "./teacher-view.js";
+import { showTeacherView, escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
 import { getFirestore, collection, query, where, getDocsWithLoading as getDocs, doc, getDocWithLoading as getDoc } from "./firebase-data.js";
@@ -187,16 +187,16 @@ onAuthStateChanged(auth, async user => {
                 tr.innerHTML = `
                   <td>
                     <div class="student">
-                      <div class="avatar">${initials}</div>
+                      <div class="avatar">${escapeHtml(initials)}</div>
                       <div>
-                        <strong>${sName}</strong>
-                        <small>Grade 6 – ${sectionName}</small>
+                        <strong>${escapeHtml(sName)}</strong>
+                        <small>Grade 6 – ${escapeHtml(sectionName)}</small>
                       </div>
                     </div>
                   </td>
                   <td class="muted-cell">${sPreStr}</td>
                   <td class="${sPostStyle}">${sPostStr}</td>
-                  <td class="muted-cell">${sArTimeStr}</td> <!-- UPDATED AR TIME DATA HERE -->
+                  <td class="muted-cell">${sArTimeStr}</td>
                   <td class="muted-cell">${dateStr}</td>
                 `;
                 rows.appendChild(tr);
@@ -241,7 +241,7 @@ onAuthStateChanged(auth, async user => {
                   <article class="module">
                     <div class="badge ${badgeClass}">${lessonCounter}</div>
                     <div>
-                      <h3>${lessonTitle}</h3>
+                      <h3>${escapeHtml(lessonTitle)}</h3>
                       <span>${statusText}</span>
                     </div>
                   </article>
