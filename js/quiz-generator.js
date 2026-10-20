@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDocs, query, setDoc, where } from "./firebase-data.js";
+import { requestQuiz } from "./quiz-request.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -331,27 +332,17 @@ const firestore = getFirestore(firebaseApp);
       loadingDetail.textContent = "Please wait while we prepare your questions.";
       showStatus(setupStatus, "AI is reading the material and creating your questions…", false);
 
-      const response = await fetch("/api/generate-quiz", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + await user.getIdToken()
-        },
-        body: JSON.stringify({
-          ...material,
-          firebaseApiKey: firebaseConfig.apiKey,
-          fileName: selectedFile.name,
-          sectionId: sectionSelect.value,
-          questionCount: Number(document.getElementById("questionCount").value),
-          difficulty,
-          questionType: document.querySelector("input[name='questionType']:checked").value
-        })
+      const questions = await requestQuiz(await user.getIdToken(), {
+        ...material,
+        firebaseApiKey: firebaseConfig.apiKey,
+        fileName: selectedFile.name,
+        sectionId: sectionSelect.value,
+        questionCount: Number(document.getElementById("questionCount").value),
+        difficulty,
+        questionType: document.querySelector("input[name='questionType']:checked").value
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result.error || "Quiz generation failed. Please try again.");
-      if (!Array.isArray(result.questions) || result.questions.length === 0) throw new Error("The question generator returned no questions. Please try again.");
 
-      generatedQuestions = result.questions.map((question) => ({
+      generatedQuestions = questions.map((question) => ({
         ...question,
         id: makeId(),
         accepted: false,

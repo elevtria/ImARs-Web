@@ -1,10 +1,11 @@
 const FIREBASE_PROJECT_ID = "imars-db-a733b";
-const GEMINI_MODEL = "gemini-3.8-flash";
-const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
+const GENERATION_TIMEOUT_MS = 60000;
 const MAX_SOURCE_CHARACTERS = 120000;
 const MAX_PDF_BASE64_CHARACTERS = 14000000;
 
 export async function onRequestPost({ request, env }) {
+  const started = Date.now();
   try {
     if (!env.GEMINI_API_KEY) {
       return jsonResponse({ error: "The question-generation service is not configured yet." }, 503);
@@ -27,6 +28,7 @@ export async function onRequestPost({ request, env }) {
 
     const { teacherProfileId } = await requireTeacher(idToken, body.firebaseApiKey);
     await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
+    const authorized = Date.now();
 
     const prompt = buildPrompt(body);
     const input = [{ type: "text", text: prompt }];
@@ -47,30 +49,43 @@ export async function onRequestPost({ request, env }) {
         schema: quizSchema(body.questionCount, body.questionType)
       }
     };
-    const models = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL];
+    // Both attempts share a deadline; a busy first model cannot double the wait.
+    const signal = AbortSignal.timeout(GENERATION_TIMEOUT_MS);
     let geminiResponse;
     let result = {};
 
-    for (let index = 0; index < models.length; index += 1) {
-      geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({ ...requestBody, model: models[index] })
-      });
-      result = await geminiResponse.json().catch(() => ({}));
+    for (let index = 0; index < GEMINI_MODELS.length; index += 1) {
+      const model = GEMINI_MODELS[index];
+      try {
+        geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": env.GEMINI_API_KEY
+          },
+          signal,
+          body: JSON.stringify({ ...requestBody, model,
+            generation_config: { thinking_level: model === "gemini-3.5-flash-lite" && body.difficulty !== "Hard" ? "minimal" : "low" }
+          })
+        });
+        result = await geminiResponse.json().catch(error => {
+          if (signal.aborted) throw error;
+          return {};
+        });
+      } catch (error) {
+        if (signal.aborted) throw new RequestValidationError("Generating these questions took too long. Please retry with fewer questions or a shorter learning file.", 504);
+        throw error;
+      }
       if (geminiResponse.ok) break;
 
       const upstreamMessage = getSafeGeminiError(result, env.GEMINI_API_KEY);
       console.error("[Quiz Generator] Gemini API error", {
-        model: models[index],
+        model,
         status: geminiResponse.status,
         message: upstreamMessage
       });
-      if (geminiResponse.status === 503 && index < models.length - 1) {
-        console.warn("[Quiz Generator] Primary model is busy; trying the Flash-Lite fallback.");
+      if (geminiResponse.status === 503 && index < GEMINI_MODELS.length - 1) {
+        console.warn("[Quiz Generator] Primary model is busy; trying the fallback.");
         continue;
       }
       break;
@@ -115,7 +130,10 @@ export async function onRequestPost({ request, env }) {
       });
       return jsonResponse({ error: "The question-generation service did not return complete questions in the requested format. Please try generating the quiz again." }, 502);
     }
-    return jsonResponse({ questions });
+    const finished = Date.now();
+    return jsonResponse({ questions }, 200, {
+      "Server-Timing": `verify;dur=${authorized - started}, ai;dur=${finished - authorized}, total;dur=${finished - started}`
+    });
   } catch (error) {
     if (error instanceof RequestValidationError) {
       return jsonResponse({ error: error.message }, error.status);
@@ -303,12 +321,13 @@ function validateGeneratedQuestions(questions, expectedCount, type) {
   return normalized;
 }
 
-function jsonResponse(payload, status = 200) {
+function jsonResponse(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...headers
     }
   });
 }
