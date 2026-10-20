@@ -2,7 +2,7 @@ import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocsWithLoading as getDocs } from "./firebase-data.js";
+import { getFirestore, collection, query, where, doc, updateDoc, getDocsWithLoading as getDocs } from "./firebase-data.js";
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";
 
@@ -26,6 +26,9 @@ const searchInput = document.getElementById("studentSearch");
 const sectionFilter = document.getElementById("sectionFilter");
 
 let dynamicCards = [];
+const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+})[character]);
 
 const applyFilters = () => {
   const searchTerm = searchInput.value.trim().toLowerCase();
@@ -82,6 +85,7 @@ onAuthStateChanged(auth, async user => {
 
           for (const { studentDoc, results } of students) {
             const sData = studentDoc.data();
+            if (sData.active === false) continue;
             const sName = sData.displayName || "Unknown Student";
 
             // Generate Initials
@@ -166,10 +170,18 @@ onAuthStateChanged(auth, async user => {
             card.innerHTML = `
               <div class="record-head">
                 <div class="student">
-                  <div class="avatar">${initials}</div>
+                  <div class="avatar">${escapeHTML(initials)}</div>
                   <div>
-                    <strong>${sName}</strong>
-                    <small>Grade 6 – ${sectionName} · ${dateStr}</small>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                      <strong>${escapeHTML(sName)}</strong>
+                      <button type="button" class="edit-student-btn" style="background: none; border: none; cursor: pointer; color: #64748b;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button type="button" class="delete-student-btn" style="background: none; border: none; cursor: pointer; color: #ef4444;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      </button>
+                    </div>
+                    <small>Grade 6 – ${escapeHTML(sectionName)} · ${dateStr}</small>
                   </div>
                 </div>
                 <span class="overall">${overallPercent}% overall</span>
@@ -182,6 +194,12 @@ onAuthStateChanged(auth, async user => {
               </div>
               <div class="bar" aria-label="${overallPercent} percent overall"><i style="width:${overallPercent}%"></i></div>
             `;
+            for (const [selector, action] of [[".edit-student-btn", "Edit"], [".delete-student-btn", "Archive"]]) {
+              const button = card.querySelector(selector);
+              button.dataset.id = studentDoc.id;
+              button.dataset.name = sName;
+              button.setAttribute("aria-label", `${action} ${sName}`);
+            }
 
             cards.appendChild(card);
           }
@@ -202,5 +220,89 @@ onAuthStateChanged(auth, async user => {
     emptyState.textContent = "Could not load student records. Please refresh to try again.";
     emptyState.hidden = false;
     timing.finish("error");
+  }
+});
+
+// Keep the incoming edit/archive actions while using cache-invalidating writes.
+const editModal = document.getElementById("editStudentModal");
+const editForm = document.getElementById("editStudentForm");
+const idInput = document.getElementById("editStudentId");
+const nameInput = document.getElementById("editFullName");
+const emailInput = document.getElementById("editEmail");
+const saveBtn = document.getElementById("saveEditBtn");
+let editRequest = 0;
+
+document.getElementById("cancelEditBtn").addEventListener("click", () => {
+  editRequest++;
+  editModal.classList.remove("open");
+});
+
+recordsContainer.addEventListener("click", async event => {
+  const editBtn = event.target.closest(".edit-student-btn");
+  if (editBtn) {
+    const request = ++editRequest;
+    const uid = auth.currentUser?.uid;
+    if (!uid) return;
+    idInput.value = editBtn.dataset.id;
+    nameInput.value = editBtn.dataset.name;
+    emailInput.value = "";
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Loading...";
+    editModal.classList.add("open");
+    try {
+      // Saved report views intentionally omit email addresses. Read the current
+      // profile when editing so returning to a saved view cannot blank an email.
+      const profile = await quietDoc(doc(db, "users", editBtn.dataset.id));
+      if (request !== editRequest || auth.currentUser?.uid !== uid) return;
+      if (!profile.exists() || profile.data().active === false) throw new Error("Student is no longer available.");
+      const data = profile.data();
+      nameInput.value = data.displayName || data.fullName || editBtn.dataset.name;
+      emailInput.value = data.email || data.providedEmail || "";
+    } catch (error) {
+      if (request !== editRequest || auth.currentUser?.uid !== uid) return;
+      editModal.classList.remove("open");
+      console.error("Error loading student profile:", error);
+      alert("Could not load the current student profile. Please retry.");
+    } finally {
+      if (request === editRequest && auth.currentUser?.uid === uid) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Changes";
+      }
+    }
+    return;
+  }
+
+  const delBtn = event.target.closest(".delete-student-btn");
+  if (delBtn && confirm(`Are you sure you want to archive ${delBtn.dataset.name}?\n\nTheir data is kept for recovery but hidden from this list.`)) {
+    try {
+      await updateDoc(doc(db, "users", delBtn.dataset.id), { active: false, deletedAt: new Date() });
+      window.location.reload();
+    } catch (error) {
+      console.error("Error archiving student:", error);
+      alert("Failed to archive student.");
+    }
+  }
+});
+
+editForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (saveBtn.disabled) return;
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving...";
+  try {
+    await updateDoc(doc(db, "users", idInput.value), {
+      displayName: nameInput.value.trim(),
+      fullName: nameInput.value.trim(),
+      email: emailInput.value.trim().toLowerCase(),
+      providedEmail: emailInput.value.trim().toLowerCase()
+    });
+    editModal.classList.remove("open");
+    window.location.reload();
+  } catch (error) {
+    console.error("Error updating student:", error);
+    alert("Failed to update student profile.");
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save Changes";
   }
 });

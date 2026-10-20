@@ -316,73 +316,163 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) handleFileSelected(fileInput.files[0]);
 });
 
+let existingStudentIds = new Set();
+let previewData = [];
+
 async function handleFileSelected(file) {
   selectedFile = file;
   parsedStudents = [];
+  previewData = [];
   uploadStatus.hidden = true;
+  document.getElementById("previewSection").hidden = true;
+  importBtn.hidden = true;
+
+  // 1. FILE SAFETY: Enforce 5 MB limit mandated by the expert report
+  const MAX_FILE_SIZE_MB = 5;
+  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    document.getElementById("dropTitle").textContent = "File is too large";
+    document.getElementById("dropHint").textContent = `Please limit your upload to ${MAX_FILE_SIZE_MB}MB to ensure safe processing.`;
+    return;
+  }
 
   try {
+    document.getElementById("dropTitle").textContent = "Validating data...";
+    document.getElementById("dropHint").textContent = "Checking against database records...";
+
+    const studentsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+    existingStudentIds.clear();
+    studentsSnap.forEach(doc => existingStudentIds.add(doc.id));
+
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
 
-    // Parse rows matching: Col A = First Name, Col B = Last Name, Col C = Student ID, Col D = Email
+    // 2. FILE SAFETY: Cap row counts to prevent browser/Cloudflare timeouts
+    const MAX_ROWS = 100;
+    if (rows.length > MAX_ROWS + 1) { // +1 accounts for the header row
+      document.getElementById("dropTitle").textContent = "Too many records";
+      document.getElementById("dropHint").textContent = `Please batch your uploads to a maximum of ${MAX_ROWS} students at a time.`;
+      return;
+    }
+
+    let validCount = 0;
+    let errorCount = 0;
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      if (!row || row.length === 0) continue;
+      if (!row || row.join("").trim() === "") continue;
 
       const firstName = String(row[0] ?? "").trim();
       const lastName = String(row[1] ?? "").trim();
       let studentId = String(row[2] ?? "").trim();
       const email = String(row[3] ?? "").trim().toLowerCase();
 
-      // Pad leading zeros if Excel stripped them (e.g. "26271000" -> "0026271000")
-      if (studentId && /^\d{8}$/.test(studentId) && studentId.startsWith("2627")) {
+      if (studentId && /^\d{8}$/.test(studentId)) {
         studentId = "00" + studentId;
       }
 
+      let rowErrors = [];
+
+      if (!firstName) rowErrors.push("Missing First Name");
+      if (!lastName) rowErrors.push("Missing Last Name");
+      
+      if (!studentId) {
+         rowErrors.push("Missing Student ID");
+      } else if (!/^\d+$/.test(studentId)) {
+         rowErrors.push("Invalid format (Letters found)");
+      } else if (studentId.length < 9) {
+         rowErrors.push("ID too short");
+      } else if (existingStudentIds.has(studentId)) {
+         rowErrors.push("Duplicate in database");
+      }
+
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+         rowErrors.push("Invalid email");
+      }
+
+      const isValid = rowErrors.length === 0;
+      if (isValid) validCount++; else errorCount++;
+
       const fullName = `${firstName} ${lastName}`.trim();
-      if (!fullName) continue;
-
-      parsedStudents.push({
-        firstName,
-        lastName,
-        fullName,
-        studentId,
-        email
+      
+      previewData.push({
+        rowNum: i + 1,
+        firstName, lastName, fullName, studentId, email,
+        isValid,
+        errors: rowErrors
       });
+
+      if (isValid) {
+        parsedStudents.push({ firstName, lastName, fullName, studentId, email });
+      }
     }
 
-    document.getElementById("dropTitle").textContent = file.name;
-    if (parsedStudents.length > 0) {
-      document.getElementById("dropHint").textContent = `${parsedStudents.length} student(s) ready · click Confirm Import to save to Firebase`;
-      importBtn.hidden = false;
-    } else {
-      document.getElementById("dropHint").textContent = "No valid student rows found in file. Check template format.";
-      importBtn.hidden = true;
-    }
+    renderPreviewTable(validCount, errorCount);
+    
   } catch (err) {
     console.error("Failed to parse file:", err);
     document.getElementById("dropTitle").textContent = "Error reading file";
     document.getElementById("dropHint").textContent = "Please upload a valid .xlsx or .csv file.";
-    importBtn.hidden = true;
   }
+}
+
+function renderPreviewTable(validCount, errorCount) {
+  const tbody = document.getElementById("previewTableBody");
+  tbody.innerHTML = "";
+  
+  previewData.forEach(item => {
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid #f1f5f9";
+    // Highlight rejected rows as requested by the expert
+    if (!item.isValid) tr.style.backgroundColor = "#fef2f2"; 
+    
+    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate'));
+    const emailHasError = item.errors.some(e => e.includes('email'));
+
+    tr.innerHTML = `
+      <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
+      <td style="padding: 10px 8px;">${item.firstName || '<em style="color:red">Missing</em>'}</td>
+      <td style="padding: 10px 8px;">${item.lastName || '<em style="color:red">Missing</em>'}</td>
+      <td style="padding: 10px 8px; ${idHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.studentId || '<em style="color:red">Missing</em>'}</td>
+      <td style="padding: 10px 8px; ${emailHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.email}</td>
+      <td style="padding: 10px 8px; color: ${item.isValid ? '#16a34a' : '#dc2626'}; font-size: 0.85rem; font-weight: 500;">
+        ${item.isValid ? '✓ Ready' : '⚠️ ' + item.errors.join(", ")}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("previewSection").hidden = false;
+  document.getElementById("previewSummary").textContent = `Found ${validCount} valid records and ${errorCount} errors.`;
+  
+  const confirmBtn = document.getElementById("confirmPreviewBtn");
+  if (validCount > 0) {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = `Import ${validCount} Valid Records`;
+  } else {
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "No valid records to import";
+  }
+  
+  document.getElementById("dropTitle").textContent = selectedFile.name;
+  document.getElementById("dropHint").textContent = "Review the table below before importing.";
 }
 
 // --- IMPORT CONFIRMATION & FIRESTORE BATCH UPLOAD ---
 const closeImportModal = () => importModal.classList.remove("open");
 
-importBtn.addEventListener("click", (event) => {
+document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
   if (!selectedFile || parsedStudents.length === 0) return;
 
   const targetSec = sections.find((s) => s.classCode === sectionSelect.value);
   const secLabel = targetSec ? targetSec.label : sectionSelect.value;
 
-  importSummary.textContent = `You are about to import ${parsedStudents.length} student(s) from “${selectedFile.name}” into ${secLabel}.`;
+  importSummary.textContent = `You are about to securely import ${parsedStudents.length} VALID student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
+  
   if (importPreviewNote) {
-    const sampleNames = parsedStudents.slice(0, 3).map((s) => `${s.fullName} (${s.studentId || "Auto ID"})`).join(", ");
+    const sampleNames = parsedStudents.slice(0, 3).map((s) => `${s.fullName} (${s.studentId})`).join(", ");
     importPreviewNote.textContent = `Preview: ${sampleNames}${parsedStudents.length > 3 ? ` and ${parsedStudents.length - 3} more...` : ""}`;
   }
   importModal.classList.add("open");
@@ -426,11 +516,6 @@ confirmImportBtn.addEventListener("click", async () => {
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
 
-      if (!finalStudentId) {
-        highestSeq++;
-        finalStudentId = `002627${highestSeq}`;
-      }
-
       const isNewStudent = !existingIds.has(finalStudentId);
 
       const studentDocData = {
@@ -451,7 +536,6 @@ confirmImportBtn.addEventListener("click", async () => {
       };
 
       if (isNewStudent) {
-        studentDocData.isRegistered = false;
         studentDocData.completedQuizzes = {};
         studentDocData.gamification = {
           badgeCounts: {

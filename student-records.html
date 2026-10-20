@@ -141,6 +141,27 @@
     </div>
   </div>
 
+    <!-- Edit Student Modal -->
+  <div class="modal" id="editStudentModal">
+    <form class="modal-card" id="editStudentForm" style="text-align: left;">
+      <h3 style="margin-bottom: 0.5rem;">Edit Student Profile</h3>
+      <p style="margin-bottom: 1.5rem; color: #64748b; font-size: 0.9rem;">Update the student's name or email address.</p>
+      
+      <input type="hidden" id="editStudentId" />
+      
+      <label for="editFullName" style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem;">Full Name</label>
+      <input id="editFullName" type="text" required style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
+
+      <label for="editEmail" style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem;">Email Address</label>
+      <input id="editEmail" type="email" required style="width: 100%; padding: 0.5rem; margin-bottom: 1.5rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
+
+      <div class="modal-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+        <button class="btn-ghost" id="cancelEditBtn" type="button">Cancel</button>
+        <button class="btn-green" id="saveEditBtn" type="submit">Save Changes</button>
+      </div>
+    </form>
+  </div>
+
   <script src="js/ui.js"></script>
   <!-- Script converted to module -->
   <script type="module" src="js/student-records.js"></script>
