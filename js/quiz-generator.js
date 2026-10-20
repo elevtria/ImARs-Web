@@ -277,7 +277,7 @@ const firestore = getFirestore(firebaseApp);
       selectedFile = null;
       selectedFileRow.hidden = true;
       fileInput.value = "";
-      showStatus(setupStatus, "Please choose a file smaller than 10 MB.", true);
+      showStatus(setupStatus, "Please choose a file of 10 MB or less.", true);
       return;
     }
     selectedFile = file;

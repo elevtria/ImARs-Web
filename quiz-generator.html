@@ -63,12 +63,13 @@
             <div class="quiz-upload-column">
               <label class="quiz-field-label" for="quizFile">Learning material</label>
               <label class="quiz-dropzone" id="quizDropzone" for="quizFile" tabindex="0">
-                <input id="quizFile" type="file" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
+                <input id="quizFile" type="file" aria-describedby="quizUploadLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
                 <span class="quiz-upload-icon" aria-hidden="true">
                   <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
                 </span>
                 <strong>Drop a file here or <span>browse</span></strong>
-              <small>PDF, DOCX, or PPTX · save older PPT files as PPTX or PDF first</small>
+                <small id="quizUploadLimits">PDF, DOCX, or PPTX · Maximum 10 MB per file</small>
+                <small>Save older PPT files as PPTX or PDF first.</small>
               </label>
               <div class="quiz-file-selected" id="selectedFileRow" hidden>
                 <span class="quiz-file-type" id="fileTypeBadge">PDF</span>
