@@ -49,8 +49,10 @@ Navigation inside the website and reloads during the same visit keep sign-in.
 Browser restoration behavior varies, so the website also checks the navigation
 entry and its per-tab visit marker instead of relying on closing events alone.
 
-The marker contains only the UID, portal role and start time, and expires after
-12 hours. It is a UI lifecycle marker, not a database or server credential. Page
+The marker contains only the UID, portal role, start time and random tab ID, and
+expires after 12 hours. The tab ID must match this browsing context's window name,
+so a new tab inheriting its opener's session storage cannot reuse the login.
+These are UI lifecycle markers, not database or server credentials. Page
 data callbacks wait for Firebase initialization and a live, unique UID-linked
 staff profile with the expected role and active status. An unavailable check
 does not fall back to cached student records. Logout clears this tab's saved

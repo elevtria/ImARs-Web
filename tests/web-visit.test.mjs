@@ -12,10 +12,10 @@ const storage = entries => {
   const data = new Map(entries);
   return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: key => data.delete(key) };
 };
-const grant = (uid = "teacher-a", role = "teacher", startedAt = Date.now()) => JSON.stringify({ uid, role, startedAt });
+const grant = (uid = "teacher-a", role = "teacher", startedAt = Date.now()) => JSON.stringify({ uid, role, startedAt, tabId: "imars-web:fixture-tab" });
 
 function page({ path = "/index", type = "navigate", referrer = "", user = { uid: "teacher-a" }, saved,
-    profile = { uid: "teacher-a", role: "teacher", active: true }, profiles, read, passwordFails = false, sessionStorage = storage() } = {}) {
+    profile = { uid: "teacher-a", role: "teacher", active: true }, profiles, read, passwordFails = false, sessionStorage = storage(), name = "imars-web:fixture-tab" } = {}) {
   if (saved) sessionStorage.setItem(VISIT, saved);
   const events = {}, observers = new Set(), calls = [], deliveries = [];
   const app = {}, auth = { app, currentUser: user, authStateReady: async () => {} };
@@ -23,9 +23,9 @@ function page({ path = "/index", type = "navigate", referrer = "", user = { uid:
   const main = { cleared: false, replaceChildren() { this.cleared = true; } };
   const location = { pathname: path, origin: "https://imars.example.test", replace(url) { this.redirect = url; } };
   const context = vm.createContext({
-    window: { location, sessionStorage, localStorage: storage(), performance: { getEntriesByType: () => [{ type }] },
+    window: { name, location, sessionStorage, localStorage: storage(), performance: { getEntriesByType: () => [{ type }] },
       addEventListener: (name, callback) => { (events[name] ||= []).push(callback); } },
-    document: { referrer, body, querySelector: () => main }, URL, Date,
+    document: { referrer, body, querySelector: () => main }, URL, Date, crypto,
     firebaseGetAuth: () => auth, browserSessionPersistence: "session-only",
     setPersistence: async (_, persistence) => { calls.push(["persistence", persistence]); },
     firebaseAuthChanged: (_, callback) => { observers.add(callback); queueMicrotask(() => callback(auth.currentUser)); return () => observers.delete(callback); },
@@ -85,7 +85,7 @@ test("only successful password and matching live staff-role verification start a
     const uid = `${role}-a`, app = page({ path: "/login", user: null, profile: { uid, role, active: true } });
     app.observe(); await app.api.signInWithEmailAndPassword(app.auth, "staff@example.test", "password", role);
     const saved = JSON.parse(app.sessionStorage.getItem(VISIT));
-    assert.deepEqual(Object.keys(saved).sort(), ["role", "startedAt", "uid"]);
+    assert.deepEqual(Object.keys(saved).sort(), ["role", "startedAt", "tabId", "uid"]);
     assert.equal(saved.uid, uid); assert.equal(saved.role, role);
     assert.ok(app.calls.findIndex(call => call[0] === "password") < app.calls.findIndex(call => call[0] === "profile"));
     assert.ok(!app.sessionStorage.getItem(VISIT).includes("password"));
@@ -126,6 +126,13 @@ test("all page observers wait for one shared live role check before displaying c
   resolve({ size: 1, docs: [{ data: () => ({ uid: "teacher-a", role: "teacher", active: true }) }] });
   await flush();
   assert.deepEqual(app.deliveries, ["teacher-a", "teacher-a"]); assert.equal(app.body.pending, false);
+});
+
+test("a new tab cannot reuse session storage copied from its opener, even with a same-site referrer", async () => {
+  const app = page({ saved: grant(), name: "", referrer: "https://imars.example.test/index" });
+  app.observe(); await flush();
+  assert.equal(app.auth.currentUser, null); assert.equal(app.body.pending, true);
+  assert.deepEqual(app.deliveries, []); assert.equal(app.location.redirect, "/login?reason=web-session");
 });
 
 test("mismatched UIDs, expired visits, restored history and cross-portal navigation require login", async () => {

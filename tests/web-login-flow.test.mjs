@@ -114,7 +114,7 @@ test("an expired website session shows a sign-in message and preserves the norma
 
 test("Firebase sign-out still clears browser authentication if web-session revocation is unavailable", async () => {
   let cleared = false;
-  const context = vm.createContext({ window: { location: { pathname: "/login" } }, invalidateTeacherViews() {}, closeWebSession: async () => { throw new Error("Retry sign-out"); },
+  const context = vm.createContext({ window: { name: "", location: { pathname: "/login" } }, invalidateTeacherViews() {}, closeWebSession: async () => { throw new Error("Retry sign-out"); },
     firebaseSignOut: async () => { cleared = true; } });
   const source = readFileSync(new URL("../js/firebase-auth.js", import.meta.url), "utf8")
     .replace(/^export \* from [^\n]+\n/gm, "")

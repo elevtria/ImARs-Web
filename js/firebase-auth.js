@@ -17,7 +17,8 @@ const hidePortal = () => { if (!loginPage()) document.body.setAttribute("data-au
 function visit() {
   try {
     const saved = JSON.parse(window.sessionStorage.getItem(VISIT));
-    if (saved?.uid && ["teacher", "admin"].includes(saved.role) && Number.isFinite(saved.startedAt) &&
+    if (saved?.uid && typeof saved.tabId === "string" && saved.tabId.startsWith("imars-web:") && saved.tabId === window.name &&
+        ["teacher", "admin"].includes(saved.role) && Number.isFinite(saved.startedAt) &&
         Date.now() >= saved.startedAt && Date.now() < saved.startedAt + MAX_VISIT_MS) return saved;
   } catch {}
   return null;
@@ -25,6 +26,7 @@ function visit() {
 
 function clearVisit() {
   try { window.sessionStorage.removeItem(VISIT); } catch {}
+  if (window.name.startsWith("imars-web:")) window.name = "";
   invalidateTeacherViews();
   hidePortal();
 }
@@ -136,7 +138,9 @@ export async function signInWithEmailAndPassword(auth, email, password, role) {
   try {
     const credential = await firebaseSignIn(auth, email, password);
     await staffProfile(auth, credential.user, role);
-    window.sessionStorage.setItem(VISIT, JSON.stringify({ uid: credential.user.uid, role, startedAt: Date.now() }));
+    const tabId = `imars-web:${crypto.randomUUID()}`;
+    window.name = tabId;
+    window.sessionStorage.setItem(VISIT, JSON.stringify({ uid: credential.user.uid, role, startedAt: Date.now(), tabId }));
     return credential;
   } catch (failure) {
     clearVisit();
