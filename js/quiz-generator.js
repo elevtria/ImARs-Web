@@ -2,6 +2,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/fireba
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
+import { quizFileSizeError } from "./quiz-limits.js";
+import { extractOfficeText } from "./quiz-office.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -117,100 +119,10 @@ const firestore = getFirestore(firebaseApp);
     return file.name.split(".").pop().toLowerCase();
   }
 
-  function base64FromBytes(bytes) {
-    let binary = "";
-    const chunkSize = 0x8000;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-    }
-    return btoa(binary);
-  }
-
-  async function readOfficeZipEntry(file, acceptedEntry) {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    let endRecord = -1;
-    for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset -= 1) {
-      if (view.getUint32(offset, true) === 0x06054b50) {
-        const commentLength = view.getUint16(offset + 20, true);
-        if (offset + 22 + commentLength === bytes.length) {
-          endRecord = offset;
-          break;
-        }
-      }
-    }
-    if (endRecord < 0) throw new Error("This file is not a readable Office document. Save it as DOCX or PPTX and try again.");
-
-    const entryCount = view.getUint16(endRecord + 10, true);
-    if (entryCount > 2000) throw new Error("This Office file has too many parts to process.");
-    let cursor = view.getUint32(endRecord + 16, true);
-    const decoder = new TextDecoder();
-    const entries = [];
-    for (let index = 0; index < entryCount; index += 1) {
-      if (view.getUint32(cursor, true) !== 0x02014b50) throw new Error("This Office file has an unsupported ZIP layout.");
-      const method = view.getUint16(cursor + 10, true);
-      const compressedSize = view.getUint32(cursor + 20, true);
-      const expandedSize = view.getUint32(cursor + 24, true);
-      const nameLength = view.getUint16(cursor + 28, true);
-      const extraLength = view.getUint16(cursor + 30, true);
-      const commentLength = view.getUint16(cursor + 32, true);
-      const localOffset = view.getUint32(cursor + 42, true);
-      const nameStart = cursor + 46;
-      const name = decoder.decode(bytes.subarray(nameStart, nameStart + nameLength));
-      cursor = nameStart + nameLength + extraLength + commentLength;
-      if (!acceptedEntry(name)) continue;
-      if (expandedSize > 12 * 1024 * 1024) throw new Error("This Office file has too much text to process. Try a smaller file.");
-
-      if (view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("This Office file could not be opened.");
-      const localNameLength = view.getUint16(localOffset + 26, true);
-      const localExtraLength = view.getUint16(localOffset + 28, true);
-      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
-      const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
-      let expanded;
-      if (method === 0) expanded = compressed;
-      else if (method === 8 && typeof DecompressionStream !== "undefined") {
-        const stream = new Blob([compressed]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-        expanded = new Uint8Array(await new Response(stream).arrayBuffer());
-      } else {
-        throw new Error("This Office file uses a compression format this browser cannot read.");
-      }
-      entries.push({ name, text: decoder.decode(expanded) });
-    }
-    return entries;
-  }
-
-  async function extractOfficeText(file) {
-    const extension = fileExtension(file);
-    if (extension === "ppt") throw new Error("Older .ppt files are not supported yet. Open the presentation and save a copy as .pptx or PDF.");
-
-    const entries = extension === "docx"
-      ? await readOfficeZipEntry(file, (name) => name === "word/document.xml")
-      : await readOfficeZipEntry(file, (name) => /^ppt\/slides\/slide\d+\.xml$/.test(name));
-    if (!entries.length) throw new Error("No readable text was found in this file.");
-
-    const orderedEntries = entries.sort((left, right) => {
-      const leftNumber = Number(left.name.match(/slide(\d+)\.xml$/)?.[1] || 0);
-      const rightNumber = Number(right.name.match(/slide(\d+)\.xml$/)?.[1] || 0);
-      return leftNumber - rightNumber;
-    });
-    const namespace = extension === "docx"
-      ? "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-      : "http://schemas.openxmlformats.org/drawingml/2006/main";
-    const text = orderedEntries.map((entry) => {
-      const xml = new DOMParser().parseFromString(entry.text, "application/xml");
-      if (xml.querySelector("parsererror")) throw new Error("Text in this Office file could not be read.");
-      return Array.from(xml.getElementsByTagNameNS(namespace, "t"), (node) => node.textContent || "").join(" ");
-    }).join("\n").trim();
-    if (!text) throw new Error("No readable text was found in this file.");
-    if (text.length > 120000) throw new Error("This file contains too much text. Try a shorter file or split it into parts.");
-    return text;
-  }
-
   async function prepareMaterial(file) {
     const extension = fileExtension(file);
     if (extension === "pdf") {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      return { fileMimeType: "application/pdf", fileBase64: base64FromBytes(bytes) };
+      return { fileMimeType: "application/pdf", pdfFile: file };
     }
     return { fileMimeType: "text/plain", sourceText: await extractOfficeText(file) };
   }
@@ -273,11 +185,12 @@ const firestore = getFirestore(firebaseApp);
       showStatus(setupStatus, "Please select a PDF, DOCX, PPT, or PPTX file.", true);
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
+    const sizeError = quizFileSizeError(file.size);
+    if (sizeError) {
       selectedFile = null;
       selectedFileRow.hidden = true;
       fileInput.value = "";
-      showStatus(setupStatus, "Please choose a file of 10 MB or less.", true);
+      showStatus(setupStatus, sizeError, true);
       return;
     }
     selectedFile = file;
@@ -329,7 +242,9 @@ const firestore = getFirestore(firebaseApp);
       if (!user) throw new Error("Your sign-in expired. Please sign in again.");
       buttonText.textContent = "Generating questions…";
       loadingTitle.textContent = "Generating your quiz";
-      loadingDetail.textContent = "Please wait while we prepare your questions.";
+      loadingDetail.textContent = material.pdfFile
+        ? "Uploading and reading your PDF, then creating questions. Larger files can take longer."
+        : "Please wait while we prepare your questions.";
       showStatus(setupStatus, "AI is reading the material and creating your questions…", false);
 
       const questions = await requestQuiz(await user.getIdToken(), {

@@ -85,7 +85,7 @@ test("authorized teachers receive the frontend's question format without stored 
   assert.equal(calls[0].model, "gemini-3.5-flash-lite");
   assert.equal(calls[0].generation_config.thinking_level, "minimal");
   assert.equal(response.headers.get("Cache-Control"), "no-store");
-  assert.match(response.headers.get("Server-Timing"), /^verify;dur=\d+, ai;dur=\d+, total;dur=\d+$/);
+  assert.match(response.headers.get("Server-Timing"), /^verify;dur=\d+, upload;dur=\d+, ai;dur=\d+, total;dur=\d+$/);
 });
 
 test("a busy Flash-Lite model falls back to Flash with low thinking and the same deadline", async (t) => {
