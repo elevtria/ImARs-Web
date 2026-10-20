@@ -297,7 +297,7 @@ camBtn.onclick = async () => {
   }
 };
 
-// --- UPLOAD QR IMAGE FALLBACK (Great for testing on PC!) ---
+// Read a QR code from an uploaded image when the camera is unavailable.
 if (qrFileInput) {
   qrFileInput.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];

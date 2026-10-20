@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { webProtectionEnabled, protectedWebLogin, closeWebSession } from "./web-login.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "./firebase-auth.js";
-import { getFirestore, doc, getDocWithLoading as getDoc, collection, query, where, getDocsWithLoading as getDocs } from "./firebase-data.js";
+import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "./firebase-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -17,7 +17,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- TEACHER PASSWORD TOGGLE ---
+function setSigningIn(button, pending, idleLabel) {
+  button.disabled = pending;
+  button.setAttribute("aria-busy", String(pending));
+  button.querySelector("[data-login-label]").textContent = pending ? "Signing in…" : idleLabel;
+}
+
 const passwordInput = document.getElementById("password");
 const togglePassword = document.getElementById("togglePassword");
 const eyeOpen = document.getElementById("eyeOpen");
@@ -31,13 +36,16 @@ togglePassword.addEventListener("click", () => {
   togglePassword.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
 });
 
-// --- TEACHER LOGIN SUBMIT ---
+const teacherSubmitBtn = document.getElementById("teacherSubmitBtn");
 document.getElementById("loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (teacherSubmitBtn.disabled) return;
 
   const rawId = document.getElementById("teacherId").value.trim().toUpperCase();
   const password = passwordInput.value.trim();
   const error = document.getElementById("error");
+  error.classList.add("hidden");
+  error.style.display = "none";
 
   const showError = (message) => {
     error.classList.remove("hidden");
@@ -50,12 +58,15 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     return;
   }
 
+  setSigningIn(teacherSubmitBtn, true, "Log in");
+  let redirecting = false;
   try {
     if (await webProtectionEnabled()) {
       const email = await protectedWebLogin(rawId, password, "teacher");
       try { await signInWithEmailAndPassword(auth, email, password); }
       catch (error) { await closeWebSession(); throw error; }
       window.location.href = "index.html";
+      redirecting = true;
       return;
     }
     const userDocRef = doc(db, "users", rawId);
@@ -69,7 +80,6 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     const userData = userDocSnap.data();
     const userRole = String(userData.role || "").toLowerCase();
 
-    // STRICT ROLE CHECK: Block Admins and Students from Teacher Sign-In
     if (userRole === "admin") {
       await signOut(auth);
       showError("Access denied: Administrator accounts cannot sign in here. Please use the Admin Login.");
@@ -85,7 +95,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 
     const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
 
-    // Double-check role by UID after authentication just in case
+    // Verify the authenticated account's role before opening the teacher portal.
     const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
     const uidSnap = await getDocs(uidQuery);
     if (!uidSnap.empty) {
@@ -98,13 +108,15 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     }
 
     window.location.href = "index.html";
+    redirecting = true;
   } catch (err) {
     showError(err.userMessage || "Invalid ID or password. Please try again.");
     console.error("Firebase Login Error:", err.message);
+  } finally {
+    if (!redirecting) setSigningIn(teacherSubmitBtn, false, "Log in");
   }
 });
 
-// --- ADMIN MODAL POP-UP LOGIC ---
 const adminModal = document.getElementById("adminLoginModal");
 const openAdminBtn = document.getElementById("openAdminModalBtn");
 const closeAdminBtn = document.getElementById("closeAdminModalBtn");
@@ -139,17 +151,16 @@ if (cancelAdminBtn && adminModal) {
   cancelAdminBtn.addEventListener("click", () => adminModal.close());
 }
 
-// Close modal when clicking backdrop outside the box
 if (adminModal) {
   adminModal.addEventListener("click", (e) => {
     if (e.target === adminModal) adminModal.close();
   });
 }
 
-// --- ADMIN LOGIN SUBMIT ---
 if (adminForm) {
   adminForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (adminSubmitBtn.disabled) return;
     if (adminError) adminError.classList.add("hidden");
 
     const rawInput = document.getElementById("adminIdentifier").value.trim();
@@ -160,11 +171,8 @@ if (adminForm) {
       return;
     }
 
-    if (adminSubmitBtn) {
-      adminSubmitBtn.disabled = true;
-      adminSubmitBtn.textContent = "Signing in...";
-    }
-
+    setSigningIn(adminSubmitBtn, true, "Sign in as Admin");
+    let redirecting = false;
     try {
       if (await webProtectionEnabled()) {
         const email = await protectedWebLogin(rawInput, password, "admin");
@@ -172,11 +180,12 @@ if (adminForm) {
         catch (error) { await closeWebSession(); throw error; }
         localStorage.setItem("imars_admin_last_active", String(Date.now()));
         window.location.href = "admin-dashboard.html";
+        redirecting = true;
         return;
       }
       let authEmail = rawInput;
 
-      // If the admin typed an ID (no '@' symbol), look it up in Firestore
+      // Resolve an admin ID to its registered sign-in email.
       if (!rawInput.includes("@")) {
         const adminId = rawInput.toUpperCase();
         const adminDocSnap = await getDoc(doc(db, "users", adminId));
@@ -184,7 +193,6 @@ if (adminForm) {
         if (adminDocSnap.exists()) {
           const data = adminDocSnap.data();
           const role = String(data.role || "").toLowerCase();
-          // STRICT ROLE CHECK: Only allow "admin" role
           if (role !== "admin") {
             await signOut(auth);
             showAdminError("Unauthorized: Only Administrator accounts can access the Admin Portal.");
@@ -197,10 +205,9 @@ if (adminForm) {
         }
       }
 
-      // Sign in with Firebase Auth
       const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
 
-      // Verify by UID that the signed-in user is strictly an admin
+      // Verify the authenticated account's administrator role.
       const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
       const uidSnap = await getDocs(uidQuery);
       if (!uidSnap.empty) {
@@ -213,24 +220,19 @@ if (adminForm) {
         }
       }
 
-      // Set fresh activity timestamp on login
       localStorage.setItem("imars_admin_last_active", String(Date.now()));
 
-      // Redirect to Admin Dashboard!
       window.location.href = "admin-dashboard.html";
+      redirecting = true;
     } catch (err) {
       console.error("Admin Login Error:", err.message);
       showAdminError(err.userMessage || "Invalid Admin credentials. Please try again.");
     } finally {
-      if (adminSubmitBtn) {
-        adminSubmitBtn.disabled = false;
-        adminSubmitBtn.textContent = "Sign in as Admin";
-      }
+      if (!redirecting) setSigningIn(adminSubmitBtn, false, "Sign in as Admin");
     }
   });
 }
 
-// --- HANDLE AUTO-LOGOUT REDIRECT & TIMESTAMP RESET ---
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get("reason") === "web-session") {
   const message = document.getElementById("error");
@@ -245,6 +247,5 @@ if (urlParams.get("reason") === "timeout") {
     adminModal.showModal();
     showAdminError("Your session expired due to 10 minutes of inactivity. Please sign in again.");
   }
-  // Clean up URL bar
   window.history.replaceState({}, document.title, window.location.pathname);
 }

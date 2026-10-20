@@ -1715,6 +1715,30 @@ td {
 
 .login-brand-mark { display: block; }
 
+.login-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.login-submit:disabled { cursor: wait; opacity: 0.8; }
+.login-submit-spinner {
+  display: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: login-spin 0.7s linear infinite;
+}
+.login-submit[aria-busy="true"] .login-submit-spinner { display: inline-block; }
+@keyframes login-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .login-submit-spinner { animation: none; }
+}
+
 /* Keep the password eye centered when shared button hover/active styles apply. */
 #togglePassword {
   transform: translateY(-50%);

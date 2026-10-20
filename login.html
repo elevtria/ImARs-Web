@@ -10,7 +10,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="js/tailwind.config.js"></script>
   <link rel="stylesheet" href="css/app.css" />
-  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body class="login-page min-h-screen bg-mist text-slate-900 font-sans grid place-items-center p-6">
   <main class="w-full max-w-[440px] bg-white rounded-3xl shadow-[0_8px_24px_rgba(28,20,60,0.05)] p-8">
@@ -22,7 +21,6 @@
           <small class="block mt-0.5 text-slate-400 text-[13px]">Teacher Portal</small>
         </div>
       </div>
-      <!-- Quick Admin Trigger Pill -->
       <button id="openAdminModalBtn" type="button"
         class="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-full transition cursor-pointer">
         Admin Login
@@ -59,14 +57,16 @@
         </div>
       </div>
       <p class="hidden text-red-600 text-[13px] font-semibold mb-3" id="error">Please enter your ID and password.</p>
-      <button class="w-full border-0 rounded-full py-3.5 px-4 bg-gold text-slate-900 font-extrabold text-[15px] cursor-pointer shadow-[0_8px_18px_rgba(254,183,5,0.35)] hover:bg-[#e5a404]" type="submit">Log in</button>
+      <button id="teacherSubmitBtn" class="login-submit w-full border-0 rounded-full py-3.5 px-4 bg-gold text-slate-900 font-extrabold text-[15px] cursor-pointer shadow-[0_8px_18px_rgba(254,183,5,0.35)] hover:bg-[#e5a404]" type="submit" aria-busy="false">
+        <span class="login-submit-spinner" aria-hidden="true"></span>
+        <span data-login-label>Log in</span>
+      </button>
     </form>
 
-    <p class="mt-4 text-center text-slate-400 text-[13px]">Use your teacher account to access Grade 6 Pintong Gubat</p>
+    <p class="mt-4 text-center text-slate-400 text-[13px]">Access Grade 6 Pintong Gubat</p>
     <span class="mt-4 block w-full text-center text-steel font-bold text-[13px]" data-school-year>SY 2026–27</span>
   </main>
 
-  <!-- Admin Sign-In Modal Pop-up -->
   <dialog id="adminLoginModal" class="fixed inset-0 m-auto border-0 rounded-3xl p-0 w-[calc(100%-2rem)] max-w-[400px] bg-white shadow-2xl backdrop:bg-slate-900/50 backdrop:backdrop-blur-sm">
     <div class="p-7">
       <div class="flex items-center justify-between mb-4">
@@ -99,9 +99,10 @@
             class="w-1/3 rounded-full py-2.5 px-4 border border-slate-200 text-slate-600 font-bold text-[14px] hover:bg-slate-50 cursor-pointer">
             Cancel
           </button>
-          <button type="submit" id="adminSubmitBtn"
-            class="w-2/3 rounded-full py-2.5 px-4 bg-indigo-600 text-white font-extrabold text-[14px] shadow-[0_8px_18px_rgba(79,70,229,0.3)] hover:bg-indigo-700 cursor-pointer">
-            Sign in as Admin
+          <button type="submit" id="adminSubmitBtn" aria-busy="false"
+            class="login-submit w-2/3 rounded-full py-2.5 px-4 bg-indigo-600 text-white font-extrabold text-[14px] shadow-[0_8px_18px_rgba(79,70,229,0.3)] hover:bg-indigo-700 cursor-pointer">
+            <span class="login-submit-spinner" aria-hidden="true"></span>
+            <span data-login-label>Sign in as Admin</span>
           </button>
         </div>
       </form>
