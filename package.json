@@ -14,8 +14,10 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",
+    "esbuild": "0.28.2",
     "firebase": "13.0.0",
     "firebase-tools": "15.34.0",
+    "html-minifier-terser": "7.2.0",
     "wrangler": "4.151.0"
   }
 }

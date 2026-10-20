@@ -116,6 +116,22 @@ the server keys private. This feature does not repair unrelated XSS or public
 Firestore access. A deliberate attacker can trigger someone else's account
 lockout; the manual recovery path is therefore necessary.
 
+Published HTML, JavaScript and CSS are minified during `npm run build`, before
+their cache versions are calculated. Editable repository files remain readable;
+only the generated `dist` files are compacted. Source maps are omitted and the
+build rejects recognizable private server credentials in client content. Module
+paths, exported interfaces and classic-script globals are retained. This reduces
+transfer size and readability; it is not encryption or an access-control layer.
+Browser tools can still format or inspect downloaded code and network requests.
+
+Firebase browser configuration remains public. Moving its values into a build
+secret would still expose them when the browser receives the compiled output.
+Keep private Gemini and service-account credentials in server-only secrets. A
+Firebase browser key should be restricted to the Firebase APIs actually needed,
+excluding Gemini/Generative Language. Restrictions need owner review and testing
+against both clients before changes to a shared production key; minification
+does not verify these console settings or replace restrictive Firestore rules.
+
 The existing teacher Active/Inactive control is separate from web login locks.
 New staff must be enrolled in the server roster before protected web login works.
 The password-based flow currently does not implement an MFA challenge.

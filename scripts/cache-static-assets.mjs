@@ -1,8 +1,46 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { transform } from "esbuild";
+import { minify as minifyHtml } from "html-minifier-terser";
 
 const IMMUTABLE = "public, max-age=31536000, immutable";
+
+export function assertPublicClientContent(content, name) {
+  if (/-----BEGIN (?:RSA |EC )?PRIVATE KEY-----|["']?type["']?\s*:\s*["']service_account["']|\b(?:GEMINI_API_KEY|FIREBASE_SERVICE_ACCOUNT_JSON|WEB_SESSION_SECRET|WEB_MAINTENANCE_KEY)\b["']?\s*[:=]\s*["'][^"']+["']/i.test(content)) {
+    throw new Error(`Private server credentials cannot be published in ${name}.`);
+  }
+}
+
+// Only generated files are changed. Keep the editable source and module paths intact.
+export async function minifyPublicAssets(output, pages) {
+  let before = 0, after = 0, count = 0;
+  async function compact(name, loader) {
+    const path = join(output, name);
+    const original = await readFile(path, "utf8");
+    assertPublicClientContent(original, name);
+    const result = loader === "html"
+      ? await minifyHtml(original, { collapseWhitespace: true, conservativeCollapse: true, removeComments: true, minifyJS: false, minifyCSS: false })
+      : (await transform(original, { loader, minify: true, charset: "utf8", legalComments: "eof", sourcemap: false, sourcefile: name })).code;
+    await writeFile(path, result);
+    before += Buffer.byteLength(original);
+    after += Buffer.byteLength(result);
+    count++;
+  }
+  async function visit(directory) {
+    for (const entry of await readdir(join(output, directory), { withFileTypes: true })) {
+      const name = `${directory}/${entry.name}`;
+      if (entry.isSymbolicLink()) throw new Error(`Public files cannot contain symbolic links: ${name}`);
+      if (entry.isDirectory()) await visit(name);
+      else if (entry.name.endsWith(".js")) await compact(name, "js");
+      else if (entry.name.endsWith(".css")) await compact(name, "css");
+    }
+  }
+  await visit("js");
+  await visit("css");
+  for (const page of pages) await compact(page, "html");
+  return { before, after, count };
+}
 
 // One content-derived directory preserves relative JS imports and import.meta.url
 // references without changing application source or introducing a bundler.

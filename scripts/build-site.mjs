@@ -1,7 +1,7 @@
 import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cacheStaticAssets } from "./cache-static-assets.mjs";
+import { cacheStaticAssets, minifyPublicAssets } from "./cache-static-assets.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = resolve(root, "dist");
@@ -17,10 +17,11 @@ const publicPaths = [...pages, "assets", "css", "js", "_routes.json"];
 for (const name of publicPaths) {
   await cp(join(root, name), join(output, name), {
     recursive: true,
-    filter: (source) => !basename(source).startsWith(".")
+    filter: (source) => !basename(source).startsWith(".") && !source.endsWith(".map")
   });
 }
 
+const minified = await minifyPublicAssets(output, pages);
 const cached = await cacheStaticAssets(output, pages);
 
 let files = 0;
@@ -41,4 +42,5 @@ async function validateDirectory(directory) {
 }
 await validateDirectory(output);
 console.log(`Built ${pages.length} pages and ${files} public files in dist. Largest file: ${(largest / 1024 / 1024).toFixed(1)} MiB.`);
-console.log(`Versioned ${cached.count} public assets at ${cached.prefix}; HTML and API caching policies are unchanged.`);
+console.log(`Minified ${minified.count} HTML, JS and CSS files: ${(minified.before / 1024).toFixed(0)} KiB → ${(minified.after / 1024).toFixed(0)} KiB. No source maps are published.`);
+console.log(`Versioned ${cached.count} public assets at ${cached.prefix}.`);

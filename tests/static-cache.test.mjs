@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
+import vm from "node:vm";
 import test from "node:test";
-import { cacheStaticAssets, staticAssetPlan, versionHtmlAssets } from "../scripts/cache-static-assets.mjs";
+import { assertPublicClientContent, cacheStaticAssets, minifyPublicAssets, staticAssetPlan, versionHtmlAssets } from "../scripts/cache-static-assets.mjs";
 
 test("identical assets keep their cache URLs; changing bytes, adding files, or renaming a file changes the version", () => {
   const files = new Map([["js/main.js", Buffer.from('import "./data.js";')], ["js/data.js", Buffer.from("export const value = 1;")]]);
@@ -13,6 +15,51 @@ test("identical assets keep their cache URLs; changing bytes, adding files, or r
   assert.notEqual(staticAssetPlan(new Map([...files, ["js/extra.js", Buffer.from("")]])).prefix, first.prefix);
   assert.notEqual(staticAssetPlan(new Map([["js/renamed.js", files.get("js/main.js")], ["js/data.js", files.get("js/data.js")]])).prefix, first.prefix);
   assert.equal(new URL("./data.js", "https://example.test" + first.urls.get("/js/main.js")).pathname, first.urls.get("/js/data.js"));
+});
+
+test("production minification preserves module exports, classic-script globals, URLs, styles and visible text", async t => {
+  const base = resolve(tmpdir()), output = await mkdtemp(join(base, "imars-minify-test-"));
+  t.after(async () => {
+    assert.ok(resolve(output).startsWith(base + sep + "imars-minify-test-"));
+    await rm(output, { recursive: true, force: true });
+  });
+  const fixtures = new Map([
+    ["package.json", '{"type":"module"}'],
+    ["js/main.js", 'import { points } from "./scores.js";\n// Editable source comment.\nexport const label = "Loading your data…";\nexport function total(count) { return points * count; }\nexport const logo = new URL("../assets/imars-logo.png", import.meta.url);'],
+    ["js/scores.js", 'export const points = 5;'],
+    ["js/ui.js", 'function openMenu() { return "Menu ready"; }\nwindow.openMenu = openMenu;'],
+    ["css/app.css", '/* Theme */\n:root { --gold: #feb705; }\nbody[data-auth-pending] { visibility: hidden; }\n.login-submit[aria-busy="true"] { color: var(--gold); }'],
+    ["index.html", '<!doctype html>\n<html><head><title>Teacher portal</title></head><body data-auth-pending>\n<!-- Source note -->\n<p><span>Sign in</span> <strong>to continue</strong></p><pre>keep  two\nlines</pre><script type="module" src="js/main.js"></script><link rel="stylesheet" href="css/app.css"></body></html>'],
+    ["assets/imars-logo.png", "logo bytes"], ["assets/imars-loader-transparent.png", "loader bytes"]
+  ]);
+  for (const [name, content] of fixtures) { await mkdir(dirname(join(output, name)), { recursive: true }); await writeFile(join(output, name), content); }
+  const compact = await minifyPublicAssets(output, ["index.html"]);
+  assert.equal(compact.count, 5); assert.ok(compact.after < compact.before);
+  const rawModule = await readFile(join(output, "js/main.js"), "utf8");
+  assert.ok(!rawModule.includes("Editable source comment")); assert.ok(!rawModule.includes("sourceMappingURL"));
+  const { prefix } = await cacheStaticAssets(output, ["index.html"]);
+  const module = await import(pathToFileURL(join(output, prefix.slice(1), "js/main.js")));
+  assert.equal(module.total(3), 15); assert.equal(module.label, "Loading your data…");
+  assert.equal(await readFile(module.logo, "utf8"), "logo bytes");
+  const browser = { window: {} };
+  vm.runInNewContext(await readFile(join(output, "js/ui.js"), "utf8"), browser);
+  assert.equal(browser.window.openMenu(), "Menu ready");
+  const html = await readFile(join(output, "index.html"), "utf8");
+  assert.ok(!html.includes("Source note")); assert.match(html, /<\/span> <strong>/);
+  assert.ok(html.includes('<pre>keep  two\nlines</pre>'));
+  assert.ok(html.includes('data-auth-pending')); assert.ok(html.includes(`src="${prefix}/js/main.js"`));
+  const css = await readFile(join(output, "css/app.css"), "utf8");
+  assert.ok(css.includes("body[data-auth-pending]")); assert.ok(css.includes("--gold:")); assert.ok(css.includes("aria-busy=true"));
+});
+
+test("public-artifact checks reject private credentials but allow Firebase browser configuration", () => {
+  for (const content of [
+    'const key = "-----BEGIN PRIVATE KEY-----";',
+    '{"type":"service_account","project_id":"example"}',
+    'const GEMINI_API_KEY = "synthetic-private-value";',
+    'const config = { WEB_SESSION_SECRET: "synthetic-private-value" };'
+  ]) assert.throws(() => assertPublicClientContent(content, "js/client.js"), /Private server credentials/);
+  assert.doesNotThrow(() => assertPublicClientContent('const firebaseConfig = { apiKey: "public-browser-config", projectId: "example" };', "js/login.js"));
 });
 
 test("HTML versioning changes only known local public files and preserves routes, downloads, remote scripts, and URL suffixes", () => {
