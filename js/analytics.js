@@ -1,4 +1,4 @@
-import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
+import { getDocs as quietDocs } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";

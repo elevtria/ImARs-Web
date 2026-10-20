@@ -14,7 +14,6 @@ import {
   doc, 
   updateDoc, 
   deleteDoc, 
-  addDoc, 
   setDoc,
   serverTimestamp 
 } from "./firebase-data.js";
