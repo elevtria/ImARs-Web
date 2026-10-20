@@ -198,7 +198,7 @@ const startCloudSync = async () => {
   try {
     const [appSdk, authSdk, firestoreSdk] = await Promise.all([
       import("https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js"),
+      import("./firebase-auth.js"),
       import("https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js")
     ]);
     const firebaseConfig = {

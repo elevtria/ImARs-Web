@@ -41,6 +41,29 @@ the account's existing web sessions.
 
 ### Session renewal and expiry
 
+Both portals now require a fresh website login for a new visit. Firebase browser
+authentication is migrated from persistent local storage to this tab's session
+storage. The login page clears an older browser login; a direct URL, bookmark,
+new tab without a current visit, or restored history entry also returns to login.
+Navigation inside the website and reloads during the same visit keep sign-in.
+Browser restoration behavior varies, so the website also checks the navigation
+entry and its per-tab visit marker instead of relying on closing events alone.
+
+The marker contains only the UID, portal role and start time, and expires after
+12 hours. It is a UI lifecycle marker, not a database or server credential. Page
+data callbacks wait for Firebase initialization and a live, unique UID-linked
+staff profile with the expected role and active status. An unavailable check
+does not fall back to cached student records. Logout clears this tab's saved
+views, notifies other website tabs for that UID, and hides history pages before
+they can be restored. Portal HTML uses `private, no-store`; existing immutable
+static-asset caching stays in place. Protected pages start hidden until the
+shared check succeeds. All of this reuses the existing auth, CSS and cache files.
+
+These website checks do not prevent direct Firestore calls while database rules
+are public. They do not implement mobile-triggered website logout; that needs an
+authenticated mobile session signal and compatible mobile rollout. Neither the
+mobile source nor Firebase rules is changed by this website visit update.
+
 When protection is enabled, both portals use these server-enforced limits:
 
 - The signed HttpOnly cookie renews after 15 minutes on the next session check or
@@ -58,8 +81,10 @@ When protection is enabled, both portals use these server-enforced limits:
 Each browser login receives random session identifiers; state and deadlines live
 in the Durable Object and survive restarts. Each account retains up to 20 browser
 sessions; signing in on a 21st retires the oldest. Tabs in the same browser share
-the cookie, so activity in one tab is recognized by the others. This is scoped to
-one host; production and preview sessions do not cross hosts.
+the server cookie, but each new website visit must still sign in in its own tab.
+The cookie has no persistent Max-Age/Expires; the server still enforces its
+15-minute idle and 12-hour absolute limits independently. This is scoped to one
+host; production and preview sessions do not cross hosts.
 
 The browser checks approximately every 30 seconds (sooner near a deadline), and
 shows a reconnecting notice on network/server errors. Only a confirmed 401 ends

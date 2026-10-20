@@ -1,4 +1,4 @@
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { decodeView, encodeView, teacherViewCache } from "./view-cache.js";
 
 export function escapeHtml(value) {

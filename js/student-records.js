@@ -1,7 +1,7 @@
 import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, query, where, doc, updateDoc, getDocsWithLoading as getDocs } from "./firebase-data.js";
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";

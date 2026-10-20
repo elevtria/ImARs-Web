@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { escapeHtml } from "./teacher-view.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
   getFirestore, 
   collection, 
@@ -335,14 +335,9 @@ onAuthStateChanged(auth, async (user) => {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
     const userSnap = await getDocs(userQ);
 
-    if (!userSnap.empty) {
-      activeTeacherId = userSnap.docs[0].id;
-    } else {
-      const fallbackSnap = await getDocs(query(collection(db, "users"), where("role", "==", "teacher")));
-      if (!fallbackSnap.empty) {
-        activeTeacherId = fallbackSnap.docs[0].id;
-      }
-    }
+    const teachers = userSnap.docs.filter(profile => profile.data().uid === user.uid && String(profile.data().role || "").toLowerCase() === "teacher");
+    if (teachers.length !== 1) throw new Error("Your teacher profile could not be verified. Please sign in again.");
+    activeTeacherId = teachers[0].id;
 
     if (activeTeacherId) {
       // Find teacher's primary classCode in case a new student is scanned

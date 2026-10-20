@@ -13,7 +13,7 @@ const accounts = [
   { id: "ADMIN1000", uid: "admin-a", email: "admin@example.test", role: "admin" }
 ];
 
-test("security headers protect HTML and API responses without changing their content or cache/session headers", async () => {
+test("security headers prevent HTML caching and preserve API bodies and existing session cookies", async () => {
   for (const [path, status, type, body] of [
     ["/login", 200, "text/html", "<h1>Login</h1>"],
     ["/api/generate-quiz", 401, "application/json", '{"error":"Sign in"}']
@@ -22,7 +22,7 @@ test("security headers protect HTML and API responses without changing their con
       next: async () => new Response(body, { status, headers: { "Content-Type": type, "Cache-Control": "no-store", "Set-Cookie": "existing=value; Secure; HttpOnly" } }) });
     assert.equal(response.status, status);
     assert.equal(await response.text(), body);
-    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    assert.equal(response.headers.get("Cache-Control"), type === "text/html" ? "private, no-store" : "no-store");
     assert.match(response.headers.get("Set-Cookie"), /existing=value/);
     assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
     const scriptPolicy = CONTENT_SECURITY_POLICY.split(";").map(rule => rule.trim()).find(rule => rule.startsWith("script-src "));
@@ -144,6 +144,7 @@ test("successful login mints a secure signed cookie and never returns Firebase t
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { email: "teacher@example.test" });
   for (const flag of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/"]) assert.ok(response.headers.get("Set-Cookie").includes(flag));
+  assert.ok(!/Max-Age=|Expires=/i.test(response.headers.get("Set-Cookie")), "a website login must not set a persistent cookie");
   const page = await app.page("/index", app.cookieOf(response));
   assert.equal(page.status, 200);
   assert.equal(page.headers.get("Cache-Control"), "private, no-store");

@@ -1,4 +1,4 @@
-import { onAuthStateChanged, signOut as firebaseSignOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "./firebase-auth.js";
 import { webProtectionEnabled } from "./web-login.js";
 import { invalidateTeacherViews } from "./view-cache.js";
 import { startSessionMonitor } from "./session-monitor.js";

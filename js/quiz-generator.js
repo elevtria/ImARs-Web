@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
 import { quizFileSizeError } from "./quiz-limits.js";

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 import { getFirestore } from "./firebase-data.js";
 import { loadAdminReports } from "./admin-report-data.js";

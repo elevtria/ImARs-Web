@@ -1,13 +1,12 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
 
 const cookieName = "__Host-imars-web";
-const sessionSeconds = 12 * 60 * 60;
 const encoder = new TextEncoder();
 const json = (body, status = 200, headers = {}) => Response.json(body, {
   status, headers: { "Cache-Control": "no-store", ...headers }
 });
 export const enabled = env => env.WEB_LOGIN_ENABLED === "true";
-const cookie = (token, age = sessionSeconds) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
 const hmacKey = secret => crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
@@ -85,8 +84,7 @@ export async function webSession(request, env, now = Date.now()) {
 async function renewalHeaders(request, env, checked) {
   if (!checked?.rotated || checked.previous) return {};
   const token = await signSession(env, checked.account, checked.session, new URL(request.url).host);
-  const remaining = Math.max(0, Math.floor((checked.session.absoluteUntil - checked.timing.serverNow) / 1000));
-  return { "Set-Cookie": cookie(token, remaining) };
+  return { "Set-Cookie": cookie(token) };
 }
 
 async function maintenance(request, env) {

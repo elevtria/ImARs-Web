@@ -1,3 +1,5 @@
+body[data-auth-pending] { visibility: hidden; }
+
 :root {
   --mist: #e2e3e7;
   --ice: #bfc8e2;

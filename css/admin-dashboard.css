@@ -1,3 +1,5 @@
+body[data-auth-pending] { visibility: hidden; }
+
 :root {
   color-scheme: light;
   --admin-bg: #f4f7fb;

@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { webProtectionEnabled, protectedWebLogin, closeWebSession } from "./web-login.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "./firebase-auth.js";
-import { getFirestore, doc, getDoc, collection, query, where, getDocs } from "./firebase-data.js";
+import { getFirestore, doc, getDoc } from "./firebase-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -63,7 +63,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   try {
     if (await webProtectionEnabled()) {
       const email = await protectedWebLogin(rawId, password, "teacher");
-      try { await signInWithEmailAndPassword(auth, email, password); }
+      try { await signInWithEmailAndPassword(auth, email, password, "teacher"); }
       catch (error) { await closeWebSession(); throw error; }
       window.location.href = "index.html";
       redirecting = true;
@@ -93,19 +93,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 
     const authEmail = userData.providedEmail || userData.email || `${rawId}@imars.edu`;
 
-    const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
-
-    // Verify the authenticated account's role before opening the teacher portal.
-    const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
-    const uidSnap = await getDocs(uidQuery);
-    if (!uidSnap.empty) {
-      const verifiedRole = String(uidSnap.docs[0].data().role || "").toLowerCase();
-      if (verifiedRole !== "teacher") {
-        await signOut(auth);
-        showError("Access denied: This account is not a Teacher account.");
-        return;
-      }
-    }
+    await signInWithEmailAndPassword(auth, authEmail, password, "teacher");
 
     window.location.href = "index.html";
     redirecting = true;
@@ -176,7 +164,7 @@ if (adminForm) {
     try {
       if (await webProtectionEnabled()) {
         const email = await protectedWebLogin(rawInput, password, "admin");
-        try { await signInWithEmailAndPassword(auth, email, password); }
+        try { await signInWithEmailAndPassword(auth, email, password, "admin"); }
         catch (error) { await closeWebSession(); throw error; }
         localStorage.setItem("imars_admin_last_active", String(Date.now()));
         window.location.href = "admin-dashboard.html";
@@ -205,20 +193,7 @@ if (adminForm) {
         }
       }
 
-      const userCred = await signInWithEmailAndPassword(auth, authEmail, password);
-
-      // Verify the authenticated account's administrator role.
-      const uidQuery = query(collection(db, "users"), where("uid", "==", userCred.user.uid));
-      const uidSnap = await getDocs(uidQuery);
-      if (!uidSnap.empty) {
-        const userData = uidSnap.docs[0].data();
-        const role = String(userData.role || "").toLowerCase();
-        if (role !== "admin") {
-          await signOut(auth);
-          showAdminError("Access denied: Only Administrator accounts can access the Admin Portal.");
-          return;
-        }
-      }
+      await signInWithEmailAndPassword(auth, authEmail, password, "admin");
 
       localStorage.setItem("imars_admin_last_active", String(Date.now()));
 
@@ -234,6 +209,14 @@ if (adminForm) {
 }
 
 const urlParams = new URLSearchParams(window.location.search);
+if (["access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
+  const message = document.getElementById("error");
+  message.classList.remove("hidden");
+  message.textContent = urlParams.get("reason") === "access-denied"
+    ? "This account does not have access to this portal. Please contact your administrator."
+    : "We could not verify access. Check your connection and sign in again.";
+  message.style.display = "block";
+}
 if (urlParams.get("reason") === "web-session") {
   const message = document.getElementById("error");
   if (message) {
