@@ -92,7 +92,10 @@ async function flushPendingScans() {
       if (entry.teacherId === activeTeacherId && !await processScannedQR(entry.text, entry)) break;
     }
   } catch { /* Scanning still works when private device storage is unavailable. */ }
-  finally { flushingScans = false; }
+  finally {
+    flushingScans = false;
+    if (auth.currentUser?.uid === owner && activeTeacherId) await loadRecentScans();
+  }
 }
 window.addEventListener?.("online", () => { void flushPendingScans(); });
 if (globalThis.navigator?.serviceWorker) {
@@ -487,3 +490,4 @@ export async function saveScanToDatabase(moduleName, type = "qr", scanId = null)
 }
 
 window.saveScanToDatabase = saveScanToDatabase;
+
