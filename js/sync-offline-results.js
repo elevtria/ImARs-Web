@@ -476,7 +476,7 @@ export async function saveScanToDatabase(moduleName, type = "qr", scanId = null)
       moduleName: moduleName,
       scanType: "qr",
       timestamp: serverTimestamp()
-    };
+    });
     if (scanId) {
       const reference = doc(scansRef, scanId);
       if (!(await getDoc(reference)).exists()) await setDoc(reference, record);
