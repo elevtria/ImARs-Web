@@ -1,4 +1,26 @@
-# Security deployment status — 2026-10-16
+# Security deployment status
+
+## Current checkpoint — 2026-10-21
+
+- Production Pages lists encrypted `FIREBASE_SERVICE_ACCOUNT_JSON`,
+  `GEMINI_API_KEY`, `WEB_MAINTENANCE_KEY`, `WEB_SESSION_SECRET` and
+  `WEB_STAFF_ACCOUNTS`. Only their names/presence were checked; their values
+  and the dedicated service account's IAM permissions remain unverified.
+- Updated the private `imars-web-auth` Worker to version
+  `5e36b647-4e90-4fec-8bc3-25e069f4789c` after 177 tests and a successful
+  dry-run compilation. No public Worker target was enabled.
+- The live website's public auth config still reports `enabled: false`.
+  Production serves `main` (`ecabdfb`) and the old login asset
+  `/assets/site-a6011748da17b6e9b095/js/login.js`, which still contains the
+  Firebase client configuration. The gateway branch removes that configuration
+  but has not been merged into `main` or deployed as the Production website.
+- Required next: verify the service-account permissions and initial staff
+  enrollment, then configure and test a separate preview before activation.
+  Firebase rules and mobile source were not changed by this checkpoint.
+
+See [the gateway setup](../docs/web-data-gateway.md) for the current rollout.
+
+## Historical snapshot — 2026-10-16
 
 ## Completed and verified
 

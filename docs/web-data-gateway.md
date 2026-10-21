@@ -4,6 +4,16 @@ Prepared and tested locally on 2026-10-21 on `codex/cloudflare-data-gateway`.
 Production remains on its existing deployment. This branch requires the server
 setup below before deployment; it deliberately has no direct browser fallback.
 
+Cloudflare status checked on 2026-10-21: all five Production secret names are
+present. Their saved values, staff roster and Firebase IAM permissions have not
+been validated. The private `imars-web-auth` Worker was updated to version
+`5e36b647-4e90-4fec-8bc3-25e069f4789c`; all 177 automated tests and its dry-run
+build passed beforehand. The live website still serves `main` (`ecabdfb`) with
+the older Firebase browser configuration, and both activation flags remain off.
+The next checks are the dedicated service account's IAM role, reviewed staff
+identities and a separately configured preview. Saving secrets or updating the
+private Worker does not deploy the gateway branch's browser files.
+
 ## What changes
 
 The existing browser auth/data wrappers now call authenticated Cloudflare APIs.
@@ -71,8 +81,8 @@ approved sign-in email.
 5. Test a configured preview with approved test accounts, including login,
    dashboard, reports, class creation/import, edits, QR result saves, schedules,
    marker progress, quizzes, admin invitations/unlock and session expiry.
-   The local fixture below uses only synthetic records. No production private
-   key or real student records were used in the completed local checks.
+   Completed local browser checks used only synthetic records. No production
+   private key or real student records were used in those local checks.
 6. Set `WEB_LOGIN_ENABLED=true` and `WEB_DATA_ENABLED=true` for the deployment
    that serves this branch, then perform the production cutover only after those
    prerequisites pass. Deploying the new browser files before setup will block
