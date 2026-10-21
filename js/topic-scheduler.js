@@ -1,14 +1,17 @@
 import { getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import {
   collection,
   doc,
   getFirestore,
   onSnapshotWithLoading as onSnapshot,
+  onSnapshot as quietSnapshot,
   updateDoc,
   writeBatch
 } from "./firebase-data.js";
 import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate } from "./topic-availability.js";
+import { prepareTeacherCache } from "./teacher-view.js";
+import { encodeView, decodeView } from "./view-cache.js";
 
 const THEMES = ["yellow", "green", "blue"];
 const FILLS = ["fill-yellow", "fill-green", "fill-blue"];
@@ -192,7 +195,12 @@ function sortLessons(docs) {
 let stopScheduleListeners = [];
 let scheduleGeneration = 0;
 
-function watchScheduleFromFirestore(generation) {
+function watchScheduleFromFirestore(generation, user) {
+  const cache = prepareTeacherCache(app, user);
+  const stored = cache.get(user.uid, "schedule");
+  let saved = null;
+  try { if (stored) saved = decodeView(stored); } catch {}
+  if (!Array.isArray(saved) || saved.length !== TERM_IDS.length || saved.some(snapshot => snapshot.docs?.length !== 4)) saved = null;
   setSyncStatus("Loading lesson schedule from Firebase…");
   const snapshots = Array(TERM_IDS.length).fill(null);
   const showLoadError = (error, termIndex) => {
@@ -208,7 +216,7 @@ function watchScheduleFromFirestore(generation) {
 
   stopScheduleListeners = TERM_IDS.map((termId, termIndex) => {
     const lessonsRef = collection(db, "terms", termId, "lessons");
-    return onSnapshot(lessonsRef, { includeMetadataChanges: true }, (snapshot) => {
+    const receive = (snapshot) => {
       if (generation !== scheduleGeneration) return;
       try {
         const lessonDocs = sortLessons(snapshot.docs);
@@ -232,11 +240,17 @@ function watchScheduleFromFirestore(generation) {
         if (isReady && !isSaving) {
           const cached = snapshots.some((item) => item.metadata.fromCache);
           setSyncStatus(cached ? "Showing cached schedule · waiting for Firebase" : "Connected · changes save to Firebase", cached ? "" : "success");
+          if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule", encodeView(snapshots));
         }
       } catch (error) {
         showLoadError(error, termIndex);
       }
-    }, (error) => showLoadError(error, termIndex));
+    };
+    if (saved) receive(saved[termIndex]);
+    return (saved ? quietSnapshot : onSnapshot)(lessonsRef, { includeMetadataChanges: true }, receive, (error) => {
+      if (error.code === "permission-denied" || error.code === "unauthenticated") cache.invalidate();
+      showLoadError(error, termIndex);
+    });
   });
 }
 
@@ -257,7 +271,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  watchScheduleFromFirestore(generation);
+  watchScheduleFromFirestore(generation, user);
 });
 
 document.getElementById("terms").addEventListener("click", async (event) => {

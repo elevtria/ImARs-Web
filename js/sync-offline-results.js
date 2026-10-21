@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { escapeHtml } from "./teacher-view.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
   getFirestore, 
   collection, 
@@ -13,7 +14,7 @@ import {
   limit, 
   addDoc, 
   serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+} from "./firebase-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
@@ -152,7 +153,7 @@ async function processScannedQR(decodedText) {
 
     detailedHtml += `
       <div class="mb-2 last:mb-0">
-        <strong>${tLabel}, ${lLabel}</strong><br>
+        <strong>${escapeHtml(tLabel)}, ${escapeHtml(lLabel)}</strong><br>
         Pre-Test: <span class="text-amber-500 font-bold">${pScore}</span> | 
         Post-Test: <span class="text-emerald-600 font-bold">${poScore}</span>
       </div>`;
@@ -297,7 +298,7 @@ camBtn.onclick = async () => {
   }
 };
 
-// --- UPLOAD QR IMAGE FALLBACK (Great for testing on PC!) ---
+// Read a QR code from an uploaded image when the camera is unavailable.
 if (qrFileInput) {
   qrFileInput.addEventListener("change", async (e) => {
     const file = e.target.files?.[0];
@@ -334,14 +335,9 @@ onAuthStateChanged(auth, async (user) => {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
     const userSnap = await getDocs(userQ);
 
-    if (!userSnap.empty) {
-      activeTeacherId = userSnap.docs[0].id;
-    } else {
-      const fallbackSnap = await getDocs(query(collection(db, "users"), where("role", "==", "teacher")));
-      if (!fallbackSnap.empty) {
-        activeTeacherId = fallbackSnap.docs[0].id;
-      }
-    }
+    const teachers = userSnap.docs.filter(profile => profile.data().uid === user.uid && String(profile.data().role || "").toLowerCase() === "teacher");
+    if (teachers.length !== 1) throw new Error("Your teacher profile could not be verified. Please sign in again.");
+    activeTeacherId = teachers[0].id;
 
     if (activeTeacherId) {
       // Find teacher's primary classCode in case a new student is scanned
@@ -391,7 +387,7 @@ async function loadRecentScans() {
       const rowHTML = `
         <div class="scan-row">
           <div>
-            <strong>${moduleName}</strong>
+            <strong>${escapeHtml(moduleName)}</strong>
             <small>${timeString}</small>
           </div>
           <span class="tag tag-qr">QR</span>

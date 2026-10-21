@@ -1,0 +1,12 @@
+{
+  "title": "ImARs Account Gateway",
+  "description": "Read school profiles and Firebase Auth identities; create and update documents for approved account activation.",
+  "stage": "GA",
+  "includedPermissions": [
+    "datastore.entities.get",
+    "datastore.entities.list",
+    "datastore.entities.create",
+    "datastore.entities.update",
+    "firebaseauth.users.get"
+  ]
+}

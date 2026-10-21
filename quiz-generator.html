@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/quiz-generator.css" />
 </head>
-<body>
+<body data-auth-pending>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -25,7 +25,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" /><path d="M9.5 17a2.5 2.5 0 0 0 5 0" /></svg>
             <span class="dot"></span>
           </button>
-          <span class="sy-chip">SY 2026–27</span>
+          <span class="sy-chip" data-school-year>SY 2026–27</span>
         </div>
       </div>
     </header>
@@ -63,19 +63,21 @@
             <div class="quiz-upload-column">
               <label class="quiz-field-label" for="quizFile">Learning material</label>
               <label class="quiz-dropzone" id="quizDropzone" for="quizFile" tabindex="0">
-                <input id="quizFile" type="file" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
+                <input id="quizFile" type="file" aria-describedby="quizUploadLimits quizContentLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
                 <span class="quiz-upload-icon" aria-hidden="true">
                   <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
                 </span>
                 <strong>Drop a file here or <span>browse</span></strong>
-              <small>PDF, DOCX, or PPTX · save older PPT files as PPTX or PDF first</small>
+                <small id="quizUploadLimits">PDF, DOCX, or PPTX · Maximum 50 MB per file</small>
+                <small>Save older PPT files as PPTX or PDF first.</small>
               </label>
               <div class="quiz-file-selected" id="selectedFileRow" hidden>
                 <span class="quiz-file-type" id="fileTypeBadge">PDF</span>
                 <span class="quiz-file-name" id="selectedFileName"></span>
                 <button class="quiz-icon-action" id="removeFile" type="button" aria-label="Remove uploaded file">×</button>
               </div>
-              <p class="quiz-help-text" id="uploadHelp">Your learning content is sent to our AI service to generate questions. ImARs does not save the original file.</p>
+              <p class="quiz-help-text" id="quizContentLimits">PDFs must have 1,000 pages or fewer. Larger files take longer; split very long documents into smaller parts for faster results.</p>
+              <p class="quiz-help-text" id="uploadHelp">Your learning material is sent to our AI service. ImARs does not save the original file. PDFs are temporarily uploaded for processing; we request deletion afterward, and the AI service automatically deletes them within 48 hours.</p>
             </div>
 
             <div class="quiz-config-column">
@@ -204,5 +206,6 @@
   <script src="js/ui.js"></script>
   <script type="module" src="js/quiz-generator.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

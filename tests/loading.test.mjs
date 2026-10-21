@@ -126,48 +126,46 @@ test("observer-style listeners and throwing callbacks release loading", () => {
   assert.equal(loading.pendingCount, 0);
 });
 
-test("loader appears as a modal and closes only after all tasks finish", async () => {
+test("loading status stays visible until all tasks finish without opening a dialog", async () => {
   const previousDocument = globalThis.document;
   const previousFrame = globalThis.requestAnimationFrame;
   globalThis.requestAnimationFrame = (callback) => queueMicrotask(callback);
-  const nodes = new Map(["img", "#appLoadingTitle", "#appLoadingDetail"].map((name) => [name, {}]));
-  const dialog = {
-    open: false, hidden: true, attributes: {}, events: {},
+  const nodes = new Map(["img", "#appLoadingTitle"].map((name) => [name, {}]));
+  const indicator = {
+    hidden: true, attributes: {},
     setAttribute(name, value) { this.attributes[name] = value; },
-    querySelector(name) { return nodes.get(name); },
-    addEventListener(name, callback) { this.events[name] = callback; },
-    showModal() { this.open = true; }, close() { this.open = false; }
+    querySelector(name) { return nodes.get(name); }
   };
-  globalThis.document = { createElement: () => dialog, body: { append() {} } };
+  globalThis.document = { createElement(tag) {
+    assert.equal(tag, "div", "loading must not create a modal dialog");
+    return indicator;
+  }, body: { append() {} } };
   try {
     const finishA = startLoading(), finishB = startLoading();
-    assert.equal(dialog.open, false);
+    assert.equal(indicator.hidden, true);
     await delay(170);
-    assert.equal(dialog.open, true);
-    assert.equal(dialog.attributes["aria-busy"], "true");
+    assert.equal(indicator.hidden, false);
+    assert.equal(indicator.attributes.role, "status");
+    assert.equal(indicator.attributes["aria-live"], "polite");
+    assert.equal(nodes.get("#appLoadingTitle").textContent, "Loading your data…");
     assert.match(nodes.get("img").src, /imars-loader-transparent\.png$/);
     finishA();
     await Promise.resolve();
-    assert.equal(dialog.open, true);
-    let cancelled = false;
-    dialog.events.cancel({ preventDefault() { cancelled = true; } });
-    assert.equal(cancelled, true);
+    assert.equal(indicator.hidden, false);
     finishB();
     await Promise.resolve();
-    assert.equal(dialog.open, false);
-    assert.equal(dialog.hidden, true);
-    assert.equal(dialog.attributes["aria-busy"], "false");
+    assert.equal(indicator.hidden, true);
 
-    // A new short request during a queued close must not leave the old dialog open.
+    // A new short request during a queued hide keeps the status until it finishes.
     const finishC = startLoading();
     await delay(170);
     finishC();
     const finishD = startLoading();
     await Promise.resolve();
-    assert.equal(dialog.open, true);
+    assert.equal(indicator.hidden, false);
     finishD();
     await Promise.resolve();
-    assert.equal(dialog.open, false);
+    assert.equal(indicator.hidden, true);
   } finally {
     globalThis.document = previousDocument;
     globalThis.requestAnimationFrame = previousFrame;

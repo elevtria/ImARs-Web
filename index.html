@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/loading.css" />
 </head>
-<body>
+<body data-auth-pending>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -32,7 +32,7 @@
           </svg>
           <span class="dot"></span>
         </button>
-        <span class="sy-chip">SY 2026–27</span>
+        <span class="sy-chip" data-school-year>SY 2026–27</span>
       </div>
       </div>
     </header>
@@ -72,7 +72,6 @@
         </article>
         <article class="card stat">
           <div class="label c-pink">Avg AR Time</div>
-          <!-- The ID avgArTimeVal is restored here -->
           <div class="value" id="avgArTimeVal">0 min</div>
           <div class="hint">Per student, this term</div>
         </article>
@@ -240,5 +239,6 @@
   </div>
   <script type="module" src="js/dashboard.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

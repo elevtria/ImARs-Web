@@ -1,9 +1,25 @@
 import { getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
-import { collection, getDocs, getFirestore, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
+import { collection, getDocs, getFirestore, query, where } from "./firebase-data.js";
+import { initWebSession } from "./web-session.js";
 
 const nameElement = document.querySelector(".side-user .user-meta strong");
 const avatarElement = document.querySelector(".side-user .user-avatar");
+
+document.addEventListener("click", async event => {
+  const link = event.target.closest("a[href]");
+  if (!link || new URL(link.href, window.location.href).pathname.replace(/\.html$/, "") !== "/login") return;
+  event.preventDefault();
+  try {
+    const app = getApps().find(candidate => candidate.name === "[DEFAULT]");
+    if (app) await signOut(getAuth(app));
+    else {
+      const { closeWebSession } = await import("./web-login.js");
+      await closeWebSession();
+    }
+    window.location.href = link.href;
+  } catch (error) { window.alert(error.message); }
+});
 
 if (nameElement && avatarElement) {
   const firebaseConfig = {
@@ -18,6 +34,7 @@ if (nameElement && avatarElement) {
 
   const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp(firebaseConfig);
   const auth = getAuth(app);
+  initWebSession(auth);
   const db = getFirestore(app);
 
   onAuthStateChanged(auth, async (user) => {

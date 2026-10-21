@@ -1,10 +1,15 @@
+import { MAX_QUIZ_TEXT_CHARACTERS } from "../../js/quiz-limits.js";
+import { QuizRequestError as RequestValidationError, readQuizMaterial, uploadPdf, deletePdf } from "../../server/quiz-material.js";
+
 const FIREBASE_PROJECT_ID = "imars-db-a733b";
-const GEMINI_MODEL = "gemini-3.8-flash";
-const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash-lite";
-const MAX_SOURCE_CHARACTERS = 120000;
+const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
+const GENERATION_TIMEOUT_MS = 60000;
 const MAX_PDF_BASE64_CHARACTERS = 14000000;
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
+  const started = Date.now();
+  let uploadedFile;
   try {
     if (!env.GEMINI_API_KEY) {
       return jsonResponse({ error: "The question-generation service is not configured yet." }, 503);
@@ -13,30 +18,25 @@ export async function onRequestPost({ request, env }) {
     const authorization = request.headers.get("Authorization") || "";
     const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!idToken) return jsonResponse({ error: "Please sign in with a teacher account first." }, 401);
-    const contentLength = Number(request.headers.get("Content-Length") || 0);
-    if (contentLength > 15000000) return jsonResponse({ error: "This file is too large. Please use a file under 10 MB." }, 413);
-
-    let body;
-    try {
-      body = await request.json();
-    } catch {
-      return jsonResponse({ error: "The quiz request could not be read." }, 400);
-    }
-    const validationError = validateRequest(body);
+    const { body, binaryPdf } = await readQuizMaterial(request);
+    const validationError = validateRequest(body, binaryPdf);
     if (validationError) return jsonResponse({ error: validationError }, 400);
 
     const { teacherProfileId } = await requireTeacher(idToken, body.firebaseApiKey);
     await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
+    const authorized = Date.now();
 
     const prompt = buildPrompt(body);
     const input = [{ type: "text", text: prompt }];
     if (body.fileMimeType === "application/pdf") {
-      input.push({
-        type: "document",
-        data: body.fileBase64,
-        mime_type: "application/pdf"
-      });
+      if (binaryPdf) {
+        const uri = await uploadPdf(request.body, body.fileSize, env.GEMINI_API_KEY, name => { uploadedFile = name; });
+        input.push({ type: "document", uri, mime_type: "application/pdf" });
+      } else {
+        input.push({ type: "document", data: body.fileBase64, mime_type: "application/pdf" });
+      }
     }
+    const materialReady = Date.now();
 
     const requestBody = {
       input,
@@ -47,30 +47,43 @@ export async function onRequestPost({ request, env }) {
         schema: quizSchema(body.questionCount, body.questionType)
       }
     };
-    const models = [GEMINI_MODEL, GEMINI_FALLBACK_MODEL];
+    // Both attempts share a deadline; a busy first model cannot double the wait.
+    const signal = AbortSignal.timeout(GENERATION_TIMEOUT_MS);
     let geminiResponse;
     let result = {};
 
-    for (let index = 0; index < models.length; index += 1) {
-      geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": env.GEMINI_API_KEY
-        },
-        body: JSON.stringify({ ...requestBody, model: models[index] })
-      });
-      result = await geminiResponse.json().catch(() => ({}));
+    for (let index = 0; index < GEMINI_MODELS.length; index += 1) {
+      const model = GEMINI_MODELS[index];
+      try {
+        geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": env.GEMINI_API_KEY
+          },
+          signal,
+          body: JSON.stringify({ ...requestBody, model,
+            generation_config: { thinking_level: model === "gemini-3.5-flash-lite" && body.difficulty !== "Hard" ? "minimal" : "low" }
+          })
+        });
+        result = await geminiResponse.json().catch(error => {
+          if (signal.aborted) throw error;
+          return {};
+        });
+      } catch (error) {
+        if (signal.aborted) throw new RequestValidationError("Generating these questions took too long. Please retry with fewer questions or a shorter learning file.", 504);
+        throw error;
+      }
       if (geminiResponse.ok) break;
 
       const upstreamMessage = getSafeGeminiError(result, env.GEMINI_API_KEY);
       console.error("[Quiz Generator] Gemini API error", {
-        model: models[index],
+        model,
         status: geminiResponse.status,
         message: upstreamMessage
       });
-      if (geminiResponse.status === 503 && index < models.length - 1) {
-        console.warn("[Quiz Generator] Primary model is busy; trying the Flash-Lite fallback.");
+      if (geminiResponse.status === 503 && index < GEMINI_MODELS.length - 1) {
+        console.warn("[Quiz Generator] Primary model is busy; trying the fallback.");
         continue;
       }
       break;
@@ -115,17 +128,27 @@ export async function onRequestPost({ request, env }) {
       });
       return jsonResponse({ error: "The question-generation service did not return complete questions in the requested format. Please try generating the quiz again." }, 502);
     }
-    return jsonResponse({ questions });
+    const finished = Date.now();
+    return jsonResponse({ questions }, 200, {
+      "Server-Timing": `verify;dur=${authorized - started}, upload;dur=${materialReady - authorized}, ai;dur=${finished - materialReady}, total;dur=${finished - started}`
+    });
   } catch (error) {
     if (error instanceof RequestValidationError) {
       return jsonResponse({ error: error.message }, error.status);
     }
     console.error("Quiz generation request failed:", error);
     return jsonResponse({ error: "The quiz request could not be completed. Please try again." }, 500);
+  } finally {
+    if (uploadedFile) {
+      const cleanup = deletePdf(uploadedFile, env.GEMINI_API_KEY);
+      if (typeof context.waitUntil === "function") context.waitUntil(cleanup);
+      else await cleanup;
+    }
+    if (request.body && !request.bodyUsed && !request.body.locked) await request.body.cancel().catch(() => {});
   }
 }
 
-function validateRequest(body) {
+function validateRequest(body, binaryPdf) {
   if (!body || typeof body !== "object") return "The quiz request is incomplete.";
   if (typeof body.firebaseApiKey !== "string" || body.firebaseApiKey.length < 20) return "The Firebase sign-in settings are missing.";
   if (typeof body.sectionId !== "string" || !body.sectionId.trim() || body.sectionId.includes("/")) return "Choose one of your sections.";
@@ -137,14 +160,14 @@ function validateRequest(body) {
   const extension = body.fileName.split(".").pop().toLowerCase();
   if (body.fileMimeType === "application/pdf") {
     if (extension !== "pdf") return "The selected file type does not match its contents.";
-    if (typeof body.fileBase64 !== "string" || body.fileBase64.length < 1 || body.fileBase64.length > MAX_PDF_BASE64_CHARACTERS) {
-      return "This PDF is empty or too large. Please use a PDF under 10 MB.";
+    if (!binaryPdf && (typeof body.fileBase64 !== "string" || body.fileBase64.length < 1 || body.fileBase64.length > MAX_PDF_BASE64_CHARACTERS)) {
+      return "This PDF is empty or too large for the older upload. Refresh the page to upload files up to 50 MB.";
     }
-    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body.fileBase64)) return "The PDF could not be read. Please choose it again.";
+    if (!binaryPdf && !/^[A-Za-z0-9+/]+={0,2}$/.test(body.fileBase64)) return "The PDF could not be read. Please choose it again.";
   } else {
     if (body.fileMimeType !== "text/plain" || !["docx", "pptx"].includes(extension)) return "Use a PDF, DOCX, or PPTX file. Save older PPT files as PPTX or PDF first.";
     if (typeof body.sourceText !== "string" || !body.sourceText.trim()) return "No readable text was found in this file.";
-    if (body.sourceText.length > MAX_SOURCE_CHARACTERS) return "This file contains too much text. Try a shorter file or split it into parts.";
+    if (body.sourceText.length > MAX_QUIZ_TEXT_CHARACTERS) return "This file contains too much text. Try a shorter file or split it into parts.";
   }
   return "";
 }
@@ -303,19 +326,13 @@ function validateGeneratedQuestions(questions, expectedCount, type) {
   return normalized;
 }
 
-function jsonResponse(payload, status = 200) {
+function jsonResponse(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store"
+      "Cache-Control": "no-store",
+      ...headers
     }
   });
-}
-
-class RequestValidationError extends Error {
-  constructor(message, status) {
-    super(message);
-    this.status = status;
-  }
 }

@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
-<body>
+<body data-auth-pending>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -32,7 +32,7 @@
             </svg>
             <span class="dot"></span>
           </button>
-          <span class="sy-chip">SY 2026–27</span>
+          <span class="sy-chip" data-school-year>SY 2026–27</span>
         </div>
       </div>
     </header>
@@ -41,7 +41,7 @@
       <section class="manual-sheet manual-sheet-setup" aria-labelledby="setupHeading">
         <div class="manual-cover">
           <div class="manual-cover-main">
-            <div class="manual-kicker"><span>ImARs · TEACHER FIELD GUIDE</span><span>SY 2026–27</span></div>
+            <div class="manual-kicker"><span>ImARs · TEACHER FIELD GUIDE</span><span data-school-year>SY 2026–27</span></div>
             <section class="hero manual-hero">
               <div>
                 <h1>Teacher Manual</h1>
@@ -69,7 +69,6 @@
         <div class="manual-sheet-heading">
           <span class="manual-section-chip">01 · GET READY</span>
           <div><h2 id="setupHeading">Set up your classroom</h2><p>Sign in, check your class, and import your student roster.</p></div>
-          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
 
         <div class="manual-setup-grid">
@@ -115,7 +114,6 @@
         <div class="manual-sheet-heading manual-sheet-heading-light">
           <span class="manual-section-chip">02 · PREPARE</span>
           <div><h2 id="prepareHeading">Plan lessons and prepare activities</h2><p>Manage lesson access, review quizzes, and download classroom markers.</p></div>
-          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
         <div class="manual-tool-grid">
           <article class="manual-tool-card manual-tool-blue">
@@ -166,7 +164,6 @@
         <div class="manual-sheet-heading manual-sheet-heading-light">
           <span class="manual-section-chip">03 · SYNC &amp; REVIEW</span>
           <div><h2 id="syncHeading">Sync offline results with a Grade QR code</h2><p>Use the student’s results QR code, then review the saved records.</p></div>
-          <span class="manual-heading-doodle" aria-hidden="true">✳</span>
         </div>
         <div class="manual-note manual-sync-note"><b>QR offline sync only</b><span>The portal scanner transfers students’ offline learning results. It does not scan printed AR markers or open 3D lessons. Keep the teacher device online to save the results to the class records.</span></div>
         <div class="manual-tool-grid">
@@ -282,5 +279,6 @@
   <script src="js/ui.js"></script>
   <script src="js/teacher-manual.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

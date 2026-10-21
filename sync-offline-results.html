@@ -13,7 +13,7 @@
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <link rel="stylesheet" href="css/app.css" />
 </head>
-<body>
+<body data-auth-pending>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -33,7 +33,7 @@
             </svg>
             <span class="dot"></span>
           </button>
-          <span class="sy-chip">SY 2026–27</span>
+          <span class="sy-chip" data-school-year>SY 2026–27</span>
         </div>
       </div>
     </header>
@@ -217,5 +217,6 @@
   <script src="js/ui.js"></script>
   <script type="module" src="js/sync-offline-results.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

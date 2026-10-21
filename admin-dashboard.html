@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="css/admin-dashboard.css" />
   <link rel="stylesheet" href="css/loading.css" />
 </head>
-<body>
+<body data-auth-pending>
   <header class="admin-topbar">
     <div class="admin-topbar-inner">
       <div class="admin-topbar-left">
@@ -25,7 +25,11 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
           <span class="notification-dot" aria-hidden="true"></span>
         </button>
-        <span class="admin-year">Admin · SY 2026–27</span>
+        <div class="school-year-control">
+          <label for="schoolYearSelect">School year for all teachers</label>
+          <select class="admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </div>
   </header>
@@ -50,7 +54,7 @@
     <section class="page-intro">
       <div>
         <h1>Admin Overview</h1>
-        <p>School-wide performance · AR Learning Platform · SY 2026–27</p>
+        <p>School-wide performance · AR Learning Platform · <span data-school-year>SY 2026–27</span></p>
       </div>
     </section>
 
@@ -131,5 +135,6 @@
 
   <button class="help-button" type="button" aria-label="Help">?</button>
   <script type="module" src="js/admin-dashboard.js"></script>
+  <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

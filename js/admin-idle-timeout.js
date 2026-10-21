@@ -1,9 +1,16 @@
-import { signOut } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+import { signOut } from "./firebase-auth.js";
+import { initWebSession } from "./web-session.js";
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes in milliseconds
 const STORAGE_KEY = "imars_admin_last_active";
 
-export function initAdminIdleTimeout(auth) {
+const initialized = new WeakSet();
+export async function initAdminIdleTimeout(auth) {
+  if (initialized.has(auth)) return;
+  initialized.add(auth);
+  // Protected sessions use the same server deadline in both portals. Keep the
+  // original admin timer for static development / disabled protection only.
+  if (await initWebSession(auth)) return;
   let idleTimer = null;
 
   const performAutoLogout = async () => {
@@ -37,7 +44,7 @@ export function initAdminIdleTimeout(auth) {
     }
   };
 
-  // Check immediately on page load in case 30 mins passed while tab was asleep
+  // Check immediately on page load in case the tab was asleep.
   const initialLastActive = parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10);
   if (initialLastActive && Date.now() - initialLastActive >= IDLE_TIMEOUT_MS) {
     performAutoLogout();
