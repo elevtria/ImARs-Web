@@ -1,16 +1,8 @@
-import { getApps, initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { collection, doc, getDocs, getFirestore, limit, onSnapshot, query, serverTimestamp, setDoc, where } from "./firebase-data.js";
 
-const app = getApps().find(candidate => candidate.name === "[DEFAULT]") || initializeApp({
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-});
+const app = getApps().find(candidate => candidate.name === "[DEFAULT]") || initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const reference = doc(db, "webSettings", "schoolYear");

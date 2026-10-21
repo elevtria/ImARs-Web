@@ -22,6 +22,25 @@ export class WebLoginState {
 
   async handle(request) {
     const action = new URL(request.url).pathname;
+    if (["/allocate-teacher", "/roster-get", "/roster-disable"].includes(action) && request.method === "POST") {
+      const body = await request.json();
+      if (action === "/allocate-teacher") {
+        if (!Number.isSafeInteger(body.minimum) || body.minimum < 1000 || body.minimum > 999999999 ||
+            typeof body.email !== "string" || body.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) return json({ error: "Invalid invitation." }, 400);
+        const next = Math.max((await this.storage.get("lastTeacherId")) || 999, body.minimum - 1) + 1;
+        const invitation = { id: `TEACH${next}`, email: body.email.toLowerCase(), role: "teacher", active: true, nonce: crypto.randomUUID() };
+        // Reservation survives deleted profiles and failed writes. Never reuse
+        // an old ID, which might still own classes or have an old mobile login.
+        await this.storage.put("lastTeacherId", next);
+        await this.storage.put("roster:" + invitation.id, invitation);
+        return json(invitation);
+      }
+      if (typeof body.id !== "string" || !/^TEACH\d{4,10}$/.test(body.id)) return json({ error: "Invalid teacher." }, 400);
+      const previous = await this.storage.get("roster:" + body.id);
+      if (action === "/roster-get") return json({ account: previous || null });
+      await this.storage.put("roster:" + body.id, { ...previous, id: body.id, active: false });
+      return json({ ok: true });
+    }
     if (action === "/rate") {
       const now = this.now();
       let bucket = await this.storage.get("rate");
@@ -74,7 +93,7 @@ export class WebLoginState {
       const sessions = pruneSessions(await this.storage.get("sessions"), next.version, now);
       const session = createSession(sessions, next.version, now);
       await this.storage.put("sessions", sessions);
-      // Only the email is passed to the browser SDK; never return upstream tokens.
+      // The private binding returns session state; upstream tokens stay here.
       return json({ email, version: next.version, session });
     }
     const error = String(account.error?.message || "").split(" : ")[0];

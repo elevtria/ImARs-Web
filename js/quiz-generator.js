@@ -1,21 +1,11 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
 import { quizFileSizeError } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
+const firebaseApp = initializeApp();
 const auth = getAuth(firebaseApp);
 const firestore = getFirestore(firebaseApp);
 
@@ -247,15 +237,14 @@ const firestore = getFirestore(firebaseApp);
         : "Please wait while we prepare your questions.";
       showStatus(setupStatus, "AI is reading the material and creating your questions…", false);
 
-      const questions = await requestQuiz(await user.getIdToken(), {
+      const questions = await requestQuiz({
         ...material,
-        firebaseApiKey: firebaseConfig.apiKey,
         fileName: selectedFile.name,
         sectionId: sectionSelect.value,
         questionCount: Number(document.getElementById("questionCount").value),
         difficulty,
         questionType: document.querySelector("input[name='questionType']:checked").value
-      });
+      }, user.uid);
 
       generatedQuestions = questions.map((question) => ({
         ...question,
@@ -419,7 +408,7 @@ const firestore = getFirestore(firebaseApp);
       });
     } catch (error) {
       console.error("Could not save quiz to Firestore:", error);
-      showStatus(editorStatus, "Firebase blocked this save. The Firestore rules must allow teachers to save their own quizzes.", true);
+      showStatus(editorStatus, "The quiz could not be saved. Check your connection and assigned section, then try again.", true);
       return;
     } finally {
       saveButton.disabled = false;

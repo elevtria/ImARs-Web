@@ -1,4 +1,5 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
+import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
 
 const cookieName = "__Host-imars-web";
 const encoder = new TextEncoder();
@@ -6,6 +7,7 @@ const json = (body, status = 200, headers = {}) => Response.json(body, {
   status, headers: { "Cache-Control": "no-store", ...headers }
 });
 export const enabled = env => env.WEB_LOGIN_ENABLED === "true";
+export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
@@ -48,7 +50,21 @@ export async function signSession(env, account, session, host) {
   return `${value}.${base64(new Uint8Array(signature))}`;
 }
 
-async function inspectSession(request, env, { now = Date.now(), active = false, rotate = false } = {}) {
+export async function resolveStaff(env, identifier, accounts = settings(env), store = new FirestoreAdmin(env)) {
+  const initial = accounts.find(item => item.id.toLowerCase() === identifier.toLowerCase() || (item.role === "admin" && item.email.toLowerCase() === identifier.toLowerCase()));
+  const id = identifier.toUpperCase();
+  if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
+  const privateRecord = await stateCall(env, "staff-roster", "roster-get", { id });
+  if (!privateRecord.ok) throw new Error("Staff invitations unavailable");
+  const invitation = privateRecord.result.account;
+  if (!invitation) return initial;
+  if (!invitation.active) return null;
+  const profile = await store.get("users/" + id);
+  if (!profile?.data.uid || profile.data.webInvitationNonce !== invitation.nonce || profile.data.role !== "teacher") return null;
+  return { id, uid: profile.data.uid, role: "teacher", email: invitation.email };
+}
+
+async function inspectSession(request, env, { now = Date.now(), active = false, rotate = false, store } = {}) {
   const accounts = settings(env);
   const value = request.headers.get("Cookie")?.split(/;\s*/).find(item => item.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
   if (!value || value.length > 2048) return null;
@@ -56,9 +72,11 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
     const parts = value.split(".");
     if (parts.length !== 2 || !await crypto.subtle.verify("HMAC", await hmacKey(env.WEB_SESSION_SECRET), unbase64(parts[1]), encoder.encode(parts[0]))) return null;
     const payload = JSON.parse(new TextDecoder().decode(unbase64(parts[0])));
-    const account = accounts.find(item => item.uid === payload.uid && item.id === payload.id && item.role === payload.role);
+    const account = typeof payload.id === "string" ? await resolveStaff(env, payload.id, accounts, store) : null;
     const time = Math.floor(now / 1000);
-    if (!account || payload.aud !== new URL(request.url).host || !Number.isSafeInteger(payload.exp) ||
+    if (!account || account.uid !== payload.uid || account.role !== payload.role ||
+        (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== account.uid) ||
+        payload.aud !== new URL(request.url).host || !Number.isSafeInteger(payload.exp) ||
         payload.exp <= time || !Number.isSafeInteger(payload.iat) || payload.iat > time + 30 ||
         payload.exp <= payload.iat || payload.exp - payload.iat > ABSOLUTE_AFTER_MS / 1000 ||
         !validSessionId(payload.family) || !validSessionId(payload.sid) || !Number.isSafeInteger(payload.version)) return null;
@@ -77,8 +95,69 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
   }
 }
 
-export async function webSession(request, env, now = Date.now()) {
-  return (await inspectSession(request, env, { now }))?.account ?? null;
+export async function webSession(request, env, now = Date.now(), store) {
+  return (await inspectSession(request, env, { now, store }))?.account ?? null;
+}
+
+const identities = new WeakMap();
+export async function staffProfile(account, store, now = Date.now()) {
+  const row = await store.get("users/" + account.id), profile = row?.data;
+  if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
+      profile.active === false || ["inactive", "disabled"].includes(String(profile.status || "").toLowerCase())) {
+    throw Object.assign(new Error("This account no longer has website access."), { status: 403 });
+  }
+  // Cache only Auth account status briefly; database role/active checks remain live.
+  const key = store.env || store;
+  let cache = identities.get(key);
+  if (!cache) { cache = new Map(); identities.set(key, cache); }
+  let identity = cache.get(account.uid);
+  if (!identity || identity.until <= now) {
+    const user = await store.identity(account.uid);
+    identity = { user, until: now + 60_000 };
+    if (cache.size >= 1000) cache.delete(cache.keys().next().value);
+    cache.set(account.uid, identity);
+  }
+  const user = identity.user;
+  if (!user || user.disabled || user.email?.toLowerCase() !== account.email.toLowerCase()) {
+    throw Object.assign(new Error("Your sign-in could not be verified. Please sign in again."), { status: 401 });
+  }
+  return { ...account, profile, row };
+}
+
+export async function requireStaff(request, env, store = new FirestoreAdmin(env)) {
+  if (!dataEnabled(env) || !enabled(env)) throw Object.assign(new Error("Website account setup is incomplete."), { status: 503 });
+  const origin = request.headers.get("Origin");
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
+    throw Object.assign(new Error("Use the ImARs website."), { status: 403 });
+  }
+  const account = await webSession(request, env, Date.now(), store);
+  if (!account || (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== account.uid)) {
+    throw Object.assign(new Error("Please sign in to the website."), { status: 401 });
+  }
+  return staffProfile(account, store);
+}
+
+const publicUser = account => ({ uid: account.uid, id: account.id, role: account.role,
+  displayName: String(account.profile?.displayName || account.profile?.fullName || "") });
+
+export async function readJson(request, maximum = 8192) {
+  if (Number(request.headers.get("Content-Length") || 0) > maximum) throw Object.assign(new Error("Request too large."), { status: 413 });
+  const reader = request.body?.getReader();
+  const decoder = new TextDecoder();
+  let text = "", size = 0;
+  try {
+    if (reader) while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > maximum) { await reader.cancel(); throw Object.assign(new Error("Request too large."), { status: 413 }); }
+      text += decoder.decode(value, { stream: true });
+    }
+    return JSON.parse(text + decoder.decode());
+  } catch (error) {
+    if (error.status) throw error;
+    throw Object.assign(new Error("Invalid request."), { status: 400 });
+  } finally { reader?.releaseLock(); }
 }
 
 async function renewalHeaders(request, env, checked) {
@@ -96,25 +175,21 @@ async function maintenance(request, env) {
   return crypto.subtle.verify("HMAC", await hmacKey(expected), proof, message);
 }
 
-export async function authApi({ request, env }, now = Date.now()) {
+export async function authApi({ request, env }, now = Date.now(), { store } = {}) {
   const action = new URL(request.url).pathname.replace(/\/$/, "").split("/").at(-1);
   if (action === "config" && request.method === "GET") {
-    if (!enabled(env)) return json({ enabled: false });
-    try { settings(env); return json({ enabled: true }); }
+    if (!enabled(env)) return dataEnabled(env) ? json({ error: "Website account setup is incomplete." }, 503) : json({ enabled: false });
+    try { settings(env); if (dataEnabled(env) && !store) serviceAccount(env); return json({ enabled: true, ...(dataEnabled(env) ? { backend: true } : {}) }); }
     catch { return json({ error: "Login protection setup needs website maintenance." }, 503); }
   }
   if (!enabled(env)) return action === "logout" ? json({ ok: true }, 200, { "Set-Cookie": cookie("", 0) }) : json({ error: "Web login protection is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   const origin = request.headers.get("Origin");
-  if (origin && origin !== new URL(request.url).origin) return json({ error: "Use the ImARs website." }, 403);
+  if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") return json({ error: "Use the ImARs website." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
   try {
     const accounts = settings(env);
-    if (Number(request.headers.get("Content-Length") || 0) > 8192) return json({ error: "Request too large." }, 413);
-    const text = await request.text();
-    if (encoder.encode(text).length > 8192) return json({ error: "Request too large." }, 413);
-    let body;
-    try { body = JSON.parse(text); } catch { return json({ error: "Invalid request." }, 400); }
+    const body = await readJson(request);
     if (!body || typeof body !== "object") return json({ error: "Invalid request." }, 400);
 
     if (action === "login") {
@@ -126,21 +201,26 @@ export async function authApi({ request, env }, now = Date.now()) {
         if (!rate.ok) return json(rate.result, rate.status, { "Retry-After": "60" });
       }
       const identifier = body.identifier.trim().toLowerCase();
-      const account = accounts.find(item => item.id.toLowerCase() === identifier || (body.portal === "admin" && item.email.toLowerCase() === identifier));
+      const account = await resolveStaff(env, identifier, accounts, store);
       if (!account || account.role !== body.portal) return json({ error: "Invalid ID or password." }, 401);
       const attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
+      const approved = dataEnabled(env) ? await staffProfile(account, store || new FirestoreAdmin(env), now) : null;
       const token = await signSession(env, account, attempt.result.session, new URL(request.url).host);
-      return json({ email: account.email }, 200, { "Set-Cookie": cookie(token) });
+      return json(approved ? { user: publicUser(approved) } : { email: account.email }, 200, { "Set-Cookie": cookie(token) });
     }
+    if (action === "identity") return json({ user: publicUser(await requireStaff(request, env, store || new FirestoreAdmin(env))) });
     if (action === "session") {
       if (typeof body.active !== "boolean") return json({ error: "Invalid session request." }, 400);
-      const checked = await inspectSession(request, env, { now, active: body.active, rotate: true });
+      const checked = await inspectSession(request, env, { now, active: body.active, rotate: true, store });
       if (!checked) return json({ error: "Your website session expired. Please sign in again." }, 401);
+      if (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== checked.account.uid) return json({ error: "Your sign-in changed. Please sign in again." }, 401);
+      if (dataEnabled(env)) await staffProfile(checked.account, store || new FirestoreAdmin(env), now);
       return json(checked.timing, 200, await renewalHeaders(request, env, checked));
     }
     if (action === "logout") {
-      const account = await webSession(request, env, now);
+      const account = await webSession(request, env, now, store);
+      if (!account && request.headers.has("X-Web-User")) return json({ error: "Your sign-in changed." }, 401);
       if (account) {
         const result = await stateCall(env, `account:${account.uid}`, "logout", {});
         if (!result.ok) throw new Error("Logout failed");
@@ -149,24 +229,25 @@ export async function authApi({ request, env }, now = Date.now()) {
     }
     if (action === "unlock") {
       const owner = await maintenance(request, env);
-      const caller = owner ? null : await webSession(request, env, now);
+      const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || new FirestoreAdmin(env)) : await webSession(request, env, now);
       if (!owner && caller?.role !== "admin") return json({ error: "Administrator or maintenance access is required." }, 403);
-      const target = accounts.find(item => item.id === String(body.identifier || "").trim().toUpperCase());
+      const target = await resolveStaff(env, String(body.identifier || "").trim(), accounts, store);
       if (!target || (!owner && target.role !== "teacher")) return json({ error: "An administrator can unlock teachers. Maintenance must restore an administrator." }, 403);
       const result = await stateCall(env, `account:${target.uid}`, "unlock", {});
       if (!result.ok) throw new Error("Unlock failed");
       return json({ ok: true });
     }
     return json({ error: "Not found." }, 404);
-  } catch {
+  } catch (error) {
     // Never log or echo passwords, cookies, upstream tokens, or server secrets.
-    return json({ error: "Login protection is temporarily unavailable. Contact website maintenance." }, 503);
+    return [400, 401, 403, 413].includes(error.status) ? json({ error: error.message }, error.status)
+      : json({ error: "Login protection is temporarily unavailable. Contact website maintenance." }, 503);
   }
 }
 
 export async function protectWebsite(context, now = Date.now()) {
   const { request, env } = context;
-  if (!enabled(env)) return context.next();
+  if (!enabled(env) && !dataEnabled(env)) return context.next();
   const url = new URL(request.url);
   let path;
   try {
@@ -177,16 +258,16 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || path === "/favicon.ico") return context.next();
-  if (path === "/login" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/")) return context.next();
+  if (path === "/login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/")) return context.next();
   try {
-    const checked = await inspectSession(request, env, { now, active: true, rotate: true });
+    const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/"), rotate: true });
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);
       return new Response(null, { status: 302, headers: { Location: "/login?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
     }
     const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
-    if (account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
+    if (!path.startsWith("/api/") && account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
     const response = await context.next();
     const protectedResponse = new Response(response.body, response);
     protectedResponse.headers.set("Cache-Control", "private, no-store");

@@ -31,15 +31,15 @@ export async function serviceToken(env, fetcher = fetch, now = Date.now()) {
   return cachedToken.token;
 }
 
-export function decodeFields(fields = {}) {
+export function decodeFields(fields = {}, typedDates = false) {
   const value = item => {
     if ("stringValue" in item) return item.stringValue;
     if ("integerValue" in item) return Number(item.integerValue);
     if ("doubleValue" in item) return item.doubleValue;
     if ("booleanValue" in item) return item.booleanValue;
     if ("nullValue" in item) return null;
-    if ("timestampValue" in item) return item.timestampValue;
-    if ("mapValue" in item) return decodeFields(item.mapValue.fields);
+    if ("timestampValue" in item) return typedDates ? { $type: "timestamp", value: item.timestampValue } : item.timestampValue;
+    if ("mapValue" in item) return decodeFields(item.mapValue.fields, typedDates);
     if ("arrayValue" in item) return (item.arrayValue.values || []).map(value);
     throw new Error("Unsupported Firestore field");
   };
@@ -49,6 +49,7 @@ export function decodeFields(fields = {}) {
 export function encodeFields(fields) {
   const value = item => {
     if (item === null) return { nullValue: null };
+    if (item instanceof Date && Number.isFinite(item.getTime())) return { timestampValue: item.toISOString() };
     if (typeof item === "string") return { stringValue: item };
     if (typeof item === "boolean") return { booleanValue: item };
     if (Number.isSafeInteger(item)) return { integerValue: String(item) };
@@ -82,8 +83,78 @@ export class FirestoreAdmin {
     return response.json();
   }
   async get(path) {
-    const result = await this.request("documents/" + path.split("/").map(encodeURIComponent).join("/"));
-    return result ? { data: decodeFields(result.fields), updateTime: result.updateTime } : null;
+    // batchGet carries the transaction in JSON rather than a binary URL query.
+    // Both production REST and the local emulator use this same wire format.
+    const result = this.transaction
+      ? (await this.request("documents:batchGet", { method: "POST", body: JSON.stringify({ documents: [this.name(path)], transaction: this.transaction }) })).find(row => row.found)?.found
+      : await this.request("documents/" + path.split("/").map(encodeURIComponent).join("/"));
+    return result ? { data: decodeFields(result.fields), wire: decodeFields(result.fields, true), updateTime: result.updateTime } : null;
+  }
+  async query(path, { filters = [], order = [], limit = 5000 } = {}) {
+    const parts = path.split("/");
+    this.name(path);
+    const parent = parts.slice(0, -1).join("/");
+    const conditions = filters.map(({ field, value }) => ({ fieldFilter: {
+      field: { fieldPath: field }, op: "EQUAL", value: encodeFields({ value }).value
+    } }));
+    const rows = await this.request(`documents${parent ? "/" + parent.split("/").map(encodeURIComponent).join("/") : ""}:runQuery`, {
+      method: "POST", body: JSON.stringify({ ...(this.transaction ? { transaction: this.transaction } : {}), structuredQuery: {
+        from: [{ collectionId: parts.at(-1) }],
+        ...(conditions.length ? { where: conditions.length === 1 ? conditions[0] : { compositeFilter: { op: "AND", filters: conditions } } } : {}),
+        ...(order.length ? { orderBy: order.map(({ field, direction }) => ({ field: { fieldPath: field }, direction: direction === "desc" ? "DESCENDING" : "ASCENDING" })) } : {}),
+        limit: limit + 1
+      } })
+    });
+    const records = rows.filter(row => row.document).map(({ document }) => ({
+      id: document.name.split("/").at(-1), data: decodeFields(document.fields), wire: decodeFields(document.fields, true), updateTime: document.updateTime
+    }));
+    if (records.length > limit && limit === 5000) throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
+    return records.slice(0, limit);
+  }
+  async begin() {
+    const result = await this.request("documents:beginTransaction", { method: "POST", body: JSON.stringify({ options: { readWrite: {} } }) });
+    if (!result?.transaction) throw new Error("Data access unavailable");
+    this.transaction = result.transaction;
+  }
+  async rollback() {
+    if (!this.transaction) return;
+    const transaction = this.transaction;
+    this.transaction = null;
+    await this.request("documents:rollback", { method: "POST", body: JSON.stringify({ transaction }) });
+  }
+  async identity(uid) {
+    const token = await serviceToken(this.env, this.fetcher);
+    const response = await this.fetcher("https://identitytoolkit.googleapis.com/v1/projects/imars-db-a733b/accounts:lookup", {
+      method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ localId: [uid] }), signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) throw new Error("Account access unavailable");
+    const result = await response.json();
+    return result.users?.find(user => user.localId === uid) || null;
+  }
+  async commit(writes) {
+    const prepared = [];
+    for (const write of writes) {
+      const currentDocument = write.updateTime ? { updateTime: write.updateTime } : { exists: false };
+      if (write.operation === "delete") {
+        prepared.push({ delete: this.name(write.path), currentDocument });
+        continue;
+      }
+      const fields = {}, transforms = [];
+      for (const [field, value] of Object.entries(write.data)) {
+        if (value?.$type === "serverTimestamp") transforms.push({ fieldPath: field, setToServerValue: "REQUEST_TIME" });
+        else if (value?.$type === "arrayUnion") transforms.push({ fieldPath: field,
+          appendMissingElements: { values: value.values.map(item => encodeFields({ value: item }).value) } });
+        else fields[field] = value?.$type === "timestamp" ? new Date(value.value) : value;
+      }
+      prepared.push({ update: { name: this.name(write.path), fields: encodeFields(fields) }, currentDocument,
+        ...(write.merge || write.operation === "update" ? { updateMask: { fieldPaths: Object.keys(fields) } } : {}),
+        ...(transforms.length ? { updateTransforms: transforms } : {}) });
+    }
+    if (prepared.length > 500) throw Object.assign(new Error("Save fewer records at a time."), { status: 400 });
+    await this.request("documents:commit", { method: "POST", body: JSON.stringify({ writes: prepared,
+      ...(this.transaction ? { transaction: this.transaction } : {}) }) });
+    this.transaction = null;
   }
   async findUser(uid) {
     const rows = await this.request("documents:runQuery", { method: "POST", body: JSON.stringify({ structuredQuery: {

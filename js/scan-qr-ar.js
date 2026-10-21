@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "./firebase-auth.js";
 import { escapeHtml } from "./teacher-view.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
@@ -16,17 +16,7 @@ import {
   serverTimestamp 
 } from "./firebase-data.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -56,7 +46,7 @@ let isCameraOpen = false;
 let html5QrCode = null;
 let lastScannedCode = "";
 let activeTeacherId = null;
-let activeTeacherClassCode = "SCIG6A01";
+let activeTeacherClassCode = null;
 
 // --- MODAL CONTROLS ---
 const closeResultModal = () => {
@@ -186,13 +176,14 @@ async function processScannedQR(decodedText) {
     const studentRef = doc(db, "users", studentId);
     const studentSnap = await getDoc(studentRef);
 
+    if (!studentSnap.exists() && !activeTeacherClassCode) throw new Error("Create or select an assigned class before syncing a new student.");
     const studentUpdate = {
       schoolId: studentId,
       displayName: studentName,
       fullName: studentName,
       role: "student",
       lastQrSyncAt: serverTimestamp(),
-      classCode: activeTeacherClassCode
+      classCode: studentSnap.exists() ? studentSnap.data().classCode : activeTeacherClassCode
     };
 
     await setDoc(studentRef, studentUpdate, { merge: true });

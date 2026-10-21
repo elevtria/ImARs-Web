@@ -53,7 +53,7 @@ export function initWebSession(auth) {
       monitor = startSessionMonitor({
         visible: () => document.visibilityState !== "hidden",
         check: active => fetch("/api/web-auth/session", { method: "POST", credentials: "same-origin", cache: "no-store",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active }), signal: AbortSignal.timeout(10_000) }),
+          headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify({ active }), signal: AbortSignal.timeout(10_000) }),
         notice: kind => ui.show(kind),
         onExpired: async () => {
           invalidateTeacherViews();

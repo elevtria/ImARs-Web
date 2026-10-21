@@ -52,14 +52,14 @@ test("production minification preserves module exports, classic-script globals, 
   assert.ok(css.includes("body[data-auth-pending]")); assert.ok(css.includes("--gold:")); assert.ok(css.includes("aria-busy=true"));
 });
 
-test("public-artifact checks reject private credentials but allow Firebase browser configuration", () => {
+test("public-artifact checks reject private credentials and direct browser Firebase configuration", () => {
   for (const content of [
     'const key = "-----BEGIN PRIVATE KEY-----";',
     '{"type":"service_account","project_id":"example"}',
     'const GEMINI_API_KEY = "synthetic-private-value";',
     'const config = { WEB_SESSION_SECRET: "synthetic-private-value" };'
   ]) assert.throws(() => assertPublicClientContent(content, "js/client.js"), /Private server credentials/);
-  assert.doesNotThrow(() => assertPublicClientContent('const firebaseConfig = { apiKey: "public-browser-config", projectId: "example" };', "js/login.js"));
+  assert.throws(() => assertPublicClientContent('const firebaseConfig = { apiKey: "public-browser-config", projectId: "example" };', "js/login.js"), /authenticated website API/);
 });
 
 test("HTML versioning changes only known local public files and preserves routes, downloads, remote scripts, and URL suffixes", () => {

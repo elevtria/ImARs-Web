@@ -197,20 +197,11 @@ const startCloudSync = async () => {
   cloudBooting = true;
   try {
     const [appSdk, authSdk, firestoreSdk] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js"),
       import("./firebase-auth.js"),
-      import("https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js")
+      import("./firebase-auth.js"),
+      import("./firebase-data.js")
     ]);
-    const firebaseConfig = {
-      apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-      authDomain: "imars-db-a733b.firebaseapp.com",
-      projectId: "imars-db-a733b",
-      storageBucket: "imars-db-a733b.firebasestorage.app",
-      messagingSenderId: "539058786779",
-      appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-      measurementId: "G-TEERTREQF3"
-    };
-    const app = appSdk.getApps().find((candidate) => candidate.name === "[DEFAULT]") || appSdk.initializeApp(firebaseConfig);
+    const app = appSdk.getApps().find((candidate) => candidate.name === "[DEFAULT]") || appSdk.initializeApp();
     const auth = authSdk.getAuth(app);
     const db = firestoreSdk.getFirestore(app);
     const firestore = { ...firestoreSdk, db };

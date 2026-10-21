@@ -1,22 +1,12 @@
 import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, query, where, doc, updateDoc, getDocsWithLoading as getDocs } from "./firebase-data.js";
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 

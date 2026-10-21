@@ -3,7 +3,7 @@ import { PDF_REQUEST_TIMEOUT_MS, quizFileSizeError } from "./quiz-limits.js";
 // Allow the server's generation deadline plus sign-in checks and network time.
 const REQUEST_TIMEOUT_MS = 105000;
 
-export async function requestQuiz(idToken, payload) {
+export async function requestQuiz(payload, uid) {
   const { pdfFile, ...settings } = payload;
   const isPdf = settings.fileMimeType === "application/pdf" && pdfFile instanceof Blob;
   if (isPdf) {
@@ -13,8 +13,8 @@ export async function requestQuiz(idToken, payload) {
   const signal = AbortSignal.timeout(isPdf ? PDF_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch("/api/generate-quiz", {
-      method: "POST",
-      headers: { Authorization: "Bearer " + idToken,
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { ...(uid ? { "X-Web-User": uid } : {}),
         "Content-Type": isPdf ? "application/pdf" : "application/json",
         ...(isPdf ? { "X-Quiz-Options": encodeURIComponent(JSON.stringify({ ...settings, fileSize: pdfFile.size })) } : {})
       },

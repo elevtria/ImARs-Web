@@ -4,7 +4,9 @@ Do not paste `firestore.candidate.rules` into the live console yet. Closing the
 current public rule requires the matching server setup, reviewed account
 bindings and updated mobile app. The private state Worker was deployed on
 2026-10-16; Pages activation, account provisioning and the mobile release remain
-pending. See `deployment-status.md` for the verified live state.
+pending. `deployment-status.md` is a historical 2026-10-16 snapshot, not current
+production status. The newer website-only gateway is documented in
+[its activation guide](../docs/web-data-gateway.md); its branch is not deployed.
 
 ## What was prepared
 
@@ -103,8 +105,10 @@ change. Administrative users can manage the school-wide records.
    Network/configuration errors are not treated as permission to bypass a known
    enabled gateway. No broad Firebase rule is added as a fallback.
 6. For the website, configure and test `WEB_LOGIN_ENABLED=true`, the signed web
-   session keys, private binding, and `WEB_STAFF_ACCOUNTS`. Add newly activated
-   teachers to that approved server roster before their first protected web login.
+   session keys, private binding, and `WEB_STAFF_ACCOUNTS`. The new website
+   gateway also requires `WEB_DATA_ENABLED=true` and the dedicated service
+   account. Initial staff need approved roster entries; gateway-created teacher
+   invitations carry private approval through mobile registration.
 
 ## Review existing identities without writing records
 

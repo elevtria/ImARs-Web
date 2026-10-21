@@ -1,21 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
-import { webProtectionEnabled, protectedWebLogin, closeWebSession } from "./web-login.js";
-import { getAuth, signInWithEmailAndPassword, signOut } from "./firebase-auth.js";
-import { getFirestore, doc, getDoc } from "./firebase-data.js";
+import { initializeApp } from "./firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword } from "./firebase-auth.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 function setSigningIn(button, pending, idleLabel) {
   button.disabled = pending;
@@ -42,7 +29,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   if (teacherSubmitBtn.disabled) return;
 
   const rawId = document.getElementById("teacherId").value.trim().toUpperCase();
-  const password = passwordInput.value.trim();
+  const password = passwordInput.value;
   const error = document.getElementById("error");
   error.classList.add("hidden");
   error.style.display = "none";
@@ -61,45 +48,13 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   setSigningIn(teacherSubmitBtn, true, "Log in");
   let redirecting = false;
   try {
-    if (await webProtectionEnabled()) {
-      const email = await protectedWebLogin(rawId, password, "teacher");
-      try { await signInWithEmailAndPassword(auth, email, password, "teacher"); }
-      catch (error) { await closeWebSession(); throw error; }
-      window.location.href = "index.html";
-      redirecting = true;
-      return;
-    }
-    const userDocRef = doc(db, "users", rawId);
-    const userDocSnap = await getDoc(userDocRef);
-
-    if (!userDocSnap.exists()) {
-      showError("Teacher ID not found in database.");
-      return;
-    }
-
-    const userData = userDocSnap.data();
-    const userRole = String(userData.role || "").toLowerCase();
-
-    if (userRole === "admin") {
-      await signOut(auth);
-      showError("Access denied: Administrator accounts cannot sign in here. Please use the Admin Login.");
-      return;
-    }
-    if (userRole !== "teacher") {
-      await signOut(auth);
-      showError("Access denied: Only Teacher accounts can sign in here.");
-      return;
-    }
-
-    const authEmail = userData.providedEmail || userData.email || `${rawId}@imars.edu`;
-
-    await signInWithEmailAndPassword(auth, authEmail, password, "teacher");
+    await signInWithEmailAndPassword(auth, rawId, password, "teacher");
 
     window.location.href = "index.html";
     redirecting = true;
   } catch (err) {
     showError(err.userMessage || "Invalid ID or password. Please try again.");
-    console.error("Firebase Login Error:", err.message);
+    console.error("Sign-in error:", err.message);
   } finally {
     if (!redirecting) setSigningIn(teacherSubmitBtn, false, "Log in");
   }
@@ -152,7 +107,7 @@ if (adminForm) {
     if (adminError) adminError.classList.add("hidden");
 
     const rawInput = document.getElementById("adminIdentifier").value.trim();
-    const password = document.getElementById("adminPassword").value.trim();
+    const password = document.getElementById("adminPassword").value;
 
     if (!rawInput || !password) {
       showAdminError("Please enter your admin email/ID and password.");
@@ -162,40 +117,8 @@ if (adminForm) {
     setSigningIn(adminSubmitBtn, true, "Sign in as Admin");
     let redirecting = false;
     try {
-      if (await webProtectionEnabled()) {
-        const email = await protectedWebLogin(rawInput, password, "admin");
-        try { await signInWithEmailAndPassword(auth, email, password, "admin"); }
-        catch (error) { await closeWebSession(); throw error; }
-        localStorage.setItem("imars_admin_last_active", String(Date.now()));
-        window.location.href = "admin-dashboard.html";
-        redirecting = true;
-        return;
-      }
-      let authEmail = rawInput;
+      await signInWithEmailAndPassword(auth, rawInput, password, "admin");
 
-      // Resolve an admin ID to its registered sign-in email.
-      if (!rawInput.includes("@")) {
-        const adminId = rawInput.toUpperCase();
-        const adminDocSnap = await getDoc(doc(db, "users", adminId));
-
-        if (adminDocSnap.exists()) {
-          const data = adminDocSnap.data();
-          const role = String(data.role || "").toLowerCase();
-          if (role !== "admin") {
-            await signOut(auth);
-            showAdminError("Unauthorized: Only Administrator accounts can access the Admin Portal.");
-            return;
-          }
-          authEmail = data.providedEmail || data.email || `${adminId}@imars.edu`;
-        } else {
-          showAdminError("Admin ID not found.");
-          return;
-        }
-      }
-
-      await signInWithEmailAndPassword(auth, authEmail, password, "admin");
-
-      localStorage.setItem("imars_admin_last_active", String(Date.now()));
 
       window.location.href = "admin-dashboard.html";
       redirecting = true;
@@ -224,11 +147,4 @@ if (urlParams.get("reason") === "web-session") {
     message.innerText = "Your website session ended. Please sign in again to continue.";
     message.style.display = "block";
   }
-}
-if (urlParams.get("reason") === "timeout") {
-  if (adminModal) {
-    adminModal.showModal();
-    showAdminError("Your session expired due to 10 minutes of inactivity. Please sign in again.");
-  }
-  window.history.replaceState({}, document.title, window.location.pathname);
 }

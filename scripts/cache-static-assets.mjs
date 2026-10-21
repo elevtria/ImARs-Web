@@ -7,6 +7,9 @@ import { minify as minifyHtml } from "html-minifier-terser";
 const IMMUTABLE = "public, max-age=31536000, immutable";
 
 export function assertPublicClientContent(content, name) {
+  if (/AIza[\w-]{30,}|firebaseConfig|firebasejs\/|firebaseapp\.com|firestore\.googleapis\.com|imars-db-a733b/i.test(content)) {
+    throw new Error(`Browser Firebase connections are forbidden in ${name}. Use the authenticated website API.`);
+  }
   if (/-----BEGIN (?:RSA |EC )?PRIVATE KEY-----|["']?type["']?\s*:\s*["']service_account["']|\b(?:GEMINI_API_KEY|FIREBASE_SERVICE_ACCOUNT_JSON|WEB_SESSION_SECRET|WEB_MAINTENANCE_KEY)\b["']?\s*[:=]\s*["'][^"']+["']/i.test(content)) {
     throw new Error(`Private server credentials cannot be published in ${name}.`);
   }

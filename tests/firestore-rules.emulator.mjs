@@ -7,6 +7,7 @@ import { doc, collection, query, where, orderBy, limit, getDoc, getDocs, setDoc,
 import { accountAccess } from "../server/account-access.js";
 import { FirestoreAdmin } from "../server/firestore-admin.js";
 import { prepareAccessBootstrap } from "../server/account-bootstrap.js";
+import { webData } from "../server/web-data.js";
 
 const projectId = "demo-imars-security-review";
 if (process.env.FIRESTORE_EMULATOR_HOST !== "127.0.0.1:58087") throw Error("Use only the isolated 127.0.0.1:58087 emulator; production is forbidden.");
@@ -16,6 +17,55 @@ before(async () => {
     rules: await readFile(new URL("../security/firestore.candidate.rules", import.meta.url), "utf8") } });
 });
 after(async () => { await environment?.cleanup(); });
+
+test("website gateway REST transactions preserve existing fields, transform timestamps/arrays, query nested results and delete only authorized quizzes", async () => {
+  const store = new FirestoreAdmin({});
+  store.request = async (suffix, options = {}) => {
+    const response = await fetch("http://127.0.0.1:58087/v1/projects/" + projectId + "/databases/(default)/" + suffix, {
+      ...options, headers: { Authorization: "Bearer owner", "Content-Type": "application/json" },
+      ...(options.body ? { body: options.body.replaceAll("imars-db-a733b", projectId) } : {})
+    });
+    if (response.status === 404) return null;
+    const result = await response.json();
+    if (!response.ok) throw Object.assign(new Error("REST gateway failed: " + response.status + " " + JSON.stringify(result)), { status: response.status === 409 ? 409 : 503 });
+    return result;
+  };
+  const authenticate = async (_request, _env, store) => {
+    const row = await store.get("users/TEACH1000");
+    assert.equal(row.data.uid, "teacher-a");
+    return { id: "TEACH1000", uid: "teacher-a", role: "teacher", profile: row.data };
+  };
+  const stamp = { $type: "serverTimestamp" };
+  const writes = [
+    { operation: "update", path: "users/0026271000", data: { displayName: "REST student" } },
+    { operation: "update", path: "users/TEACH1000", data: { sections: { $type: "arrayUnion", values: ["REST section"] } } },
+    { operation: "set", path: "users/TEACH1000/offlineSync/markerDownloads", merge: true, data: { requestedFiles: { $type: "arrayUnion", values: ["markers.zip"] }, updatedAt: stamp } },
+    { operation: "set", path: resultPath("0026271000"), merge: true, data: { lessonId: "lesson_01", timestamp: stamp, isPreTestCompleted: true, preTestScore: 4, preTestTotalQuestions: 5 } }
+  ];
+  const call = body => webData({ env: { WEB_DATA_ENABLED: "true" }, request: new Request("https://imars.example.test/api/web-data", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+  }) }, { store, authenticate });
+  const response = await call({ action: "commit", writes });
+  assert.equal(response.status, 200, await response.text());
+  const student = await store.get("users/0026271000");
+  assert.equal(student.data.uid, "student-a"); assert.equal(student.data.displayName, "REST student");
+  assert.deepEqual((await store.get("users/TEACH1000")).data.sections, ["A", "REST section"]);
+  const progress = await store.get("users/TEACH1000/offlineSync/markerDownloads");
+  assert.deepEqual(progress.data.requestedFiles, ["markers.zip"]); assert.equal(progress.wire.updatedAt.$type, "timestamp");
+  await environment.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), "generatedQuizzes", "owned"), { teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A" });
+  });
+  const deleted = await call({ action: "commit", writes: [{ operation: "delete", path: "generatedQuizzes/owned" }] });
+  assert.equal(deleted.status, 200, await deleted.text());
+  assert.equal(await store.get("generatedQuizzes/owned"), null);
+  const results = await call({ action: "query", reference: { kind: "query", path: "users/0026271000/test_results/term_01/lessons" } });
+  assert.equal(results.status, 200); assert.equal((await results.json()).documents[0].data.preTestScore, 4);
+  const denied = await call({ action: "commit", writes: [writes[0], { operation: "update", path: "users/0026271001", data: { displayName: "Forbidden" } }] });
+  assert.equal(denied.status, 403);
+  await store.begin();
+  assert.equal((await store.query("users", { filters: [{ field: "role", value: "teacher" }] })).length, 2);
+  await store.rollback();
+});
 const baseUsers = {
   ADMIN1000: { uid: "admin-a", role: "admin", active: true, displayName: "Admin" },
   TEACH1000: { uid: "teacher-a", role: "teacher", active: true, displayName: "Teacher A", sections: ["A"] },

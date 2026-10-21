@@ -1,6 +1,6 @@
 # Dedicated account-gateway identity — owner setup
 
-Prepared on 2026-10-17. No Google service account, IAM role, permission grant or
+Updated on 2026-10-21 for the website data gateway. No Google service account, IAM role, permission grant or
 private key was created by preparing these files.
 
 Use project `imars-db-a733b`. Create a dedicated service account named
@@ -19,18 +19,20 @@ role ID `imarsAccountGateway`. It has only these permissions:
 | `datastore.entities.list` | Query `users` by UID and reject duplicate mappings. |
 | `datastore.entities.create` | Create a private `_accountAccess/{uid}` document. |
 | `datastore.entities.update` | Atomically link a verified UID to an unused invitation. |
+| `datastore.entities.delete` | Delete an authorized quiz or administrator-selected teacher profile. |
+| `datastore.databases.get` | Begin/roll back transactions that verify role and class ownership with each save. |
 | `firebaseauth.users.get` | Compare existing Auth UIDs and emails with the independently reviewed migration manifest. |
 
 Firestore IAM is enforced independently of client Security Rules. These IAM
 permissions are not collection- or field-specific: the service identity can
-read/create/update other documents within its grant scope. The server must keep
+read/create/update/delete other documents within its grant scope. The server must keep
 enforcing the fixed paths and invitation/identity checks in
-`server/account-access.js`. Do not describe the key itself as limited to only one
-collection. No document-delete, Firebase Auth create/update/delete, IAM-management
+`server/account-access.js` and `server/web-data.js`. Do not describe the key itself as limited to only one
+collection. No Firebase Auth create/update/delete, IAM-management
 or rules-publishing permission is included.
 
-The current server uses REST `get`, `runQuery` and atomic `commit`, without
-`beginTransaction`. Its intended permissions were checked against the official
+The website server uses REST `get`, transactional `batchGet`, `runQuery`, atomic
+`commit`, `beginTransaction` and `rollback`. Its intended permissions were checked against the official
 API tables; production IAM still needs a real authorized check before activation.
 Do not expand the role to Owner, Editor or Firebase Admin to silence a failure.
 
