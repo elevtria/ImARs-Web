@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import { escapeHtml } from "./teacher-view.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { 
   getFirestore, 
   collection, 
@@ -57,6 +58,11 @@ let html5QrCode = null;
 let lastScannedCode = "";
 let activeTeacherId = null;
 let activeTeacherClassCode = "SCIG6A01";
+
+// --- NEW: Enable Offline Queue ---
+enableIndexedDbPersistence(db).catch((err) => {
+    console.warn("Offline mode setup failed: ", err.code);
+});
 
 // --- MODAL CONTROLS ---
 const closeResultModal = () => {
