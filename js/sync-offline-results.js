@@ -249,7 +249,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
       classCode: studentSnap.exists() ? studentSnap.data().classCode : activeTeacherClassCode
     };
 
-    setDoc(studentRef, studentUpdate, { merge: true }); // <-- Removed 'await'
+    await setDoc(studentRef, studentUpdate, { merge: true }); // <-- ADDED 'await' back
 
     // 3. Loop and Sync Every Lesson (Math matches Unity's RoundToInt)
     for (const item of lessonBreakdown) {
@@ -273,11 +273,11 @@ async function processScannedQR(decodedText, queuedScan = null) {
         lessonUpdate.postTestTotalQuestions = 10;
       }
 
-      setDoc(lessonRef, lessonUpdate, { merge: true }); // <-- Removed 'await'
+      await setDoc(lessonRef, lessonUpdate, { merge: true }); // <-- ADDED 'await' back
     }
 
     // 4. Record Scan & Update UI
-    saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr"); // <-- Removed 'await'
+    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr"); // <-- ADDED 'await' back
     if (modalSyncText) modalSyncText.textContent = `✓ All Terms & Lessons Synced!`;
     status.textContent = `Successfully scanned and synced ${studentName}'s records.`;
     
@@ -479,7 +479,7 @@ export async function saveScanToDatabase(moduleName, type = "qr") {
   try {
     const scansRef = collection(db, "users", activeTeacherId, "recent_scans");
     
-    addDoc(scansRef, { 
+    await addDoc(scansRef, { // <-- ADDED 'await' back
       moduleName: moduleName,
       scanType: type,
       timestamp: serverTimestamp()
