@@ -90,7 +90,7 @@ test("raw PDF requests preserve the original Blob and Unicode filename without b
     assert.equal(JSON.stringify(options.headers).includes(env.GEMINI_API_KEY), false);
     return Response.json({ questions });
   });
-  assert.deepEqual(await requestQuiz("fixture-token", { ...settings, fileName: blob.name, pdfFile: blob }), questions);
+  assert.deepEqual(await requestQuiz({ ...settings, fileName: blob.name, pdfFile: blob }, "teacher-a"), questions);
 });
 
 test("oversized declarations, truncated streams and mismatched actual lengths cannot bypass server validation", async t => {

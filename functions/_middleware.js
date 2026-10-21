@@ -2,14 +2,14 @@ import { protectWebsite } from "../server/web-auth.js";
 
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self' https://www.gstatic.com/firebasejs/12.19.0/ https://cdn.tailwindcss.com https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
+  "script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js",
   "script-src-attr 'none'",
   // Existing charts, the Tailwind runtime, and PDF export create inline styles.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com https://www.googleapis.com https://www.gstatic.com https://fonts.googleapis.com https://fonts.gstatic.com",
-  "frame-src 'self' https://imars-db-a733b.firebaseapp.com",
+  "connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com",
+  "frame-src 'self'",
   "worker-src 'self' blob:",
   "media-src 'self' blob:",
   "object-src 'none'",

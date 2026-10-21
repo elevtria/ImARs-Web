@@ -1,13 +1,10 @@
 # Website login protection
 
-Implemented locally, disabled until Cloudflare is configured. The private
-`imars-web-auth` state Worker was deployed on 2026-10-16; the website binding,
-secrets, staff roster and activation remain pending. See
-`security/deployment-status.md`. Nothing here
-disables Firebase Authentication users, changes Firestore rules, or changes
-mobile sign-in. Do not describe this as protection for the database: the public
-Firestore rules previously shared still permit direct data access independently
-of the website login. Already downloaded pages/data cannot be withdrawn.
+Active on Production with the [website data gateway](web-data-gateway.md) as of
+2026-10-21. The private binding, dedicated Firebase credential, session keys and
+staff roster are configured; setup failures deny access instead of falling back
+to browser Firebase calls. Firebase rules and mobile code are unchanged; public
+Firestore rules remain a separate data-access risk.
 
 ## Account policy
 
@@ -41,11 +38,10 @@ the account's existing web sessions.
 
 ### Session renewal and expiry
 
-Both portals now require a fresh website login for a new visit. Firebase browser
-authentication is migrated from persistent local storage to this tab's session
-storage. The login page clears an older browser login; a direct URL, bookmark,
-new tab without a current visit, or restored history entry also returns to login.
-Navigation inside the website and reloads during the same visit keep sign-in.
+Both portals require a fresh website login for a new visit. The browser uses
+the signed Cloudflare session instead of Firebase browser authentication. The
+login page clears the old visit marker; a direct URL, bookmark, new tab or
+restored history entry returns to login. Navigation inside the website and reloads during the same visit keep sign-in.
 Browser restoration behavior varies, so the website also checks the navigation
 entry and its per-tab visit marker instead of relying on closing events alone.
 
@@ -53,8 +49,8 @@ The marker contains only the UID, portal role, start time and random tab ID, and
 expires after 12 hours. The tab ID must match this browsing context's window name,
 so a new tab inheriting its opener's session storage cannot reuse the login.
 These are UI lifecycle markers, not database or server credentials. Page
-data callbacks wait for Firebase initialization and a live, unique UID-linked
-staff profile with the expected role and active status. An unavailable check
+data callbacks wait for a server-verified staff identity with its approved UID,
+role and live profile active status. An unavailable check
 does not fall back to cached student records. Logout clears this tab's saved
 views, notifies other website tabs for that UID, and hides history pages before
 they can be restored. Portal HTML uses `private, no-store`; existing immutable
@@ -96,11 +92,9 @@ if a browser timer is paused, removed, or changed. A valid stolen current sessio
 can simulate activity until it is retired; rotation is an additional safeguard,
 not a substitute for protecting the browser or preventing XSS.
 
-The old 10-minute browser-only admin timer remains only when web protection is
-disabled, including plain static development. Upgrading an already enabled
-installation requires existing staff to sign in again: older stateless cookies
-have no matching server session record. Deploy the state Worker before the Pages
-update, then verify both portals in Preview before production activation.
+The shared server timer is used by both portals. The browser-only admin timer
+has been removed. Deploy the updated private Worker before the Pages update,
+and verify configured test accounts before production activation.
 
 This website cookie is separate from Firebase ID/refresh tokens and Firestore's
 `gsessionid` connection parameter. No Firebase token lifetime, Authentication
@@ -124,16 +118,15 @@ paths, exported interfaces and classic-script globals are retained. This reduces
 transfer size and readability; it is not encryption or an access-control layer.
 Browser tools can still format or inspect downloaded code and network requests.
 
-Firebase browser configuration remains public. Moving its values into a build
-secret would still expose them when the browser receives the compiled output.
-Keep private Gemini and service-account credentials in server-only secrets. A
-Firebase browser key should be restricted to the Firebase APIs actually needed,
-excluding Gemini/Generative Language. Restrictions need owner review and testing
-against both clients before changes to a shared production key; minification
-does not verify these console settings or replace restrictive Firestore rules.
+The website data gateway removes Firebase configuration and Firebase SDK imports
+from published browser assets. Authorized API responses and browser UI code
+remain inspectable; minification is not encryption. Firebase keys already used
+in mobile apps remain public identifiers. Review their API restrictions with the
+owner, excluding Gemini from Firebase client keys.
 
 The existing teacher Active/Inactive control is separate from web login locks.
-New staff must be enrolled in the server roster before protected web login works.
+Initial staff must be enrolled in the private roster. Admin-created invitations
+use private server approval for new teachers after their mobile registration.
 The password-based flow currently does not implement an MFA challenge.
 
 ## Owner setup, before activation
@@ -157,10 +150,12 @@ The password-based flow currently does not implement an MFA challenge.
    is deployed. Deploy the Worker first; a Pages deployment that references a
    missing Worker will fail. Adding the binding does not enable protection.
 
-   Preview currently has no state binding and must be configured with a separate
-   test Worker before enabling Preview security. Keep its credentials, roster and
-   session state separate from production. The main configuration intentionally
-   does not give Preview the production state binding.
+   Preview binds to the separate private `imars-web-auth-preview` Worker. Deploy
+   it with the same Worker config and `--name imars-web-auth-preview`, then verify
+   there are no public targets. Preview enables both gateway flags but fails
+   closed until its own credentials and approved roster are configured. It never
+   uses the production session-state binding. Credentials for Preview require
+   separate authorization; Production secrets cannot be read back for copying.
 
 3. Add these encrypted Production secrets in the Pages project:
 
@@ -181,7 +176,8 @@ The password-based flow currently does not implement an MFA challenge.
    The roster is server-owned because the current public Firestore profiles cannot
    be trusted to grant administrator access. Include every staff member who needs
    web access; IDs, UIDs, and emails must be unique. Keep real roster files and keys
-   out of Git and chat. No Firebase service-account key is needed.
+   out of Git and chat. The data gateway additionally requires the dedicated
+   Firebase service-account secret and IAM permissions in its setup guide.
 
    To generate each random key locally and copy it without printing it:
 
@@ -189,14 +185,12 @@ The password-based flow currently does not implement an MFA challenge.
    node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))" | Set-Clipboard
    ```
 
-4. Deploy these website changes with `WEB_LOGIN_ENABLED` unset/false first.
-   Check the build, binding, roster and recovery key using a separate Preview
-   environment and test accounts. Preview needs separate keys, a separate Worker
-   namespace, and its own roster; never test guesses against real teachers.
-5. After those checks, set the Pages variable `WEB_LOGIN_ENABLED` to the exact
-   string `true` and redeploy. Until then, the existing login is retained.
-   Enabling it with missing configuration fails closed. On first use, existing
-   Firebase browser sessions need a fresh website login to obtain the web cookie.
+4. Complete the service-account/IAM setup in [the gateway guide](web-data-gateway.md).
+   Test with isolated state and approved test accounts. This branch has no legacy
+   browser Firebase fallback and cannot sign in when backend setup is disabled.
+5. Deploy the updated private Worker first, then activate the website deployment
+   with both `WEB_LOGIN_ENABLED=true` and `WEB_DATA_ENABLED=true` after the
+   prerequisites pass. Do not deploy incomplete configuration to production.
 
 ## Restore access
 
@@ -222,7 +216,7 @@ their web cookie; do not delete the Durable Object namespace to unlock one user.
 Run `npm test` and `npm run build`. Tests cover cooldown boundaries, indefinite
 locks, simultaneous attempts, persistent state across actor reconstruction,
 forged/expired cookies, encoded admin paths, direct Firebase token bypass attempts,
-administrator/maintenance recovery, and the unchanged disabled-mode login flow.
+administrator/maintenance recovery, and rejection of unconfigured browser login.
 Session tests also cover random IDs, simultaneous-tab renewal, old-credential
 retirement, passive polling, 15-minute idle and 12-hour absolute boundaries,
 durable state, bounded sessions, connection failures, and browser warning/retry.

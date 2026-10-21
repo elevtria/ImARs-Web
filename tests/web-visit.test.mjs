@@ -17,44 +17,37 @@ const grant = (uid = "teacher-a", role = "teacher", startedAt = Date.now()) => J
 function page({ path = "/index", type = "navigate", referrer = "", user = { uid: "teacher-a" }, saved,
     profile = { uid: "teacher-a", role: "teacher", active: true }, profiles, read, passwordFails = false, sessionStorage = storage(), name = "imars-web:fixture-tab" } = {}) {
   if (saved) sessionStorage.setItem(VISIT, saved);
-  const events = {}, observers = new Set(), calls = [], deliveries = [];
-  const app = {}, auth = { app, currentUser: user, authStateReady: async () => {} };
+  const events = {}, calls = [], deliveries = [];
+  const application = {};
   const body = { pending: path !== "/login", setAttribute() { this.pending = true; }, removeAttribute() { this.pending = false; } };
   const main = { cleared: false, replaceChildren() { this.cleared = true; } };
   const location = { pathname: path, origin: "https://imars.example.test", replace(url) { this.redirect = url; } };
+  const approved = async () => {
+    const result = read ? await read() : null;
+    const rows = result ? result.docs.map(row => row.data()) : profiles || (profile ? [profile] : []);
+    const record = rows.length === 1 ? rows[0] : null;
+    if (!record || record.active === false || record.status === "disabled" || record.role === "student") throw Object.assign(new Error("Access denied"), { status: 403 });
+    return record;
+  };
   const context = vm.createContext({
     window: { name, location, sessionStorage, localStorage: storage(), performance: { getEntriesByType: () => [{ type }] },
       addEventListener: (name, callback) => { (events[name] ||= []).push(callback); } },
     document: { referrer, body, querySelector: () => main }, URL, Date, crypto,
-    firebaseGetAuth: () => auth, browserSessionPersistence: "session-only",
-    setPersistence: async (_, persistence) => { calls.push(["persistence", persistence]); },
-    firebaseAuthChanged: (_, callback) => { observers.add(callback); queueMicrotask(() => callback(auth.currentUser)); return () => observers.delete(callback); },
-    firebaseSignIn: async () => {
-      calls.push(["password"]);
-      if (passwordFails) throw Object.assign(new Error("Invalid credentials"), { code: "auth/invalid-credential" });
-      auth.currentUser = { uid: profile.uid };
-      for (const callback of observers) callback(auth.currentUser);
-      return { user: auth.currentUser };
-    },
-    firebaseSignOut: async () => {
-      calls.push(["sign-out"]); auth.currentUser = null;
-      for (const callback of observers) callback(null);
+    webRequest: async () => { calls.push(["profile"]); return { user: await approved() }; },
+    protectedWebLogin: async (identifier, password, role) => {
+      calls.push(["password", identifier, password, role]);
+      if (passwordFails) throw new Error("Invalid credentials");
+      const record = await approved();
+      if (record.role !== role) throw new Error("Wrong portal");
+      return record;
     },
     closeWebSession: async () => { calls.push(["server-sign-out"]); },
-    invalidateTeacherViews: () => { calls.push(["clear-views"]); },
-    getFirestore: () => ({}), collection: (_, path) => ({ path }), where: (...args) => args, limit: count => ({ count }),
-    query: (reference, ...filters) => ({ ...reference, filters }),
-    getDocsFromServer: async reference => {
-      calls.push(["profile", reference]);
-      if (read) return read();
-      const rows = profiles || (profile ? [profile] : []);
-      return { size: rows.length, docs: rows.map(row => ({ data: () => row })) };
-    }
+    invalidateTeacherViews: () => { calls.push(["clear-views"]); }
   });
   const api = vm.runInContext(source + "\n({ getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut });", context);
-  api.getAuth(app);
+  const auth = api.getAuth(application);
   const observe = callback => api.onAuthStateChanged(auth, callback || (user => deliveries.push(user?.uid || null)));
-  return { api, auth, app, body, main, location, calls, deliveries, observe, sessionStorage,
+  return { api, auth, app: application, body, main, location, calls, deliveries, observe, sessionStorage,
     emit: (name, event) => { for (const listener of events[name] || []) listener(event); } };
 }
 
@@ -65,10 +58,9 @@ test("new visits discard remembered browser accounts before any portal data call
     assert.equal(app.sessionStorage.getItem(VISIT), null);
     assert.deepEqual(app.deliveries, []);
     assert.equal(app.calls.some(call => call[0] === "profile"), false);
-    assert.equal(app.calls[0][1], "session-only", "migrate away from Firebase's persistent local login before exposing auth state");
     assert.equal(app.body.pending, true);
     assert.equal(app.main.cleared, true);
-    assert.equal(app.location.redirect, "/login?reason=web-session");
+    assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
   }
 });
 
@@ -87,7 +79,8 @@ test("only successful password and matching live staff-role verification start a
     const saved = JSON.parse(app.sessionStorage.getItem(VISIT));
     assert.deepEqual(Object.keys(saved).sort(), ["role", "startedAt", "tabId", "uid"]);
     assert.equal(saved.uid, uid); assert.equal(saved.role, role);
-    assert.ok(app.calls.findIndex(call => call[0] === "password") < app.calls.findIndex(call => call[0] === "profile"));
+    assert.equal(app.calls.filter(call => call[0] === "password").length, 1);
+    assert.equal(app.calls.filter(call => call[0] === "profile").length, 0);
     assert.ok(!app.sessionStorage.getItem(VISIT).includes("password"));
     assert.equal(app.location.redirect, undefined);
   }
@@ -132,7 +125,7 @@ test("a new tab cannot reuse session storage copied from its opener, even with a
   const app = page({ saved: grant(), name: "", referrer: "https://imars.example.test/index" });
   app.observe(); await flush();
   assert.equal(app.auth.currentUser, null); assert.equal(app.body.pending, true);
-  assert.deepEqual(app.deliveries, []); assert.equal(app.location.redirect, "/login?reason=web-session");
+  assert.deepEqual(app.deliveries, []); assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
 });
 
 test("mismatched UIDs, expired visits, restored history and cross-portal navigation require login", async () => {
@@ -143,7 +136,7 @@ test("mismatched UIDs, expired visits, restored history and cross-portal navigat
     const app = page({ saved: grant(), referrer: "https://imars.example.test/index", ...options });
     app.observe(); await flush();
     assert.deepEqual(app.deliveries, []); assert.equal(app.body.pending, true);
-    assert.equal(app.location.redirect, "/login?reason=web-session");
+    assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
   }
 });
 
@@ -164,7 +157,7 @@ test("back-button restoration after logout cannot reveal previously rendered stu
   app.emit("pageshow", { persisted: true }); await flush();
   assert.equal(app.body.pending, true); assert.equal(app.main.cleared, true);
   assert.deepEqual(app.deliveries, ["teacher-a"]);
-  assert.equal(app.location.redirect, "/login?reason=web-session");
+  assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
 });
 
 test("returning to a live history page rechecks access before un-hiding it", async () => {

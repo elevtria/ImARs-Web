@@ -377,3 +377,21 @@ test("session endpoint rejects cross-origin / malformed activity and distinguish
   assert.equal((await app.call("session", { active: false }, cookie)).status, 503);
   assert.equal((await app.page("/index", cookie)).status, 503);
 });
+
+test("automatic data refreshes cannot extend an idle website session", async () => {
+  const app = fixture(), cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
+  app.advance(IDLE_AFTER_MS - 1000);
+  assert.equal((await app.page("/api/web-data", cookie)).status, 200);
+  app.advance(1001);
+  assert.equal((await app.call("session", { active: false }, cookie)).status, 401);
+});
+
+test("a stale tab cannot rotate, clear or revoke another account's shared cookie", async () => {
+  const app = fixture(), cookie = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  app.advance(RENEW_AFTER_MS - 1000);
+  for (const action of ["session", "logout"]) {
+    const response = await app.call(action, { active: true }, cookie, { "X-Web-User": "teacher-a" });
+    assert.equal(response.status, 401); assert.equal(response.headers.get("Set-Cookie"), null);
+  }
+  assert.equal((await app.call("session", { active: true }, cookie, { "X-Web-User": "admin-a" })).status, 200);
+});

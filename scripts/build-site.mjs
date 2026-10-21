@@ -1,7 +1,7 @@
-import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cacheStaticAssets, minifyPublicAssets } from "./cache-static-assets.mjs";
+import { assertPublicClientContent, cacheStaticAssets, minifyPublicAssets } from "./cache-static-assets.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const output = resolve(root, "dist");
@@ -22,7 +22,9 @@ for (const name of publicPaths) {
 }
 
 const minified = await minifyPublicAssets(output, pages);
+await cp(join(output, "js", "sw.js"), join(output, "sw.js"));
 const cached = await cacheStaticAssets(output, pages);
+await writeFile(join(output, "_redirects"), "/scan-qr-ar /sync-offline-results 302\n/scan-qr-ar.html /sync-offline-results 302\n");
 
 let files = 0;
 let largest = 0;
@@ -35,6 +37,7 @@ async function validateDirectory(directory) {
       continue;
     }
     const { size } = await stat(path);
+    if (/\.(?:html|js|css|json|txt|svg|ya?ml)$/i.test(path)) assertPublicClientContent(await readFile(path, "utf8"), relative(output, path));
     if (size > 25 * 1024 * 1024) throw new Error(`Cloudflare Pages asset exceeds 25 MiB: ${relative(output, path)}`);
     largest = Math.max(largest, size);
     files += 1;

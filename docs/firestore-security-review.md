@@ -53,7 +53,7 @@ changed by the browser protections.
 | Admin profile | Merge selected profile fields into the UID-linked admin document | `js/admin-profile.js` |
 | Lesson schedule | Listen to all lesson documents under three terms; update `isLocked` and `scheduledDate`, including batched changes | `js/topic-scheduler.js` |
 | Generated quizzes | Teacher queries by `teacherUid`, saves questions and correct answers with section ownership, deletes own quizzes | `js/quiz-generator.js` |
-| Offline result transfer | Teacher reads student profile, merges progress fields and nested lesson results; appends own recent scan history | `js/scan-qr-ar.js` |
+| Offline result transfer | Teacher reads student profile, merges progress fields and nested lesson results; appends own recent scan history | `js/sync-offline-results.js` |
 | Marker download progress | Teacher reads/writes `users/{teacherId}/offlineSync/markerDownloads` | `js/offline-sync.js` |
 | Shared school year | Read `webSettings/schoolYear`; administrator updates selected year and audit fields | `js/school-year.js` |
 | AI question generation | Server uses the caller's Firebase token to query their profile and read the selected class | `functions/api/generate-quiz.js` |

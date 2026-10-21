@@ -2,8 +2,9 @@ import { loadAdminReports } from "./admin-report-data.js";
 import { showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { webProtectionEnabled } from "./web-login.js";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
+import { webRequest } from "./web-login.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 import { 
   getFirestore, 
@@ -14,21 +15,11 @@ import {
   doc, 
   updateDoc, 
   deleteDoc, 
-  setDoc,
+  createTeacher,
   serverTimestamp 
 } from "./firebase-data.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -191,9 +182,7 @@ if (list) {
       if (!window.confirm(`Restore web login for ${identifier}? This clears their failed-attempt history. Mobile access is unchanged.`)) return;
       unlock.disabled = true;
       try {
-        const response = await fetch("/api/web-auth/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier }) });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Unable to restore web login.");
+        await webRequest("/api/web-auth/unlock", { identifier });
         alert(`Web login restored for ${identifier}.`);
       } catch (error) { alert(error.message); }
       finally { unlock.disabled = false; }
@@ -253,9 +242,10 @@ if (dialog) {
 }
 
 if (form) {
+  let submitting = false;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!adminReady || !auth.currentUser) return;
+    if (!adminReady || !auth.currentUser || submitting) return;
     const formData = new FormData(form);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -267,42 +257,15 @@ if (form) {
 
     if (!name || !email || !subject) return;
 
+    submitting = true;
+    const submitButton = form.querySelector('[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
     try {
-      // 1. Calculate the next sequential Teacher ID (e.g. TEACH1001)
-      const teachersSnap = await getDocs(query(collection(db, "users"), where("role", "==", "teacher")));
-      let highestNum = 999;
-
-      teachersSnap.forEach((docSnap) => {
-        const id = docSnap.id;
-        if (id.startsWith("TEACH") && id.length >= 9) {
-          const num = parseInt(id.substring(5), 10);
-          if (!isNaN(num) && num > highestNum) highestNum = num;
-        }
-      });
-      const nextTeacherId = `TEACH${highestNum + 1}`;
-
-      // 2. Create the pre-approved profile doc using the Teacher ID as key
-      const newTeacherDoc = {
-        schoolId: nextTeacherId,
-        displayName: name,
-        fullName: name,
-        providedEmail: email,
-        email: email,
-        subject: subject,
-        sections: sections,
-        role: "teacher",
-        active: true,
-        status: "invited",
-        isRegistered: false, // Flag indicating the teacher hasn't completed sign-up in the app yet
-        createdAt: serverTimestamp()
-      };
-
-      // Set the document directly with the custom ID
-      await setDoc(doc(db, "users", nextTeacherId), newTeacherDoc);
+      const { id: nextTeacherId } = await createTeacher({ name, email, subject, sections });
 
       teachers.unshift({
         id: nextTeacherId,
-        schoolId: nextTeacherId, // <-- Include this
+        schoolId: nextTeacherId,
         name,
         email,
         subject,
@@ -324,6 +287,9 @@ if (form) {
     } catch (err) {
       console.error("Failed to add teacher to Firestore:", err);
       alert("Error adding teacher: " + err.message);
+    } finally {
+      submitting = false;
+      if (submitButton) submitButton.disabled = false;
     }
   });
 }

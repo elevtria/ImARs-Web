@@ -1,26 +1,32 @@
-const CACHE_NAME = "imars-teacher-v1";
-const ASSETS = [
-  "/",
-  "/sync-offline-results.html",
-  "/css/app.css",
-  "/js/sync-offline-results.js",
-  "/js/html5-qrcode.min.js",
-  "/js/firebase-data.js",
-  "/js/firebase-auth.js",
-  "/js/ui.js",
-  "https://cdn.tailwindcss.com"
-];
-
-// Install and cache the files
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
+const CACHE_NAME = "imars-public-assets-v2";
+self.addEventListener("install", () => { self.skipWaiting(); });
+self.addEventListener("activate", event => {
+  event.waitUntil((async () => {
+    for (const name of await caches.keys()) {
+      if ((name.startsWith("imars-teacher-") || name.startsWith("imars-public-assets-")) && name !== CACHE_NAME) await caches.delete(name);
+    }
+    await self.clients.claim();
+  })());
 });
-
-// Serve cached files when offline
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
+self.addEventListener("fetch", event => {
+  const request = event.request, url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin ||
+      !url.pathname.startsWith("/assets/site-") ||
+      !["script", "style", "image", "font"].includes(request.destination)) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    try {
+      const response = await fetch(request);
+      if (response.ok && !/no-store|private/i.test(response.headers.get("Cache-Control") || "")) {
+        await cache.put(request, response.clone());
+        const keys = await cache.keys();
+        if (keys.length > 200) await cache.delete(keys[0]);
+      }
+      return response;
+    } catch (error) {
+      const saved = await cache.match(request);
+      if (saved) return saved;
+      throw error;
+    }
+  })());
 });

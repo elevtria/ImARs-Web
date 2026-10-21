@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
   getFirestore, 
@@ -11,21 +11,12 @@ import {
   setDoc, 
   updateDoc, 
   arrayUnion, 
+  checkStudentIds,
   serverTimestamp 
 } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0",
-  authDomain: "imars-db-a733b.firebaseapp.com",
-  projectId: "imars-db-a733b",
-  storageBucket: "imars-db-a733b.firebasestorage.app",
-  messagingSenderId: "539058786779",
-  appId: "1:539058786779:web:201076a476a471a0bdd7fe",
-  measurementId: "G-TEERTREQF3"
-};
-
-const app = initializeApp(firebaseConfig);
+const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
@@ -339,9 +330,7 @@ async function handleFileSelected(file) {
     document.getElementById("dropTitle").textContent = "Validating data...";
     document.getElementById("dropHint").textContent = "Checking against database records...";
 
-    const studentsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
     existingStudentIds.clear();
-    studentsSnap.forEach(doc => existingStudentIds.add(doc.id));
 
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
@@ -356,6 +345,12 @@ async function handleFileSelected(file) {
       return;
     }
 
+    const candidateIds = rows.slice(1).map(row => {
+      const id = String(row[2] ?? "").trim();
+      return /^\d{8}$/.test(id) ? "00" + id : id;
+    }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
+    for (const id of await checkStudentIds([...new Set(candidateIds)])) existingStudentIds.add(id);
+    const fileIds = new Set();
     let validCount = 0;
     let errorCount = 0;
 
@@ -386,6 +381,9 @@ async function handleFileSelected(file) {
       } else if (existingStudentIds.has(studentId)) {
          rowErrors.push("Duplicate in database");
       }
+
+      if (fileIds.has(studentId)) rowErrors.push("Duplicate in file");
+      fileIds.add(studentId);
 
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
          rowErrors.push("Invalid email");
@@ -496,19 +494,8 @@ confirmImportBtn.addEventListener("click", async () => {
   confirmImportBtn.textContent = "Importing...";
 
   try {
-    const studentsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-    let highestSeq = 999;
-    const existingIds = new Set();
-
-    studentsSnap.forEach((docSnap) => {
-      const id = docSnap.id;
-      existingIds.add(id);
-
-      if (id.startsWith("002627") && id.length >= 10) {
-        const seq = parseInt(id.substring(6), 10);
-        if (!isNaN(seq) && seq > highestSeq) highestSeq = seq;
-      }
-    });
+    const existingIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
+    if (existingIds.size) throw new Error("Some student IDs were just registered. Upload the file again to refresh the preview.");
 
     let importedCount = 0;
     const savedList = [];

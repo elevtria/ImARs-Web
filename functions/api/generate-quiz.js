@@ -1,12 +1,14 @@
 import { MAX_QUIZ_TEXT_CHARACTERS } from "../../js/quiz-limits.js";
 import { QuizRequestError as RequestValidationError, readQuizMaterial, uploadPdf, deletePdf } from "../../server/quiz-material.js";
+import { dataEnabled, requireStaff } from "../../server/web-auth.js";
+import { FirestoreAdmin } from "../../server/firestore-admin.js";
 
 const FIREBASE_PROJECT_ID = "imars-db-a733b";
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 const GENERATION_TIMEOUT_MS = 60000;
 const MAX_PDF_BASE64_CHARACTERS = 14000000;
 
-export async function onRequestPost(context) {
+export async function onRequestPost(context, { store = new FirestoreAdmin(context.env), authenticate = requireStaff } = {}) {
   const { request, env } = context;
   const started = Date.now();
   let uploadedFile;
@@ -15,15 +17,23 @@ export async function onRequestPost(context) {
       return jsonResponse({ error: "The question-generation service is not configured yet." }, 503);
     }
 
+    const gateway = dataEnabled(env);
+    const staff = gateway ? await authenticate(request, env, store) : null;
+    if (gateway && staff.role !== "teacher") return jsonResponse({ error: "Only a teacher account can generate quizzes." }, 403);
     const authorization = request.headers.get("Authorization") || "";
     const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!idToken) return jsonResponse({ error: "Please sign in with a teacher account first." }, 401);
+    if (!gateway && !idToken) return jsonResponse({ error: "Please sign in with a teacher account first." }, 401);
     const { body, binaryPdf } = await readQuizMaterial(request);
-    const validationError = validateRequest(body, binaryPdf);
+    const validationError = validateRequest(body, binaryPdf, gateway);
     if (validationError) return jsonResponse({ error: validationError }, 400);
 
-    const { teacherProfileId } = await requireTeacher(idToken, body.firebaseApiKey);
-    await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
+    if (gateway) {
+      const section = await store.get("classes/" + body.sectionId);
+      if (section?.data.teacherId !== staff.id) return jsonResponse({ error: "You can only generate quizzes for your own sections." }, 403);
+    } else {
+      const { teacherProfileId } = await requireTeacher(idToken, body.firebaseApiKey);
+      await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
+    }
     const authorized = Date.now();
 
     const prompt = buildPrompt(body);
@@ -133,7 +143,7 @@ export async function onRequestPost(context) {
       "Server-Timing": `verify;dur=${authorized - started}, upload;dur=${materialReady - authorized}, ai;dur=${finished - materialReady}, total;dur=${finished - started}`
     });
   } catch (error) {
-    if (error instanceof RequestValidationError) {
+    if (error instanceof RequestValidationError || [401, 403, 503].includes(error.status)) {
       return jsonResponse({ error: error.message }, error.status);
     }
     console.error("Quiz generation request failed:", error);
@@ -148,10 +158,10 @@ export async function onRequestPost(context) {
   }
 }
 
-function validateRequest(body, binaryPdf) {
+function validateRequest(body, binaryPdf, gateway = false) {
   if (!body || typeof body !== "object") return "The quiz request is incomplete.";
-  if (typeof body.firebaseApiKey !== "string" || body.firebaseApiKey.length < 20) return "The Firebase sign-in settings are missing.";
-  if (typeof body.sectionId !== "string" || !body.sectionId.trim() || body.sectionId.includes("/")) return "Choose one of your sections.";
+  if (!gateway && (typeof body.firebaseApiKey !== "string" || body.firebaseApiKey.length < 20)) return "The Firebase sign-in settings are missing.";
+  if (typeof body.sectionId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.sectionId)) return "Choose one of your sections.";
   if (typeof body.fileName !== "string" || body.fileName.length > 240) return "Choose a supported learning file.";
   if (!Number.isInteger(body.questionCount) || body.questionCount < 1 || body.questionCount > 50) return "Choose between 1 and 50 questions.";
   if (!["Easy", "Medium", "Hard"].includes(body.difficulty)) return "Choose Easy, Medium, or Hard difficulty.";

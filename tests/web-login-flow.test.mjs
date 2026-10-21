@@ -23,7 +23,13 @@ function page({ protection = true, denied = false, outage = false, search = "", 
       return "teacher@example.test";
     },
     closeWebSession: async () => { calls.push(["logout"]); },
-    signInWithEmailAndPassword: async (_, email, password) => { calls.push(["firebase", email, password]); return { user: { uid: "teacher-a" } }; },
+    signInWithEmailAndPassword: async (_, identifier, password, role) => {
+      if (outage || !protection) throw new Error("Unavailable");
+      await configuration;
+      calls.push(["server", identifier, password, role]);
+      if (denied || !profileExists) throw Object.assign(new Error("Web login is locked. Contact your administrator."), { userMessage: "Web login is locked. Contact your administrator." });
+      return { user: { uid: "teacher-a" } };
+    },
     signOut: async () => {}, doc: () => ({}), collection: () => ({}), where: () => ({}), query: () => ({}),
     getDoc: async () => { calls.push(["legacy-profile"]); return { exists: () => profileExists, data: () => ({ role: "teacher", email: "teacher@example.test" }) }; },
     getDocs: async () => ({ empty: false, docs: [{ data: () => ({ role: "teacher" }) }] })
@@ -37,7 +43,7 @@ function page({ protection = true, denied = false, outage = false, search = "", 
 
 test("enabled protection sends Teacher ID/password through the server and keeps the dashboard flow", async () => {
   const app = page(); await app.submit("loginForm");
-  assert.deepEqual(app.calls, [["protected", "TEACH1000", "password", "teacher"], ["firebase", "teacher@example.test", "password"]]);
+  assert.deepEqual(app.calls, [["server", "TEACH1000", "password", "teacher"]]);
   assert.equal(app.location.href, "index.html");
 });
 test("a locked teacher never reaches the browser Firebase sign-in step", async () => {
@@ -56,10 +62,10 @@ test("a configuration outage cannot silently fall back to the old login", async 
   assert.equal(app.calls.length, 0);
   assert.equal(app.location.href, "login.html");
 });
-test("until protection is activated, the original teacher login stays available", async () => {
+test("unconfigured protection fails closed without any legacy profile lookup", async () => {
   const app = page({ protection: false }); await app.submit("loginForm");
-  assert.deepEqual(app.calls, [["legacy-profile"], ["firebase", "teacher@example.test", "password"]]);
-  assert.equal(app.location.href, "index.html");
+  assert.deepEqual(app.calls, []);
+  assert.equal(app.location.href, "login.html");
 });
 
 for (const [role, form, button, idleLabel] of [
@@ -77,8 +83,8 @@ for (const [role, form, button, idleLabel] of [
     await app.submit(form);
     resolve();
     await pending;
-    assert.equal(app.calls.filter(call => call[0] === "protected").length, 1);
-    assert.equal(app.calls.filter(call => call[0] === "firebase").length, 1);
+    assert.equal(app.calls.filter(call => call[0] === "server").length, 1);
+    assert.equal(app.calls.filter(call => call[0] === "legacy-profile").length, 0);
     assert.equal(app.element(button).disabled, true, "keep progress visible until the new page opens");
   });
 
@@ -95,12 +101,12 @@ for (const [role, form, button, idleLabel] of [
 }
 
 test("an unknown Teacher ID restores the button after the profile check", async () => {
-  const app = page({ protection: false, profileExists: false });
+  const app = page({ profileExists: false });
   await app.submit("loginForm");
   assert.equal(app.element("teacherSubmitBtn").disabled, false);
   assert.equal(app.element("teacherSubmitBtn:label").textContent, "Log in");
-  assert.match(app.element("error").innerText, /Teacher ID not found/);
-  assert.deepEqual(app.calls, [["legacy-profile"]]);
+  assert.match(app.element("error").innerText, /Contact your administrator/);
+  assert.deepEqual(app.calls, [["server", "TEACH1000", "password", "teacher"]]);
 });
 
 test("an expired website session shows a sign-in message and preserves the normal teacher login", async () => {
@@ -110,17 +116,4 @@ test("an expired website session shows a sign-in message and preserves the norma
   assert.deepEqual(app.calls, []);
   await app.submit("loginForm");
   assert.equal(app.location.href, "index.html");
-});
-
-test("Firebase sign-out still clears browser authentication if web-session revocation is unavailable", async () => {
-  let cleared = false;
-  const context = vm.createContext({ window: { name: "", location: { pathname: "/login" } }, invalidateTeacherViews() {}, closeWebSession: async () => { throw new Error("Retry sign-out"); },
-    firebaseSignOut: async () => { cleared = true; } });
-  const source = readFileSync(new URL("../js/firebase-auth.js", import.meta.url), "utf8")
-    .replace(/^export \* from [^\n]+\n/gm, "")
-    .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "")
-    .replace(/^export /gm, "");
-  const signOut = vm.runInContext(source + "\nsignOut;", context);
-  await assert.rejects(signOut({}), /Retry sign-out/);
-  assert.equal(cleared, true);
 });

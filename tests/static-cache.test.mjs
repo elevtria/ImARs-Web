@@ -7,6 +7,25 @@ import vm from "node:vm";
 import test from "node:test";
 import { assertPublicClientContent, cacheStaticAssets, minifyPublicAssets, staticAssetPlan, versionHtmlAssets } from "../scripts/cache-static-assets.mjs";
 
+test("offline service worker caches public assets while leaving portal HTML and API data on the network", async () => {
+  const handlers = new Map(), deleted = [];
+  const context = {
+    URL, self: { location: { origin: "https://example.test" }, clients: { claim: async () => {} }, addEventListener: (type, callback) => handlers.set(type, callback) },
+    caches: { keys: async () => ["imars-teacher-v1", "unrelated"], delete: async name => deleted.push(name), open: async () => ({ match: async () => new Response("cached script") }) },
+    fetch: async () => { throw new Error("Offline"); }
+  };
+  vm.runInNewContext(await readFile(new URL("../js/sw.js", import.meta.url), "utf8"), context);
+  let activated;
+  handlers.get("activate")({ waitUntil: promise => { activated = promise; } });
+  await activated; assert.deepEqual(deleted, ["imars-teacher-v1"]);
+  for (const [path, destination] of [["/admin-dashboard", "document"], ["/api/web-data", ""], ["/assets/site-123/record.json", ""]]) {
+    handlers.get("fetch")({ request: { method: "GET", url: "https://example.test" + path, destination }, respondWith: () => assert.fail("Private responses must not use offline cache") });
+  }
+  let saved;
+  handlers.get("fetch")({ request: { method: "GET", url: "https://example.test/assets/site-123/js/app.js", destination: "script" }, respondWith: promise => { saved = promise; } });
+  assert.equal(await (await saved).text(), "cached script");
+});
+
 test("identical assets keep their cache URLs; changing bytes, adding files, or renaming a file changes the version", () => {
   const files = new Map([["js/main.js", Buffer.from('import "./data.js";')], ["js/data.js", Buffer.from("export const value = 1;")]]);
   const first = staticAssetPlan(files);
@@ -52,14 +71,14 @@ test("production minification preserves module exports, classic-script globals, 
   assert.ok(css.includes("body[data-auth-pending]")); assert.ok(css.includes("--gold:")); assert.ok(css.includes("aria-busy=true"));
 });
 
-test("public-artifact checks reject private credentials but allow Firebase browser configuration", () => {
+test("public-artifact checks reject private credentials and direct browser Firebase configuration", () => {
   for (const content of [
     'const key = "-----BEGIN PRIVATE KEY-----";',
     '{"type":"service_account","project_id":"example"}',
     'const GEMINI_API_KEY = "synthetic-private-value";',
     'const config = { WEB_SESSION_SECRET: "synthetic-private-value" };'
   ]) assert.throws(() => assertPublicClientContent(content, "js/client.js"), /Private server credentials/);
-  assert.doesNotThrow(() => assertPublicClientContent('const firebaseConfig = { apiKey: "public-browser-config", projectId: "example" };', "js/login.js"));
+  assert.throws(() => assertPublicClientContent('const firebaseConfig = { apiKey: "public-browser-config", projectId: "example" };', "js/login.js"), /authenticated website API/);
 });
 
 test("HTML versioning changes only known local public files and preserves routes, downloads, remote scripts, and URL suffixes", () => {

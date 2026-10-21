@@ -1,4 +1,42 @@
-# Security deployment status — 2026-10-16
+# Security deployment status
+
+## Current checkpoint — 2026-10-21
+
+- The user requested Production publication. The gateway was first activated
+  as release 8e5c025 at https://imars-web.pages.dev (c15c95fb). Both
+  WEB_LOGIN_ENABLED and WEB_DATA_ENABLED report true.
+- The current login module is /assets/site-0f43855bbedf6c960c0d/js/login.js.
+  It contains no Firebase configuration or private key. Login, service-worker
+  and public school-year requests return 200; anonymous dashboard requests
+  redirect to login and anonymous data/unknown-account requests return 401.
+- All 182 automated tests, the website build and Functions compilation pass.
+  Real staff password sign-in and AI generation were not performed in this
+  deployment run and still need normal user acceptance.
+- All five required encrypted Production settings are present. The dedicated
+  gateway key passed Google authentication, seven required IAM permissions,
+  Firestore/Auth checks and an empty transaction/rollback without record
+  changes. The user confirmed real staff details in the private roster.
+- The private Production Worker remains 5e36b647-4e90-4fec-8bc3-25e069f4789c.
+  Preview uses a separate state Worker, aff8fe94-5f2c-4b13-be33-6911ecfcd556.
+  Both have no public Worker targets.
+- The first attempt (f388c4a4) failed the database connection check and was
+  automatically restored to the prior working build (9cd9410f). Fixed native
+  fetch invocation in FirestoreAdmin with a regression; real Preview and
+  Production database checks then passed.
+- Included current main changes through bffde64. Offline scans never wait for a
+  database request. QR results queue by teacher
+  UID, retry only after authenticated reconnect, and reuse scan-history IDs.
+  The service worker excludes protected HTML/API data from its offline cache.
+- Preview has its approved gateway credential and independent random session
+  and maintenance secrets. Its school-year request passes; staff roster and
+  Gemini secrets still need supplying for further Preview login/AI testing.
+- No Firebase rules, Authentication accounts, mobile sources or student
+  records were changed by the deployment. Public Firestore rules remain a
+  separate issue requiring the coordinated mobile/rules rollout.
+
+See [the gateway setup](../docs/web-data-gateway.md) for operation and rollback.
+
+## Historical snapshot — 2026-10-16
 
 ## Completed and verified
 

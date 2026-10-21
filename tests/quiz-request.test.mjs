@@ -9,21 +9,23 @@ test("quiz requests preserve teacher authorization, requested options and the re
   t.mock.method(globalThis, "fetch", async (url, options) => {
     assert.equal(url, "/api/generate-quiz");
     assert.equal(options.method, "POST");
-    assert.equal(options.headers.Authorization, "Bearer test-token");
+    assert.equal(options.headers["X-Web-User"], "teacher-a");
+    assert.equal(options.headers.Authorization, undefined);
+    assert.equal(options.credentials, "same-origin");
     assert.deepEqual(JSON.parse(options.body), payload);
     assert.ok(options.signal instanceof AbortSignal);
     return Response.json({ questions });
   });
-  assert.deepEqual(await requestQuiz("test-token", payload), questions);
+  assert.deepEqual(await requestQuiz(payload, "teacher-a"), questions);
 });
 
 test("server errors and an HTML 404 produce useful errors instead of an endless pending state", async t => {
   const mock = t.mock.method(globalThis, "fetch", async () => Response.json({ error: "Please retry with fewer questions." }, { status: 504 }));
-  await assert.rejects(requestQuiz("test-token", payload), /fewer questions/);
+  await assert.rejects(requestQuiz(payload, "teacher-a"), /fewer questions/);
   mock.mock.mockImplementation(async () => new Response("<!doctype html>Missing route", { status: 404 }));
-  await assert.rejects(requestQuiz("test-token", payload), /unavailable.*Refresh/);
+  await assert.rejects(requestQuiz(payload, "teacher-a"), /unavailable.*Refresh/);
   mock.mock.mockImplementation(async () => Response.json({ questions: [] }));
-  await assert.rejects(requestQuiz("test-token", payload), /returned no questions/);
+  await assert.rejects(requestQuiz(payload, "teacher-a"), /returned no questions/);
 });
 
 for (const phase of ["fetch", "response body"]) {
@@ -40,7 +42,7 @@ for (const phase of ["fetch", "response body"]) {
       deadline.signal.addEventListener("abort", () => reject(deadline.signal.reason), { once: true });
     });
     const mock = t.mock.method(globalThis, "fetch", () => phase === "fetch" ? waitForAbort() : ({ ok: true, json: waitForAbort }));
-    const pending = requestQuiz("test-token", payload);
+    const pending = requestQuiz(payload, "teacher-a");
     await ready;
     deadline.abort(new DOMException("Timed out", "TimeoutError"));
     await assert.rejects(pending, /took too long.*fewer questions/);
