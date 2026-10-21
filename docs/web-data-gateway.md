@@ -1,47 +1,46 @@
 # Website data gateway
 
-Prepared and tested locally on 2026-10-21 on `codex/cloudflare-data-gateway`.
-Production remains on its existing deployment. This branch requires the server
-setup below before deployment; it deliberately has no direct browser fallback.
+Activated on Production on 2026-10-21 at https://imars-web.pages.dev.
+The verified release is 8e5c025, initially deployed as c15c95fb. The live browser
+asset version is site-d6ac71af8620e21ac612. Both gateway activation flags are true.
+The private Production state Worker remains imars-web-auth, version
+5e36b647-4e90-4fec-8bc3-25e069f4789c, with no public Worker route.
 
-Cloudflare status checked on 2026-10-21: all five Production secret names are
-present. The dedicated `imars-account-gateway` credential has now passed Google
-authentication and `testIamPermissions` for all seven required permissions.
-The checked IAM-management and Auth create/update/delete permissions were absent.
-Live Firestore reads, a query with a nonexistent probe UID, Auth lookup of that
-probe UID and an empty transaction followed by rollback passed without changing
-records. Replaced the example `FIREBASE_SERVICE_ACCOUNT_JSON` Production secret
-with that validated credential through stdin, with logging disabled. No key or
-token was printed or copied into the repository. The user confirmed that
-`WEB_STAFF_ACCOUNTS` contains real staff details; its saved contents and the other
-secrets still require deployment checks. The private `imars-web-auth` Worker was updated to version
-`5e36b647-4e90-4fec-8bc3-25e069f4789c`; all 177 automated tests and its dry-run
-build passed beforehand. The live website still serves `main` (`ecabdfb`) with
-the older Firebase browser configuration, and both activation flags remain off.
-The isolated private Preview Worker `imars-web-auth-preview` is deployed at
-version `aff8fe94-5f2c-4b13-be33-6911ecfcd556`, with no public targets. Preview
-configuration now binds to that separate state Worker and enables the gateway
-only within Preview; missing secrets cause setup errors instead of a fallback.
-The user explicitly authorized credential use in Preview. Uploaded the validated
-service-account key and fresh random `WEB_SESSION_SECRET` and
-`WEB_MAINTENANCE_KEY` to encrypted Preview secrets through stdin with logging
-disabled; their saved names are confirmed. Preview still needs
-`WEB_STAFF_ACCOUNTS` and `GEMINI_API_KEY` supplied from the real approved values.
-Production's encrypted values cannot be read back for copying. Redeploy Preview
-after all secrets are present, then validate staff login and quiz generation.
-Deployed the website preview to `https://gateway-review.imars-web.pages.dev`
-(deployment `41bce574`). Its login page and browser login module return 200 and
-contain no Firebase configuration or private key. Auth configuration, protected
-dashboard and data requests return 503 while setup is incomplete. Rechecked both
-public login modules: Production still serves `site-a6011748da17b6e9b095`, with
-Firebase configuration, and Preview serves `site-c6ea6a6ad39f5cd10b41`, without
-it. Production's public auth configuration still reports both gateway flags
-disabled. Saving the Preview secrets does not update the Production browser code.
-The new invitation verification check passes all 178 automated tests; the
-website build and Pages Functions compilation also pass.
-The next checks are the saved server settings, reviewed staff identities and a
-fully configured preview. Saving secrets or updating the
-private Worker does not deploy the gateway branch's browser files.
+All 182 automated tests, the website build and Pages Functions compilation pass.
+Live checks confirm login HTML/module and school-year requests return 200,
+anonymous dashboard requests redirect to login, and anonymous data requests and
+unknown-account login probes return 401. The served login module contains no
+Firebase configuration or private key. No real staff password was used during
+deployment checks; staff sign-in and AI generation still need normal user acceptance.
+
+All five encrypted Production settings are present. The dedicated service-account
+credential passed Google authentication, all seven required IAM permissions,
+Firestore reads/query, Auth lookup and an empty transaction/rollback. The checked
+IAM-management and Auth create/update/delete permissions were absent. The user
+confirmed the initial roster contains real approved accounts. No credential or
+token was printed or copied into the repository.
+
+An initial release attempt was restored to the previous working build after a
+Cloudflare-native fetch receiver error. A regression reproduces the problem;
+the fixed request wrapper passed the real Preview database check and the
+subsequent Production checks. No database records were changed by these probes.
+
+The latest main-branch QR route, scanner library and reconnect work through
+630a2f1 are included. Pending QR results are stored by teacher UID and retried
+after reconnect and authenticated sign-in. History uses the same pending-scan ID
+on retries. The service worker caches versioned public assets only; protected
+HTML and API responses never use its offline cache.
+
+Preview uses the separate private imars-web-auth-preview Worker, version
+aff8fe94-5f2c-4b13-be33-6911ecfcd556. With explicit user approval, its gateway
+credential and fresh session/maintenance keys were saved as encrypted secrets.
+Its public school-year request passes. Preview still lacks WEB_STAFF_ACCOUNTS
+and GEMINI_API_KEY, so further Preview staff/quiz acceptance checks require those
+settings. Production uses its existing complete settings.
+
+Firebase rules, mobile source and Firebase Authentication accounts were not
+changed by this website release. The separate coordinated mobile/rules rollout
+is still required to replace the previously shared public Firestore rules.
 
 ## What changes
 

@@ -1,9 +1,9 @@
 # Website login protection
 
-Prepared locally with the [website data gateway](web-data-gateway.md). Production
-activation still requires the private binding, dedicated Firebase service-account
-secret, session keys and reviewed staff roster. This branch fails closed until
-that setup is complete. Firebase rules and mobile code are unchanged; public
+Active on Production with the [website data gateway](web-data-gateway.md) as of
+2026-10-21. The private binding, dedicated Firebase credential, session keys and
+staff roster are configured; setup failures deny access instead of falling back
+to browser Firebase calls. Firebase rules and mobile code are unchanged; public
 Firestore rules remain a separate data-access risk.
 
 ## Account policy
