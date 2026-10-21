@@ -96,16 +96,9 @@ npm.cmd run build
 npx.cmd --no-install wrangler pages functions build functions --outdir .wrangler/gateway-functions
 ```
 
-Browser fixture, after building:
-
-```powershell
-node tests/web-data.local.mjs
-```
-
-Open `http://127.0.0.1:8848/login`. Synthetic accounts are `TEACH1000` and
-`ADMIN1000`, password `correct`. This fixture is not a deployment target and
-must never be hosted or connected to production credentials. Tests/fixtures,
-server sources, setup documents and credentials are excluded from public `dist`.
+The temporary manual preview servers have been removed after the browser checks.
+The synthetic fixtures used by automated tests remain. Tests/fixtures, server
+sources, setup documents and credentials are excluded from public `dist`.
 
 The emulator verifies actual REST transaction reads, transforms, commits and
 rollback against `demo-imars-security-review` on loopback only. The unit suite
