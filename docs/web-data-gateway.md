@@ -5,13 +5,29 @@ Production remains on its existing deployment. This branch requires the server
 setup below before deployment; it deliberately has no direct browser fallback.
 
 Cloudflare status checked on 2026-10-21: all five Production secret names are
-present. Their saved values, staff roster and Firebase IAM permissions have not
-been validated. The private `imars-web-auth` Worker was updated to version
+present. The dedicated `imars-account-gateway` credential has now passed Google
+authentication and `testIamPermissions` for all seven required permissions.
+The checked IAM-management and Auth create/update/delete permissions were absent.
+Live Firestore reads, a query with a nonexistent probe UID, Auth lookup of that
+probe UID and an empty transaction followed by rollback passed without changing
+records. Replaced the example `FIREBASE_SERVICE_ACCOUNT_JSON` Production secret
+with that validated credential through stdin, with logging disabled. No key or
+token was printed or copied into the repository. The user confirmed that
+`WEB_STAFF_ACCOUNTS` contains real staff details; its saved contents and the other
+secrets still require deployment checks. The private `imars-web-auth` Worker was updated to version
 `5e36b647-4e90-4fec-8bc3-25e069f4789c`; all 177 automated tests and its dry-run
 build passed beforehand. The live website still serves `main` (`ecabdfb`) with
 the older Firebase browser configuration, and both activation flags remain off.
-The next checks are the dedicated service account's IAM role, reviewed staff
-identities and a separately configured preview. Saving secrets or updating the
+The isolated private Preview Worker `imars-web-auth-preview` is deployed at
+version `aff8fe94-5f2c-4b13-be33-6911ecfcd556`, with no public targets. Preview
+configuration now binds to that separate state Worker and enables the gateway
+only within Preview; missing secrets cause setup errors instead of a fallback.
+Preview secret values have not been uploaded. They require explicit authorization
+for that environment, plus its approved staff roster and Gemini credential.
+The new invitation verification check passes all 178 automated tests; the
+website build and Pages Functions compilation also pass.
+The next checks are the saved server settings, reviewed staff identities and a
+fully configured preview. Saving secrets or updating the
 private Worker does not deploy the gateway branch's browser files.
 
 ## What changes
@@ -51,10 +67,14 @@ The AI secret stays server-side. Student imports check only submitted IDs instea
 of downloading every school's student profiles. QR sync retains an existing
 student's assigned class. Admin invitations receive a server-allocated Teacher
 ID and private approval marker; existing mobile registration's merge/update
-preserves that marker. Newly registered teachers do not need a manual roster
-secret edit when created through this gateway. IDs are never reused after a
-deletion or failed reservation. Contact emails remain separate from the private
-approved sign-in email.
+preserves that marker. Newly registered teachers must verify the privately
+assigned email in Firebase Auth before website access is granted; possession of
+the public invitation marker alone cannot activate an account. Verification is
+checked again on a fresh login so an earlier unverified lookup does not delay
+activation. Independently approved initial staff retain their existing UID-bound
+login. No manual roster secret edit is needed for verified invitations. IDs are
+never reused after a deletion or failed reservation. Contact emails remain
+separate from the private approved sign-in email.
 
 ## Owner setup before activation
 
@@ -76,8 +96,8 @@ approved sign-in email.
 4. Deploy the updated private `imars-web-auth` Worker before deploying this
    branch. It adds private invitation/ID allocation actions. Confirm the Pages
    `WEB_LOGIN_STATE` binding points to that Worker in the same account. Preview
-   requires a separate test Worker, separate state and reviewed test accounts;
-   the repository intentionally leaves its binding empty.
+   uses `imars-web-auth-preview`, separate state, separate secrets and reviewed
+   test accounts.
 5. Test a configured preview with approved test accounts, including login,
    dashboard, reports, class creation/import, edits, QR result saves, schedules,
    marker progress, quizzes, admin invitations/unlock and session expiry.

@@ -4,8 +4,14 @@
 
 - Production Pages lists encrypted `FIREBASE_SERVICE_ACCOUNT_JSON`,
   `GEMINI_API_KEY`, `WEB_MAINTENANCE_KEY`, `WEB_SESSION_SECRET` and
-  `WEB_STAFF_ACCOUNTS`. Only their names/presence were checked; their values
-  and the dedicated service account's IAM permissions remain unverified.
+  `WEB_STAFF_ACCOUNTS`. The real dedicated gateway credential now passes Google
+  authentication, all seven required IAM permissions and read-only Firestore/Auth
+  checks, including an empty transaction and rollback. The checked IAM-management
+  and Auth create/update/delete permissions were absent. Replaced the example
+  service-account Production secret using stdin with logging disabled; no key or
+  token was displayed or copied into the repository. The user confirmed the
+  staff roster contains real account details; saved roster/key settings still
+  require deployment validation.
 - Updated the private `imars-web-auth` Worker to version
   `5e36b647-4e90-4fec-8bc3-25e069f4789c` after 177 tests and a successful
   dry-run compilation. No public Worker target was enabled.
@@ -14,9 +20,18 @@
   `/assets/site-a6011748da17b6e9b095/js/login.js`, which still contains the
   Firebase client configuration. The gateway branch removes that configuration
   but has not been merged into `main` or deployed as the Production website.
-- Required next: verify the service-account permissions and initial staff
-  enrollment, then configure and test a separate preview before activation.
+- Required next: verify the saved server settings and initial staff enrollment,
+  then configure and test a separate preview before activation.
   Firebase rules and mobile source were not changed by this checkpoint.
+- The separate private Preview Worker `imars-web-auth-preview` is deployed at
+  `aff8fe94-5f2c-4b13-be33-6911ecfcd556`; its trigger settings confirm no public
+  targets. Preview uses its own state binding and still has no secrets uploaded.
+  Credential use in Preview needs explicit authorization. Its staff roster and
+  Gemini key must also be supplied before live staff/quiz acceptance checks.
+- Newly invited teachers must have a verified Firebase Auth email matching the
+  private invitation. Existing independently approved roster accounts keep the
+  current login flow. All 178 automated tests, the public website build and
+  Pages Functions compilation pass after this check.
 
 See [the gateway setup](../docs/web-data-gateway.md) for the current rollout.
 

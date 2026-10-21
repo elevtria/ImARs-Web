@@ -103,6 +103,7 @@ test("admin data access works through middleware, invitations use private reserv
   assert.ok(app.data.get("users/" + id).webInvitationNonce);
   // Existing mobile registration adds a UID with UpdateAsync; it preserves the invitation marker.
   app.data.get("users/" + id).uid = "new-teacher";
+  app.data.get("users/" + id).authEmailVerified = true;
   const dynamic = await app.login(id); assert.equal((await app.auth("identity", {}, dynamic)).status, 200);
   assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
   assert.equal((await app.auth("identity", {}, dynamic)).status, 401);
@@ -114,6 +115,24 @@ test("a forged public teacher profile cannot enroll itself in the private websit
   app.data.set("users/TEACH9999", { uid: "student-a", role: "teacher", email: "student@example.test", active: true, webInvitationNonce: "made-up" });
   const response = await app.auth("login", { identifier: "TEACH9999", password: "correct", portal: "teacher" });
   assert.equal(response.status, 401); assert.equal(response.headers.get("Set-Cookie"), null);
+});
+
+test("a public invitation and an unverified Auth account cannot grant website access; verification permits a fresh login", async () => {
+  const app = fixture(), admin = await app.login("ADMIN1000", "admin");
+  const created = await app.call({ action: "create-teacher", profile: { name: "Invited Teacher", email: "invited@example.test", subject: "Science", sections: ["C"] } }, admin);
+  assert.equal(created.status, 200);
+  const { id } = await created.json(), profile = app.data.get("users/" + id);
+  profile.uid = "invited-teacher";
+  for (const verified of [undefined, false]) {
+    profile.authEmailVerified = verified;
+    const response = await app.auth("login", { identifier: id, password: "correct", portal: "teacher" });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get("Set-Cookie"), null);
+    assert.match((await response.json()).error, /verify your assigned email/i);
+  }
+  profile.authEmailVerified = true;
+  const cookie = await app.login(id);
+  assert.equal((await app.auth("identity", {}, cookie)).status, 200);
 });
 
 test("public school-year reads expose only the year, and disabled Auth identities fail verification", async () => {

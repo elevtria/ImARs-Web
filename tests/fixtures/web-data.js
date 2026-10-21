@@ -23,7 +23,7 @@ export function fixture() {
   const env = { WEB_DATA_ENABLED: "true", WEB_LOGIN_ENABLED: "true", WEB_STAFF_ACCOUNTS: JSON.stringify(accounts), WEB_SESSION_SECRET: "fixture-only-not-a-real-signing-secret" };
   const store = { env, data, began: 0, committed: 0, rolledBack: 0,
     async get(path) { return data.has(path) ? { data: structuredClone(data.get(path)), updateTime: String(revision) } : null; },
-    async identity(uid) { const row = [...data.values()].find(row => row.uid === uid); return row ? { localId: uid, email: row.email, disabled: row.authDisabled } : null; },
+    async identity(uid) { const row = [...data.values()].find(row => row.uid === uid); return row ? { localId: uid, email: row.email, disabled: row.authDisabled, emailVerified: row.authEmailVerified } : null; },
     async query(path, { filters = [], limit = 5000 } = {}) {
       return [...data].filter(([name, row]) => name.startsWith(path + "/") && name.split("/").length === path.split("/").length + 1 && filters.every(filter => row[filter.field] === filter.value)).slice(0, limit).map(([name, row]) => ({ id: name.split("/").at(-1), data: structuredClone(row), updateTime: String(revision) }));
     },

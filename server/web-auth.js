@@ -61,7 +61,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   if (!invitation.active) return null;
   const profile = await store.get("users/" + id);
   if (!profile?.data.uid || profile.data.webInvitationNonce !== invitation.nonce || profile.data.role !== "teacher") return null;
-  return { id, uid: profile.data.uid, role: "teacher", email: invitation.email };
+  return { id, uid: profile.data.uid, role: "teacher", email: invitation.email, requiresVerifiedEmail: true };
 }
 
 async function inspectSession(request, env, { now = Date.now(), active = false, rotate = false, store } = {}) {
@@ -111,7 +111,7 @@ export async function staffProfile(account, store, now = Date.now()) {
   let cache = identities.get(key);
   if (!cache) { cache = new Map(); identities.set(key, cache); }
   let identity = cache.get(account.uid);
-  if (!identity || identity.until <= now) {
+  if (!identity || identity.until <= now || (account.requiresVerifiedEmail && identity.user?.emailVerified !== true)) {
     const user = await store.identity(account.uid);
     identity = { user, until: now + 60_000 };
     if (cache.size >= 1000) cache.delete(cache.keys().next().value);
@@ -120,6 +120,9 @@ export async function staffProfile(account, store, now = Date.now()) {
   const user = identity.user;
   if (!user || user.disabled || user.email?.toLowerCase() !== account.email.toLowerCase()) {
     throw Object.assign(new Error("Your sign-in could not be verified. Please sign in again."), { status: 401 });
+  }
+  if (account.requiresVerifiedEmail && user.emailVerified !== true) {
+    throw Object.assign(new Error("Verify your assigned email before signing in to the website."), { status: 403 });
   }
   return { ...account, profile, row };
 }

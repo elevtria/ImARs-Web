@@ -150,10 +150,12 @@ The password-based flow currently does not implement an MFA challenge.
    is deployed. Deploy the Worker first; a Pages deployment that references a
    missing Worker will fail. Adding the binding does not enable protection.
 
-   Preview currently has no state binding and must be configured with a separate
-   test Worker before enabling Preview security. Keep its credentials, roster and
-   session state separate from production. The main configuration intentionally
-   does not give Preview the production state binding.
+   Preview binds to the separate private `imars-web-auth-preview` Worker. Deploy
+   it with the same Worker config and `--name imars-web-auth-preview`, then verify
+   there are no public targets. Preview enables both gateway flags but fails
+   closed until its own credentials and approved roster are configured. It never
+   uses the production session-state binding. Credentials for Preview require
+   separate authorization; Production secrets cannot be read back for copying.
 
 3. Add these encrypted Production secrets in the Pages project:
 
