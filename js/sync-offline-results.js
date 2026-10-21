@@ -228,7 +228,8 @@ async function processScannedQR(decodedText, queuedScan = null) {
   const detailedListContainer = document.getElementById("modalDetailedScoresList");
   if (detailedListContainer) detailedListContainer.innerHTML = detailedHtml;
 
-  if (qrResultModal && !qrResultModal.open) {
+  // --- CHANGED: Only open the modal if this is a live scan, not a background auto-sync ---
+  if (!queuedScan && qrResultModal && !qrResultModal.open) {
     qrResultModal.showModal();
   }
 
@@ -279,6 +280,10 @@ async function processScannedQR(decodedText, queuedScan = null) {
     saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr"); // <-- Removed 'await'
     if (modalSyncText) modalSyncText.textContent = `✓ All Terms & Lessons Synced!`;
     status.textContent = `Successfully scanned and synced ${studentName}'s records.`;
+    
+    // --- CHANGED: Delete the scan from IndexedDB so it doesn't trigger again ---
+    if (pending) { try { await pendingScans("delete", owner, pending); } catch {} }
+    
     return true;
     
   } catch (err) {
@@ -467,20 +472,18 @@ async function loadRecentScans() {
   }
 }
 
-export async function saveScanToDatabase(moduleName, type = "qr", scanId = null) {
+// --- CHANGED: Removed the broken 'record' variable references ---
+export async function saveScanToDatabase(moduleName, type = "qr") {
   if (!activeTeacherId) throw new Error("Sign in before saving a scan.");
 
   try {
     const scansRef = collection(db, "users", activeTeacherId, "recent_scans");
-    addDoc(scansRef, { // <-- Removed 'await'
+    
+    addDoc(scansRef, { 
       moduleName: moduleName,
-      scanType: "qr",
+      scanType: type,
       timestamp: serverTimestamp()
     });
-    if (scanId) {
-      const reference = doc(scansRef, scanId);
-      if (!(await getDoc(reference)).exists()) await setDoc(reference, record);
-    } else await addDoc(scansRef, record);
 
     loadRecentScans();
   } catch (error) {
@@ -490,4 +493,3 @@ export async function saveScanToDatabase(moduleName, type = "qr", scanId = null)
 }
 
 window.saveScanToDatabase = saveScanToDatabase;
-
