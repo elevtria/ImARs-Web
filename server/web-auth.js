@@ -260,7 +260,7 @@ export async function protectWebsite(context, now = Date.now()) {
     canonical.pathname = decoded.replace(/\/{2,}/g, "/");
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
-  if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || path === "/favicon.ico") return context.next();
+  if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
   if (path === "/login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/")) return context.next();
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/"), rotate: true });

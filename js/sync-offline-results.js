@@ -48,6 +48,57 @@ let lastScannedCode = "";
 let activeTeacherId = null;
 let activeTeacherClassCode = null;
 
+let queueDatabase;
+let flushingScans = false;
+async function pendingScans(operation, owner, entry) {
+  if (!owner || !globalThis.indexedDB) throw new Error("Device storage is unavailable.");
+  if (!queueDatabase) queueDatabase = new Promise((resolve, reject) => {
+    const request = indexedDB.open("imars-pending-qr", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("scans", { keyPath: "key" }).createIndex("owner", "owner");
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => { queueDatabase = null; reject(new Error("Device storage is unavailable.")); };
+    request.onblocked = () => { queueDatabase = null; reject(new Error("Device storage is unavailable.")); };
+  });
+  const storage = await queueDatabase;
+  return new Promise((resolve, reject) => {
+    const transaction = storage.transaction("scans", operation === "list" ? "readonly" : "readwrite");
+    const records = transaction.objectStore("scans");
+    const request = operation === "list" ? records.index("owner").getAll(owner, 101)
+      : operation === "put" ? records.put({ ...entry, owner }) : records.delete(entry.key);
+    let result;
+    request.onsuccess = () => { result = request.result; };
+    transaction.oncomplete = () => resolve(result);
+    transaction.onerror = transaction.onabort = () => reject(new Error("The pending scan could not be saved on this device."));
+  });
+}
+
+async function retainScan(text, owner) {
+  const entries = await pendingScans("list", owner);
+  const previous = entries.find(entry => entry.text === text && entry.teacherId === activeTeacherId);
+  if (previous) return previous;
+  if (entries.length >= 100) throw new Error("Sync the pending scans before adding more.");
+  const entry = { key: crypto.randomUUID().replaceAll("-", ""), text, teacherId: activeTeacherId, savedAt: Date.now() };
+  await pendingScans("put", owner, entry);
+  return entry;
+}
+
+async function flushPendingScans() {
+  const owner = auth.currentUser?.uid;
+  if (flushingScans || !owner || !activeTeacherId || globalThis.navigator?.onLine === false) return;
+  flushingScans = true;
+  try {
+    for (const entry of await pendingScans("list", owner)) {
+      if (auth.currentUser?.uid !== owner || globalThis.navigator?.onLine === false) break;
+      if (entry.teacherId === activeTeacherId && !await processScannedQR(entry.text, entry)) break;
+    }
+  } catch { /* Scanning still works when private device storage is unavailable. */ }
+  finally { flushingScans = false; }
+}
+window.addEventListener?.("online", () => { void flushPendingScans(); });
+if (globalThis.navigator?.serviceWorker) {
+  window.addEventListener?.("load", () => { navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {}); });
+}
+
 // --- MODAL CONTROLS ---
 const closeResultModal = () => {
   if (qrResultModal) qrResultModal.close();
@@ -112,7 +163,7 @@ function getInitials(name) {
 }
 
 // --- SYNC SCANNED STUDENT GRADES TO FIRESTORE & SHOW MODAL ---
-async function processScannedQR(decodedText) {
+async function processScannedQR(decodedText, queuedScan = null) {
   status.textContent = `QR Detected! Processing...`;
 
   const parsed = parseStudentGradeQR(decodedText);
@@ -124,6 +175,13 @@ async function processScannedQR(decodedText) {
   }
 
   const { studentId, studentName, lessonBreakdown } = parsed;
+  const owner = auth.currentUser?.uid;
+  if (!owner || !activeTeacherId || (queuedScan && queuedScan.teacherId !== activeTeacherId)) {
+    status.textContent = "Sign in with your teacher account before syncing results.";
+    return false;
+  }
+  let pending = queuedScan;
+  try { pending ||= await retainScan(decodedText, owner); } catch {}
   const lessonsCount = lessonBreakdown.length;
 
   // Calculate Averages exactly like Unity does
@@ -214,13 +272,22 @@ async function processScannedQR(decodedText) {
     }
 
     // 4. Record Scan & Update UI
-    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr");
+    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr", pending?.key);
+    if (pending) await pendingScans("delete", owner, pending);
     if (modalSyncText) modalSyncText.textContent = `✓ All Terms & Lessons Synced!`;
     status.textContent = `Successfully scanned and synced ${studentName}'s records.`;
+    return true;
     
   } catch (err) {
     console.error("Error syncing QR grade data:", err);
-    if (modalSyncText) modalSyncText.textContent = "Displayed from QR (Offline Mode)";
+    const rejected = [400, 403].includes(err.status);
+    if (rejected && pending) { try { await pendingScans("delete", owner, pending); } catch {} }
+    const message = rejected ? "Not synced. " + err.message : pending
+      ? "Saved on this device. Results will sync when you reconnect and sign in."
+      : "Not saved. Keep this QR code and scan it again when connected.";
+    if (modalSyncText) modalSyncText.textContent = message;
+    status.textContent = message;
+    return false;
   }
 }
 
@@ -337,6 +404,7 @@ onAuthStateChanged(auth, async (user) => {
         activeTeacherClassCode = classSnap.docs[0].id;
       }
       loadRecentScans();
+      await flushPendingScans();
     }
   } catch (error) {
     console.error("Error loading teacher auth:", error);
@@ -396,20 +464,25 @@ async function loadRecentScans() {
   }
 }
 
-export async function saveScanToDatabase(moduleName, type = "qr") {
-  if (!activeTeacherId) return;
+export async function saveScanToDatabase(moduleName, type = "qr", scanId = null) {
+  if (!activeTeacherId) throw new Error("Sign in before saving a scan.");
 
   try {
     const scansRef = collection(db, "users", activeTeacherId, "recent_scans");
-    await addDoc(scansRef, {
+    const record = {
       moduleName: moduleName,
       scanType: "qr",
       timestamp: serverTimestamp()
-    });
+    };
+    if (scanId) {
+      const reference = doc(scansRef, scanId);
+      if (!(await getDoc(reference)).exists()) await setDoc(reference, record);
+    } else await addDoc(scansRef, record);
 
     loadRecentScans();
   } catch (error) {
     console.error("Error saving scan to database:", error);
+    throw error;
   }
 }
 

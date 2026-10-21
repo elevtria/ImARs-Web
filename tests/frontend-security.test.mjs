@@ -75,7 +75,7 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
 });
 
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {
-  const app = page("scan-qr-ar.js");
+  const app = page("sync-offline-results.js");
   await vm.runInContext('activeTeacherId = "T1"; loadRecentScans();', app.context);
   assertTextOnly(app.element("recentScansList").html());
 });
@@ -88,4 +88,91 @@ test("teacher document IDs cannot break out of action-button attributes", async 
   assertTextOnly(html);
   assert.ok(html.includes('data-delete-id="&lt;img'));
   assert.ok(html.includes('data-toggle-id="&lt;img'));
+});
+
+function queuedScanner() {
+  const app = page("sync-offline-results.js"), pending = new Map(), remote = new Map();
+  const modal = app.element("qrResultModal");
+  modal.showModal = () => { modal.open = true; };
+  let connected = false;
+  const storage = {
+    createObjectStore: () => ({ createIndex() {} }),
+    transaction() {
+      const transaction = {};
+      const operation = action => {
+        const request = {};
+        queueMicrotask(() => { request.result = action(); request.onsuccess?.(); queueMicrotask(() => transaction.oncomplete?.()); });
+        return request;
+      };
+      transaction.objectStore = () => ({
+        index: () => ({ getAll: (owner, maximum) => operation(() => [...pending.values()].filter(entry => entry.owner === owner).slice(0, maximum)) }),
+        put: entry => operation(() => { pending.set(entry.key, structuredClone(entry)); return entry.key; }),
+        delete: key => operation(() => pending.delete(key))
+      });
+      return transaction;
+    }
+  };
+  Object.assign(app.context, {
+    crypto: globalThis.crypto, navigator: { onLine: false },
+    indexedDB: { open() {
+      const request = {};
+      queueMicrotask(() => { request.result = storage; request.onupgradeneeded?.(); request.onsuccess?.(); });
+      return request;
+    } },
+    collection: (_, ...parts) => ({ path: parts.join("/") }),
+    doc: (parent, ...parts) => ({ path: [parent.path, ...parts].filter(Boolean).join("/") }),
+    getDoc: async reference => {
+      if (!connected) throw new TypeError("Network unavailable");
+      return { exists: () => remote.has(reference.path), data: () => remote.get(reference.path) };
+    },
+    setDoc: async (reference, values) => {
+      if (!connected) throw new TypeError("Network unavailable");
+      remote.set(reference.path, { ...remote.get(reference.path), ...values });
+    },
+    serverTimestamp: () => ({ $type: "serverTimestamp" })
+  });
+  vm.runInContext('activeTeacherId = "TEACH1000"; activeTeacherClassCode = "A";', app.context);
+  remote.set("users/0026271000", { role: "student", classCode: "A" });
+  return { ...app, pending, remote, connect() { connected = true; app.context.navigator.onLine = true; } };
+}
+const gradeQr = "0026271000|Student A|term_01lesson_01_Pre:60%_Post:80%";
+
+test("offline grade scans persist until reconnect, preserve class assignment and reuse one history record on retry", async () => {
+  const app = queuedScanner();
+  app.context.gradeQr = gradeQr;
+  assert.equal(await vm.runInContext("processScannedQR(gradeQr)", app.context), false);
+  assert.equal(app.pending.size, 1);
+  assert.match(app.element("modalSyncText").textContent, /Saved on this device/);
+  assert.equal(app.remote.size, 1);
+  const entry = structuredClone([...app.pending.values()][0]);
+  app.connect();
+  await vm.runInContext("flushPendingScans()", app.context);
+  assert.equal(app.pending.size, 0);
+  assert.equal(app.remote.get("users/0026271000").classCode, "A");
+  const result = app.remote.get("users/0026271000/test_results/term_01/lessons/lesson_01");
+  assert.equal(result.preTestScore, 3); assert.equal(result.postTestScore, 8);
+  app.pending.set(entry.key, entry);
+  await vm.runInContext("flushPendingScans()", app.context);
+  assert.equal(app.pending.size, 0);
+  assert.equal([...app.remote.keys()].filter(path => path.includes("/recent_scans/")).length, 1);
+});
+
+test("another teacher or a signed-out tab cannot replay queued QR results", async () => {
+  const app = queuedScanner();
+  app.pending.set("foreign", { key: "foreign", owner: "teacher-b", teacherId: "TEACH1001", text: gradeQr });
+  app.connect();
+  await vm.runInContext("flushPendingScans()", app.context);
+  assert.equal(app.pending.size, 1); assert.equal(app.remote.size, 1);
+  vm.runInContext("auth.currentUser = null;", app.context);
+  await vm.runInContext("flushPendingScans()", app.context);
+  assert.equal(app.pending.size, 1); assert.equal(app.remote.size, 1);
+});
+
+test("blocked device storage never claims an offline QR scan was saved", async () => {
+  const app = queuedScanner();
+  app.context.indexedDB = undefined;
+  app.context.gradeQr = gradeQr;
+  assert.equal(await vm.runInContext("processScannedQR(gradeQr)", app.context), false);
+  assert.equal(app.pending.size, 0);
+  assert.match(app.element("modalSyncText").textContent, /Not saved/);
 });
