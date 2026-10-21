@@ -233,7 +233,8 @@ async function processScannedQR(decodedText, queuedScan = null) {
   }
 
   try {
-    // 2. Update Student Profile
+    if (globalThis.navigator?.onLine === false) throw new TypeError("Connection unavailable.");
+    // Check the existing class only after the connection returns.
     const studentRef = doc(db, "users", studentId);
     const studentSnap = await getDoc(studentRef);
 

@@ -2,10 +2,10 @@
 
 ## Current checkpoint — 2026-10-21
 
-- The user requested Production publication. Release 8e5c025 is live at
-  https://imars-web.pages.dev, initially deployed as c15c95fb. Both
+- The user requested Production publication. The gateway was first activated
+  as release 8e5c025 at https://imars-web.pages.dev (c15c95fb). Both
   WEB_LOGIN_ENABLED and WEB_DATA_ENABLED report true.
-- The live login module is /assets/site-d6ac71af8620e21ac612/js/login.js.
+- The current login module is /assets/site-0f43855bbedf6c960c0d/js/login.js.
   It contains no Firebase configuration or private key. Login, service-worker
   and public school-year requests return 200; anonymous dashboard requests
   redirect to login and anonymous data/unknown-account requests return 401.
@@ -23,7 +23,8 @@
   automatically restored to the prior working build (9cd9410f). Fixed native
   fetch invocation in FirestoreAdmin with a regression; real Preview and
   Production database checks then passed.
-- Included current main changes through 630a2f1. QR results queue by teacher
+- Included current main changes through bffde64. Offline scans never wait for a
+  database request. QR results queue by teacher
   UID, retry only after authenticated reconnect, and reuse scan-history IDs.
   The service worker excludes protected HTML/API data from its offline cache.
 - Preview has its approved gateway credential and independent random session

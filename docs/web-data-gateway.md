@@ -1,8 +1,9 @@
 # Website data gateway
 
 Activated on Production on 2026-10-21 at https://imars-web.pages.dev.
-The verified release is 8e5c025, initially deployed as c15c95fb. The live browser
-asset version is site-d6ac71af8620e21ac612. Both gateway activation flags are true.
+The gateway first shipped as release 8e5c025, deployed as c15c95fb. The current
+browser asset version is site-0f43855bbedf6c960c0d after integrating the latest
+main QR fixes. Both gateway activation flags are true.
 The private Production state Worker remains imars-web-auth, version
 5e36b647-4e90-4fec-8bc3-25e069f4789c, with no public Worker route.
 
@@ -26,7 +27,8 @@ the fixed request wrapper passed the real Preview database check and the
 subsequent Production checks. No database records were changed by these probes.
 
 The latest main-branch QR route, scanner library and reconnect work through
-630a2f1 are included. Pending QR results are stored by teacher UID and retried
+bffde64 are included. Offline scans do not wait for a database request. Pending
+QR results are stored by teacher UID and retried
 after reconnect and authenticated sign-in. History uses the same pending-scan ID
 on retries. The service worker caches versioned public assets only; protected
 HTML and API responses never use its offline cache.

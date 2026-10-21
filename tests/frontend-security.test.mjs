@@ -94,7 +94,7 @@ function queuedScanner() {
   const app = page("sync-offline-results.js"), pending = new Map(), remote = new Map();
   const modal = app.element("qrResultModal");
   modal.showModal = () => { modal.open = true; };
-  let connected = false;
+  let connected = false, reads = 0;
   const storage = {
     createObjectStore: () => ({ createIndex() {} }),
     transaction() {
@@ -122,6 +122,7 @@ function queuedScanner() {
     collection: (_, ...parts) => ({ path: parts.join("/") }),
     doc: (parent, ...parts) => ({ path: [parent.path, ...parts].filter(Boolean).join("/") }),
     getDoc: async reference => {
+      reads++;
       if (!connected) throw new TypeError("Network unavailable");
       return { exists: () => remote.has(reference.path), data: () => remote.get(reference.path) };
     },
@@ -133,7 +134,7 @@ function queuedScanner() {
   });
   vm.runInContext('activeTeacherId = "TEACH1000"; activeTeacherClassCode = "A";', app.context);
   remote.set("users/0026271000", { role: "student", classCode: "A" });
-  return { ...app, pending, remote, connect() { connected = true; app.context.navigator.onLine = true; } };
+  return { ...app, pending, remote, reads: () => reads, connect() { connected = true; app.context.navigator.onLine = true; } };
 }
 const gradeQr = "0026271000|Student A|term_01lesson_01_Pre:60%_Post:80%";
 
@@ -142,6 +143,7 @@ test("offline grade scans persist until reconnect, preserve class assignment and
   app.context.gradeQr = gradeQr;
   assert.equal(await vm.runInContext("processScannedQR(gradeQr)", app.context), false);
   assert.equal(app.pending.size, 1);
+  assert.equal(app.reads(), 0, "offline scanning must not wait for a database request");
   assert.match(app.element("modalSyncText").textContent, /Saved on this device/);
   assert.equal(app.remote.size, 1);
   const entry = structuredClone([...app.pending.values()][0]);
