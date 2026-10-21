@@ -24,6 +24,11 @@ configuration now binds to that separate state Worker and enables the gateway
 only within Preview; missing secrets cause setup errors instead of a fallback.
 Preview secret values have not been uploaded. They require explicit authorization
 for that environment, plus its approved staff roster and Gemini credential.
+Deployed the website preview to `https://gateway-review.imars-web.pages.dev`
+(deployment `41bce574`). Its login page and browser login module return 200 and
+contain no Firebase configuration or private key. Auth configuration, protected
+dashboard and data requests return 503 while setup is incomplete. Production's
+public auth configuration still reports both gateway flags disabled.
 The new invitation verification check passes all 178 automated tests; the
 website build and Pages Functions compilation also pass.
 The next checks are the saved server settings, reviewed staff identities and a

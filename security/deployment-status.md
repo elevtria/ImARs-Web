@@ -28,6 +28,11 @@
   targets. Preview uses its own state binding and still has no secrets uploaded.
   Credential use in Preview needs explicit authorization. Its staff roster and
   Gemini key must also be supplied before live staff/quiz acceptance checks.
+- Deployed `gateway-review` Preview (`41bce574`) at
+  `https://gateway-review.imars-web.pages.dev`. Login HTML/module return 200;
+  the served module has no Firebase configuration or private key. Setup and
+  protected requests return 503 until secrets are supplied. Production's public
+  config still reports the gateway disabled.
 - Newly invited teachers must have a verified Firebase Auth email matching the
   private invitation. Existing independently approved roster accounts keep the
   current login flow. All 178 automated tests, the public website build and
