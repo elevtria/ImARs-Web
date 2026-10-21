@@ -188,9 +188,8 @@ async function processScannedQR(decodedText) {
   }
 
   try {
-    // 2. Update Student Profile
+    // 2. Update Student Profile (REMOVED getDoc TO PREVENT OFFLINE FREEZE)
     const studentRef = doc(db, "users", studentId);
-    const studentSnap = await getDoc(studentRef);
 
     const studentUpdate = {
       schoolId: studentId,
