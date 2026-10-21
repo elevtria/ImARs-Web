@@ -429,3 +429,15 @@ export async function saveScanToDatabase(moduleName, type = "qr") {
 }
 
 window.saveScanToDatabase = saveScanToDatabase;
+
+// --- NEW: Automatically refresh the list when Wi-Fi reconnects ---
+window.addEventListener('online', () => {
+  const status = document.getElementById("camStatus");
+  if (status) status.textContent = "Wi-Fi restored! Syncing offline results...";
+  
+  // Give Firebase 2 seconds to push the offline queue to the server and generate real timestamps
+  setTimeout(() => {
+    loadRecentScans();
+    if (status) status.textContent = "✓ Offline scans successfully synced to database.";
+  }, 2000);
+});
