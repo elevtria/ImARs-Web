@@ -62,7 +62,7 @@ export function encodeFields(fields) {
 }
 
 export class FirestoreAdmin {
-  constructor(env, fetcher = fetch) { this.env = env; this.fetcher = fetcher; }
+  constructor(env, fetcher = fetch) { this.env = env; this.fetcher = (...args) => fetcher(...args); }
   name(path) {
     if (!path.split("/").every(part => /^[A-Za-z0-9_-]{1,128}$/.test(part))) throw new Error("Invalid database path");
     return "projects/imars-db-a733b/databases/(default)/documents/" + path;

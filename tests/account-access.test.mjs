@@ -158,7 +158,10 @@ test("administrative OAuth proof is signed on the server and has a fixed audienc
   const pkcs8 = Buffer.from(await crypto.subtle.exportKey("pkcs8", pair.privateKey)).toString("base64");
   const env = { FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "imars-db-a733b", client_email: "fixture@imars-db-a733b.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\n" + pkcs8 + "\n-----END PRIVATE KEY-----" }) };
   let calls = 0;
-  const fetcher = async (url, options) => {
+  const fetcher = async function (url, options) {
+    assert.ok(this === undefined, "The fetch transport must not receive the application instance as its receiver.");
+    if (url.startsWith("https://firestore.googleapis.com/")) return Response.json({ fields: { startYear: { integerValue: "2026" } } });
+    if (url.startsWith("https://identitytoolkit.googleapis.com/")) return Response.json({ users: [{ localId: "fixture-uid", email: "fixture@example.test" }] });
     calls++; assert.equal(url, "https://oauth2.googleapis.com/token");
     const [header, payload, signature] = options.body.get("assertion").split(".");
     assert.equal(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", pair.publicKey, Buffer.from(signature, "base64url"), new TextEncoder().encode(header + "." + payload)), true);
@@ -170,4 +173,7 @@ test("administrative OAuth proof is signed on the server and has a fixed audienc
   assert.equal(await serviceToken(env, fetcher, 1000), "fixture-private-token");
   assert.equal(await serviceToken(env, fetcher, 2000), "fixture-private-token"); assert.equal(calls, 1);
   assert.equal(await serviceToken(env, fetcher, 3_601_000), "fixture-private-token"); assert.equal(calls, 2);
+  const store = new FirestoreAdmin(env, fetcher);
+  assert.equal((await store.get("webSettings/schoolYear")).data.startYear, 2026);
+  assert.equal((await store.identity("fixture-uid")).localId, "fixture-uid");
 });
