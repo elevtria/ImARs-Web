@@ -25,14 +25,19 @@
   Firebase rules and mobile source were not changed by this checkpoint.
 - The separate private Preview Worker `imars-web-auth-preview` is deployed at
   `aff8fe94-5f2c-4b13-be33-6911ecfcd556`; its trigger settings confirm no public
-  targets. Preview uses its own state binding and still has no secrets uploaded.
-  Credential use in Preview needs explicit authorization. Its staff roster and
-  Gemini key must also be supplied before live staff/quiz acceptance checks.
+  targets. Preview uses its own state binding. Following the user's explicit
+  approval, uploaded the validated service-account credential and fresh random
+  session/maintenance keys as encrypted Preview secrets through stdin with logs
+  disabled; their three saved names are confirmed. Preview's approved staff
+  roster and Gemini key must still be supplied before redeployment and live
+  staff/quiz acceptance checks. Production secrets were not changed by this step.
 - Deployed `gateway-review` Preview (`41bce574`) at
   `https://gateway-review.imars-web.pages.dev`. Login HTML/module return 200;
   the served module has no Firebase configuration or private key. Setup and
   protected requests return 503 until secrets are supplied. Production's public
-  config still reports the gateway disabled.
+  config still reports the gateway disabled. A fresh comparison confirms that
+  Production still serves the old login module containing Firebase config;
+  Preview serves `site-c6ea6a6ad39f5cd10b41/js/login.js` without Firebase config.
 - Newly invited teachers must have a verified Firebase Auth email matching the
   private invitation. Existing independently approved roster accounts keep the
   current login flow. All 178 automated tests, the public website build and

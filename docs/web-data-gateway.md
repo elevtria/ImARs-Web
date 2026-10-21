@@ -22,13 +22,21 @@ The isolated private Preview Worker `imars-web-auth-preview` is deployed at
 version `aff8fe94-5f2c-4b13-be33-6911ecfcd556`, with no public targets. Preview
 configuration now binds to that separate state Worker and enables the gateway
 only within Preview; missing secrets cause setup errors instead of a fallback.
-Preview secret values have not been uploaded. They require explicit authorization
-for that environment, plus its approved staff roster and Gemini credential.
+The user explicitly authorized credential use in Preview. Uploaded the validated
+service-account key and fresh random `WEB_SESSION_SECRET` and
+`WEB_MAINTENANCE_KEY` to encrypted Preview secrets through stdin with logging
+disabled; their saved names are confirmed. Preview still needs
+`WEB_STAFF_ACCOUNTS` and `GEMINI_API_KEY` supplied from the real approved values.
+Production's encrypted values cannot be read back for copying. Redeploy Preview
+after all secrets are present, then validate staff login and quiz generation.
 Deployed the website preview to `https://gateway-review.imars-web.pages.dev`
 (deployment `41bce574`). Its login page and browser login module return 200 and
 contain no Firebase configuration or private key. Auth configuration, protected
-dashboard and data requests return 503 while setup is incomplete. Production's
-public auth configuration still reports both gateway flags disabled.
+dashboard and data requests return 503 while setup is incomplete. Rechecked both
+public login modules: Production still serves `site-a6011748da17b6e9b095`, with
+Firebase configuration, and Preview serves `site-c6ea6a6ad39f5cd10b41`, without
+it. Production's public auth configuration still reports both gateway flags
+disabled. Saving the Preview secrets does not update the Production browser code.
 The new invitation verification check passes all 178 automated tests; the
 website build and Pages Functions compilation also pass.
 The next checks are the saved server settings, reviewed staff identities and a
