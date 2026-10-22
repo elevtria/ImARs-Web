@@ -79,6 +79,9 @@ function scheduler() {
         closest: selector => selector === ".activity-schedule-save" ? { closest: () => card } : null
       } });
     },
+    activityTermClick: index => element("activityScheduleList").events.click({ target: {
+      closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
+    } }),
     click: (attribute, value) => element("terms").events.click({
       target: { closest: (selector) => selector === `[data-${attribute}]` ? { dataset: { [attribute]: value } } : null }
     })
@@ -119,6 +122,19 @@ test("activity schedule uses the same lesson records and updates the topic tiles
   assert.equal(app.records.get("term_01")[0].scheduledDate, "");
   assert.equal(app.records.get("term_01")[0].isLocked, false);
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
+});
+
+test("activity schedule groups lessons in collapsible terms", async () => {
+  const app = scheduler();
+  const list = app.element("activityScheduleList");
+  assert.equal((list.innerHTML.match(/class="activity-term /g) || []).length, 3);
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="false"/);
+  assert.match(list.innerHTML, /id="activityTermRows0" hidden/);
+  await app.activityTermClick(0);
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
+  assert.match(list.innerHTML, /id="activityTermRows0"><article/);
+  await app.activityClick("0-0", "now");
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
 });
 
 test("a rejected activity access change keeps the confirmed lesson state", async () => {

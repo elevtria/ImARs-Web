@@ -828,6 +828,13 @@ td {
 .quiz-scheduler-heading h2 { margin-bottom: 0; }
 .quiz-scheduler-heading .ghost-btn { flex-shrink: 0; text-decoration: none; }
 .quiz-schedule-list { display: grid; gap: 12px; }
+.activity-term { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.activity-term-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; border: 0; background: #f8fafd; color: var(--ink); text-align: left; cursor: pointer; }
+.activity-term-name { font-size: 16px; font-weight: 800; }
+.activity-term-summary { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.activity-term.open .chevron { transform: rotate(180deg); }
+.activity-term-rows { display: grid; gap: 12px; padding: 12px; border-top: 1px solid var(--line); }
+.activity-term-rows[hidden] { display: none; }
 .quiz-schedule-empty { padding: 22px; border: 1px dashed var(--steel); border-radius: 14px; color: var(--muted); }
 .quiz-schedule-card { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 610px); gap: 20px; align-items: center; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafd; }
 .quiz-schedule-info { min-width: 0; }

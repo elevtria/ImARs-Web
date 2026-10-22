@@ -73,6 +73,7 @@ const syncStatus = document.getElementById("syncStatus");
 const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
 let activityMessage = "";
+const activityOpenTerms = [false, false, false];
 const setSyncStatus = (message, state = "") => {
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
@@ -103,7 +104,9 @@ function renderActivitySchedule() {
     activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
     return;
   }
-  activityList.innerHTML = terms.flatMap((term, termIndex) => term.topics.map((topic, topicIndex) => {
+  activityList.innerHTML = terms.map((term, termIndex) => {
+    const open = activityOpenTerms[termIndex];
+    const rows = term.topics.map((topic, topicIndex) => {
     const state = topicAvailability(topic);
     const mode = state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now";
     return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
@@ -118,7 +121,15 @@ function renderActivitySchedule() {
         <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
       </div>
     </article>`;
-  })).join("");
+    }).join("");
+    return `<section class="activity-term ${open ? "open" : ""}">
+      <button class="activity-term-toggle" type="button" data-activity-term="${termIndex}" aria-expanded="${open}" aria-controls="activityTermRows${termIndex}">
+        <span class="activity-term-name">${escapeHtml(term.name)}</span>
+        <span class="activity-term-summary">${term.topics.length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </button>
+      <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}</div>
+    </section>`;
+  }).join("");
 }
 
 function render() {
@@ -301,6 +312,13 @@ activityList.addEventListener("change", event => {
 });
 
 activityList.addEventListener("click", async event => {
+  const termToggle = event.target.closest("[data-activity-term]");
+  if (termToggle) {
+    const termIndex = Number(termToggle.dataset.activityTerm);
+    activityOpenTerms[termIndex] = !activityOpenTerms[termIndex];
+    renderActivitySchedule();
+    return;
+  }
   const button = event.target.closest(".activity-schedule-save");
   if (!button || !isReady || isSaving) return;
   const card = button.closest("[data-activity]");
