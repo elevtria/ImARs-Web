@@ -1,6 +1,6 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, collection, deleteDoc, doc, getDocs, query, setDoc, where } from "./firebase-data.js";
+import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
 import { quizFileSizeError } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
@@ -32,6 +32,8 @@ const firestore = getFirestore(firebaseApp);
   let generatedQuestions = [];
   let editorQuestions = [];
   let editingQuizId = null;
+  let expandedScheduleQuizId = null;
+  let scheduleBusy = false;
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({
@@ -461,8 +463,63 @@ const firestore = getFirestore(firebaseApp);
       const statusLabel = status === "now" ? "Available" : status === "scheduled" ? "Scheduled · locked" : "Draft · locked";
       const statusClass = status === "now" ? "available" : status === "scheduled" ? "scheduled" : "";
       const availability = status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
-      return "<article class='quiz-library-card'><div class='quiz-library-main'><div class='quiz-library-title-row'><h3>" + escapeHtml(quiz.title) + "</h3><span class='quiz-status-badge " + statusClass + "'>" + statusLabel + "</span></div><div class='quiz-library-details'><span>" + escapeHtml(quiz.section) + "</span><span>" + (quiz.questions || []).length + " questions</span><span>" + (quiz.type === "true-false" ? "True or false" : "Multiple choice") + "</span><span>" + availability + "</span></div></div><div class='quiz-library-actions'><button type='button' data-edit-quiz='" + escapeHtml(quiz.id) + "'>Edit</button><button class='delete' type='button' data-delete-quiz='" + escapeHtml(quiz.id) + "'>Delete</button></div></article>";
+      const expanded = expandedScheduleQuizId === quiz.id;
+      const scheduleForm = expanded ? `<form class="quiz-library-scheduler" data-schedule-form="${escapeHtml(quiz.id)}">
+        <div><strong>Quiz release</strong><p>Choose when learners in ${escapeHtml(quiz.section || "this section")} can open this quiz.</p></div>
+        <div class="quiz-library-scheduler-fields">
+          <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
+            <option value="draft" ${status === "draft" ? "selected" : ""}>Keep locked</option>
+            <option value="now" ${status === "now" ? "selected" : ""}>Available now</option>
+            <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Schedule release</option>
+          </select></label>
+          <label class="quiz-library-date" ${status === "scheduled" ? "" : "hidden"}>Release date and time <input name="availableAt" type="datetime-local" value="${status === "scheduled" ? escapeHtml(toLocalDateTimeInput(quiz.availableAt)) : ""}"></label>
+          <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
+        </div>
+      </form>` : "";
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${quiz.type === "true-false" ? "True or false" : "Multiple choice"}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
+  }
+
+  async function saveLibrarySchedule(form) {
+    if (scheduleBusy) return;
+    const id = form.dataset.scheduleForm;
+    const quiz = loadQuizzes().find(item => item.id === id);
+    if (!quiz || !auth.currentUser || !teacherProfileId) return;
+    const availability = form.elements.availability.value;
+    const dateInput = form.elements.availableAt;
+    const releaseDate = availability === "scheduled" ? new Date(dateInput.value) : null;
+    const libraryStatus = document.getElementById("libraryStatus");
+    if (availability === "scheduled" && (!dateInput.value || Number.isNaN(releaseDate.getTime()) || releaseDate.getTime() <= Date.now())) {
+      showStatus(libraryStatus, "Choose a future date and time for this quiz.", true);
+      dateInput.focus();
+      return;
+    }
+    scheduleBusy = true;
+    form.querySelector("button[type='submit']").disabled = true;
+    showStatus(libraryStatus, `Saving release for ${quiz.title}…`, false);
+    try {
+      const reference = doc(firestore, "generatedQuizzes", id);
+      const current = await getDoc(reference);
+      if (!current.exists() || current.data().teacherUid !== auth.currentUser.uid) throw new Error("This quiz is no longer available. Reload the page.");
+      const updated = {
+        ...current.data(),
+        id,
+        availability,
+        availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(reference, updated);
+      saveQuizzes(loadQuizzes().map(item => item.id === id ? updated : item));
+      expandedScheduleQuizId = null;
+      renderLibrary();
+      showStatus(libraryStatus, `Release saved for ${quiz.title}.`, false);
+    } catch (error) {
+      console.error("Could not save quiz release:", error);
+      showStatus(libraryStatus, error.message || "Could not save the quiz release. Try again.", true);
+    } finally {
+      scheduleBusy = false;
+      if (form.isConnected) form.querySelector("button[type='submit']").disabled = false;
+    }
   }
 
   function editQuiz(id) {
@@ -647,6 +704,13 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("newQuizFromLibrary").addEventListener("click", resetNewQuiz);
   document.getElementById("emptyCreateQuiz").addEventListener("click", resetNewQuiz);
   libraryList.addEventListener("click", async (event) => {
+    const schedule = event.target.closest("[data-schedule-quiz]");
+    if (schedule && !scheduleBusy) {
+      expandedScheduleQuizId = expandedScheduleQuizId === schedule.dataset.scheduleQuiz ? null : schedule.dataset.scheduleQuiz;
+      showStatus(document.getElementById("libraryStatus"), "", false);
+      renderLibrary();
+      return;
+    }
     const edit = event.target.closest("[data-edit-quiz]");
     const remove = event.target.closest("[data-delete-quiz]");
     if (edit) editQuiz(edit.dataset.editQuiz);
@@ -663,6 +727,17 @@ const firestore = getFirestore(firebaseApp);
         showStatus(document.getElementById("libraryStatus"), "Firebase blocked the delete. Check the Firestore rules for the generatedQuizzes collection.", true);
       }
     }
+  });
+  libraryList.addEventListener("change", (event) => {
+    if (!event.target.matches("select[name='availability']")) return;
+    const form = event.target.closest("[data-schedule-form]");
+    form.querySelector(".quiz-library-date").hidden = event.target.value !== "scheduled";
+  });
+  libraryList.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-schedule-form]");
+    if (!form) return;
+    event.preventDefault();
+    void saveLibrarySchedule(form);
   });
 
 })();
