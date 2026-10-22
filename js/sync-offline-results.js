@@ -277,7 +277,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
     }
 
     // 4. Record Scan & Update UI
-    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr"); // <-- ADDED 'await' back
+    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr", pending?.key);
     if (modalSyncText) modalSyncText.textContent = `✓ All Terms & Lessons Synced!`;
     status.textContent = `Successfully scanned and synced ${studentName}'s records.`;
     
@@ -472,18 +472,21 @@ async function loadRecentScans() {
   }
 }
 
-// --- CHANGED: Removed the broken 'record' variable references ---
-export async function saveScanToDatabase(moduleName, type = "qr") {
+export async function saveScanToDatabase(moduleName, type = "qr", scanId = null) {
   if (!activeTeacherId) throw new Error("Sign in before saving a scan.");
 
   try {
     const scansRef = collection(db, "users", activeTeacherId, "recent_scans");
     
-    await addDoc(scansRef, { // <-- ADDED 'await' back
+    const record = {
       moduleName: moduleName,
       scanType: type,
       timestamp: serverTimestamp()
-    });
+    };
+    if (scanId) {
+      const reference = doc(scansRef, scanId);
+      if (!(await getDoc(reference)).exists()) await setDoc(reference, record);
+    } else await addDoc(scansRef, record);
 
     loadRecentScans();
   } catch (error) {
