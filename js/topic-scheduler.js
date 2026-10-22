@@ -70,6 +70,9 @@ let isReady = false;
 let isSaving = false;
 let dateTarget = null;
 const syncStatus = document.getElementById("syncStatus");
+const activityStatus = document.getElementById("activityScheduleStatus");
+const activityList = document.getElementById("activityScheduleList");
+let activityMessage = "";
 const setSyncStatus = (message, state = "") => {
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
@@ -92,6 +95,31 @@ const lockIcon = (locked) => locked
   : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/></svg>`;
 
 const calIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
+
+function renderActivitySchedule() {
+  const activityCount = terms.reduce((total, term) => total + term.topics.length, 0);
+  activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
+  if (!isReady) {
+    activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
+    return;
+  }
+  activityList.innerHTML = terms.flatMap((term, termIndex) => term.topics.map((topic, topicIndex) => {
+    const state = topicAvailability(topic);
+    const mode = state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now";
+    return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
+      <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${mode === "scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
+      <div class="quiz-schedule-controls">
+        <label class="quiz-schedule-access">Access <select class="activity-schedule-mode" aria-label="Access for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}>
+          <option value="locked" ${mode === "locked" ? "selected" : ""}>Locked</option>
+          <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
+          <option value="scheduled" ${mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
+        </select></label>
+        <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(topic.date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+        <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
+      </div>
+    </article>`;
+  })).join("");
+}
 
 function render() {
   const root = document.getElementById("terms");
@@ -164,6 +192,7 @@ function render() {
       </div>
     `;
   }).join("");
+  renderActivitySchedule();
 }
 
 const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
@@ -255,6 +284,7 @@ onAuthStateChanged(auth, (user) => {
   stopScheduleListeners.forEach((stop) => stop());
   stopScheduleListeners = [];
   isReady = false;
+  activityMessage = "";
   render();
   if (!user) {
     setSyncStatus("Sign in to load and edit the lesson schedule.", "error");
@@ -262,6 +292,45 @@ onAuthStateChanged(auth, (user) => {
   }
 
   watchScheduleFromFirestore(generation, user);
+});
+
+activityList.addEventListener("change", event => {
+  if (!event.target.matches(".activity-schedule-mode")) return;
+  const card = event.target.closest("[data-activity]");
+  card.querySelector(".quiz-schedule-date").hidden = event.target.value !== "scheduled";
+});
+
+activityList.addEventListener("click", async event => {
+  const button = event.target.closest(".activity-schedule-save");
+  if (!button || !isReady || isSaving) return;
+  const card = button.closest("[data-activity]");
+  const [termIndex, topicIndex] = card.dataset.activity.split("-").map(Number);
+  const topic = terms[termIndex]?.topics[topicIndex];
+  if (!topic) return;
+  const mode = card.querySelector(".activity-schedule-mode").value;
+  const dateInput = card.querySelector(".quiz-schedule-date input");
+  if (mode === "scheduled" && (!dateInput.value || dateInput.value <= todayISO() || !dateInput.checkValidity())) {
+    activityMessage = "Choose a future release date for this activity.";
+    activityStatus.textContent = activityMessage;
+    dateInput.focus();
+    return;
+  }
+  const update = mode === "scheduled" ? scheduledAccessUpdate(dateInput.value, topic) : manualAccessUpdate(mode === "locked");
+  isSaving = true;
+  activityMessage = `Saving access for ${topic.title}…`;
+  render();
+  try {
+    await updateDoc(lessonRef(termIndex, topicIndex), update);
+    activityMessage = `Saved access for ${topic.title}.`;
+    setSyncStatus("Connected · changes save to Firebase", "success");
+  } catch (error) {
+    console.error("Unable to save activity access:", error);
+    activityMessage = `Could not save activity access: ${error.message}`;
+    setSyncStatus(activityMessage, "error");
+  } finally {
+    isSaving = false;
+    render();
+  }
 });
 
 document.getElementById("terms").addEventListener("click", async (event) => {

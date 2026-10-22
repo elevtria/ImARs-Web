@@ -829,17 +829,24 @@ td {
 .quiz-scheduler-heading .ghost-btn { flex-shrink: 0; text-decoration: none; }
 .quiz-schedule-list { display: grid; gap: 12px; }
 .quiz-schedule-empty { padding: 22px; border: 1px dashed var(--steel); border-radius: 14px; color: var(--muted); }
-.quiz-schedule-card { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 20px; align-items: center; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafd; }
+.quiz-schedule-card { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 610px); gap: 20px; align-items: center; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafd; }
 .quiz-schedule-info { min-width: 0; }
 .quiz-schedule-section { color: #41658b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .quiz-schedule-info h3 { margin: 3px 0; font-size: 15px; overflow-wrap: anywhere; }
 .quiz-schedule-info p { color: var(--muted); font-size: 12px; }
-.quiz-schedule-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.quiz-schedule-controls { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(210px, 1.2fr) auto; align-items: end; gap: 10px; }
+.quiz-schedule-controls .quiz-schedule-access { grid-column: 1; }
+.quiz-schedule-controls .quiz-schedule-date { grid-column: 2; }
+.quiz-schedule-controls .quiz-schedule-save, .quiz-schedule-controls .activity-schedule-save { grid-column: 3; }
 .quiz-schedule-controls label { display: grid; gap: 4px; color: #506980; font-size: 11px; font-weight: 800; }
 .quiz-schedule-controls label[hidden] { display: none; }
-.quiz-schedule-controls select, .quiz-schedule-controls input { min-height: 38px; padding: 7px 9px; border: 1px solid #b9c9dc; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
+.quiz-schedule-controls select, .quiz-schedule-controls input { width: 100%; min-height: 38px; padding: 7px 9px; border: 1px solid #b9c9dc; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
 .quiz-schedule-controls .primary-btn { min-height: 38px; padding: 7px 14px; }
-@media (max-width: 800px) { .quiz-schedule-card { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .quiz-schedule-card { grid-template-columns: 1fr; } }
+@media (max-width: 650px) {
+  .quiz-schedule-controls { grid-template-columns: 1fr; }
+  .quiz-schedule-controls .quiz-schedule-access, .quiz-schedule-controls .quiz-schedule-date, .quiz-schedule-controls .quiz-schedule-save, .quiz-schedule-controls .activity-schedule-save { grid-column: 1; }
+}
 
 .bar {
   height: 8px;
