@@ -103,14 +103,15 @@
         <div class="performance-table-wrap">
           <table class="performance-table" id="studentGrid">
             <thead>
-              <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Improvement</th></tr>
+              <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Activity Score</th><th scope="col">Improvement</th></tr>
             </thead>
             <!-- Added id="studentTableBody" and cleared out hardcoded students -->
             <tbody id="studentTableBody">
-              <tr class="empty-row" id="emptyState" hidden><td colspan="5">No students match that search.</td></tr>
+              <tr class="empty-row" id="emptyState" hidden><td colspan="6">No students match that search.</td></tr>
             </tbody>
           </table>
         </div>
+        <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
       </section>
 
 <!-- Topic Completion Rate Section -->

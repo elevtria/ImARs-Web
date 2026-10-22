@@ -824,6 +824,39 @@ td {
 
 .year-col .year-meta span:last-child { color: var(--ink); font-weight: 800; }
 
+.topic-progress-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.topic-progress-tile {
+  display: grid;
+  place-items: center;
+  height: 36px;
+  border: 2px dashed #c4cfdd;
+  border-radius: 10px;
+  background: #f5f7fa;
+  color: #67788d;
+  font-size: 12px;
+  font-weight: 800;
+}
+.year-col:nth-child(1) .topic-progress-tile.is-unlocked { background: #fff0ba; border: 2px solid #cb8800; color: #6f4b00; }
+.year-col:nth-child(2) .topic-progress-tile.is-unlocked { background: #d9f7e4; border: 2px solid #14834c; color: #145b3a; }
+.year-col:nth-child(3) .topic-progress-tile.is-unlocked { background: #dceeff; border: 2px solid #2478d4; color: #164e89; }
+
+.quiz-scheduler-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.quiz-scheduler-heading h2 { margin-bottom: 0; }
+.quiz-scheduler-heading .ghost-btn { flex-shrink: 0; text-decoration: none; }
+.quiz-schedule-list { display: grid; gap: 12px; }
+.quiz-schedule-empty { padding: 22px; border: 1px dashed var(--steel); border-radius: 14px; color: var(--muted); }
+.quiz-schedule-card { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 20px; align-items: center; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafd; }
+.quiz-schedule-info { min-width: 0; }
+.quiz-schedule-section { color: #41658b; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.quiz-schedule-info h3 { margin: 3px 0; font-size: 15px; overflow-wrap: anywhere; }
+.quiz-schedule-info p { color: var(--muted); font-size: 12px; }
+.quiz-schedule-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; }
+.quiz-schedule-controls label { display: grid; gap: 4px; color: #506980; font-size: 11px; font-weight: 800; }
+.quiz-schedule-controls label[hidden] { display: none; }
+.quiz-schedule-controls select, .quiz-schedule-controls input { min-height: 38px; padding: 7px 9px; border: 1px solid #b9c9dc; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; font-size: 13px; }
+.quiz-schedule-controls .primary-btn { min-height: 38px; padding: 7px 14px; }
+@media (max-width: 800px) { .quiz-schedule-card { grid-template-columns: 1fr; } }
+
 .bar {
   height: 8px;
   background: rgba(191, 200, 226, 0.7);

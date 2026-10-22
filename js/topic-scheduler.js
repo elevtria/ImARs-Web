@@ -14,7 +14,6 @@ import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
 
 const THEMES = ["yellow", "green", "blue"];
-const FILLS = ["fill-yellow", "fill-green", "fill-blue"];
 const TERM_IDS = ["term_01", "term_02", "term_03"];
 
 const DEFAULT_TERMS = [
@@ -160,7 +159,9 @@ function render() {
           <span>${term.name}</span>
           <span>${isReady ? `${pct}%` : "—"}</span>
         </div>
-        <div class="bar" role="progressbar" aria-label="${term.name} unlocked topics" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${isReady ? `${availability.unlocked} of ${availability.total} topics unlocked` : "Waiting for data"}"><i class="${FILLS[ti]}" style="width:${pct}%"></i></div>
+        <div class="topic-progress-tiles" role="progressbar" aria-label="${term.name} unlocked topics" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${isReady ? `${availability.unlocked} of ${availability.total} topics unlocked` : "Waiting for data"}">
+          ${term.topics.map((topic, index) => `<span class="topic-progress-tile ${isReady && !isTopicLocked(topic) ? "is-unlocked" : ""}" title="${escapeHtml(`${index + 1}. ${topic.title}: ${isReady ? (isTopicLocked(topic) ? "Locked" : "Unlocked") : "Waiting for data"}`)}" aria-hidden="true">${index + 1}</span>`).join("")}
+        </div>
       </div>
     `;
   }).join("");

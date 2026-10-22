@@ -11,6 +11,7 @@ import {
 } from "./firebase-data.js";
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";
+import { activityPercent } from "./activity-score.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -197,12 +198,19 @@ onAuthStateChanged(auth, async user => {
           let studentPreSum = 0;
           let studentPostSum = 0;
           let testCount = 0;
+          let studentActivitySum = 0;
+          let activityCount = 0;
 
           // Check tests across all active terms
           for (const { termId, lessonsSnap } of results) {
             lessonsSnap.forEach((lessonDoc) => {
               const tData = lessonDoc.data();
               const compositeKey = `${termId}_${lessonDoc.id}`;
+              const activity = activityPercent(tData);
+              if (activity !== null) {
+                studentActivitySum += activity;
+                activityCount++;
+              }
 
               // Check completion for the matching term & lesson
               if (topicStatsMap.has(compositeKey)) {
@@ -234,14 +242,17 @@ onAuthStateChanged(auth, async user => {
             });
           }
 
-          if (testCount > 0) {
-            const avgPre = Math.round(studentPreSum / testCount);
-            const avgPost = Math.round(studentPostSum / testCount);
-            const improvement = avgPost - avgPre;
+          if (testCount > 0 || activityCount > 0) {
+            const avgPre = testCount ? Math.round(studentPreSum / testCount) : null;
+            const avgPost = testCount ? Math.round(studentPostSum / testCount) : null;
+            const avgActivity = activityCount ? Math.round(studentActivitySum / activityCount) : null;
+            const improvement = testCount ? avgPost - avgPre : null;
 
-            totalClassPrePercentageSum += avgPre;
-            totalClassPostPercentageSum += avgPost;
-            totalStudentTestsCount++;
+            if (testCount) {
+              totalClassPrePercentageSum += avgPre;
+              totalClassPostPercentageSum += avgPost;
+              totalStudentTestsCount++;
+            }
 
             const tr = document.createElement("tr");
             tr.className = "student-row";
@@ -254,9 +265,10 @@ onAuthStateChanged(auth, async user => {
             tr.innerHTML = `
               <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
               <td>Grade 6 – ${escapeHtml(sectionName)}</td>
-              <td>${avgPre}%</td>
-              <td>${avgPost}%</td>
-              <td><span class="improvement-value ${impClass}">${impSign}${improvement}%</span></td>
+              <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
+              <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
+              <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
+              <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
             `;
 
             rows.appendChild(tr);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { activityPercent } from "../js/activity-score.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
@@ -30,7 +31,7 @@ function page(file, report) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   let authChanged;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml,
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -65,12 +66,14 @@ test("dashboard names, sections, and lesson titles render as text rather than ex
 
 test("analytics names, sections, and topic titles cannot inject HTML into reports", async () => {
   const lesson = record("lesson_01", { isPreTestCompleted: true, preTestScore: 4, preTestTotalQuestions: 5,
-    isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10 });
+    isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10,
+    activityScore: 3, activityTotalQuestions: 4 });
   const app = page("analytics.js", { curriculum: [snapshot([record("lesson_01", { title: attack })]), snapshot([]), snapshot([])],
     sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: record("S1", { displayName: attack }),
       results: [{ termId: "term_01", lessonsSnap: snapshot([lesson]) }] }] }] });
   await app.render();
   assertTextOnly(app.element("#studentGrid tbody").html());
+  assert.ok(app.element("#studentGrid tbody").html().includes("75%"));
   assertTextOnly(app.element("topicsContainer").html());
 });
 
