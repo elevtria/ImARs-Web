@@ -1,0 +1,18 @@
+/* Shared visual rhythm for the teacher and administrator portals. */
+@media screen {
+:root { --portal-ink:#2c3a4f; --portal-muted:#596b7e; --portal-line:#a4b8d94d; --portal-blue:#81a2c1; --portal-gold:#feb705; }
+body:not(.login-page) :is(.hero,.intro) { padding:22px 24px; border-left:4px solid var(--portal-gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
+body:not(.login-page) :is(.card.section,.term-card,.progress-card,.scan-card,.recent-card,.panel,.profile-info-card,.profile-session-card) { border:1px solid #ffffffbd; border-radius:20px; box-shadow:0 8px 28px #81a2c11a; background:linear-gradient(135deg,#fffffff0,#f6f8fcdf); }
+body:not(.login-page) :is(.section-head,.panel-heading) h2 { color:var(--portal-ink); letter-spacing:-.025em; }
+body:not(.login-page) :is(.progress-card,.scan-card,.recent-card) > h2 { padding-left:12px; border-left:4px solid var(--portal-blue); }
+body:not(.login-page) :is(.metric-card,.profile-card) { border-radius:20px; border-top:3px solid var(--portal-blue); box-shadow:0 8px 24px #81a2c11a; }
+body:not(.login-page) .metric-card:nth-child(3n) { border-top-color:var(--portal-gold); }
+body:not(.login-page) .record { border-left:3px solid var(--portal-blue); background:linear-gradient(110deg,#fffffff0,#bfc8e21f); }
+body:not(.login-page) .record:nth-child(3n) { border-left-color:var(--portal-gold); }
+body:not(.login-page) :is(.table-wrap,.table-scroll) thead { background:#bfc8e233; }
+body:not(.login-page) :is(.table-wrap,.table-scroll) tbody tr:nth-child(even) { background:#bfc8e214; }
+body:not(.login-page) :is(input,select,textarea):focus-visible { outline:2px solid var(--portal-blue); outline-offset:2px; }
+body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outline:3px solid var(--portal-blue); outline-offset:3px; }
+body:not(.login-page) :is(.admin-nav-link,.admin-nav-item).active { background:var(--portal-blue); color:#fff; }
+@media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
+}

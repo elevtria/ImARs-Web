@@ -1982,3 +1982,23 @@ label {
   body:has(#drawer) .app { transition:margin-left 280ms cubic-bezier(.22,1,.36,1); }
   #drawer .drawer-panel { transition:none; }
 }
+
+/* Reserve a stable icon rail so hovering never reflows dashboard content. */
+@media(min-width:1000px) {
+  body:has(#drawer) .app { margin-left:82px; transition:none; }
+  #drawer .drawer-panel { width:260px; overflow:hidden; }
+  #drawer.is-compact .drawer-panel { width:82px; }
+  #drawer .brand { height:86px; flex-wrap:nowrap; justify-content:flex-start; padding:22px; }
+  #drawer.is-compact .brand { padding:22px; flex-wrap:nowrap; justify-content:flex-start; }
+  #drawer .brand > div,#drawer .nav-label,#drawer .user-meta { display:block; opacity:1; white-space:nowrap; }
+  #drawer.is-compact .brand > div,#drawer.is-compact .nav-label,#drawer.is-compact .user-meta { display:block; opacity:0; pointer-events:none; }
+  #drawer .side-nav,#drawer.is-compact .side-nav { padding:14px 12px 24px; }
+  #drawer .nav-item,#drawer.is-compact .nav-item { width:234px; justify-content:flex-start; padding:11px 19px; min-height:44px; }
+  #drawer .side-user,#drawer.is-compact .side-user { width:260px; flex-direction:row; padding:18px 22px; }
+  #drawer.is-compact .account { visibility:hidden; }
+  #drawer:not(.is-compact) .drawer-panel { box-shadow:10px 0 30px #2c3a4f18; }
+}
+@media(min-width:1000px) and (prefers-reduced-motion:no-preference) {
+  #drawer,#drawer .drawer-panel { transition:width 320ms cubic-bezier(.22,1,.36,1); }
+  #drawer .nav-label,#drawer .brand > div,#drawer .user-meta { transition:opacity 180ms ease; }
+}
