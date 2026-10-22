@@ -930,7 +930,7 @@ td {
   width: auto;
 }
 
-.record .overall { justify-items: initial; gap: 0; background: #ffedba; color: #765000; border: 1px solid #e8bf5b; }
+.record .overall { justify-items: initial; gap: 0; }
 
 .donut {
   position: relative;
@@ -1135,8 +1135,6 @@ td {
   padding: 22px 24px 20px;
   margin-bottom: 16px;
   border: 1.5px solid var(--gold);
-  background: rgba(255, 251, 241, 0.9);
-  box-shadow: 0 10px 30px rgba(149, 108, 16, 0.12);
 }
 
 .record-head {
@@ -1157,8 +1155,7 @@ td {
 }
 
 .record .stat {
-  background: #fff2d7;
-  border: 1px solid #f2d48a;
+  background: rgba(191, 200, 226, 0.45);
   border-radius: 16px;
   padding: 14px 16px;
   min-height: 0;
@@ -1179,13 +1176,8 @@ td {
   letter-spacing: -0.03em;
 }
 
-.record-progress { padding: 11px 14px 13px; border: 1px solid #ebcf8d; border-radius: 14px; background: #fff7e7; }
-.record-progress-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; color: #69511d; font-size: 12px; font-weight: 800; }
-.record-progress-label strong { color: #7a4e00; font-size: 14px; }
-.record-progress-steps { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
-.record-progress-step { position: relative; height: 20px; overflow: hidden; border: 1px solid #d9b867; border-radius: 6px; background: #fffdf7; }
-.record-progress-step::before { position: absolute; inset: 0 auto 0 0; width: var(--step-fill); background: linear-gradient(90deg, #f5ae00, #ffce45); content: ""; }
-.card .bar i {
+.record .bar { height: 8px; }
+.record .bar i, .card .bar i {
   display: block;
   height: 100%;
   background: var(--steel);
