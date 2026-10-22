@@ -1919,3 +1919,26 @@ label {
 #drawer.is-compact .side-user { flex-direction:column; padding:16px 10px; }
 #drawer.is-compact .account-menu { right:auto; left:30px; bottom:0; }
 @media(prefers-reduced-motion:reduce) { #drawer,#drawer .drawer-panel { transition:none; } }
+
+/* Desktop navigation occupies its own column instead of covering the page. */
+@media (min-width:1000px) {
+  body:has(#drawer) { --navigation-width:260px; }
+  body:has(#drawer.is-compact) { --navigation-width:82px; }
+  body:has(#drawer) .app { margin-left:var(--navigation-width); }
+  #drawer { inset:0 auto 0 0; width:var(--navigation-width); opacity:1; pointer-events:auto; background:transparent; }
+  #drawer .drawer-panel { width:100%; transform:none; border-right:1px solid var(--line); box-shadow:3px 0 20px #2c3a4f08; }
+  #drawer.is-compact .drawer-panel { width:100%; }
+  #drawer .nav-close { display:none; }
+}
+
+/* The desktop sidebar replaces the header menu button; mobile keeps its opener. */
+@media (min-width:1000px) {
+  body:has(#drawer) #menuBtn { display:none; }
+}
+
+/* Dashboard summaries link directly to their detailed views. */
+.stats .stat-link { display:block; position:relative; color:inherit; text-decoration:none; cursor:pointer; transition:background-color .18s ease,box-shadow .18s ease; }
+.stats .stat-link:hover { background:#fff; box-shadow:0 10px 28px #81a2c12e; }
+.stats .stat-link:focus-visible { outline:3px solid var(--steel); outline-offset:4px; }
+.stat-link-arrow { position:absolute; top:20px; right:22px; color:var(--steel); font-size:22px; line-height:1; }
+@media(prefers-reduced-motion:reduce) { .stats .stat-link { transition:none; } }

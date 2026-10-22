@@ -12,11 +12,29 @@ if (navigationDrawer) {
     collapse.setAttribute("aria-expanded", "true");
     collapse.innerHTML = svg('<path d="m14 6-6 6 6 6"/>');
     brand.append(collapse);
-    collapse.addEventListener("click", () => {
+    const toggleCompact = () => {
       const compact = navigationDrawer.classList.toggle("is-compact");
       collapse.setAttribute("aria-expanded", String(!compact));
       collapse.setAttribute("aria-label", compact ? "Expand navigation labels" : "Collapse navigation labels");
-    });
+    };
+    collapse.addEventListener("click", toggleCompact);
+
+    const desktop = window.matchMedia("(min-width:1000px)");
+    const syncLayout = () => {
+      navigationDrawer.setAttribute("aria-hidden", String(!desktop.matches && !navigationDrawer.classList.contains("open")));
+    };
+    desktop.addEventListener("change", syncLayout);
+    new MutationObserver(() => {
+      const hidden = String(!desktop.matches && !navigationDrawer.classList.contains("open"));
+      if (navigationDrawer.getAttribute("aria-hidden") !== hidden) navigationDrawer.setAttribute("aria-hidden", hidden);
+    }).observe(navigationDrawer, { attributes:true, attributeFilter:["aria-hidden", "class"] });
+    document.getElementById("menuBtn")?.addEventListener("click", event => {
+      if (!desktop.matches) return;
+      event.stopImmediatePropagation();
+      toggleCompact();
+    }, true);
+    syncLayout();
+
     const close = document.createElement("button");
     close.type = "button";
     close.className = "nav-close";
