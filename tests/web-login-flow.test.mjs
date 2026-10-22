@@ -3,8 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-function page({ protection = true, denied = false, outage = false, search = "", configuration, profileExists = true } = {}) {
+function page({ protection = true, denied = false, outage = false, search = "", configuration, profileExists = true, responses } = {}) {
   const elements = new Map(), calls = [];
+  const pendingResponses = responses?.slice();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { value: "", disabled: false, events: {}, style: {}, attributes: {}, classList: { add() {}, remove() {}, toggle() {} },
       addEventListener(name, callback) { this.events[name] = callback; },
@@ -15,6 +16,10 @@ function page({ protection = true, denied = false, outage = false, search = "", 
   const location = { href: "login.html", search, pathname: "/login" };
   const context = vm.createContext({
     console: { error() {} }, document: { getElementById: element }, window: { location }, URLSearchParams,
+    AbortSignal, sessionStorage: { getItem: () => null }, fetch: async () => {
+      const { body, status } = pendingResponses.shift();
+      return Response.json(body, { status });
+    },
     localStorage: { setItem() {} }, initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
     webProtectionEnabled: async () => { if (outage) throw new Error("Unavailable"); await configuration; return protection; },
     protectedWebLogin: async (...args) => {
@@ -27,6 +32,7 @@ function page({ protection = true, denied = false, outage = false, search = "", 
       if (outage || !protection) throw new Error("Unavailable");
       await configuration;
       calls.push(["server", identifier, password, role]);
+      if (pendingResponses) return context.webRequest("/api/web-auth/login", { identifier, password, portal: role });
       if (denied || !profileExists) throw Object.assign(new Error("Web login is locked. Contact your administrator."), { userMessage: "Web login is locked. Contact your administrator." });
       return { user: { uid: "teacher-a" } };
     },
@@ -34,6 +40,10 @@ function page({ protection = true, denied = false, outage = false, search = "", 
     getDoc: async () => { calls.push(["legacy-profile"]); return { exists: () => profileExists, data: () => ({ role: "teacher", email: "teacher@example.test" }) }; },
     getDocs: async () => ({ empty: false, docs: [{ data: () => ({ role: "teacher" }) }] })
   });
+  if (pendingResponses) {
+    const transport = readFileSync(new URL("../js/web-login.js", import.meta.url), "utf8").replace(/^export /gm, "");
+    vm.runInContext(transport, context);
+  }
   const source = readFileSync(new URL("../js/login.js", import.meta.url), "utf8").replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
   vm.runInContext(source, context);
   element("teacherId").value = "TEACH1000"; element("password").value = "password";
@@ -118,3 +128,25 @@ test("an expired website session opens the normal login without an automatic err
   await app.submit("loginForm");
   assert.equal(app.location.href, "index.html");
 });
+
+for (const [role, form, errorId] of [["teacher", "loginForm", "error"], ["admin", "adminLoginForm", "adminError"]]) {
+  test(`${role} login shows server attempts and lock durations without inventing a browser counter`, async () => {
+    const responses = [
+      { status: 401, body: { error: "Invalid ID or password. Please try again. (2/3 attempts)" } },
+      { status: 429, body: { error: "Too many incorrect attempts.", retryAfter: 300 } },
+      { status: 429, body: { error: "Too many incorrect attempts.", retryAfter: 18000 } },
+      { status: 429, body: { error: "Web login is locked. Contact your administrator or website maintenance to restore access.", manual: true, retryAfter: 0 } }
+    ];
+    const app = page({ responses });
+    for (const expected of [
+      "Invalid ID or password. Please try again. (2/3 attempts)",
+      "Too many incorrect attempts. Please try again in 5 minutes.",
+      "Too many incorrect attempts. Please try again in 5 hours.",
+      "Web login is locked. Contact your administrator or website maintenance to restore access."
+    ]) {
+      await app.submit(form);
+      assert.equal(app.element(errorId)[role === "teacher" ? "innerText" : "textContent"], expected);
+      assert.equal(app.location.href, "login.html");
+    }
+  });
+}

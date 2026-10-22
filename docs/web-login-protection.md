@@ -22,6 +22,12 @@ and configuration errors do not count as wrong passwords. Time passing never
 clears an indefinite lock. Teachers contact an administrator or maintenance;
 locked administrators require maintenance recovery.
 
+Teacher and admin forms display server-confirmed failures as "Invalid ID or
+password. Please try again. (1/3 attempts)" and then "(2/3 attempts)". The third
+failure displays the waiting time instead. Unknown IDs and wrong-portal
+submissions follow the same error sequence in separate private counters; they
+cannot change a real account's failure history. No browser counter is trusted.
+
 ## Enforcement and limits
 
 Cloudflare Durable Objects persist counters by Firebase UID and serialize the
