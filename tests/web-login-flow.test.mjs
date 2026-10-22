@@ -109,10 +109,11 @@ test("an unknown Teacher ID restores the button after the profile check", async 
   assert.deepEqual(app.calls, [["server", "TEACH1000", "password", "teacher"]]);
 });
 
-test("an expired website session shows a sign-in message and preserves the normal teacher login", async () => {
+test("an expired website session opens the normal login without an automatic error", async () => {
   const app = page({ search: "?reason=web-session" });
-  assert.match(app.element("error").innerText, /session ended/);
-  assert.equal(app.element("error").style.display, "block");
+  assert.equal(app.element("error").innerText, undefined);
+  assert.equal(app.element("error").textContent, undefined);
+  assert.notEqual(app.element("error").style.display, "block");
   assert.deepEqual(app.calls, []);
   await app.submit("loginForm");
   assert.equal(app.location.href, "index.html");

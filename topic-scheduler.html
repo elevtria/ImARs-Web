@@ -48,6 +48,15 @@
 
       <section class="terms" id="terms"></section>
 
+      <section class="progress-card quiz-scheduler" aria-labelledby="quizSchedulerHeading">
+        <div class="quiz-scheduler-heading">
+          <div><h2 id="quizSchedulerHeading">Generated quiz schedule</h2><p class="scheduler-progress-copy">Set a release time or change access for quizzes made in Quiz Generator.</p></div>
+          <a class="ghost-btn" href="quiz-generator.html">Create quiz</a>
+        </div>
+        <p class="scheduler-sync-status" id="quizScheduleStatus" role="status" aria-live="polite">Loading quizzes…</p>
+        <div id="quizScheduleList" class="quiz-schedule-list"></div>
+      </section>
+
       <section class="progress-card">
         <h2>Year Progress</h2>
         <p class="scheduler-progress-copy">Based on topics currently unlocked for learners.</p>
@@ -141,6 +150,7 @@
   </div>
   <script src="js/ui.js"></script>
   <script type="module" src="js/topic-scheduler.js"></script>
+  <script type="module" src="js/quiz-scheduler.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/school-year.js"></script>
 </body>
