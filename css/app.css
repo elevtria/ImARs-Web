@@ -1176,7 +1176,18 @@ td {
   letter-spacing: -0.03em;
 }
 
-.record .bar { height: 8px; }
+.record-progress-tile {
+  display: grid;
+  grid-template-columns: auto minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(191, 200, 226, 0.45);
+}
+.record-progress-title { color: #5b6e84; font-size: 13px; font-weight: 700; }
+.record-progress-value { min-width: 42px; color: #3f5c78; font-size: 15px; font-weight: 800; text-align: right; }
+.record-progress-tile .bar { height: 14px; background: rgba(255, 255, 255, 0.85); box-shadow: inset 0 0 0 1px rgba(129, 162, 193, 0.4); }
 .record .bar i, .card .bar i {
   display: block;
   height: 100%;
@@ -1820,6 +1831,8 @@ label {
   .performance-controls .search { width: 100%; }
   .search { min-width: 0; width: 100%; }
   .record .stats { grid-template-columns: 1fr 1fr; }
+  .record-progress-tile { grid-template-columns: 1fr auto; gap: 9px 12px; }
+  .record-progress-title { grid-column: 1 / -1; }
   .cols { grid-template-columns: 1fr 1fr; }
   .banner { flex-direction: column; align-items: flex-start; border-radius: 18px; }
   .progress-head, .files-foot { flex-direction: column; align-items: stretch; }
