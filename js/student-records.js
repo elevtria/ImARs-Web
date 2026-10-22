@@ -182,7 +182,12 @@ onAuthStateChanged(auth, async user => {
                 <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
                 <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
               </div>
-              <div class="bar" aria-label="${overallPercent} percent overall"><i style="width:${overallPercent}%"></i></div>
+              <div class="record-progress">
+                <div class="record-progress-label"><span>Overall performance</span><strong>${overallPercent}%</strong></div>
+                <div class="record-progress-steps" role="progressbar" aria-label="Overall performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}">
+                  ${Array.from({ length: 10 }, (_, index) => `<span class="record-progress-step" style="--step-fill:${Math.max(0, Math.min(100, (overallPercent - index * 10) * 10))}%" aria-hidden="true"></span>`).join("")}
+                </div>
+              </div>
             `;
             for (const [selector, action] of [[".edit-student-btn", "Edit"], [".delete-student-btn", "Archive"]]) {
               const button = card.querySelector(selector);
