@@ -77,6 +77,9 @@ const showAdminError = (msg) => {
 const clearAdminModal = () => {
   if (adminError) adminError.classList.add("hidden");
   if (adminForm) adminForm.reset();
+  adminPasswordInput.type = "password";
+  toggleAdminPassword.setAttribute("aria-label", "Show password");
+  toggleAdminPassword.setAttribute("aria-pressed", "false");
 };
 
 if (openAdminBtn && adminModal) {
@@ -148,3 +151,12 @@ if (urlParams.get("reason") === "web-session") {
     message.style.display = "block";
   }
 }
+
+const adminPasswordInput = document.getElementById("adminPassword");
+const toggleAdminPassword = document.getElementById("toggleAdminPassword");
+toggleAdminPassword.addEventListener("click", () => {
+  const hidden = adminPasswordInput.type === "password";
+  adminPasswordInput.type = hidden ? "text" : "password";
+  toggleAdminPassword.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+  toggleAdminPassword.setAttribute("aria-pressed", String(hidden));
+});
