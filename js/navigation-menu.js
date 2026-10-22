@@ -5,22 +5,20 @@ if (navigationDrawer) {
   const brand = panel?.querySelector(".brand");
   if (panel && brand) {
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
-    const collapse = document.createElement("button");
-    collapse.type = "button";
-    collapse.className = "nav-collapse";
-    collapse.setAttribute("aria-label", "Collapse navigation labels");
-    collapse.setAttribute("aria-expanded", "true");
-    collapse.innerHTML = svg('<path d="m14 6-6 6 6 6"/>');
-    brand.append(collapse);
-    const toggleCompact = () => {
-      const compact = navigationDrawer.classList.toggle("is-compact");
-      collapse.setAttribute("aria-expanded", String(!compact));
-      collapse.setAttribute("aria-label", compact ? "Expand navigation labels" : "Collapse navigation labels");
-    };
-    collapse.addEventListener("click", toggleCompact);
-
     const desktop = window.matchMedia("(min-width:1000px)");
+    const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
+    let pointerInside = false;
+    const updateCompact = () => {
+      const focused = panel.contains(document.activeElement);
+      navigationDrawer.classList.toggle("is-compact", desktop.matches && hoverPointer.matches && !pointerInside && !focused);
+    };
+    panel.addEventListener("pointerenter", () => { pointerInside = true; updateCompact(); });
+    panel.addEventListener("pointerleave", () => { pointerInside = false; updateCompact(); });
+    panel.addEventListener("focusin", updateCompact);
+    panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
+    hoverPointer.addEventListener("change", updateCompact);
     const syncLayout = () => {
+      updateCompact();
       navigationDrawer.setAttribute("aria-hidden", String(!desktop.matches && !navigationDrawer.classList.contains("open")));
     };
     desktop.addEventListener("change", syncLayout);
@@ -31,7 +29,8 @@ if (navigationDrawer) {
     document.getElementById("menuBtn")?.addEventListener("click", event => {
       if (!desktop.matches) return;
       event.stopImmediatePropagation();
-      toggleCompact();
+      pointerInside = true;
+      updateCompact();
     }, true);
     syncLayout();
 
