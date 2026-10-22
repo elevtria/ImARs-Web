@@ -153,6 +153,15 @@
 .quiz-library-actions { display: flex; gap: 7px; }
 .quiz-library-actions button { min-height: 34px; padding: 0 11px; border: 1px solid rgba(129,162,193,.26); border-radius: 9px; color: #58758f; background: #f7f9fc; font-size: 10px; font-weight: 700; }
 .quiz-library-actions button.delete { color: #a96d6d; }
+.quiz-library-actions button[data-schedule-quiz] { border-color: #8aaed0; color: #275b86; background: #eaf3fb; }
+.quiz-library-scheduler { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(175px,1fr) auto; align-items: end; gap: 16px; padding: 15px 16px; border: 1px solid #c8dced; border-radius: 12px; background: #f1f7fc; }
+.quiz-library-scheduler strong { color: #314760; font-size: 12px; }
+.quiz-library-scheduler p { margin-top: 4px; color: #72869b; font-size: 10px; line-height: 1.4; }
+.quiz-library-scheduler-fields { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; }
+.quiz-library-scheduler-fields label { display: grid; gap: 5px; color: #506981; font-size: 10px; font-weight: 700; }
+.quiz-library-scheduler-fields label[hidden] { display: none; }
+.quiz-library-scheduler-fields select, .quiz-library-scheduler-fields input { height: 36px; min-width: 150px; padding: 6px 9px; border: 1px solid #aac5db; border-radius: 9px; background: #fff; color: #314760; font: inherit; font-size: 11px; }
+.quiz-library-scheduler-fields button { min-height: 36px; padding: 0 14px; }
 .quiz-empty-state { display: grid; justify-items: center; padding: 48px 18px; border: 1px dashed rgba(129,162,193,.42); border-radius: 18px; background: rgba(255,255,255,.46); text-align: center; }
 .quiz-empty-state[hidden] { display: none; }
 .quiz-empty-icon { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 16px; color: #5e86a6; background: #eaf2f8; font-size: 22px; }
@@ -205,6 +214,7 @@
   .quiz-library-heading { align-items: flex-start; flex-direction: column; }
   .quiz-library-card { grid-template-columns: 1fr; gap: 11px; }
   .quiz-library-actions { justify-content: flex-end; }
+  .quiz-library-scheduler { grid-template-columns: 1fr; }
   .quiz-availability-title { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {

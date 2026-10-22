@@ -205,8 +205,16 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       }
       const identifier = body.identifier.trim().toLowerCase();
       const account = await resolveStaff(env, identifier, accounts, store);
-      if (!account || account.role !== body.portal) return json({ error: "Invalid ID or password." }, 401);
-      const attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
+      let attempt;
+      if (!account || account.role !== body.portal) {
+        // Keep unknown IDs and wrong-portal submissions on the same error sequence,
+        // without changing a real account's counter or storing the submitted ID.
+        const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`${body.portal}:${identifier}`));
+        attempt = await stateCall(env, `invalid-login:${base64(new Uint8Array(digest))}`, "invalid-login", {});
+        if (attempt.ok) throw new Error("An invalid login cannot authenticate");
+      } else {
+        attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
+      }
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
       const approved = dataEnabled(env) ? await staffProfile(account, store || new FirestoreAdmin(env), now) : null;
       const token = await signSession(env, account, attempt.result.session, new URL(request.url).host);

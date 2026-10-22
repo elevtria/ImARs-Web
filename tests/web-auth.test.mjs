@@ -118,9 +118,42 @@ test("parallel requests cannot all verify against a stale two-attempt counter", 
   const responses = await Promise.all(Array.from({ length: 12 }, () => app.login()));
   assert.equal(app.count(), 3);
   assert.deepEqual(responses.slice(0, 3).map(response => response.status), [401, 401, 429]);
+  assert.equal((await responses[0].json()).error, "Invalid ID or password. Please try again. (1/3 attempts)");
+  assert.equal((await responses[1].json()).error, "Invalid ID or password. Please try again. (2/3 attempts)");
   assert.ok(responses.slice(3).every(response => response.status === 429));
   const stored = app.stores.get("account:teacher-a").get("account");
   assert.equal(stored.stage, 1);
+});
+
+test("known, unknown and wrong-portal logins show the same server-counted error sequence", async () => {
+  for (const [identifier, portal, known] of [
+    ["TEACH1000", "teacher", true], ["TEACH9999", "teacher", false],
+    ["ADMIN1000", "admin", true], ["ADMIN9999", "admin", false],
+    ["TEACH1000", "admin", false]
+  ]) {
+    const app = fixture();
+    for (let stage = 0; stage < 3; stage++) {
+      for (let failure = 1; failure <= 3; failure++) {
+        const response = await app.login(identifier, "wrong", portal, { failures: 0, attempts: 0 });
+        const result = await response.json();
+        assert.equal(response.headers.get("Set-Cookie"), null);
+        assert.equal(response.status, failure < 3 ? 401 : 429);
+        assert.equal(result.error, failure < 3
+          ? `Invalid ID or password. Please try again. (${failure}/3 attempts)`
+          : stage < 2 ? "Too many incorrect attempts."
+            : "Web login is locked. Contact your administrator or website maintenance to restore access.");
+        assert.equal(result.retryAfter, failure < 3 || stage === 2 ? 0 : cooldowns[stage] / 1000);
+        // Reconstruct the actor like a later browser request after refresh/restart.
+        app.actors.clear();
+      }
+      const blocked = await app.login(identifier.toLowerCase(), "correct", portal);
+      assert.equal(blocked.status, 429);
+      assert.equal((await blocked.json()).manual, stage === 2);
+      if (stage < 2) app.advance(cooldowns[stage]);
+    }
+    assert.equal(app.count(), known ? 9 : 0);
+    if (!known) assert.equal(app.stores.has("account:teacher-a"), false);
+  }
 });
 
 test("temporary and permanent web locks survive new requests, actor restart, and browser-provided fake state", async () => {
@@ -201,8 +234,10 @@ test("only the private maintenance key can recover an administrator and it never
 
 test("admin email and school ID aliases share one server attempt counter", async () => {
   const app = fixture();
-  await app.login("admin@example.test", "wrong", "admin");
-  await app.login("ADMIN1000", "wrong", "admin");
+  const first = await app.login("admin@example.test", "wrong", "admin");
+  assert.match((await first.json()).error, /\(1\/3 attempts\)/);
+  const second = await app.login("ADMIN1000", "wrong", "admin");
+  assert.match((await second.json()).error, /\(2\/3 attempts\)/);
   assert.equal((await app.login("admin@example.test", "wrong", "admin")).status, 429);
   assert.equal((await app.login("ADMIN1000", "correct", "admin")).status, 429);
 });

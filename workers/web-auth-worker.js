@@ -68,10 +68,11 @@ export class WebLoginState {
       // Only the private Pages binding sees this state, never browser JSON.
       return json({ ...checked, timing: sessionTiming(checked.session, now) });
     }
-    if (action !== "/login" || request.method !== "POST") return json({ error: "Not found." }, 404);
+    if (!["/login", "/invalid-login"].includes(action) || request.method !== "POST") return json({ error: "Not found." }, 404);
     if (!access.allowed) return json({ ...access, error: access.manual
       ? "Web login is locked. Contact your administrator or website maintenance to restore access."
-      : "Too many incorrect attempts. Please wait before signing in again." }, 429);
+      : "Too many incorrect attempts." }, 429);
+    if (action === "/invalid-login") return this.rejectPassword(state);
 
     const { uid, email, password } = await request.json();
     if (typeof uid !== "string" || typeof email !== "string" || typeof password !== "string" || !password || password.length > 4096) {
@@ -98,16 +99,21 @@ export class WebLoginState {
     }
     const error = String(account.error?.message || "").split(" : ")[0];
     if (["INVALID_PASSWORD", "INVALID_LOGIN_CREDENTIALS", "EMAIL_NOT_FOUND"].includes(error)) {
-      const next = passwordFailed(state, this.now());
-      await this.storage.put("account", next);
-      const nextAccess = decision(next, this.now());
-      return json({ ...nextAccess, error: !nextAccess.allowed
-        ? (nextAccess.manual ? "Web login is locked. Contact your administrator or website maintenance to restore access."
-          : "Too many incorrect attempts. Please wait before signing in again.")
-        : "Invalid ID or password." }, nextAccess.allowed ? 401 : 429);
+      return this.rejectPassword(state);
     }
     return json({ error: error === "USER_DISABLED" ? "This Firebase account is disabled. Contact website maintenance."
       : "Sign-in could not be verified. Your attempt was not counted." }, error === "USER_DISABLED" ? 403 : 503);
+  }
+
+  async rejectPassword(state) {
+    const now = this.now();
+    const next = passwordFailed(state, now);
+    await this.storage.put("account", next);
+    const access = decision(next, now);
+    return json({ ...access, error: access.allowed
+      ? `Invalid ID or password. Please try again. (${next.failures}/3 attempts)`
+      : access.manual ? "Web login is locked. Contact your administrator or website maintenance to restore access."
+        : "Too many incorrect attempts." }, access.allowed ? 401 : 429);
   }
 }
 

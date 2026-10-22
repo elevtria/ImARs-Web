@@ -28,7 +28,9 @@ export async function webRequest(path, body, options = {}) {
     let message = result.error || "The website service is unavailable. Please try again.";
     if (result.retryAfter) {
       const minutes = Math.ceil(result.retryAfter / 60);
-      message += minutes >= 60 ? ` Try again in about ${Math.ceil(minutes / 60)} hour(s).` : ` Try again in about ${minutes} minute(s).`;
+      const amount = minutes >= 60 ? Math.ceil(minutes / 60) : minutes;
+      const unit = minutes >= 60 ? "hour" : "minute";
+      message += ` Please try again in ${amount} ${unit}${amount === 1 ? "" : "s"}.`;
     }
     if (response.status === 401 && !path.endsWith("/login")) window.dispatchEvent(new Event("imars-session-ended"));
     throw Object.assign(new Error(message), { userMessage: message, code: result.code, status: response.status });
