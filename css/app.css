@@ -1092,30 +1092,31 @@ td {
 .empty-row td { text-align: center; color: var(--muted); padding: 28px 12px; }
 .student-activity-section { padding: 8px 4px 20px; }
 .activity-record-table { min-width: 760px; }
+.activity-record-table > thead th { background: #e5eef8; color: #41658b; }
 .activity-record-toggle { display: inline-flex; align-items: center; gap: 12px; border: 0; background: none; color: var(--ink); text-align: left; font: inherit; font-weight: 700; cursor: pointer; }
 .activity-record-toggle small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 500; }
-.activity-record-chevron { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 10px; background: #f0ebff; color: #6948f5; flex-shrink: 0; }
+.activity-record-chevron { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 10px; background: #e5eef8; color: #41658b; flex-shrink: 0; }
 .activity-record-chevron svg { transition: transform .2s ease; }
 .activity-record-toggle[aria-expanded="true"] .activity-record-chevron svg { transform: rotate(90deg); }
-.activity-record-toggle:hover .activity-record-chevron, .activity-record-toggle:focus-visible .activity-record-chevron { background: #e3d9ff; }
-.activity-record-completed { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #e8faf0; color: #3d8b63; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.activity-record-toggle:hover .activity-record-chevron, .activity-record-toggle:focus-visible .activity-record-chevron { background: #d1e2f3; }
+.activity-record-completed { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #e2f0fb; color: #3f7198; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .activity-record-detail[hidden] { display: none; }
 .activity-record-detail > td { padding: 18px 20px; background: #f8fafd; }
 .activity-record-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .activity-record-detail-head strong, .activity-record-detail-head small { display: block; }
 .activity-record-detail-head small { margin-top: 3px; color: var(--muted); font-size: 12px; }
 .activity-record-detail-head > span { padding: 6px 10px; border-radius: 999px; background: #fff; color: #506980; font-size: 12px; font-weight: 700; }
-.activity-record-results-wrap { overflow-x: auto; border: 1px solid #d7ccff; border-radius: 12px; background: #fff; }
+.activity-record-results-wrap { overflow-x: auto; border: 1px solid #b9cfe3; border-radius: 12px; background: #fff; }
 .activity-record-results { min-width: 480px; }
-.activity-record-results thead th { background: #eee9ff; color: #6142d8; border-bottom-color: #d7ccff; }
-.activity-record-results tbody tr:nth-child(even) { background: #faf8ff; }
-.activity-record-results tbody tr:hover { background: #f3efff; }
-.activity-record-results tbody th, .activity-record-results tbody td { border-bottom-color: #e9e2ff; }
-.activity-record-results .table-avatar { color: #fff; background: #704dff; }
+.activity-record-results thead th { background: #dceaf7; color: #365f85; border-bottom-color: #b9cfe3; }
+.activity-record-results tbody tr:nth-child(even) { background: #f4f9fd; }
+.activity-record-results tbody tr:hover { background: #eaf4fc; }
+.activity-record-results tbody th, .activity-record-results tbody td { border-bottom-color: #dce9f5; }
+.activity-record-results .table-avatar { color: #fff; background: #5d91bb; }
 .activity-record-results td:nth-child(2), .activity-record-results td:nth-child(3) { font-weight: 700; }
-.activity-result-score { display: inline-block; padding: 5px 10px; border-radius: 999px; color: #4f2bc9; background: #eee9ff; white-space: nowrap; }
+.activity-result-score { display: inline-block; padding: 5px 10px; border-radius: 999px; color: #365f85; background: #e2f0fb; white-space: nowrap; }
 .activity-result-score.is-empty { color: #718198; background: #eef1f7; }
-.activity-result-time { color: #5140a6; }
+.activity-result-time { color: #416f98; }
 .activity-record-empty { color: var(--muted); font-size: 13px; }
 
 .students {
