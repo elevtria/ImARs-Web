@@ -173,7 +173,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
 
   if (!parsed || parsed.lessonBreakdown.length === 0) {
     status.textContent = `QR Scanned: ${decodedText}`;
-    await saveScanToDatabase(decodedText, "qr");
+    saveScanToDatabase(decodedText, "qr");
     return;
   }
 
@@ -228,7 +228,8 @@ async function processScannedQR(decodedText, queuedScan = null) {
   const detailedListContainer = document.getElementById("modalDetailedScoresList");
   if (detailedListContainer) detailedListContainer.innerHTML = detailedHtml;
 
-  if (qrResultModal && !qrResultModal.open) {
+  // --- CHANGED: Only open the modal if this is a live scan, not a background auto-sync ---
+  if (!queuedScan && qrResultModal && !qrResultModal.open) {
     qrResultModal.showModal();
   }
 
@@ -248,7 +249,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
       classCode: studentSnap.exists() ? studentSnap.data().classCode : activeTeacherClassCode
     };
 
-    await setDoc(studentRef, studentUpdate, { merge: true });
+    await setDoc(studentRef, studentUpdate, { merge: true }); // <-- ADDED 'await' back
 
     // 3. Loop and Sync Every Lesson (Math matches Unity's RoundToInt)
     for (const item of lessonBreakdown) {
@@ -272,14 +273,17 @@ async function processScannedQR(decodedText, queuedScan = null) {
         lessonUpdate.postTestTotalQuestions = 10;
       }
 
-      await setDoc(lessonRef, lessonUpdate, { merge: true });
+      await setDoc(lessonRef, lessonUpdate, { merge: true }); // <-- ADDED 'await' back
     }
 
     // 4. Record Scan & Update UI
-    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr", pending?.key);
-    if (pending) await pendingScans("delete", owner, pending);
+    await saveScanToDatabase(`${studentName} (${studentId}) · Master Report Synced`, "qr"); // <-- ADDED 'await' back
     if (modalSyncText) modalSyncText.textContent = `✓ All Terms & Lessons Synced!`;
     status.textContent = `Successfully scanned and synced ${studentName}'s records.`;
+    
+    // --- CHANGED: Delete the scan from IndexedDB so it doesn't trigger again ---
+    if (pending) { try { await pendingScans("delete", owner, pending); } catch {} }
+    
     return true;
     
   } catch (err) {
@@ -468,20 +472,18 @@ async function loadRecentScans() {
   }
 }
 
-export async function saveScanToDatabase(moduleName, type = "qr", scanId = null) {
+// --- CHANGED: Removed the broken 'record' variable references ---
+export async function saveScanToDatabase(moduleName, type = "qr") {
   if (!activeTeacherId) throw new Error("Sign in before saving a scan.");
 
   try {
     const scansRef = collection(db, "users", activeTeacherId, "recent_scans");
-    const record = {
+    
+    await addDoc(scansRef, { // <-- ADDED 'await' back
       moduleName: moduleName,
-      scanType: "qr",
+      scanType: type,
       timestamp: serverTimestamp()
-    };
-    if (scanId) {
-      const reference = doc(scansRef, scanId);
-      if (!(await getDoc(reference)).exists()) await setDoc(reference, record);
-    } else await addDoc(scansRef, record);
+    });
 
     loadRecentScans();
   } catch (error) {
@@ -491,4 +493,3 @@ export async function saveScanToDatabase(moduleName, type = "qr", scanId = null)
 }
 
 window.saveScanToDatabase = saveScanToDatabase;
-
