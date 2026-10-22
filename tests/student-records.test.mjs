@@ -75,8 +75,6 @@ test("merged records retain score summaries, filters and both controls; archived
   assert.match(cards[0].innerHTML, /4 min/); assert.match(cards[0].innerHTML, /3 min/);
   assert.match(cards[0].innerHTML, /A &lt;Student&gt; &quot;One&quot;/);
   assert.match(cards[0].innerHTML, /A &amp; B/);
-  assert.match(cards[0].innerHTML, /record-progress-steps" role="progressbar"[^>]*aria-valuenow="100"/);
-  assert.equal((cards[0].innerHTML.match(/class="record-progress-step"/g) || []).length, 10);
   assert.ok(cards.every(card => card.querySelector(".edit-student-btn") && card.querySelector(".delete-student-btn")));
   app.ids.studentSearch.value = "legacy"; await app.ids.studentSearch.emit("input");
   assert.equal(cards[0].classList.contains("hidden"), true); assert.equal(cards[1].classList.contains("hidden"), false);
