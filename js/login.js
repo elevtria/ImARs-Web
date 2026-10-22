@@ -143,15 +143,6 @@ if (["access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
     : "We could not verify access. Check your connection and sign in again.";
   message.style.display = "block";
 }
-<<<<<<< HEAD
-if (urlParams.get("reason") === "web-session") {
-  const message = document.getElementById("error");
-  if (message) {
-    message.classList.remove("hidden");
-    message.innerText = "Your website session ended. Please sign in again to continue.";
-    message.style.display = "block";
-  }
-}
 
 const adminPasswordInput = document.getElementById("adminPassword");
 const toggleAdminPassword = document.getElementById("toggleAdminPassword");
@@ -161,5 +152,3 @@ toggleAdminPassword.addEventListener("click", () => {
   toggleAdminPassword.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
   toggleAdminPassword.setAttribute("aria-pressed", String(hidden));
 });
-=======
->>>>>>> aa34c1356874963a0d7dd3b978afd7fbeb5000b4
