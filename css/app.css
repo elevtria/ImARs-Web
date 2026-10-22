@@ -1090,6 +1090,23 @@ td {
 .student-row.hidden { display: none; }
 .empty-row[hidden] { display: none; }
 .empty-row td { text-align: center; color: var(--muted); padding: 28px 12px; }
+.student-activity-section { padding: 8px 4px 20px; }
+.activity-record-table { min-width: 760px; }
+.activity-record-toggle { display: inline-flex; align-items: center; gap: 12px; border: 0; background: none; color: var(--ink); text-align: left; font: inherit; font-weight: 700; cursor: pointer; }
+.activity-record-toggle small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.activity-record-chevron { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--ice); color: #5b6e84; font-size: 21px; transition: transform .2s ease; }
+.activity-record-toggle[aria-expanded="true"] .activity-record-chevron { transform: rotate(180deg); }
+.activity-record-completed { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #e8faf0; color: #3d8b63; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.activity-record-detail[hidden] { display: none; }
+.activity-record-detail > td { padding: 18px 20px; background: #f8fafd; }
+.activity-record-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.activity-record-detail-head strong, .activity-record-detail-head small { display: block; }
+.activity-record-detail-head small { margin-top: 3px; color: var(--muted); font-size: 12px; }
+.activity-record-detail-head > span { padding: 6px 10px; border-radius: 999px; background: #fff; color: #506980; font-size: 12px; font-weight: 700; }
+.activity-record-results-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.activity-record-results { min-width: 480px; }
+.activity-record-results td:nth-child(2), .activity-record-results td:nth-child(3) { font-weight: 700; }
+.activity-record-empty { color: var(--muted); font-size: 13px; }
 
 .students {
   display: grid;
