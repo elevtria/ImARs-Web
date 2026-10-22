@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/login.css" />
 </head>
 <body class="login-page min-h-screen bg-mist text-slate-900 font-sans grid place-items-center p-6">
+  <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <main class="login-card w-full max-w-[440px] bg-white rounded-3xl shadow-[0_8px_24px_rgba(28,20,60,0.05)] p-8">
     <div class="flex items-center justify-between gap-3 mb-6">
       <div class="flex items-center gap-3">
@@ -60,11 +61,11 @@
       <p class="hidden text-red-600 text-[13px] font-semibold mb-3" role="alert" id="error">Please enter your ID and password.</p>
       <button id="teacherSubmitBtn" class="login-submit w-full border-0 rounded-full py-3.5 px-4 bg-gold text-slate-900 font-extrabold text-[15px] cursor-pointer shadow-[0_8px_18px_rgba(254,183,5,0.35)] hover:bg-[#e5a404]" type="submit" aria-busy="false">
         <span class="login-submit-spinner" aria-hidden="true"></span>
-        <span data-login-label>Log in</span><svg class="button-arrow" aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+        <span data-login-label>Log in</span>
       </button>
     </form>
 
-    <p class="mt-4 text-center text-slate-400 text-[13px]">Access Grade 6 Pintong Gubat</p>
+    <p class="mt-4 text-center text-slate-400 text-[13px]">Sign in to your account</p>
     <span class="mt-4 block w-full text-center text-steel font-bold text-[13px]" data-school-year>SY 2026–27</span>
   </main>
 
@@ -101,7 +102,7 @@
           <button type="submit" id="adminSubmitBtn" aria-busy="false"
             class="login-submit w-2/3 rounded-full py-2.5 px-4 bg-indigo-600 text-white font-extrabold text-[14px] shadow-[0_8px_18px_rgba(79,70,229,0.3)] hover:bg-indigo-700 cursor-pointer">
             <span class="login-submit-spinner" aria-hidden="true"></span>
-            <span data-login-label>Sign in as Admin</span><svg class="button-arrow" aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+            <span data-login-label>Sign in as Admin</span>
           </button>
         </div>
       </form>
