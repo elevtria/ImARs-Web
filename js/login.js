@@ -140,11 +140,3 @@ if (["access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
     : "We could not verify access. Check your connection and sign in again.";
   message.style.display = "block";
 }
-if (urlParams.get("reason") === "web-session") {
-  const message = document.getElementById("error");
-  if (message) {
-    message.classList.remove("hidden");
-    message.innerText = "Your website session ended. Please sign in again to continue.";
-    message.style.display = "block";
-  }
-}
