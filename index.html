@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/loading.css" />
 </head>
-<body data-auth-pending>
+<body class="teacher-dashboard" data-auth-pending>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -55,22 +55,22 @@
       </section>
 
       <section class="stats">
-        <a class="card stat stat-link" href="student-records.html" aria-label="View student records">
+        <a class="card stat stat-link" href="student-records.html" aria-label="View student records"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
           <div class="label c-purple">Students</div>
           <div class="value" id="studentCountVal">0</div>
           <div class="hint">Active this term</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
-        <a class="card stat stat-link" href="analytics.html" aria-label="View pre-test analytics">
+        <a class="card stat stat-link" href="analytics.html" aria-label="View pre-test analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h4"/></svg></span>
           <div class="label c-slate">Avg Pre-Test</div>
           <div class="value" id="avgPreTestVal">0/5</div>
           <div class="hint">Before AR lessons</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
-        <a class="card stat stat-link" href="analytics.html" aria-label="View post-test analytics">
+        <a class="card stat stat-link" href="analytics.html" aria-label="View post-test analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
           <div class="label c-green">Avg Post-Test</div>
           <div class="value" id="avgPostTestVal">0/10</div>
           <div class="hint">After AR lessons</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
-        <a class="card stat stat-link" href="analytics.html" aria-label="View AR learning analytics">
+        <a class="card stat stat-link" href="analytics.html" aria-label="View AR learning analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></span>
           <div class="label c-pink">Avg AR Time</div>
           <div class="value" id="avgArTimeVal">0 min</div>
           <div class="hint">Per student, this term</div>
@@ -112,7 +112,7 @@
           </a>
           <a class="action" href="student-records.html">
             <span class="action-icon i-pink">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M10 19V9M16 19V13M22 19H2"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg>
             </span>
             <span>
               <h3>Student Records</h3>
@@ -121,7 +121,7 @@
           </a>
           <a class="action" href="offline-sync.html">
             <span class="action-icon i-cyan">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M10 19V9M16 19V13M22 19H2"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>
             </span>
             <span>
               <h3>Offline Sync</h3>
@@ -130,7 +130,7 @@
           </a>
           <a class="action" href="teacher-manual.html">
             <span class="action-icon i-amber">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M10 19V9M16 19V13M22 19H2"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v16M3 3h4a5 5 0 0 1 5 2 5 5 0 0 1 5-2h4v16h-4a5 5 0 0 0-5 2 5 5 0 0 0-5-2H3z"/></svg>
             </span>
             <span>
               <h3>Teacher Manual</h3>

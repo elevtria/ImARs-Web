@@ -1934,3 +1934,38 @@ label {
 .stats .stat-link:focus-visible { outline:3px solid var(--steel); outline-offset:4px; }
 .stat-link-arrow { position:absolute; top:20px; right:22px; color:var(--steel); font-size:22px; line-height:1; }
 @media(prefers-reduced-motion:reduce) { .stats .stat-link { transition:none; } }
+
+/* Dashboard accents vary by purpose within the existing blue and gold palette. */
+.teacher-dashboard .hero { padding:22px 24px; border-left:4px solid var(--gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
+.teacher-dashboard .stats .stat-link { --card-accent:var(--steel); padding-right:80px; border-top:3px solid var(--card-accent); background:linear-gradient(125deg,#fff,#bfc8e224); }
+.teacher-dashboard .stats .stat-link:nth-child(2) { --card-accent:var(--sky); background:linear-gradient(125deg,#fff,#a4b8d926); }
+.teacher-dashboard .stats .stat-link:nth-child(3) { --card-accent:var(--gold); background:linear-gradient(125deg,#fff,#feb7050d); }
+.teacher-dashboard .stats .stat-link:nth-child(4) { --card-accent:var(--ink); background:linear-gradient(125deg,#fff,#81a2c126); }
+.teacher-dashboard .stat .label { color:var(--ink); letter-spacing:.065em; }
+.teacher-dashboard .stat .value { color:var(--ink); }
+.teacher-dashboard .stat .hint { text-align:left; }
+.summary-icon { position:absolute; top:22px; right:24px; width:40px; height:40px; display:grid; place-items:center; background:#bfc8e233; color:#476781; border-radius:12px; }
+.summary-icon svg { width:23px; height:23px; }
+.teacher-dashboard .stat-link:nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
+.teacher-dashboard .stat-link-arrow { top:auto; bottom:18px; right:30px; color:#476781; font-size:19px; }
+.teacher-dashboard .section-head h2 { display:flex; align-items:center; gap:10px; }
+.teacher-dashboard .section-head h2::before { content:''; width:5px; height:20px; border-radius:4px; background:var(--steel); flex-shrink:0; }
+.teacher-dashboard .section:has(.actions) .section-head h2::before { background:var(--gold); }
+.teacher-dashboard .actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.teacher-dashboard .action { min-width:0; position:relative; padding:18px; background:#ffffffa6; text-decoration:none; }
+.teacher-dashboard .action h3 { color:var(--ink); font-size:14px; }
+.teacher-dashboard .action p { color:#596b7e; font-size:12px; line-height:1.6; }
+.teacher-dashboard .action-icon { border-radius:12px; background:#bfc8e24d; color:#476781; flex-shrink:0; }
+.teacher-dashboard .action:last-child .action-icon { background:#feb70526; color:#735400; }
+.teacher-dashboard .action:hover { background:#fff; border-color:var(--steel); }
+.teacher-dashboard .action:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
+.teacher-dashboard .table-wrap thead { background:#bfc8e233; }
+.teacher-dashboard .table-wrap tbody tr:nth-child(even) { background:#bfc8e214; }
+@media(max-width:640px) { .teacher-dashboard .actions { grid-template-columns:1fr; } .teacher-dashboard .hero { padding:18px; } }
+
+/* Keep the sidebar and dashboard moving together as the menu expands. */
+@media (min-width:1000px) and (prefers-reduced-motion:no-preference) {
+  #drawer { transition:width 280ms cubic-bezier(.22,1,.36,1); }
+  body:has(#drawer) .app { transition:margin-left 280ms cubic-bezier(.22,1,.36,1); }
+  #drawer .drawer-panel { transition:none; }
+}
