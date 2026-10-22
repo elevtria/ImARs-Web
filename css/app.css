@@ -2002,3 +2002,7 @@ label {
   #drawer,#drawer .drawer-panel { transition:width 320ms cubic-bezier(.22,1,.36,1); }
   #drawer .nav-label,#drawer .brand > div,#drawer .user-meta { transition:opacity 180ms ease; }
 }
+
+/* Sidebar labels must not create a horizontal scrollbar in the compact rail. */
+#drawer .drawer-panel { overflow-x:hidden; }
+#drawer .side-nav { overflow-x:hidden; }
