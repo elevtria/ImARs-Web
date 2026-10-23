@@ -66,7 +66,7 @@
       </section>
 
       <!-- Dynamic Student Records Container -->
-      <div id="recordsContainer">
+      <div id="recordsContainer" class="student-record-list" aria-label="Student list">
         <!-- Records will be injected here by JS -->
       </div>
 
@@ -74,6 +74,11 @@
     </main>
   </div>
 
+  <dialog id="studentRecordDialog" aria-labelledby="studentRecordTitle">
+    <header class="student-detail-heading"><div><h2 id="studentRecordTitle">Student record</h2><p id="studentRecordPosition" aria-live="polite"></p></div><button type="button" id="closeStudentRecord" aria-label="Close student record">×</button></header>
+    <div id="studentRecordContent"></div>
+    <footer class="student-detail-navigation"><button type="button" id="previousStudentRecord">← Previous</button><button type="button" id="nextStudentRecord">Next →</button></footer>
+  </dialog>
   <button class="help" id="helpBtn" aria-label="Help">?</button>
 
   <aside class="drawer" id="drawer" aria-hidden="true">
@@ -171,5 +176,6 @@
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
+  <script type="module" src="js/student-record-browser.js"></script>
 </body>
 </html>

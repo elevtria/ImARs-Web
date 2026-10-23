@@ -201,7 +201,7 @@ onAuthStateChanged(auth, async user => {
 
         recordsContainer.appendChild(cards);
         // Update DOM cache array to make the search filter function work
-        dynamicCards = Array.from(document.querySelectorAll(".record"));
+        dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
         emptyState.textContent = "No students match the selected section or search.";
         if (Array.from(sectionFilter.options).some(option => option.value === selectedSection)) sectionFilter.value = selectedSection;
         applyFilters();

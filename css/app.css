@@ -2048,3 +2048,24 @@ label {
 /* Sidebar labels must not create a horizontal scrollbar in the compact rail. */
 #drawer .drawer-panel { overflow-x:hidden; }
 #drawer .side-nav { overflow-x:hidden; }
+
+/* Compact roster with full details shown on demand. */
+.student-record-list .record { display:flex; align-items:center; gap:16px; padding:16px 20px; margin-bottom:8px; border-radius:14px; cursor:pointer; }
+.student-record-list .record.hidden { display:none; }
+.student-record-list .record > .stats,.student-record-list .record > .record-progress-tile { display:none; }
+.student-record-list .record-head { flex:1; margin:0; min-width:0; }
+.student-record-list .record .student strong { font-size:15px; }
+.student-record-list .record .avatar { width:38px; height:38px; font-size:12px; }
+.student-record-list .record:hover { background:#fff; border-left-color:var(--gold); }
+.open-student-record,.student-detail-navigation button { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:#bfc8e233; color:var(--ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+#studentRecordDialog { width:min(760px,calc(100% - 32px)); max-height:calc(100svh - 40px); overflow-y:auto; margin:auto; padding:26px; border:1px solid #fff; border-radius:22px; background:#f6f8fc; color:var(--ink); box-shadow:0 24px 80px #2c3a4f33; }
+#studentRecordDialog::backdrop { background:#2c3a4f66; backdrop-filter:blur(3px); }
+.student-detail-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:22px; }
+.student-detail-heading h2 { font-size:22px; font-weight:800; }
+.student-detail-heading p { margin-top:4px; color:#596b7e; font-size:13px; }
+#closeStudentRecord { display:grid; place-items:center; width:36px; height:36px; border:1px solid var(--line); border-radius:50%; background:#fff; color:var(--ink); font-size:25px; line-height:1; }
+#studentRecordContent .record { margin:0; background:#fff; }
+.student-detail-navigation { display:flex; justify-content:space-between; gap:14px; margin-top:22px; }
+.student-detail-navigation button:disabled { opacity:.4; cursor:default; }
+.open-student-record:focus-visible,#studentRecordDialog button:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
+@media(max-width:600px) { .student-record-list .record { flex-wrap:wrap; padding:14px; } .student-record-list .record-head { width:100%; flex:auto; gap:8px; } .student-record-list .overall { font-size:11px; } #studentRecordDialog { padding:18px; } #studentRecordContent .record .stats { grid-template-columns:1fr 1fr; } }

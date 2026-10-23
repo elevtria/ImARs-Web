@@ -26,6 +26,7 @@ class Element {
   setAttribute(name, value) { this[name] = value; }
   appendChild(child) { if (child.tag === "fragment") this.children.push(...child.children); else this.children.push(child); }
   querySelector(selector) { return this.buttons?.[selector] || null; }
+  querySelectorAll(selector) { return selector === ".record" ? this.children.filter(child => child.className === "record") : []; }
   addEventListener(type, callback) { (this.listeners[type] ||= []).push(callback); }
   async emit(type, event = {}) { for (const callback of this.listeners[type] || []) await callback({ preventDefault() {}, ...event }); }
 }
