@@ -78,3 +78,6 @@ body.login-page { margin:0; min-height:100svh; padding:48px 24px; color:#080a2d;
 @keyframes unity-cube-tilt { 0%,100% { rotate:-7deg; } 50% { rotate:7deg; } }
 @media(max-width:700px) { .floating-cube { opacity:.45; } .floating-cube:nth-child(1) { left:-55px; top:20%; width:110px; height:124px; } .floating-cube:nth-child(4) { right:-50px; bottom:8%; width:110px; height:124px; opacity:.45; } }
 @media(prefers-reduced-motion:reduce) { .floating-cube { animation:none; } }
+
+.login-page .save-password-option { display:flex; align-items:center; gap:9px; margin:0 0 20px; font-size:13px; font-weight:500; color:#4b6aa6; cursor:pointer; }
+.login-page .save-password-option input { width:17px; height:17px; flex:0 0 17px; margin:0; accent-color:#205bff; cursor:pointer; }
