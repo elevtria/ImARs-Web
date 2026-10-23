@@ -65,6 +65,12 @@
         </div>
       </section>
 
+      <div class="student-status-switch" role="group" aria-label="Student status">
+        <button type="button" id="activeStudentsTab" aria-pressed="true">Active <span id="activeStudentsCount">0</span></button>
+        <button type="button" id="archivedStudentsTab" aria-pressed="false">Archived <span id="archivedStudentsCount">0</span></button>
+      </div>
+      <button type="button" id="archiveSectionBtn" class="ghost-btn archive-section-btn" disabled>Archive section</button>
+      <p class="archive-section-hint">Select a section to archive its active students together.</p>
       <!-- Dynamic Student Records Container -->
       <div id="recordsContainer" class="student-record-list" aria-label="Student list">
         <!-- Records will be injected here by JS -->
@@ -150,23 +156,14 @@
   </div>
 
     <!-- Edit Student Modal -->
-  <div class="modal" id="editStudentModal">
-    <form class="modal-card" id="editStudentForm" style="text-align: left;">
-      <h3 style="margin-bottom: 0.5rem;">Edit Student Profile</h3>
-      <p style="margin-bottom: 1.5rem; color: #64748b; font-size: 0.9rem;">Update the student's name or email address.</p>
-      
-      <input type="hidden" id="editStudentId" />
-      
-      <label for="editFullName" style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem;">Full Name</label>
-      <input id="editFullName" type="text" required style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-
-      <label for="editEmail" style="display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.25rem;">Email Address</label>
-      <input id="editEmail" type="email" required style="width: 100%; padding: 0.5rem; margin-bottom: 1.5rem; border: 1px solid #cbd5e1; border-radius: 6px;" />
-
-      <div class="modal-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-        <button class="btn-ghost" id="cancelEditBtn" type="button">Cancel</button>
-        <button class="btn-green" id="saveEditBtn" type="submit">Save Changes</button>
-      </div>
+  <div class="modal" id="archiveStudentModal" role="dialog" aria-modal="true" aria-labelledby="archiveStudentTitle">
+    <form class="modal-card" id="archiveStudentForm">
+      <h3 id="archiveStudentTitle">Archive student</h3><p id="archiveStudentName"></p>
+      <p>The student's records will be kept in the Archived list.</p>
+      <label for="archiveReason">Reason</label>
+      <select id="archiveReason" required><option value="">Choose a reason</option><option value="graduated">Graduated</option><option value="dropped-out">Dropped out</option></select>
+      <p id="archiveStudentError" role="alert"></p>
+      <div class="modal-actions"><button type="button" id="cancelArchiveStudent" class="ghost-btn">Cancel</button><button type="submit" id="confirmArchiveStudent" class="primary-btn">Archive student</button></div>
     </form>
   </div>
 

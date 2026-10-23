@@ -7,7 +7,7 @@ const next = document.getElementById("nextStudentRecord");
 let selectedId;
 let opener;
 const rows = () => Array.from(list.querySelectorAll(".record")).filter(row => !row.classList.contains("hidden"));
-const id = row => row.querySelector(".edit-student-btn")?.dataset.id;
+const id = row => row.dataset.studentId;
 function showRecord(row) {
   if (!row) return;
   selectedId = id(row);
@@ -38,15 +38,15 @@ function enhanceRows() {
   }
 }
 list.addEventListener("click", event => {
-  if (event.target.closest(".edit-student-btn,.delete-student-btn")) return;
+  if (event.target.closest(".archive-student-btn,.unarchive-student-btn,.remove-student-btn")) return;
   const row = event.target.closest(".record");
   if (row) { opener = row.querySelector(".open-student-record"); showRecord(row); }
 });
 content.addEventListener("click", event => {
-  const action = event.target.closest(".edit-student-btn,.delete-student-btn");
+  const action = event.target.closest(".archive-student-btn,.unarchive-student-btn,.remove-student-btn");
   if (!action) return;
   const row = rows().find(row => id(row) === selectedId);
-  const selector = action.classList.contains("edit-student-btn") ? ".edit-student-btn" : ".delete-student-btn";
+  const selector = action.classList.contains("unarchive-student-btn") ? ".unarchive-student-btn" : action.classList.contains("remove-student-btn") ? ".remove-student-btn" : ".archive-student-btn";
   dialog.close();
   row?.querySelector(selector)?.click();
 });

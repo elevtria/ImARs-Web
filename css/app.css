@@ -2071,3 +2071,24 @@ label {
 @media(max-width:600px) { .student-record-list .record { flex-wrap:wrap; padding:14px; } .student-record-list .record-head { width:100%; flex:auto; gap:8px; } .student-record-list .overall { font-size:11px; } #studentRecordDialog { padding:18px; } #studentRecordContent .record .stats { grid-template-columns:1fr 1fr; } }
 #closeStudentRecord { padding:0; flex-shrink:0; }
 #closeStudentRecord svg { display:block; }
+
+.student-status-switch { display:inline-flex; gap:5px; padding:5px; margin:0 0 20px; border-radius:999px; background:#bfc8e240; border:1px solid var(--line); }
+.student-status-switch button { display:flex; align-items:center; gap:9px; padding:10px 18px; border:0; border-radius:999px; background:transparent; color:var(--ink); font:inherit; font-size:14px; font-weight:700; }
+.student-status-switch button[aria-pressed="true"] { background:var(--steel); color:#fff; box-shadow:0 3px 8px #81a2c133; }
+.student-status-switch span { min-width:23px; padding:2px 6px; border-radius:999px; background:#ffffffa8; color:var(--ink); font-size:12px; }
+.archive-student-btn { padding:5px 10px; border:1px solid var(--line); border-radius:8px; background:#bfc8e226; color:#476781; font:inherit; font-size:12px; cursor:pointer; }
+.student-archive-badge { padding:4px 8px; border-radius:999px; background:#feb70526; color:#735400; font-size:11px; font-weight:600; }
+#archiveStudentForm > p { margin:10px 0 16px; color:#596b7e; font-size:14px; line-height:1.6; }
+#archiveStudentForm label { display:block; margin:12px 0 8px; font-weight:700; font-size:14px; }
+#archiveReason { width:100%; padding:12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
+#archiveStudentForm #archiveStudentError { color:#b42318; }
+.student-status-switch button:focus-visible,.archive-student-btn:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
+.unarchive-student-btn,.remove-student-btn { padding:5px 10px; border:1px solid var(--line); border-radius:8px; background:#bfc8e226; color:#476781; font:inherit; font-size:12px; cursor:pointer; }
+.remove-student-btn { color:#a52323; background:#fff4f4; border-color:#efcaca; }
+.unarchive-student-btn:disabled,.remove-student-btn:disabled { opacity:.5; cursor:wait; }
+.record .student > div > div { flex-wrap:wrap; }
+.unarchive-student-btn:focus-visible,.remove-student-btn:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
+.archive-section-btn { margin:0 0 12px 12px; }
+.archive-section-btn:disabled { opacity:.45; cursor:not-allowed; }
+.archive-section-hint { margin:-4px 0 18px; color:#596b7e; font-size:12px; }
+@media(max-width:480px) { .archive-section-btn { margin-left:0; display:flex; } }

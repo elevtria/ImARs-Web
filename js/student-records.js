@@ -2,7 +2,7 @@ import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, collection, query, where, doc, updateDoc, getDocsWithLoading as getDocs } from "./firebase-data.js";
+import { getFirestore, collection, query, where, doc, updateDoc, deleteDoc, writeBatch, getDocsWithLoading as getDocs } from "./firebase-data.js";
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";
 
@@ -14,8 +14,10 @@ const recordsContainer = document.getElementById("recordsContainer");
 const emptyState = document.getElementById("emptyState");
 const searchInput = document.getElementById("studentSearch");
 const sectionFilter = document.getElementById("sectionFilter");
+const archiveSectionButton = document.getElementById("archiveSectionBtn");
 
 let dynamicCards = [];
+let recordStatus = "active";
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
@@ -28,14 +30,26 @@ const applyFilters = () => {
   dynamicCards.forEach((card) => {
     const matchesName = card.dataset.name.includes(searchTerm);
     const matchesSection = !selectedSection || card.dataset.section === selectedSection;
-    const visible = matchesName && matchesSection;
+    const visible = matchesName && matchesSection && (recordStatus === "archived" ? card.dataset.archived === "true" : card.dataset.archived !== "true");
     card.classList.toggle("hidden", !visible);
     if (visible) shown += 1;
   });
 
+  const sectionActive = dynamicCards.filter(card => card.dataset.section === selectedSection && card.dataset.archived !== "true");
+  archiveSectionButton.disabled = !selectedSection || recordStatus !== "active" || !sectionActive.length;
+  archiveSectionButton.title = !selectedSection ? "Select a section first" : "Archive all active students in this section, including those hidden by search";
   emptyState.hidden = shown > 0;
+  emptyState.textContent = "No " + recordStatus + " students match your filters.";
+  const inSection = dynamicCards.filter(card => !selectedSection || card.dataset.section === selectedSection);
+  document.getElementById("activeStudentsCount").textContent = inSection.filter(card => card.dataset.archived !== "true").length;
+  document.getElementById("archivedStudentsCount").textContent = inSection.filter(card => card.dataset.archived === "true").length;
 };
 
+for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").addEventListener("click", () => {
+  recordStatus = status;
+  for (const value of ["active", "archived"]) document.getElementById(value + "StudentsTab").setAttribute("aria-pressed", String(status === value));
+  applyFilters();
+});
 searchInput.addEventListener("input", applyFilters);
 sectionFilter.addEventListener("change", applyFilters);
 
@@ -75,7 +89,7 @@ onAuthStateChanged(auth, async user => {
 
           for (const { studentDoc, results } of students) {
             const sData = studentDoc.data();
-            if (sData.active === false) continue;
+
             const sName = sData.displayName || "Unknown Student";
 
             // Generate Initials
@@ -154,6 +168,8 @@ onAuthStateChanged(auth, async user => {
             // Building the actual HTML Card
             const card = document.createElement("article");
             card.className = "record";
+            card.dataset.studentId = studentDoc.id;
+            card.dataset.archived = String(sData.active === false);
             card.dataset.name = sName.toLowerCase();
             card.dataset.section = classCode;
 
@@ -164,12 +180,7 @@ onAuthStateChanged(auth, async user => {
                   <div>
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                       <strong>${escapeHTML(sName)}</strong>
-                      <button type="button" class="edit-student-btn" style="background: none; border: none; cursor: pointer; color: #64748b;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                      </button>
-                      <button type="button" class="delete-student-btn" style="background: none; border: none; cursor: pointer; color: #ef4444;">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                      </button>
+                      ${sData.active === false ? '<span class="student-archive-badge">' + (sData.archiveReason === "graduated" ? "Graduated" : sData.archiveReason === "dropped-out" ? "Dropped out" : "Archived") + '</span><button type="button" class="unarchive-student-btn">Unarchive</button><button type="button" class="remove-student-btn">Delete</button>' : '<button type="button" class="archive-student-btn">Archive</button>'}
                     </div>
                     <small>Grade 6 – ${escapeHTML(sectionName)} · ${dateStr}</small>
                   </div>
@@ -188,13 +199,15 @@ onAuthStateChanged(auth, async user => {
                 <strong class="record-progress-value">${overallPercent}%</strong>
               </div>
             `;
-            for (const [selector, action] of [[".edit-student-btn", "Edit"], [".delete-student-btn", "Archive"]]) {
-              const button = card.querySelector(selector);
+            for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
+            const button = card.querySelector(selector);
+            if (button) {
               button.dataset.id = studentDoc.id;
               button.dataset.name = sName;
-              button.setAttribute("aria-label", `${action} ${sName}`);
+              button.setAttribute("aria-label", (selector === ".archive-student-btn" ? "Archive " : selector === ".unarchive-student-btn" ? "Unarchive " : "Delete ") + sName);
             }
 
+            }
             cards.appendChild(card);
           }
         }
@@ -217,86 +230,93 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-// Keep the incoming edit/archive actions while using cache-invalidating writes.
-const editModal = document.getElementById("editStudentModal");
-const editForm = document.getElementById("editStudentForm");
-const idInput = document.getElementById("editStudentId");
-const nameInput = document.getElementById("editFullName");
-const emailInput = document.getElementById("editEmail");
-const saveBtn = document.getElementById("saveEditBtn");
-let editRequest = 0;
 
-document.getElementById("cancelEditBtn").addEventListener("click", () => {
-  editRequest++;
-  editModal.classList.remove("open");
+const archiveModal = document.getElementById("archiveStudentModal");
+const archiveForm = document.getElementById("archiveStudentForm");
+const archiveReason = document.getElementById("archiveReason");
+const archiveSave = document.getElementById("confirmArchiveStudent");
+const archiveError = document.getElementById("archiveStudentError");
+let archiveTarget;
+let archiveSectionTargets = null;
+document.getElementById("cancelArchiveStudent").addEventListener("click", () => {
+  if (!archiveSave.disabled) archiveModal.classList.remove("open");
+});
+recordsContainer.addEventListener("click", event => {
+  const button = event.target.closest(".archive-student-btn");
+  if (!button) return;
+  archiveSectionTargets = null;
+  archiveTarget = { id: button.dataset.id, name: button.dataset.name };
+  document.getElementById("archiveStudentTitle").textContent = "Archive student";
+  archiveSave.textContent = "Archive student";
+  archiveReason.value = "";
+  archiveError.textContent = "";
+  document.getElementById("archiveStudentName").textContent = archiveTarget.name;
+  archiveModal.classList.add("open");
+  archiveReason.focus();
+});
+archiveSectionButton.addEventListener("click", () => {
+  if (archiveSectionButton.disabled) return;
+  archiveSectionTargets = dynamicCards.filter(card => card.dataset.section === sectionFilter.value && card.dataset.archived !== "true").map(card => card.dataset.studentId);
+  if (!archiveSectionTargets.length) return;
+  archiveTarget = null;
+  const label = Array.from(sectionFilter.options).find(option => option.value === sectionFilter.value)?.textContent || sectionFilter.value;
+  document.getElementById("archiveStudentTitle").textContent = "Archive section";
+  document.getElementById("archiveStudentName").textContent = label + " — " + archiveSectionTargets.length + " active students. This includes students hidden by the search filter.";
+  archiveSave.textContent = "Archive " + archiveSectionTargets.length + " students";
+  archiveReason.value = "";
+  archiveError.textContent = "";
+  archiveModal.classList.add("open");
+  archiveReason.focus();
+});
+archiveForm.addEventListener("submit", async event => {
+  event.preventDefault();
+  if (archiveSave.disabled || (!archiveTarget && !archiveSectionTargets?.length) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
+  archiveSave.disabled = true;
+  archiveSave.textContent = "Archiving…";
+  archiveError.textContent = "";
+  let savedCount = 0;
+  try {
+    const data = { active: false, deletedAt: new Date(), archiveReason: archiveReason.value };
+    if (archiveSectionTargets) {
+      // The server accepts at most 100 writes per atomic batch.
+      while (archiveSectionTargets.length) {
+        const group = archiveSectionTargets.slice(0, 100);
+        const batch = writeBatch(db);
+        for (const id of group) batch.update(doc(db, "users", id), data);
+        await batch.commit();
+        archiveSectionTargets.splice(0, group.length);
+        savedCount += group.length;
+      }
+    } else await updateDoc(doc(db, "users", archiveTarget.id), data);
+    archiveModal.classList.remove("open");
+    window.location.reload();
+  } catch (error) {
+    console.error("Error archiving student:", error);
+    archiveError.textContent = savedCount ? savedCount + " students archived. Some could not be archived. Retry to finish the remaining students, or refresh to see the current list." : "Could not archive the selected students. Please try again.";
+  } finally {
+    archiveSave.disabled = false;
+    archiveSave.textContent = archiveSectionTargets?.length ? "Retry remaining students" : "Archive student";
+  }
 });
 
 recordsContainer.addEventListener("click", async event => {
-  const editBtn = event.target.closest(".edit-student-btn");
-  if (editBtn) {
-    const request = ++editRequest;
-    const uid = auth.currentUser?.uid;
-    if (!uid) return;
-    idInput.value = editBtn.dataset.id;
-    nameInput.value = editBtn.dataset.name;
-    emailInput.value = "";
-    saveBtn.disabled = true;
-    saveBtn.textContent = "Loading...";
-    editModal.classList.add("open");
-    try {
-      // Saved report views intentionally omit email addresses. Read the current
-      // profile when editing so returning to a saved view cannot blank an email.
-      const profile = await quietDoc(doc(db, "users", editBtn.dataset.id));
-      if (request !== editRequest || auth.currentUser?.uid !== uid) return;
-      if (!profile.exists() || profile.data().active === false) throw new Error("Student is no longer available.");
-      const data = profile.data();
-      nameInput.value = data.displayName || data.fullName || editBtn.dataset.name;
-      emailInput.value = data.email || data.providedEmail || "";
-    } catch (error) {
-      if (request !== editRequest || auth.currentUser?.uid !== uid) return;
-      editModal.classList.remove("open");
-      console.error("Error loading student profile:", error);
-      alert("Could not load the current student profile. Please retry.");
-    } finally {
-      if (request === editRequest && auth.currentUser?.uid === uid) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = "Save Changes";
-      }
-    }
-    return;
-  }
-
-  const delBtn = event.target.closest(".delete-student-btn");
-  if (delBtn && confirm(`Are you sure you want to archive ${delBtn.dataset.name}?\n\nTheir data is kept for recovery but hidden from this list.`)) {
-    try {
-      await updateDoc(doc(db, "users", delBtn.dataset.id), { active: false, deletedAt: new Date() });
-      window.location.reload();
-    } catch (error) {
-      console.error("Error archiving student:", error);
-      alert("Failed to archive student.");
-    }
-  }
-});
-
-editForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  if (saveBtn.disabled) return;
-  saveBtn.disabled = true;
-  saveBtn.textContent = "Saving...";
+  const restore = event.target.closest(".unarchive-student-btn");
+  const remove = event.target.closest(".remove-student-btn");
+  const button = restore || remove;
+  if (!button || button.disabled) return;
+  const message = restore
+    ? "Return " + button.dataset.name + " to the Active students list?"
+    : "Delete the archived student profile for " + button.dataset.name + "? This cannot be undone. Existing lesson results and their sign-in account are not erased.";
+  if (!window.confirm(message)) return;
+  button.disabled = true;
   try {
-    await updateDoc(doc(db, "users", idInput.value), {
-      displayName: nameInput.value.trim(),
-      fullName: nameInput.value.trim(),
-      email: emailInput.value.trim().toLowerCase(),
-      providedEmail: emailInput.value.trim().toLowerCase()
-    });
-    editModal.classList.remove("open");
+    const reference = doc(db, "users", button.dataset.id);
+    if (restore) await updateDoc(reference, { active: true, archiveReason: null, deletedAt: null });
+    else await deleteDoc(reference);
     window.location.reload();
   } catch (error) {
-    console.error("Error updating student:", error);
-    alert("Failed to update student profile.");
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.textContent = "Save Changes";
+    console.error("Student action failed:", error);
+    window.alert(restore ? "Could not unarchive this student. Please try again." : "Could not delete this student. Please try again.");
+    button.disabled = false;
   }
 });
