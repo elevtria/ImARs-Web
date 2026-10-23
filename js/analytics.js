@@ -12,6 +12,7 @@ import {
 import { loadClassReports } from "./teacher-report-data.js";
 import { createPagePerformance } from "./page-performance.js";
 import { activityPercent } from "./activity-score.js";
+import { buildStudentActivityRecords } from "./student-activity-record.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -24,6 +25,8 @@ const sectionSummary = document.getElementById("sectionSummary");
 const studentCount = document.getElementById("studentCount");
 const studentGrid = document.querySelector("#studentGrid tbody");
 const topicsContainer = document.getElementById("topicsContainer");
+const studentActivityBody = document.getElementById("studentActivityBody");
+const openActivities = new Set();
 
 let dynamicRows = [];
 let allTopicStats = []; // Store fetched topics globally for term filtering
@@ -35,6 +38,44 @@ const termLabels = {
   term_02: "Term 2",
   term_03: "Term 3"
 };
+
+function renderStudentActivities(curriculum, sections) {
+  if (!studentActivityBody) return;
+  const records = buildStudentActivityRecords(curriculum, sections, termLabels);
+  if (!records.length) {
+    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
+    return;
+  }
+  studentActivityBody.innerHTML = records.map((record, index) => {
+    const key = record.key;
+    const open = openActivities.has(key);
+    const detailId = `studentActivityDetail${index}`;
+    const learnerRows = record.learners.map(learner => {
+      const initials = learner.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase();
+      const score = learner.score === null ? "—" : `${learner.rawScore}/${learner.totalScore} · ${Math.round(learner.score)}%`;
+      return `<tr><th scope="row"><span class="table-avatar">${escapeHtml(initials)}</span>${escapeHtml(learner.name)}</th><td><span class="activity-result-score${learner.score === null ? " is-empty" : ""}">${score}</span></td><td class="activity-result-time">${learner.minutes === null ? "—" : `${Math.round(learner.minutes)} min`}</td></tr>`;
+    }).join("");
+    return `<tr class="activity-record-row">
+      <th scope="row"><button class="activity-record-toggle" type="button" data-activity-index="${index}" aria-expanded="${open}" aria-controls="${detailId}"><span class="activity-record-chevron" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span><span>${escapeHtml(record.title)}<small>${escapeHtml(record.term)} · AR lesson</small></span></button></th>
+      <td>${escapeHtml(record.section)}</td><td>${record.averageMinutes === null ? "—" : `${record.averageMinutes} min`}</td><td>${record.learnerCount}</td>
+      <td><span class="activity-record-completed">${record.completedCount}/${record.learnerCount} completed</span></td>
+    </tr><tr class="activity-record-detail" id="${detailId}" ${open ? "" : "hidden"}><td colspan="5">
+      <div class="activity-record-detail-head"><div><strong>Student Results</strong><small>${escapeHtml(record.title)} · ${record.learners.length} learner records shown</small></div><span>Average score: ${record.averageScore === null ? "—" : `${record.averageScore}%`}</span></div>
+      ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Score</th><th scope="col">Time to finish</th></tr></thead><tbody>${learnerRows}</tbody></table></div>` : '<p class="activity-record-empty">No student activity results recorded yet.</p>'}
+    </td></tr>`;
+  }).join("");
+  studentActivityBody.querySelectorAll(".activity-record-toggle").forEach(button => {
+    button.addEventListener("click", () => {
+      const record = records[Number(button.dataset.activityIndex)];
+      const key = record.key;
+      const detail = document.getElementById(button.getAttribute("aria-controls"));
+      const open = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(open));
+      detail.hidden = !open;
+      if (open) openActivities.add(key); else openActivities.delete(key);
+    });
+  });
+}
 
 // Filtering logic for students
 const filterStudents = () => {
@@ -318,6 +359,7 @@ onAuthStateChanged(auth, async user => {
       allTopicStats = Array.from(topicStatsMap.values());
       window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
       renderTopics(window.totalStudentsBase);
+      renderStudentActivities(curriculum, sections);
       }),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
+import { buildStudentActivityRecords } from "../js/student-activity-record.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
@@ -31,7 +32,7 @@ function page(file, report) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   let authChanged;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent,
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -75,6 +76,7 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.ok(app.element("#studentGrid tbody").html().includes("75%"));
   assertTextOnly(app.element("topicsContainer").html());
+  assertTextOnly(app.element("studentActivityBody").html());
 });
 
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {
