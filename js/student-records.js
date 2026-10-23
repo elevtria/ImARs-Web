@@ -236,6 +236,13 @@ const archiveForm = document.getElementById("archiveStudentForm");
 const archiveReason = document.getElementById("archiveReason");
 const archiveSave = document.getElementById("confirmArchiveStudent");
 const archiveError = document.getElementById("archiveStudentError");
+archiveForm.addEventListener("change", event => {
+  if (event.target.name === "archiveReasonChoice") archiveReason.value = event.target.value;
+});
+function resetArchiveReason() {
+  archiveReason.value = "";
+  archiveForm.querySelectorAll('input[name="archiveReasonChoice"]').forEach(input => { input.checked = false; });
+}
 let archiveTarget;
 let archiveSectionTargets = null;
 document.getElementById("cancelArchiveStudent").addEventListener("click", () => {
@@ -248,11 +255,11 @@ recordsContainer.addEventListener("click", event => {
   archiveTarget = { id: button.dataset.id, name: button.dataset.name };
   document.getElementById("archiveStudentTitle").textContent = "Archive student";
   archiveSave.textContent = "Archive student";
-  archiveReason.value = "";
+  resetArchiveReason();
   archiveError.textContent = "";
   document.getElementById("archiveStudentName").textContent = archiveTarget.name;
   archiveModal.classList.add("open");
-  archiveReason.focus();
+  archiveForm.querySelector('input[name="archiveReasonChoice"]')?.focus();
 });
 archiveSectionButton.addEventListener("click", () => {
   if (archiveSectionButton.disabled) return;
@@ -263,10 +270,10 @@ archiveSectionButton.addEventListener("click", () => {
   document.getElementById("archiveStudentTitle").textContent = "Archive section";
   document.getElementById("archiveStudentName").textContent = label + " — " + archiveSectionTargets.length + " active students. This includes students hidden by the search filter.";
   archiveSave.textContent = "Archive " + archiveSectionTargets.length + " students";
-  archiveReason.value = "";
+  resetArchiveReason();
   archiveError.textContent = "";
   archiveModal.classList.add("open");
-  archiveReason.focus();
+  archiveForm.querySelector('input[name="archiveReasonChoice"]')?.focus();
 });
 archiveForm.addEventListener("submit", async event => {
   event.preventDefault();

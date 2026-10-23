@@ -2092,3 +2092,22 @@ label {
 .archive-section-btn:disabled { opacity:.45; cursor:not-allowed; }
 .archive-section-hint { margin:-4px 0 18px; color:#596b7e; font-size:12px; }
 @media(max-width:480px) { .archive-section-btn { margin-left:0; display:flex; } }
+
+/* Archive confirmation uses clear choices instead of a native dropdown. */
+#archiveStudentModal { padding:24px; background:#2c3a4f70; backdrop-filter:blur(4px); }
+#archiveStudentForm { width:min(460px,100%); max-height:calc(100svh - 48px); overflow-y:auto; padding:30px; border-radius:24px; border:1px solid #fff; box-shadow:0 24px 70px #2c3a4f26; background:#fff; }
+#archiveStudentForm h3 { font-size:23px; letter-spacing:-.6px; color:var(--ink); }
+#archiveStudentForm #archiveStudentName { display:inline-block; padding:7px 12px; margin:12px 0 0; border-radius:9px; background:#bfc8e230; color:#476781; font-size:13px; font-weight:600; }
+.archive-reasons { border:0; padding:0; margin:22px 0 8px; min-width:0; }
+.archive-reasons legend { padding:0; margin-bottom:10px; font-size:13px; font-weight:700; color:var(--ink); }
+#archiveStudentForm .archive-reason-choice { display:flex; align-items:center; gap:13px; padding:16px; margin:0 0 10px; border:1px solid var(--line); border-radius:13px; background:#f8fafc; cursor:pointer; }
+.archive-reason-choice input { flex:0 0 18px; width:18px; height:18px; margin:0; accent-color:#476781; }
+.archive-reason-choice strong { display:block; font-size:14px; font-weight:700; color:var(--ink); }
+.archive-reason-choice small { display:block; margin-top:4px; color:#596b7e; font-size:12px; font-weight:400; line-height:1.5; }
+#archiveStudentForm .archive-reason-choice:has(input:checked) { background:#bfc8e22e; border-color:var(--steel); box-shadow:0 0 0 1px var(--steel); }
+#archiveStudentForm .archive-reason-choice:has(input:focus-visible) { outline:3px solid #81a2c155; outline-offset:3px; }
+#archiveStudentForm .modal-actions { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top:22px; padding-top:18px; border-top:1px solid #a4b8d92e; }
+#archiveStudentForm .modal-actions button { min-height:44px; padding:11px 20px; font-size:13px; }
+#archiveStudentForm #cancelArchiveStudent { background:#f0f3f7; color:var(--ink); }
+#archiveStudentForm #archiveStudentError:empty { display:none; }
+@media(max-width:480px) { #archiveStudentForm { padding:23px; } #archiveStudentForm .modal-actions { flex-wrap:wrap; } }

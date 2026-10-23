@@ -160,8 +160,12 @@
     <form class="modal-card" id="archiveStudentForm">
       <h3 id="archiveStudentTitle">Archive student</h3><p id="archiveStudentName"></p>
       <p>The student's records will be kept in the Archived list.</p>
-      <label for="archiveReason">Reason</label>
-      <select id="archiveReason" required><option value="">Choose a reason</option><option value="graduated">Graduated</option><option value="dropped-out">Dropped out</option></select>
+      <input type="hidden" id="archiveReason" />
+      <fieldset class="archive-reasons">
+        <legend>Reason for archiving</legend>
+        <label class="archive-reason-choice"><input type="radio" name="archiveReasonChoice" value="graduated" required /><span><strong>Graduated</strong><small>Completed their studies in this class.</small></span></label>
+        <label class="archive-reason-choice"><input type="radio" name="archiveReasonChoice" value="dropped-out" required /><span><strong>Dropped out</strong><small>No longer attending this class.</small></span></label>
+      </fieldset>
       <p id="archiveStudentError" role="alert"></p>
       <div class="modal-actions"><button type="button" id="cancelArchiveStudent" class="ghost-btn">Cancel</button><button type="submit" id="confirmArchiveStudent" class="primary-btn">Archive student</button></div>
     </form>
