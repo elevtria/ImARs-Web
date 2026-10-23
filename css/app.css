@@ -2111,3 +2111,5 @@ label {
 #archiveStudentForm #cancelArchiveStudent { background:#f0f3f7; color:var(--ink); }
 #archiveStudentForm #archiveStudentError:empty { display:none; }
 @media(max-width:480px) { #archiveStudentForm { padding:23px; } #archiveStudentForm .modal-actions { flex-wrap:wrap; } }
+
+#archiveStudentForm #cancelArchiveStudent { display:inline-flex; align-items:center; justify-content:center; text-align:center; }
