@@ -2058,7 +2058,7 @@ label {
 .student-record-list .record .avatar { width:38px; height:38px; font-size:12px; }
 .student-record-list .record:hover { background:#fff; border-left-color:var(--gold); }
 .open-student-record,.student-detail-navigation button { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:#bfc8e233; color:var(--ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
-#studentRecordDialog { width:min(760px,calc(100% - 32px)); max-height:calc(100svh - 40px); overflow-y:auto; margin:auto; padding:26px; border:1px solid #fff; border-radius:22px; background:#f6f8fc; color:var(--ink); box-shadow:0 24px 80px #2c3a4f33; }
+#studentRecordDialog { width:min(860px,calc(100% - 32px)); max-height:calc(100svh - 40px); overflow-y:auto; margin:auto; padding:32px; border:1px solid #fff; border-radius:22px; background:#f6f8fc; color:var(--ink); box-shadow:0 24px 80px #2c3a4f33; }
 #studentRecordDialog::backdrop { background:#2c3a4f66; backdrop-filter:blur(3px); }
 .student-detail-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:22px; }
 .student-detail-heading h2 { font-size:22px; font-weight:800; }
