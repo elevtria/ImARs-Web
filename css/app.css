@@ -2069,3 +2069,5 @@ label {
 .student-detail-navigation button:disabled { opacity:.4; cursor:default; }
 .open-student-record:focus-visible,#studentRecordDialog button:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
 @media(max-width:600px) { .student-record-list .record { flex-wrap:wrap; padding:14px; } .student-record-list .record-head { width:100%; flex:auto; gap:8px; } .student-record-list .overall { font-size:11px; } #studentRecordDialog { padding:18px; } #studentRecordContent .record .stats { grid-template-columns:1fr 1fr; } }
+#closeStudentRecord { padding:0; flex-shrink:0; }
+#closeStudentRecord svg { display:block; }
