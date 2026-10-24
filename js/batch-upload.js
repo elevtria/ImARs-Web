@@ -39,9 +39,11 @@ const browseBtn = document.getElementById("browseBtn");
 const importBtn = document.getElementById("importBtn");
 
 let currentTeacherId = null;
-let sections = []; // [{ classCode, label, rawName, count }]
+let sections = []; 
 let selectedFile = null;
 let parsedStudents = [];
+let previewData = [];
+let existingStudentIds = new Set();
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -169,7 +171,7 @@ onAuthStateChanged(auth, (user) => {
   }).catch(error => { uploadStatus.hidden = false; uploadStatus.textContent = "Could not load your sections. Please refresh to try again."; console.error(error); });
 });
 
-// --- OFFICIAL TEMPLATE DOWNLOADS (First Name, Last Name, Student ID, Email) ---
+// --- OFFICIAL TEMPLATE DOWNLOADS ---
 const templateRows = [
   ["First Name", "Last Name", "Student ID", "Email"],
   ["Test", "Student", "0026271000", "name@email.com"],
@@ -191,7 +193,6 @@ document.getElementById("dlXlsx").onclick = () => {
   if (window.XLSX) {
     const ws = window.XLSX.utils.aoa_to_sheet(templateRows);
     const wb = window.XLSX.utils.book_new();
-    // Matches the exact sheet tab name "ImArs_Student_Template"
     window.XLSX.utils.book_append_sheet(wb, ws, "ImArs_Student_Template");
     window.XLSX.writeFile(wb, "ImArs_Student_Template.xlsx");
   }
@@ -307,18 +308,13 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) handleFileSelected(fileInput.files[0]);
 });
 
-let existingStudentIds = new Set();
-let previewData = [];
-
 async function handleFileSelected(file) {
   selectedFile = file;
-  parsedStudents = [];
   previewData = [];
   uploadStatus.hidden = true;
   document.getElementById("previewSection").hidden = true;
   importBtn.hidden = true;
 
-  // 1. FILE SAFETY: Enforce 5 MB limit mandated by the expert report
   const MAX_FILE_SIZE_MB = 5;
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
     document.getElementById("dropTitle").textContent = "File is too large";
@@ -337,9 +333,8 @@ async function handleFileSelected(file) {
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
 
-    // 2. FILE SAFETY: Cap row counts to prevent browser/Cloudflare timeouts
     const MAX_ROWS = 100;
-    if (rows.length > MAX_ROWS + 1) { // +1 accounts for the header row
+    if (rows.length > MAX_ROWS + 1) { 
       document.getElementById("dropTitle").textContent = "Too many records";
       document.getElementById("dropHint").textContent = `Please batch your uploads to a maximum of ${MAX_ROWS} students at a time.`;
       return;
@@ -351,8 +346,6 @@ async function handleFileSelected(file) {
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     for (const id of await checkStudentIds([...new Set(candidateIds)])) existingStudentIds.add(id);
     const fileIds = new Set();
-    let validCount = 0;
-    let errorCount = 0;
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -390,8 +383,6 @@ async function handleFileSelected(file) {
       }
 
       const isValid = rowErrors.length === 0;
-      if (isValid) validCount++; else errorCount++;
-
       const fullName = `${firstName} ${lastName}`.trim();
       
       previewData.push({
@@ -400,13 +391,9 @@ async function handleFileSelected(file) {
         isValid,
         errors: rowErrors
       });
-
-      if (isValid) {
-        parsedStudents.push({ firstName, lastName, fullName, studentId, email });
-      }
     }
 
-    renderPreviewTable(validCount, errorCount);
+    renderPreviewTable();
     
   } catch (err) {
     console.error("Failed to parse file:", err);
@@ -415,30 +402,81 @@ async function handleFileSelected(file) {
   }
 }
 
-function renderPreviewTable(validCount, errorCount) {
+// --- NEW: INLINE EDITING LOGIC ---
+function updateRowData(index, field, value) {
+  const item = previewData[index];
+  
+  if (field === 'email') {
+    item.email = value.trim().toLowerCase();
+  } else {
+    item[field] = value.trim();
+  }
+  
+  item.fullName = `${item.firstName} ${item.lastName}`.trim();
+
+  // Re-validate the specific row
+  let rowErrors = [];
+  if (!item.firstName) rowErrors.push("Missing First Name");
+  if (!item.lastName) rowErrors.push("Missing Last Name");
+  
+  // Retain existing ID errors (IDs are not editable)
+  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate") || e.includes("format") || e.includes("short"));
+  rowErrors.push(...prevIdErrors);
+
+  if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
+     rowErrors.push("Invalid email");
+  }
+
+  item.errors = [...new Set(rowErrors)];
+  item.isValid = item.errors.length === 0;
+
+  renderPreviewTable();
+}
+
+function renderPreviewTable() {
   const tbody = document.getElementById("previewTableBody");
   tbody.innerHTML = "";
   
-  previewData.forEach(item => {
+  let validCount = 0;
+  let errorCount = 0;
+
+  previewData.forEach((item, index) => {
+    if (item.isValid) validCount++;
+    else errorCount++;
+
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
-    // Highlight rejected rows as requested by the expert
     if (!item.isValid) tr.style.backgroundColor = "#fef2f2"; 
     
-    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate'));
+    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
     const emailHasError = item.errors.some(e => e.includes('email'));
 
+    // Inject input fields for inline editing
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
-      <td style="padding: 10px 8px;">${item.firstName || '<em style="color:red">Missing</em>'}</td>
-      <td style="padding: 10px 8px;">${item.lastName || '<em style="color:red">Missing</em>'}</td>
+      <td style="padding: 10px 8px;">
+        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.firstName ? 'border-color: #dc2626;' : ''}">
+      </td>
+      <td style="padding: 10px 8px;">
+        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.lastName ? 'border-color: #dc2626;' : ''}">
+      </td>
       <td style="padding: 10px 8px; ${idHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.studentId || '<em style="color:red">Missing</em>'}</td>
-      <td style="padding: 10px 8px; ${emailHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.email}</td>
+      <td style="padding: 10px 8px;">
+        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 160px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626;' : ''}">
+      </td>
       <td style="padding: 10px 8px; color: ${item.isValid ? '#16a34a' : '#dc2626'}; font-size: 0.85rem; font-weight: 500;">
         ${item.isValid ? '✓ Ready' : '⚠️ ' + item.errors.join(", ")}
       </td>
     `;
     tbody.appendChild(tr);
+  });
+
+  // Bind change listeners to trigger row updates
+  const inputs = tbody.querySelectorAll('input');
+  inputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+      updateRowData(e.target.dataset.index, e.target.dataset.field, e.target.value);
+    });
   });
 
   document.getElementById("previewSection").hidden = false;
@@ -454,7 +492,7 @@ function renderPreviewTable(validCount, errorCount) {
   }
   
   document.getElementById("dropTitle").textContent = selectedFile.name;
-  document.getElementById("dropHint").textContent = "Review the table below before importing.";
+  document.getElementById("dropHint").textContent = "Review the table below before importing. You can edit names and emails directly.";
 }
 
 // --- IMPORT CONFIRMATION & FIRESTORE BATCH UPLOAD ---
@@ -462,6 +500,18 @@ const closeImportModal = () => importModal.classList.remove("open");
 
 document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
+  
+  // Build the final array based on the edited preview data
+  parsedStudents = previewData
+    .filter(item => item.isValid)
+    .map(item => ({
+      firstName: item.firstName,
+      lastName: item.lastName,
+      fullName: item.fullName,
+      studentId: item.studentId,
+      email: item.email
+    }));
+
   if (!selectedFile || parsedStudents.length === 0) return;
 
   const targetSec = sections.find((s) => s.classCode === sectionSelect.value);
@@ -494,16 +544,15 @@ confirmImportBtn.addEventListener("click", async () => {
   confirmImportBtn.textContent = "Importing...";
 
   try {
-    const existingIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
-    if (existingIds.size) throw new Error("Some student IDs were just registered. Upload the file again to refresh the preview.");
+    const finalIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
+    if (finalIds.size) throw new Error("Some student IDs were just registered by another user. Upload the file again to refresh the preview.");
 
     let importedCount = 0;
     const savedList = [];
 
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
-
-      const isNewStudent = !existingIds.has(finalStudentId);
+      const isNewStudent = !finalIds.has(finalStudentId);
 
       const studentDocData = {
         schoolId: finalStudentId,
@@ -536,7 +585,7 @@ confirmImportBtn.addEventListener("click", async () => {
       await setDoc(doc(db, "users", finalStudentId), studentDocData, { merge: true });
       
       if (isNewStudent) {
-        existingIds.add(finalStudentId);
+        finalIds.add(finalStudentId);
         targetSec.count++;
       }
       importedCount++;
@@ -549,7 +598,6 @@ confirmImportBtn.addEventListener("click", async () => {
     uploadStatus.textContent = `Successfully imported ${importedCount} student(s) to ${targetSec.label}! Students: ${savedList.slice(0, 4).join(", ")}${savedList.length > 4 ? "..." : ""}`;
     uploadStatus.hidden = false;
 
-    // Reset dropzone
     importBtn.hidden = true;
     fileInput.value = "";
     document.getElementById("dropTitle").textContent = "Drag & drop your Excel file here";
