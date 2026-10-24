@@ -135,11 +135,10 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     );
 
     if (!alreadyExists) {
-      // FIX: Uniform class code auto-increment for auto-loaded sections
-      const classesSnap = await read(collection(db, "classes"));
+      // Safe check: Only scan the sections this teacher already loaded
       let maxNum = 0;
-      classesSnap.forEach(d => {
-        const match = d.id.match(/^SCIG6A(\d+)$/);
+      loadedSections.forEach(s => {
+        const match = s.classCode.match(/^SCIG6A(\d+)$/);
         if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
       });
       const newClassCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
@@ -245,11 +244,10 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    // FIX: Uniform class code auto-increment for manually added sections
-    const classesSnap = await quietDocs(collection(db, "classes"));
+    // Safe check: Scan the current in-memory sections array
     let maxNum = 0;
-    classesSnap.forEach(d => {
-      const match = d.id.match(/^SCIG6A(\d+)$/);
+    sections.forEach(s => {
+      const match = s.classCode.match(/^SCIG6A(\d+)$/);
       if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
     });
     const classCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
@@ -385,7 +383,7 @@ async function handleFileSelected(file) {
          rowErrors.push("ID too short");
       }
       
-      // FEATURE: Upsert tracking
+      // Track existing records for Upsert instead of rejecting
       const isExisting = existingStudentIds.has(studentId);
 
       if (fileIds.has(studentId)) rowErrors.push("Duplicate in file");
@@ -402,7 +400,7 @@ async function handleFileSelected(file) {
         rowNum: i + 1,
         firstName, lastName, fullName, studentId, email,
         isValid,
-        isExisting, // Track if it's an update
+        isExisting, 
         errors: rowErrors
       });
     }
@@ -428,10 +426,12 @@ function updateRowData(index, field, value) {
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
 
+  // Re-validate the specific row
   let rowErrors = [];
   if (!item.firstName) rowErrors.push("Missing First Name");
   if (!item.lastName) rowErrors.push("Missing Last Name");
   
+  // Retain formatting errors, but ignore database duplicate checks
   const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate in file") || e.includes("format") || e.includes("short"));
   rowErrors.push(...prevIdErrors);
 
@@ -464,6 +464,7 @@ function renderPreviewTable() {
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
     
+    // Set colors based on status (New, Update, or Error)
     let statusBadge = '';
     let statusColor = '';
     
@@ -483,6 +484,7 @@ function renderPreviewTable() {
     const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
     const emailHasError = item.errors.some(e => e.includes('email'));
 
+    // Inject input fields for inline editing
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
