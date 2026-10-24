@@ -135,8 +135,14 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     );
 
     if (!alreadyExists) {
-      const suffix = rawSection.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(-4) || "SEC1";
-      const newClassCode = `SCIG6_${suffix}`;
+      // FIX: Uniform class code auto-increment for auto-loaded sections
+      const classesSnap = await read(collection(db, "classes"));
+      let maxNum = 0;
+      classesSnap.forEach(d => {
+        const match = d.id.match(/^SCIG6A(\d+)$/);
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      });
+      const newClassCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
       await setDoc(doc(db, "classes", newClassCode), {
         SectionName: rawSection,
@@ -239,8 +245,14 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    const cleanCode = rawSectionOnly.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6) || "SEC";
-    const classCode = `SCIG6${cleanCode}${Math.floor(10 + Math.random() * 89)}`;
+    // FIX: Uniform class code auto-increment for manually added sections
+    const classesSnap = await quietDocs(collection(db, "classes"));
+    let maxNum = 0;
+    classesSnap.forEach(d => {
+      const match = d.id.match(/^SCIG6A(\d+)$/);
+      if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+    });
+    const classCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
     await setDoc(doc(db, "classes", classCode), {
       SectionName: rawSectionOnly,
@@ -371,9 +383,10 @@ async function handleFileSelected(file) {
          rowErrors.push("Invalid format (Letters found)");
       } else if (studentId.length < 9) {
          rowErrors.push("ID too short");
-      } else if (existingStudentIds.has(studentId)) {
-         rowErrors.push("Duplicate in database");
       }
+      
+      // FEATURE: Upsert tracking
+      const isExisting = existingStudentIds.has(studentId);
 
       if (fileIds.has(studentId)) rowErrors.push("Duplicate in file");
       fileIds.add(studentId);
@@ -389,6 +402,7 @@ async function handleFileSelected(file) {
         rowNum: i + 1,
         firstName, lastName, fullName, studentId, email,
         isValid,
+        isExisting, // Track if it's an update
         errors: rowErrors
       });
     }
@@ -402,7 +416,7 @@ async function handleFileSelected(file) {
   }
 }
 
-// --- NEW: INLINE EDITING LOGIC ---
+// --- INLINE EDITING & UPDATING LOGIC ---
 function updateRowData(index, field, value) {
   const item = previewData[index];
   
@@ -414,13 +428,11 @@ function updateRowData(index, field, value) {
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
 
-  // Re-validate the specific row
   let rowErrors = [];
   if (!item.firstName) rowErrors.push("Missing First Name");
   if (!item.lastName) rowErrors.push("Missing Last Name");
   
-  // Retain existing ID errors (IDs are not editable)
-  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate") || e.includes("format") || e.includes("short"));
+  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate in file") || e.includes("format") || e.includes("short"));
   rowErrors.push(...prevIdErrors);
 
   if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
@@ -439,19 +451,38 @@ function renderPreviewTable() {
   
   let validCount = 0;
   let errorCount = 0;
+  let updateCount = 0;
 
   previewData.forEach((item, index) => {
-    if (item.isValid) validCount++;
-    else errorCount++;
+    if (item.isValid) {
+        validCount++;
+        if (item.isExisting) updateCount++;
+    } else {
+        errorCount++;
+    }
 
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
-    if (!item.isValid) tr.style.backgroundColor = "#fef2f2"; 
+    
+    let statusBadge = '';
+    let statusColor = '';
+    
+    if (!item.isValid) {
+        tr.style.backgroundColor = "#fef2f2"; 
+        statusBadge = '⚠️ ' + item.errors.join(", ");
+        statusColor = '#dc2626'; 
+    } else if (item.isExisting) {
+        tr.style.backgroundColor = "#f0f9ff"; 
+        statusBadge = '🔄 Update Record';
+        statusColor = '#0284c7'; 
+    } else {
+        statusBadge = '✓ Ready (New)';
+        statusColor = '#16a34a'; 
+    }
     
     const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
     const emailHasError = item.errors.some(e => e.includes('email'));
 
-    // Inject input fields for inline editing
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
@@ -464,14 +495,13 @@ function renderPreviewTable() {
       <td style="padding: 10px 8px;">
         <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 160px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626;' : ''}">
       </td>
-      <td style="padding: 10px 8px; color: ${item.isValid ? '#16a34a' : '#dc2626'}; font-size: 0.85rem; font-weight: 500;">
-        ${item.isValid ? '✓ Ready' : '⚠️ ' + item.errors.join(", ")}
+      <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
+        ${statusBadge}
       </td>
     `;
     tbody.appendChild(tr);
   });
 
-  // Bind change listeners to trigger row updates
   const inputs = tbody.querySelectorAll('input');
   inputs.forEach(input => {
     input.addEventListener('change', (e) => {
@@ -480,19 +510,24 @@ function renderPreviewTable() {
   });
 
   document.getElementById("previewSection").hidden = false;
-  document.getElementById("previewSummary").textContent = `Found ${validCount} valid records and ${errorCount} errors.`;
+  
+  let summaryText = `Found ${validCount} valid records `;
+  if (updateCount > 0) summaryText += `(${updateCount} will be updated) `;
+  summaryText += `and ${errorCount} errors.`;
+  
+  document.getElementById("previewSummary").textContent = summaryText;
   
   const confirmBtn = document.getElementById("confirmPreviewBtn");
   if (validCount > 0) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = `Import ${validCount} Valid Records`;
+    confirmBtn.textContent = `Import/Update ${validCount} Records`;
   } else {
     confirmBtn.disabled = true;
     confirmBtn.textContent = "No valid records to import";
   }
   
   document.getElementById("dropTitle").textContent = selectedFile.name;
-  document.getElementById("dropHint").textContent = "Review the table below before importing. You can edit names and emails directly.";
+  document.getElementById("dropHint").textContent = "Review the table below. You can edit names and emails directly to fix mistakes or update existing students.";
 }
 
 // --- IMPORT CONFIRMATION & FIRESTORE BATCH UPLOAD ---
@@ -501,7 +536,6 @@ const closeImportModal = () => importModal.classList.remove("open");
 document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
   
-  // Build the final array based on the edited preview data
   parsedStudents = previewData
     .filter(item => item.isValid)
     .map(item => ({
@@ -517,7 +551,7 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
   const targetSec = sections.find((s) => s.classCode === sectionSelect.value);
   const secLabel = targetSec ? targetSec.label : sectionSelect.value;
 
-  importSummary.textContent = `You are about to securely import ${parsedStudents.length} VALID student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
+  importSummary.textContent = `You are about to securely import/update ${parsedStudents.length} student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
   
   if (importPreviewNote) {
     const sampleNames = parsedStudents.slice(0, 3).map((s) => `${s.fullName} (${s.studentId})`).join(", ");
@@ -541,13 +575,13 @@ confirmImportBtn.addEventListener("click", async () => {
   }
 
   confirmImportBtn.disabled = true;
-  confirmImportBtn.textContent = "Importing...";
+  confirmImportBtn.textContent = "Processing...";
 
   try {
     const finalIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
-    if (finalIds.size) throw new Error("Some student IDs were just registered by another user. Upload the file again to refresh the preview.");
 
-    let importedCount = 0;
+    let newCount = 0;
+    let updateCount = 0;
     const savedList = [];
 
     for (const stu of parsedStudents) {
@@ -587,15 +621,18 @@ confirmImportBtn.addEventListener("click", async () => {
       if (isNewStudent) {
         finalIds.add(finalStudentId);
         targetSec.count++;
+        newCount++;
+      } else {
+        updateCount++;
       }
-      importedCount++;
+      
       savedList.push(`${stu.fullName} (${finalStudentId})`);
     }
 
     updateSelectedSection();
     closeImportModal();
 
-    uploadStatus.textContent = `Successfully imported ${importedCount} student(s) to ${targetSec.label}! Students: ${savedList.slice(0, 4).join(", ")}${savedList.length > 4 ? "..." : ""}`;
+    uploadStatus.textContent = `Successfully added ${newCount} and updated ${updateCount} student(s) in ${targetSec.label}!`;
     uploadStatus.hidden = false;
 
     importBtn.hidden = true;
@@ -604,7 +641,7 @@ confirmImportBtn.addEventListener("click", async () => {
     document.getElementById("dropHint").textContent = "or click to browse · .xlsx, .csv supported";
   } catch (err) {
     console.error("Batch import error:", err);
-    alert("Error importing students: " + err.message);
+    alert("Error processing students: " + err.message);
   } finally {
     confirmImportBtn.disabled = false;
     confirmImportBtn.textContent = "Confirm Import";
