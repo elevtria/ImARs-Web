@@ -6,7 +6,6 @@ import {
   query, 
   where, 
   getDocsWithLoading as getDocs,
-  getDocs as quietDocs,
   doc, 
   setDoc, 
   updateDoc, 
@@ -85,10 +84,9 @@ sectionSelect.addEventListener("change", updateSelectedSection);
 
 // --- LOAD TEACHER SECTIONS & STUDENT COUNTS FROM FIRESTORE ---
 async function loadSectionsFromDB(user, { background = false } = {}) {
-  const read = background ? quietDocs : getDocs;
   try {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
-    const userSnap = await read(userQ);
+    const userSnap = await getDocs(userQ);
 
     const teacher = userSnap.docs.find(entry => String(entry.data().role || "").toLowerCase() === "teacher");
     if (!teacher) throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
@@ -96,7 +94,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     const teacherData = teacher.data();
 
     const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
-    const classSnap = await read(classQ);
+    const classSnap = await getDocs(classQ);
 
     const loadedSections = [];
 
@@ -110,7 +108,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
         where("role", "==", "student"),
         where("classCode", "==", classDoc.id)
       );
-      const stuSnap = await read(stuQ);
+      const stuSnap = await getDocs(stuQ);
 
       loadedSections.push({
         classCode: classDoc.id,
@@ -135,11 +133,13 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     );
 
     if (!alreadyExists) {
-      // Safe check: Only scan the sections this teacher already loaded
+      // BULLETPROOF CHECK: Bypass errors if classCodes are missing or malformed
       let maxNum = 0;
       loadedSections.forEach(s => {
-        const match = s.classCode.match(/^SCIG6A(\d+)$/);
-        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        if (s.classCode) {
+            const match = s.classCode.match(/^SCIG6A(\d+)$/);
+            if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        }
       });
       const newClassCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
@@ -162,7 +162,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
-    throw err;
+    throw err; // Pass to the auth handler to display
   }
 }
 
@@ -173,7 +173,13 @@ onAuthStateChanged(auth, (user) => {
   }
   showTeacherView({ app, user, page: "batch-upload", load: options => loadSectionsFromDB(user, options),
     render: data => { currentTeacherId = data.teacherId; sections = data.sections; renderSections(); }
-  }).catch(error => { uploadStatus.hidden = false; uploadStatus.textContent = "Could not load your sections. Please refresh to try again."; console.error(error); });
+  }).catch(error => { 
+    // ERROR CATCHER: Visually show the error if it crashes
+    sectionNameEl.textContent = "Error loading data!";
+    sectionSelect.innerHTML = `<option>Failed to load</option>`;
+    alert("Script Error: " + error.message + "\n\nPlease clear your browser cache and refresh.");
+    console.error(error); 
+  });
 });
 
 // --- OFFICIAL TEMPLATE DOWNLOADS ---
@@ -244,11 +250,13 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    // Safe check: Scan the current in-memory sections array
+    // BULLETPROOF CHECK: Scan the current in-memory sections safely
     let maxNum = 0;
     sections.forEach(s => {
-      const match = s.classCode.match(/^SCIG6A(\d+)$/);
-      if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      if (s.classCode) {
+        const match = s.classCode.match(/^SCIG6A(\d+)$/);
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      }
     });
     const classCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
