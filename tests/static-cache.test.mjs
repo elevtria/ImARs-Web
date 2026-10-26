@@ -48,7 +48,7 @@ test("production minification preserves module exports, classic-script globals, 
     ["js/scores.js", 'export const points = 5;'],
     ["js/ui.js", 'function openMenu() { return "Menu ready"; }\nwindow.openMenu = openMenu;'],
     ["css/app.css", '/* Theme */\n:root { --gold: #feb705; }\nbody[data-auth-pending] { visibility: hidden; }\n.login-submit[aria-busy="true"] { color: var(--gold); }'],
-    ["index.html", '<!doctype html>\n<html><head><title>Teacher portal</title></head><body data-auth-pending>\n<!-- Source note -->\n<p><span>Sign in</span> <strong>to continue</strong></p><pre>keep  two\nlines</pre><script type="module" src="js/main.js"></script><link rel="stylesheet" href="css/app.css"></body></html>'],
+    ["index.html", '<!doctype html>\n<html><head><title>Teacher portal</title></head><body data-auth-pending>\n<!-- Source note -->\n<p><span>Sign in</span> <strong>to continue</strong></p><pre>keep  two\nlines</pre><script src="js/ui.js"></script><script type="module" src="js/main.js"></script><link rel="stylesheet" href="css/app.css"></body></html>'],
     ["assets/imars-logo.png", "logo bytes"], ["assets/imars-loader-transparent.png", "loader bytes"]
   ]);
   for (const [name, content] of fixtures) { await mkdir(dirname(join(output, name)), { recursive: true }); await writeFile(join(output, name), content); }
@@ -56,17 +56,17 @@ test("production minification preserves module exports, classic-script globals, 
   assert.equal(compact.count, 5); assert.ok(compact.after < compact.before);
   const rawModule = await readFile(join(output, "js/main.js"), "utf8");
   assert.ok(!rawModule.includes("Editable source comment")); assert.ok(!rawModule.includes("sourceMappingURL"));
-  const { prefix } = await cacheStaticAssets(output, ["index.html"]);
-  const module = await import(pathToFileURL(join(output, prefix.slice(1), "js/main.js")));
+  const { urls } = await cacheStaticAssets(output, ["index.html"]);
+  const module = await import(pathToFileURL(join(output, urls.get("/js/main.js").slice(1))));
   assert.equal(module.total(3), 15); assert.equal(module.label, "Loading your data…");
   assert.equal(await readFile(module.logo, "utf8"), "logo bytes");
   const browser = { window: {} };
-  vm.runInNewContext(await readFile(join(output, "js/ui.js"), "utf8"), browser);
+  vm.runInNewContext(await readFile(join(output, urls.get("/js/ui.js").slice(1)), "utf8"), browser);
   assert.equal(browser.window.openMenu(), "Menu ready");
   const html = await readFile(join(output, "index.html"), "utf8");
   assert.ok(!html.includes("Source note")); assert.match(html, /<\/span> <strong>/);
   assert.ok(html.includes('<pre>keep  two\nlines</pre>'));
-  assert.ok(html.includes('data-auth-pending')); assert.ok(html.includes(`src="${prefix}/js/main.js"`));
+  assert.ok(html.includes('data-auth-pending')); assert.ok(html.includes(`src="${urls.get("/js/main.js")}"`));
   const css = await readFile(join(output, "css/app.css"), "utf8");
   assert.ok(css.includes("body[data-auth-pending]")); assert.ok(css.includes("--gold:")); assert.ok(css.includes("aria-busy=true"));
 });
@@ -94,7 +94,7 @@ test("HTML versioning changes only known local public files and preserves routes
   assert.equal(plan.headers.includes(".html"), false);
 });
 
-test("build output has versioned import dependencies, working loader URLs, and exact immutable rules without modifying source assets", async t => {
+test("bundled output preserves loader URLs, downloads and immutable caching without modifying source assets", async t => {
   const base = resolve(tmpdir());
   const output = await mkdtemp(join(base, "imars-cache-test-"));
   t.after(async () => {
@@ -103,24 +103,63 @@ test("build output has versioned import dependencies, working loader URLs, and e
     await rm(output, { recursive: true, force: true });
   });
   const fixtures = new Map([
-    ["js/loading.js", 'import "./data.js";\nconst logo = new URL("../assets/imars-loader-transparent.png", import.meta.url);'],
+    ["package.json", '{"type":"module"}'],
+    ["js/loading.js", 'import { value } from "./data.js"; export { value }; export const logo = new URL("../assets/imars-loader-transparent.png", import.meta.url);'],
     ["js/data.js", 'export const value = 1;'], ["css/app.css", "body { color: black; }"],
     ["assets/imars-logo.png", "logo bytes"], ["assets/imars-loader-transparent.png", "loader bytes"],
     ["assets/markers/topic.zip", "ZIP bytes"],
     ["index.html", '<script src="js/loading.js" type="module"></script><link href="css/app.css"><img src="assets/imars-logo.png"><a href="login.html">Login</a>']
   ]);
   for (const [name, content] of fixtures) { await mkdir(dirname(join(output, name)), { recursive: true }); await writeFile(join(output, name), content); }
-  const { prefix, count } = await cacheStaticAssets(output, ["index.html"]);
-  assert.equal(count, 5);
-  const script = await readFile(join(output, prefix.slice(1), "js/loading.js"), "utf8");
-  assert.equal(script, fixtures.get("js/loading.js"));
-  const loaderUrl = new URL("../assets/imars-loader-transparent.png", "https://example.test" + prefix + "/js/loading.js");
-  assert.equal(await readFile(join(output, loaderUrl.pathname.slice(1)), "utf8"), "loader bytes");
+  const { prefix, count, urls } = await cacheStaticAssets(output, ["index.html"]);
+  const module = await import(pathToFileURL(join(output, urls.get("/js/loading.js").slice(1))));
+  assert.equal(module.value, 1);
+  assert.equal(await readFile(module.logo, "utf8"), "loader bytes");
   assert.equal(await readFile(join(output, "js/data.js"), "utf8"), 'export const value = 1;');
   assert.equal(await readFile(join(output, "assets/markers/topic.zip"), "utf8"), "ZIP bytes");
-  assert.deepEqual((await readdir(join(output, prefix.slice(1), "assets"))).sort(), ["imars-loader-transparent.png", "imars-logo.png"]);
+  const published = await readdir(join(output, prefix.slice(1)));
+  assert.ok(published.every(name => /^(?:app|chunk|style|asset)-[\w-]+\.(?:js|css|png)$/.test(name)));
+  assert.ok(!published.some(name => /loading|data|imars/.test(name)));
   const headers = await readFile(join(output, "_headers"), "utf8");
   assert.equal(headers.split("Cache-Control:").length - 1, count);
   assert.ok(headers.includes("Cache-Control: public, max-age=31536000, immutable"));
-  assert.ok((await readFile(join(output, "index.html"), "utf8")).includes(`src="${prefix}/js/loading.js"`));
+  assert.ok((await readFile(join(output, "index.html"), "utf8")).includes(`src="${urls.get("/js/loading.js")}"`));
+});
+
+test("separate page entries and lazy imports share one session object and retain runtime styles and classic globals", async t => {
+  const base = resolve(tmpdir()), output = await mkdtemp(join(base, "imars-bundle-test-"));
+  t.after(async () => {
+    assert.ok(resolve(output).startsWith(base + sep + "imars-bundle-test-"));
+    await rm(output, { recursive: true, force: true });
+  });
+  const fixtures = new Map([
+    ["package.json", '{"type":"module"}'],
+    ["js/session.js", 'export const session = { visits: 0 }; export const style = new URL("../css/session.css", import.meta.url);'],
+    ["js/first.js", 'import { session, style } from "./session.js"; session.visits++; export { session, style }; export const later = () => import("./session.js");'],
+    ["js/second.js", 'import { session } from "./session.js"; session.visits++; export { session };'],
+    ["js/scanner.js", 'var Scanner = { ready: true }; function openScanner() { return Scanner.ready; }'],
+    ["css/session.css", '.notice { color: red; }'],
+    ["assets/imars-logo.png", "logo bytes"], ["assets/imars-loader-transparent.png", "loader bytes"],
+    ["index.html", '<script src="https://cdn.example/library.js"></script><script src="js/scanner.js"></script><script type="module" src="js/first.js"></script><script type="module" src="js/second.js"></script>']
+  ]);
+  for (const [name, content] of fixtures) { await mkdir(dirname(join(output, name)), { recursive: true }); await writeFile(join(output, name), content); }
+  await minifyPublicAssets(output, ["index.html"]);
+  const { prefix, urls } = await cacheStaticAssets(output, ["index.html"]);
+  const first = await import(pathToFileURL(join(output, urls.get("/js/first.js").slice(1))));
+  const second = await import(pathToFileURL(join(output, urls.get("/js/second.js").slice(1))));
+  assert.equal(first.session, second.session);
+  assert.equal(first.session.visits, 2);
+  assert.equal((await first.later()).session, first.session);
+  assert.match(await readFile(first.style, "utf8"), /color:red/);
+  const browser = {};
+  vm.runInNewContext(await readFile(join(output, urls.get("/js/scanner.js").slice(1)), "utf8"), browser);
+  assert.equal(browser.openScanner(), true);
+  assert.equal(browser.Scanner.ready, true);
+  const html = await readFile(join(output, "index.html"), "utf8");
+  assert.ok(html.indexOf("https://cdn.example/library.js") < html.indexOf(urls.get("/js/scanner.js")));
+  assert.ok(html.indexOf(urls.get("/js/scanner.js")) < html.indexOf(urls.get("/js/first.js")));
+  for (const name of await readdir(join(output, prefix.slice(1)))) {
+    assert.ok(!name.endsWith(".map"));
+    if (name.endsWith(".js")) assert.ok(!(await readFile(join(output, prefix.slice(1), name), "utf8")).includes("sourceMappingURL"));
+  }
 });

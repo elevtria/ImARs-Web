@@ -24,6 +24,12 @@ for (const name of publicPaths) {
 const minified = await minifyPublicAssets(output, pages);
 await cp(join(output, "js", "sw.js"), join(output, "sw.js"));
 const cached = await cacheStaticAssets(output, pages);
+// Remove only generated source copies; publish the hashed bundles and root SW.
+for (const directory of ["js", "css"]) {
+  const generated = resolve(output, directory);
+  if (relative(output, generated) !== directory) throw new Error("Invalid generated asset directory.");
+  await rm(generated, { recursive: true, force: true });
+}
 await writeFile(join(output, "_redirects"), "/scan-qr-ar /sync-offline-results 302\n/scan-qr-ar.html /sync-offline-results 302\n");
 
 let files = 0;
