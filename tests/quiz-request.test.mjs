@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { requestQuiz } from "../js/quiz-request.js";
+import { normalizeQuizQuestion } from "../js/quiz-limits.js";
 
 const questions = [{ text: "Which material freezes into ice?", options: ["Water", "Sand", "Air", "Metal"], correctIndex: 0 }];
 const payload = { questionCount: 1, sectionId: "fixture-section", fileName: "science.docx" };
+
+test("question validation rejects disguised duplicate choices and preserves true/false answer meaning", () => {
+  assert.equal(normalizeQuizQuestion({ text: "Choose a state.", options: ["Liquid", " liquid! ", "Gas", "Solid"], correctIndex: 0 }, "multiple-choice"), null);
+  assert.equal(normalizeQuizQuestion({ text: "A statement", options: ["False", "True"], correctIndex: 0 }, "true-false"), null);
+  assert.equal(normalizeQuizQuestion({ text: "A statement", options: ["True", "False"], correctIndex: 1, correction: "" }, "modified-true-false"), null);
+  assert.equal(normalizeQuizQuestion({ text: "A true statement", options: ["True", "False"], correctIndex: 0, correction: "" }, "modified-true-false").correctIndex, 0);
+});
 
 test("quiz requests preserve teacher authorization, requested options and the review question format", async t => {
   t.mock.method(globalThis, "fetch", async (url, options) => {

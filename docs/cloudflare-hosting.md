@@ -75,16 +75,30 @@ Direct Upload project if you want the guide's Git-based deployment workflow.
   appear; save a draft and check it in My quizzes.
 - Check a marker ZIP download and the QR offline-sync page.
 
-The backend currently uses `gemini-3.8-flash`, with `gemini-3.5-flash-lite` as a
-fallback if the primary model is busy. Both list free input/output tiers as of
-October 15, 2026. Availability and quotas depend on the Google project; leave
-paid billing disabled to keep generation within the free tier. Quota exhaustion
-returns HTTP 429. The Function disables Interactions API request storage with
+The backend currently uses `gemini-3.5-flash-lite`, with `gemini-3.8-flash` as a
+fallback if the primary model is busy. Availability, billing and quotas depend
+on the Google project. Quota exhaustion returns HTTP 429. The Function disables
+Interactions API request storage with
 `store: false`; Google's separate free-tier data-use terms still apply.
 
 Server-side teacher and section authorization is implemented. No additional
 per-teacher request limiter is configured yet; model quotas still apply. Do not
 send private student records as quiz learning material.
+
+## Quiz formats
+
+The website supports multiple choice, true/false, essay, identification with
+explanation, and modified true/false. Written questions keep teacher-editable
+model answers, explanations or rubrics, and points. Modified false statements
+include a corrected statement. These records use schema version 2. Student
+answering and grading in the mobile app require a later mobile update; this
+website change does not install that update or automatically grade essays.
+
+Multiple-choice generation performs an additional independent relevance check
+on all options. Questions are withheld when that check fails or cannot complete.
+It shares the existing generation deadline and temporary PDF upload; it does
+make a second AI request. Teacher review remains necessary because AI checks
+can make mistakes.
 
 ## References
 

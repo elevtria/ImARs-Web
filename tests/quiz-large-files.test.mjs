@@ -10,7 +10,7 @@ import { readOfficeZipEntries } from "../js/quiz-office.js";
 const env = { GEMINI_API_KEY: "quiz-upload-test-key-only" };
 const settings = { firebaseApiKey: "public-firebase-test-key-only", fileName: "Water cycle.pdf", sectionId: "fixture-section",
   questionCount: 1, questionType: "multiple-choice", difficulty: "Easy", fileMimeType: "application/pdf" };
-const questions = [{ text: "What does water form when it freezes?", options: ["Ice", "Sand", "Air", "Metal"], correctIndex: 0 }];
+const questions = [{ text: "What does water form when it freezes?", options: ["Ice", "Liquid water", "Water vapour", "Water droplets"], correctIndex: 0 }];
 const file = { name: "files/fixture-pdf", uri: "https://generativelanguage.googleapis.com/v1beta/files/fixture-pdf", mimeType: "application/pdf", state: "ACTIVE" };
 
 function bytes(size) {
@@ -54,6 +54,7 @@ function provider(t, overrides = {}) {
     if (url.endsWith("/v1beta/files/fixture-pdf")) return Response.json(file);
     if (url.endsWith("/interactions")) {
       const body = JSON.parse(options.body); generations.push(body);
+      if (body.response_format.schema.properties.checks) return Response.json({ output_text: JSON.stringify({ checks: [{ questionIndex: 0, topicRelevant: true, plausibleDistractors: true, singleCorrect: true, supportedAnswer: true }] }) });
       return overrides.generate ? overrides.generate(body) : Response.json({ output_text: JSON.stringify({ questions }) });
     }
     throw Error("Unexpected fixture request");

@@ -2,7 +2,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
-import { quizFileSizeError } from "./quiz-limits.js";
+import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
 
 const firebaseApp = initializeApp();
@@ -272,7 +272,7 @@ const firestore = getFirestore(firebaseApp);
     const available = generatedQuestions.filter((question) => !question.discarded).length;
     const accepted = generatedQuestions.filter((question) => question.accepted && !question.discarded).length;
     const requested = Number(document.getElementById("reviewSummary").dataset.requested || 0);
-    document.getElementById("reviewSummary").innerHTML = "<span><strong>" + available + " AI suggestions</strong> for “" + escapeHtml(selectedFile ? selectedFile.name : "your file") + "”</span><span>" + escapeHtml(difficulty) + " · " + (document.querySelector("input[name='questionType']:checked").value === "multiple-choice" ? "Multiple choice" : "True or false") + "</span>";
+    document.getElementById("reviewSummary").innerHTML = "<span><strong>" + available + " AI suggestions</strong> for “" + escapeHtml(selectedFile ? selectedFile.name : "your file") + "”</span><span>" + escapeHtml(difficulty) + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value) + "</span>";
     if (requested > available) {
       document.getElementById("reviewSummary").innerHTML += "<span>Requested " + requested + " questions.</span>";
     }
@@ -287,10 +287,13 @@ const firestore = getFirestore(firebaseApp);
   function renderSuggestions() {
     const type = document.querySelector("input[name='questionType']:checked").value;
     suggestionList.innerHTML = generatedQuestions.map((question, index) => {
-      const answerMarkup = question.options.map((option, optionIndex) => {
+      let answerMarkup = writtenQuestion(type)
+        ? `<div class="quiz-suggestion-answer correct"><b>Answer guide</b>${escapeHtml(question.answer)}</div><div class="quiz-suggestion-answer"><b>${type === "essay" ? "Marking criteria" : "Explanation"}</b>${escapeHtml(type === "essay" ? question.rubric : question.explanation)} · ${question.points} points</div>`
+        : question.options.map((option, optionIndex) => {
         const label = type === "multiple-choice" ? String.fromCharCode(65 + optionIndex) : "";
         return "<div class='quiz-suggestion-answer " + (optionIndex === question.correctIndex ? "correct" : "") + "'><b>" + label + "</b>" + escapeHtml(option) + (optionIndex === question.correctIndex ? " · Correct answer" : "") + "</div>";
       }).join("");
+      if (type === "modified-true-false" && question.correctIndex === 1) answerMarkup += `<div class="quiz-suggestion-answer correct"><b>Corrected statement</b>${escapeHtml(question.correction)}</div>`;
       const cardClass = "quiz-suggestion-card" + (question.discarded ? " is-discarded" : "");
       const status = question.discarded ? "Discarded" : question.accepted ? "Accepted" : "New";
       const actionMarkup = question.discarded
@@ -311,11 +314,11 @@ const firestore = getFirestore(firebaseApp);
       showStatus(setupStatus, "Accept at least one question before continuing.", true);
       return;
     }
-    editorQuestions = ready.map((question) => ({ id: makeId(), text: question.text, options: question.options.slice(), correctIndex: question.correctIndex }));
+    editorQuestions = ready.map((question) => ({ ...question, id: makeId(), options: question.options.slice() }));
     editingQuizId = null;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
     document.getElementById("editorSectionName").textContent = selectedSectionName();
-    document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + (document.querySelector("input[name='questionType']:checked").value === "multiple-choice" ? "Multiple choice" : "True or false");
+    document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value);
     document.getElementById("editorDemoNotice").hidden = false;
     document.getElementById("backToReview").hidden = false;
     document.querySelector("input[name='availability'][value='draft']").checked = true;
@@ -328,16 +331,21 @@ const firestore = getFirestore(firebaseApp);
     editorList.innerHTML = editorQuestions.map((question, index) => {
       const controls = "<div class='quiz-question-controls'><button type='button' data-move='up' data-index='" + index + "' aria-label='Move question up' " + (index === 0 ? "disabled" : "") + ">↑</button><button type='button' data-move='down' data-index='" + index + "' aria-label='Move question down' " + (index === editorQuestions.length - 1 ? "disabled" : "") + ">↓</button><button class='delete' type='button' data-delete-question='" + index + "' aria-label='Delete question'>×</button></div>";
       let answers;
-      if (type === "multiple-choice") {
+      if (writtenQuestion(type)) {
+        const field = type === "essay" ? "rubric" : "explanation";
+        answers = `<label class="quiz-field"><span class="quiz-field-label">${type === "essay" ? "Model answer" : "Expected identification"}</span><textarea class="quiz-input" rows="3" maxlength="${type === "essay" ? 8000 : 1000}" data-answer-field="answer" data-question-index="${index}">${escapeHtml(question.answer || "")}</textarea></label><label class="quiz-field"><span class="quiz-field-label">${type === "essay" ? "Marking criteria" : "Expected explanation"}</span><textarea class="quiz-input" rows="3" maxlength="4000" data-answer-field="${field}" data-question-index="${index}">${escapeHtml(question[field] || "")}</textarea></label><label class="quiz-field"><span class="quiz-field-label">Points</span><input class="quiz-input" type="number" min="1" max="100" data-answer-field="points" data-question-index="${index}" value="${Number(question.points) || 1}" /></label>`;
+      } else if (type === "multiple-choice") {
         answers = question.options.map((option, optionIndex) => "<label class='quiz-option-row'><input type='radio' name='correct-" + question.id + "' data-correct-index='" + optionIndex + "' data-question-index='" + index + "' " + (question.correctIndex === optionIndex ? "checked" : "") + " aria-label='Mark option " + String.fromCharCode(65 + optionIndex) + " as correct' /><input class='quiz-option-input' type='text' maxlength='240' data-option-index='" + optionIndex + "' data-question-index='" + index + "' value='" + escapeHtml(option) + "' aria-label='Answer option " + String.fromCharCode(65 + optionIndex) + "' /></label>").join("");
       } else {
         answers = question.options.map((option, optionIndex) => "<label class='quiz-option-row'><input type='radio' name='correct-" + question.id + "' data-correct-index='" + optionIndex + "' data-question-index='" + index + "' " + (question.correctIndex === optionIndex ? "checked" : "") + " aria-label='Mark " + escapeHtml(option) + " as correct' /><span class='quiz-option-input'>" + escapeHtml(option) + "</span></label>").join("");
       }
-      return "<article class='quiz-question-card'><div class='quiz-question-card-head'><strong>Question " + (index + 1) + "</strong><span class='quiz-q-badge'>" + (type === "multiple-choice" ? "Multiple choice" : "True or false") + "</span>" + controls + "</div><textarea class='quiz-question-input' rows='2' maxlength='500' data-question-text='" + index + "' aria-label='Question " + (index + 1) + " text'>" + escapeHtml(question.text) + "</textarea><div class='quiz-option-editor'>" + answers + "</div><p class='quiz-correct-hint'>Select the circle beside the correct answer.</p></article>";
+      if (type === "modified-true-false" && question.correctIndex === 1) answers += `<label class="quiz-field"><span class="quiz-field-label">Corrected statement</span><textarea class="quiz-input" rows="3" maxlength="4000" data-answer-field="correction" data-question-index="${index}">${escapeHtml(question.correction || "")}</textarea></label>`;
+      const hint = writtenQuestion(type) ? "Answer guides support teacher review; they do not automatically grade a student's written response." : type === "modified-true-false" ? "Select the correct answer and provide the corrected statement for a False item." : "Select the circle beside the correct answer.";
+      return "<article class='quiz-question-card'><div class='quiz-question-card-head'><strong>Question " + (index + 1) + "</strong><span class='quiz-q-badge'>" + questionTypeLabel(type) + "</span>" + controls + "</div><textarea class='quiz-question-input' rows='2' maxlength='500' data-question-text='" + index + "' aria-label='Question " + (index + 1) + " text'>" + escapeHtml(question.text) + "</textarea><div class='quiz-option-editor'>" + answers + "</div><p class='quiz-correct-hint'>" + hint + "</p></article>";
     }).join("");
     document.getElementById("questionLimitText").textContent = editorQuestions.length + " / 50";
     document.getElementById("addQuestion").disabled = editorQuestions.length >= 50;
-    document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + (type === "multiple-choice" ? "Multiple choice" : "True or false");
+    document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(type);
   }
 
   function updateReleaseSelection() {
@@ -347,6 +355,10 @@ const firestore = getFirestore(firebaseApp);
     });
     const scheduleSelected = document.querySelector("input[name='availability']:checked").value === "scheduled";
     document.getElementById("scheduleFields").hidden = !scheduleSelected;
+  }
+
+  function updateTypeSelection() {
+    document.querySelectorAll(".quiz-type-option").forEach(label => label.classList.toggle("selected", label.querySelector("input").checked));
   }
 
   async function saveCurrentQuiz() {
@@ -361,9 +373,10 @@ const firestore = getFirestore(firebaseApp);
       showStatus(editorStatus, "A quiz must have between 1 and 50 questions.", true);
       return;
     }
-    const incompleteQuestion = editorQuestions.some((question) => !question.text.trim() || question.options.some((option) => !String(option).trim()));
-    if (incompleteQuestion) {
-      showStatus(editorStatus, "Complete every question and answer choice before saving.", true);
+    const type = document.querySelector("input[name='questionType']:checked").value;
+    const normalizedQuestions = editorQuestions.map(question => normalizeQuizQuestion(question, type));
+    if (normalizedQuestions.some(question => !question)) {
+      showStatus(editorStatus, "Complete every question, answer choice, answer guide, and required correction before saving. Multiple-choice options must be distinct.", true);
       return;
     }
     const availability = document.querySelector("input[name='availability']:checked").value;
@@ -391,9 +404,11 @@ const firestore = getFirestore(firebaseApp);
       section: selectedSectionName(),
       sectionId: sectionSelect.value,
       sourceFile: selectedFile ? selectedFile.name : (oldQuiz ? oldQuiz.sourceFile : "Uploaded source"),
-      type: document.querySelector("input[name='questionType']:checked").value,
+      type,
+      schemaVersion: 2,
+      gradingMode: writtenQuestion(type) || type === "modified-true-false" ? "teacher-review" : "automatic",
       difficulty: difficulty,
-      questions: editorQuestions.map((question) => ({ id: question.id, text: question.text, options: question.options.slice(), correctIndex: question.correctIndex })),
+      questions: normalizedQuestions.map((question, index) => ({ id: editorQuestions[index].id, ...question })),
       availability: availability,
       availableAt: availability === "scheduled" ? new Date(availableAt).toISOString() : "",
       createdAt: oldQuiz ? oldQuiz.createdAt : new Date().toISOString(),
@@ -476,7 +491,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${quiz.type === "true-false" ? "True or false" : "Multiple choice"}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -527,9 +542,10 @@ const firestore = getFirestore(firebaseApp);
     if (!quiz) return;
     editingQuizId = quiz.id;
     editorQuestions = (quiz.questions || []).map((question) => ({
+      ...question,
       id: question.id || makeId(),
       text: question.text || "",
-      options: Array.isArray(question.options) ? question.options.slice() : ["", "", "", ""],
+      options: Array.isArray(question.options) ? question.options.slice() : writtenQuestion(quiz.type) ? [] : quiz.type === "multiple-choice" ? ["", "", "", ""] : ["True", "False"],
       correctIndex: Number.isInteger(question.correctIndex) ? question.correctIndex : 0
     }));
     selectedFile = null;
@@ -549,6 +565,7 @@ const firestore = getFirestore(firebaseApp);
       button.setAttribute("aria-pressed", String(selected));
     });
     document.querySelector("input[name='questionType'][value='" + (quiz.type || "multiple-choice") + "']").checked = true;
+    updateTypeSelection();
     const availability = currentAvailability(quiz);
     document.querySelector("input[name='availability'][value='" + availability + "']").checked = true;
     document.getElementById("availableAt").value = availability === "scheduled" ? toLocalDateTimeInput(quiz.availableAt) : "";
@@ -568,6 +585,7 @@ const firestore = getFirestore(firebaseApp);
     document.getElementById("quizTitle").value = "";
     document.getElementById("questionCount").value = "10";
     document.querySelector("input[name='questionType'][value='multiple-choice']").checked = true;
+    updateTypeSelection();
     document.querySelectorAll("[data-difficulty]").forEach((button) => {
       const selected = button.dataset.difficulty === "Medium";
       button.classList.toggle("selected", selected);
@@ -632,9 +650,7 @@ const firestore = getFirestore(firebaseApp);
       choice.setAttribute("aria-pressed", String(selected));
     });
   }));
-  document.querySelectorAll("input[name='questionType']").forEach((radio) => radio.addEventListener("change", () => {
-    document.querySelectorAll(".quiz-type-option").forEach((label) => label.classList.toggle("selected", label.querySelector("input").checked));
-  }));
+  document.querySelectorAll("input[name='questionType']").forEach(radio => radio.addEventListener("change", updateTypeSelection));
   document.getElementById("suggestionsList").addEventListener("click", (event) => {
     const accept = event.target.closest("[data-accept]");
     const discard = event.target.closest("[data-discard]");
@@ -661,11 +677,16 @@ const firestore = getFirestore(firebaseApp);
     if (!question) return;
     if (event.target.dataset.questionText !== undefined) question.text = event.target.value;
     if (event.target.dataset.optionIndex !== undefined) question.options[Number(event.target.dataset.optionIndex)] = event.target.value;
+    const field = event.target.dataset.answerField;
+    if (["answer", "explanation", "rubric", "correction", "points"].includes(field)) question[field] = field === "points" ? Number(event.target.value) : event.target.value;
   });
   editorList.addEventListener("change", (event) => {
     if (event.target.dataset.correctIndex === undefined) return;
     const question = editorQuestions[Number(event.target.dataset.questionIndex)];
-    if (question) question.correctIndex = Number(event.target.dataset.correctIndex);
+    if (question) {
+      question.correctIndex = Number(event.target.dataset.correctIndex);
+      if (document.querySelector("input[name='questionType']:checked").value === "modified-true-false") renderEditor();
+    }
   });
   editorList.addEventListener("click", (event) => {
     const remove = event.target.closest("[data-delete-question]");
@@ -690,8 +711,10 @@ const firestore = getFirestore(firebaseApp);
     editorQuestions.push({
       id: makeId(),
       text: "",
-      options: type === "true-false" ? ["True", "False"] : ["", "", "", ""],
-      correctIndex: 0
+      options: writtenQuestion(type) ? [] : type === "multiple-choice" ? ["", "", "", ""] : ["True", "False"],
+      correctIndex: writtenQuestion(type) ? -1 : 0,
+      ...(writtenQuestion(type) ? { answer: "", [type === "essay" ? "rubric" : "explanation"]: "", points: type === "essay" ? 10 : 2 } : {}),
+      ...(type === "modified-true-false" ? { correction: "" } : {})
     });
     renderEditor();
     editorList.lastElementChild.querySelector("textarea").focus();

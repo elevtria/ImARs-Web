@@ -109,6 +109,9 @@
                 <div class="quiz-type-options">
                   <label class="quiz-type-option selected"><input type="radio" name="questionType" value="multiple-choice" checked /><span class="quiz-type-icon">A</span><span><b>Multiple choice</b><small>Choose one correct answer</small></span></label>
                   <label class="quiz-type-option"><input type="radio" name="questionType" value="true-false" /><span class="quiz-type-icon quiz-type-icon-tf">T/F</span><span><b>True or false</b><small>Choose true or false</small></span></label>
+                  <label class="quiz-type-option"><input type="radio" name="questionType" value="essay" /><span class="quiz-type-icon">E</span><span><b>Essay</b><small>Written response with a marking guide</small></span></label>
+                  <label class="quiz-type-option"><input type="radio" name="questionType" value="identification-explanation" /><span class="quiz-type-icon">ID</span><span><b>Identification with explanation</b><small>Identify a term and explain your answer</small></span></label>
+                  <label class="quiz-type-option"><input type="radio" name="questionType" value="modified-true-false" /><span class="quiz-type-icon quiz-type-icon-tf">M</span><span><b>Modified true or false</b><small>Correct the statement when it is false</small></span></label>
                 </div>
               </fieldset>
             </div>
@@ -127,7 +130,7 @@
             <span class="quiz-demo-badge"><i></i> AI generated · review before saving</span>
           </div>
           <div class="quiz-review-summary" id="reviewSummary"></div>
-          <div class="quiz-demo-note" id="demoNotice"><b>Review carefully:</b> AI-generated questions and answers can contain mistakes.</div>
+          <div class="quiz-demo-note" id="demoNotice"><b>Review carefully:</b> AI-generated questions and answers can contain mistakes. Multiple-choice options receive an additional relevance check; review every option before publishing.</div>
           <div class="quiz-suggestions" id="suggestionsList"></div>
           <div class="quiz-review-footer">
             <button class="btn-ghost" id="discardAll" type="button">Discard all</button>

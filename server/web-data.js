@@ -1,5 +1,6 @@
 import { FirestoreAdmin } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
+import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion } from "../js/quiz-limits.js";
 
 const json = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -178,13 +179,16 @@ class Scope {
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
       await this.ownsClass(data.sectionId);
-      if (!names(["id", "title", "section", "sectionId", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId"]) ||
+      if (!names(["id", "title", "section", "sectionId", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode"]) ||
           data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) || !text(data.sourceFile, 240) ||
-          !["multiple-choice", "true-false"].includes(data.type) || !["Easy", "Medium", "Hard"].includes(data.difficulty) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
+          !Object.hasOwn(QUIZ_TYPES, data.type) || !["Easy", "Medium", "Hard"].includes(data.difficulty) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
+          (data.schemaVersion !== undefined && data.schemaVersion !== 2) ||
+          (data.gradingMode !== undefined && data.gradingMode !== (writtenQuestion(data.type) || data.type === "modified-true-false" ? "teacher-review" : "automatic")) ||
           !Array.isArray(data.questions) || data.questions.length < 1 || data.questions.length > 50) throw fail("Invalid quiz details.", 400);
-      if (data.questions.some(question => !object(question) || !fields(question, ["id", "text", "options", "correctIndex"]) || !part(question.id) || !text(question.text, 2000) ||
-          !Array.isArray(question.options) || question.options.length !== (data.type === "true-false" ? 2 : 4) || question.options.some(option => !text(option, 1000)) ||
-          !Number.isInteger(question.correctIndex) || question.correctIndex < 0 || question.correctIndex >= question.options.length)) throw fail("Check the quiz questions and answers.", 400);
+      const answerFields = writtenQuestion(data.type) ? ["answer", "points", data.type === "essay" ? "rubric" : "explanation"] : data.type === "modified-true-false" ? ["correction"] : [];
+      if (data.questions.some(question => !object(question) || !fields(question, ["id", "text", "options", "correctIndex", ...answerFields]) || !part(question.id) ||
+          (writtenQuestion(data.type) && (!Array.isArray(question.options) || question.options.length !== 0 || question.correctIndex !== -1)) || !normalizeQuizQuestion(question, data.type))) throw fail("Check the quiz questions and answer guides.", 400);
+      if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
       if (data.availability === "scheduled" ? !Number.isFinite(Date.parse(data.availableAt)) || Date.parse(data.availableAt) <= Date.now() : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
       return { ...input, data: { ...data, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
     }

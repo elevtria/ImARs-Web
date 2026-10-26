@@ -162,8 +162,29 @@ test("the quiz service rejects anonymous/admin/foreign-class requests before con
   assert.equal(provider.mock.callCount(), 0);
   provider.mock.mockImplementation(async (_url, options) => {
     assert.equal(options.headers.Authorization, undefined);
-    return Response.json({ output_text: JSON.stringify({ questions: [{ text: "What freezes?", options: ["Water", "Sand", "Metal", "Stone"], correctIndex: 0 }] }) });
+    if (JSON.parse(options.body).response_format.schema.properties.checks) return Response.json({ output_text: JSON.stringify({ checks: [{ questionIndex: 0, topicRelevant: true, plausibleDistractors: true, singleCorrect: true, supportedAnswer: true }] }) });
+    return Response.json({ output_text: JSON.stringify({ questions: [{ text: "What does freezing produce?", options: ["Ice", "Liquid water", "Water vapour", "Water droplets"], correctIndex: 0 }] }) });
   });
   const success = await generateQuiz({ env: app.env, request: app.request("/api/generate-quiz", { ...body, sectionId: "A" }, cookie) }, { store: app.store, authenticate: requireStaff });
   assert.equal(success.status, 200); assert.equal((await success.json()).questions.length, 1);
 });
+
+for (const [type, question] of [
+  ["essay", { answer: "Cooling makes water freeze.", rubric: "Explain cooling and the change to a solid.", points: 5, options: [], correctIndex: -1 }],
+  ["identification-explanation", { answer: "Ice", explanation: "Ice is frozen water.", points: 2, options: [], correctIndex: -1 }],
+  ["modified-true-false", { options: ["True", "False"], correctIndex: 1, correction: "Water freezes into ice." }]
+]) {
+  test(`${type} saves its answer guide and preserves teacher ownership`, async () => {
+    const app = fixture(), cookie = await app.login();
+    const quiz = { id: "written1", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A", section: "A", title: "Water", sourceFile: "water.pdf", type, difficulty: "Easy", questions: [{ id: "q1", text: "Explain freezing.", ...question }], availability: "draft", availableAt: "", demo: false, schemaVersion: 2, gradingMode: "teacher-review" };
+    const response = await app.call(save("generatedQuizzes/written1", quiz, false), cookie);
+    assert.equal(response.status, 200, JSON.stringify(await response.json()));
+    assert.deepEqual(app.data.get("generatedQuizzes/written1").questions[0], quiz.questions[0]);
+    assert.equal((await app.call(save("generatedQuizzes/foreign", { ...quiz, id: "foreign", sectionId: "B" }, false), cookie)).status, 403);
+    assert.equal((await app.call(save("generatedQuizzes/written1", { ...quiz, gradingMode: "automatic" }, false), cookie)).status, 400);
+    const invalid = structuredClone(quiz);
+    if (type === "modified-true-false") invalid.questions[0].correction = "";
+    else invalid.questions[0].points = 0;
+    assert.equal((await app.call(save("generatedQuizzes/written1", invalid, false), cookie)).status, 400);
+  });
+}
