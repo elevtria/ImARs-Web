@@ -512,6 +512,7 @@ const firestore = getFirestore(firebaseApp);
     scheduleBusy = true;
     form.querySelector("button[type='submit']").disabled = true;
     showStatus(libraryStatus, `Saving release for ${quiz.title}…`, false);
+    let saved = false;
     try {
       const reference = doc(firestore, "generatedQuizzes", id);
       const current = await getDoc(reference);
@@ -526,14 +527,15 @@ const firestore = getFirestore(firebaseApp);
       await setDoc(reference, updated);
       saveQuizzes(loadQuizzes().map(item => item.id === id ? updated : item));
       expandedScheduleQuizId = null;
-      renderLibrary();
+      saved = true;
       showStatus(libraryStatus, `Release saved for ${quiz.title}.`, false);
     } catch (error) {
       console.error("Could not save quiz release:", error);
       showStatus(libraryStatus, error.message || "Could not save the quiz release. Try again.", true);
     } finally {
       scheduleBusy = false;
-      if (form.isConnected) form.querySelector("button[type='submit']").disabled = false;
+      if (saved) renderLibrary();
+      else if (form.isConnected) form.querySelector("button[type='submit']").disabled = false;
     }
   }
 

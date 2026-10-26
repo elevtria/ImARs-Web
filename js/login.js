@@ -137,9 +137,6 @@ if (adminForm) {
     let redirecting = false;
     try {
       await signInWithEmailAndPassword(auth, rawInput, password, "admin");
-      await saveBrowserPassword("saveAdminPassword", rawInput, password);
-
-
       window.location.href = "admin-dashboard.html";
       redirecting = true;
     } catch (err) {
