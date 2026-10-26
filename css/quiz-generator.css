@@ -141,6 +141,8 @@
 .quiz-schedule-fields[hidden] { display: none; }
 .quiz-editor-footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 17px; padding-top: 14px; border-top: 1px solid rgba(129,162,193,.2); }
 .quiz-library-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 3px 0 17px; }
+.quiz-library-filters { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.quiz-library-filters .quiz-field { width: min(100%, 260px); }
 .quiz-library-list { display: grid; gap: 10px; }
 .quiz-library-card { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; padding: 16px 18px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(255,255,255,.75); box-shadow: var(--shadow); }
 .quiz-library-main { min-width: 0; }
@@ -154,13 +156,13 @@
 .quiz-library-actions button { min-height: 34px; padding: 0 11px; border: 1px solid rgba(129,162,193,.26); border-radius: 9px; color: #58758f; background: #f7f9fc; font-size: 10px; font-weight: 700; }
 .quiz-library-actions button.delete { color: #a96d6d; }
 .quiz-library-actions button[data-schedule-quiz] { border-color: #8aaed0; color: #275b86; background: #eaf3fb; }
-.quiz-library-scheduler { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(175px,1fr) auto; align-items: end; gap: 16px; padding: 15px 16px; border: 1px solid #c8dced; border-radius: 12px; background: #f1f7fc; }
+.quiz-library-scheduler { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(175px,1fr) minmax(0,2fr); align-items: end; gap: 16px; padding: 15px 16px; border: 1px solid #c8dced; border-radius: 12px; background: #f1f7fc; }
 .quiz-library-scheduler strong { color: #314760; font-size: 12px; }
 .quiz-library-scheduler p { margin-top: 4px; color: #72869b; font-size: 10px; line-height: 1.4; }
 .quiz-library-scheduler-fields { display: flex; align-items: end; flex-wrap: wrap; gap: 9px; }
-.quiz-library-scheduler-fields label { display: grid; gap: 5px; color: #506981; font-size: 10px; font-weight: 700; }
+.quiz-library-scheduler-fields label { display: grid; flex: 1 1 150px; min-width: 0; gap: 5px; color: #506981; font-size: 10px; font-weight: 700; }
 .quiz-library-scheduler-fields label[hidden] { display: none; }
-.quiz-library-scheduler-fields select, .quiz-library-scheduler-fields input { height: 36px; min-width: 150px; padding: 6px 9px; border: 1px solid #aac5db; border-radius: 9px; background: #fff; color: #314760; font: inherit; font-size: 11px; }
+.quiz-library-scheduler-fields select, .quiz-library-scheduler-fields input { height: 36px; width: 100%; min-width: 0; padding: 6px 9px; border: 1px solid #aac5db; border-radius: 9px; background: #fff; color: #314760; font: inherit; font-size: 11px; }
 .quiz-library-scheduler-fields button { min-height: 36px; padding: 0 14px; }
 .quiz-empty-state { display: grid; justify-items: center; padding: 48px 18px; border: 1px dashed rgba(129,162,193,.42); border-radius: 18px; background: rgba(255,255,255,.46); text-align: center; }
 .quiz-empty-state[hidden] { display: none; }

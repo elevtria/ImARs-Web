@@ -19,6 +19,7 @@ const firestore = getFirestore(firebaseApp);
   const suggestionList = document.getElementById("suggestionsList");
   const editorList = document.getElementById("questionEditorList");
   const libraryList = document.getElementById("quizLibraryList");
+  const librarySectionFilter = document.getElementById("librarySectionFilter");
   const createView = document.getElementById("createView");
   const libraryView = document.getElementById("libraryView");
   const setupStep = document.getElementById("setupStep");
@@ -27,6 +28,7 @@ const firestore = getFirestore(firebaseApp);
   let libraryStorageKey = "imars-generated-quizzes:anonymous";
   let selectedFile = null;
   let teacherProfileId = null;
+  let teacherSections = [];
   let quizCache = [];
   let difficulty = "Medium";
   let generatedQuestions = [];
@@ -46,11 +48,20 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function loadSections() {
+    teacherSections = [];
+    renderSectionFilter();
     sectionSelect.replaceChildren();
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = "Sign in to load your sections";
     sectionSelect.append(placeholder);
+  }
+
+  function renderSectionFilter() {
+    const selected = librarySectionFilter.value;
+    librarySectionFilter.innerHTML = '<option value="">All sections</option>' + teacherSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
+    librarySectionFilter.value = teacherSections.some(section => section.id === selected) ? selected : "";
+    librarySectionFilter.disabled = teacherSections.length === 0 || scheduleBusy;
   }
 
   async function loadTeacherSections(user) {
@@ -68,6 +79,8 @@ const firestore = getFirestore(firebaseApp);
       teacherProfileId = teacherDocument.id;
 
       const classSnapshot = await getDocs(query(collection(firestore, "classes"), where("teacherId", "==", teacherProfileId)));
+      teacherSections = classSnapshot.docs.map(classDocument => ({ id: classDocument.id, name: classDocument.data().SectionName || classDocument.id }));
+      renderSectionFilter();
       sectionSelect.replaceChildren();
       classSnapshot.docs.forEach((classDocument) => {
         const data = classDocument.data();
@@ -467,11 +480,14 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function renderLibrary() {
-    const quizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
-    const count = String(quizzes.length);
+    const allQuizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
+    const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quiz.sectionId === librarySectionFilter.value) : allQuizzes;
+    const count = String(allQuizzes.length);
     document.getElementById("libraryCount").textContent = count;
     document.getElementById("libraryTabCount").textContent = count;
-    document.getElementById("emptyLibrary").hidden = quizzes.length > 0;
+    document.getElementById("emptyLibrary").hidden = allQuizzes.length > 0;
+    document.getElementById("libraryFilterEmpty").hidden = !allQuizzes.length || quizzes.length > 0;
+    document.getElementById("libraryFilterCount").textContent = `Showing ${quizzes.length} of ${count} ${allQuizzes.length === 1 ? "quiz" : "quizzes"}`;
     libraryList.hidden = quizzes.length === 0;
     libraryList.innerHTML = quizzes.map((quiz) => {
       const status = currentAvailability(quiz);
@@ -480,8 +496,12 @@ const firestore = getFirestore(firebaseApp);
       const availability = status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
       const expanded = expandedScheduleQuizId === quiz.id;
       const scheduleForm = expanded ? `<form class="quiz-library-scheduler" data-schedule-form="${escapeHtml(quiz.id)}">
-        <div><strong>Quiz release</strong><p>Choose when learners in ${escapeHtml(quiz.section || "this section")} can open this quiz.</p></div>
+        <div><strong>Quiz release</strong><p>Choose the section that receives this quiz and when its learners can open it.</p></div>
         <div class="quiz-library-scheduler-fields">
+          <label>Assign to section <select name="sectionId" aria-label="Section for ${escapeHtml(quiz.title)}" required>
+            ${teacherSections.some(section => section.id === quiz.sectionId) ? "" : '<option value="" selected disabled>Choose a section</option>'}
+            ${teacherSections.map(section => `<option value="${escapeHtml(section.id)}" ${section.id === quiz.sectionId ? "selected" : ""}>${escapeHtml(section.name)}</option>`).join("")}
+          </select></label>
           <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
             <option value="draft" ${status === "draft" ? "selected" : ""}>Keep locked</option>
             <option value="now" ${status === "now" ? "selected" : ""}>Available now</option>
@@ -504,12 +524,18 @@ const firestore = getFirestore(firebaseApp);
     const dateInput = form.elements.availableAt;
     const releaseDate = availability === "scheduled" ? new Date(dateInput.value) : null;
     const libraryStatus = document.getElementById("libraryStatus");
+    const section = teacherSections.find(item => item.id === form.elements.sectionId.value);
+    if (!section) {
+      showStatus(libraryStatus, "Choose one of your assigned sections for this quiz.", true);
+      return;
+    }
     if (availability === "scheduled" && (!dateInput.value || Number.isNaN(releaseDate.getTime()) || releaseDate.getTime() <= Date.now())) {
       showStatus(libraryStatus, "Choose a future date and time for this quiz.", true);
       dateInput.focus();
       return;
     }
     scheduleBusy = true;
+    librarySectionFilter.disabled = true;
     form.querySelector("button[type='submit']").disabled = true;
     showStatus(libraryStatus, `Saving release for ${quiz.title}…`, false);
     let saved = false;
@@ -520,6 +546,8 @@ const firestore = getFirestore(firebaseApp);
       const updated = {
         ...current.data(),
         id,
+        sectionId: section.id,
+        section: section.name,
         availability,
         availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
         updatedAt: new Date().toISOString()
@@ -528,12 +556,13 @@ const firestore = getFirestore(firebaseApp);
       saveQuizzes(loadQuizzes().map(item => item.id === id ? updated : item));
       expandedScheduleQuizId = null;
       saved = true;
-      showStatus(libraryStatus, `Release saved for ${quiz.title}.`, false);
+      showStatus(libraryStatus, `Release saved for ${quiz.title} in ${section.name}.`, false);
     } catch (error) {
       console.error("Could not save quiz release:", error);
       showStatus(libraryStatus, error.message || "Could not save the quiz release. Try again.", true);
     } finally {
       scheduleBusy = false;
+      librarySectionFilter.disabled = teacherSections.length === 0;
       if (saved) renderLibrary();
       else if (form.isConnected) form.querySelector("button[type='submit']").disabled = false;
     }
@@ -578,6 +607,7 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
+    if (librarySectionFilter.value) sectionSelect.value = librarySectionFilter.value;
     selectedFile = null;
     generatedQuestions = [];
     editorQuestions = [];
@@ -607,6 +637,9 @@ const firestore = getFirestore(firebaseApp);
   renderLibrary();
   onAuthStateChanged(auth, async (user) => {
     libraryStorageKey = user ? "imars-generated-quizzes:" + user.uid : "imars-generated-quizzes:anonymous";
+    librarySectionFilter.value = "";
+    teacherSections = [];
+    renderSectionFilter();
     quizCache = [];
     renderLibrary();
     await loadTeacherSections(user);
@@ -728,6 +761,11 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
   document.getElementById("newQuizFromLibrary").addEventListener("click", resetNewQuiz);
   document.getElementById("emptyCreateQuiz").addEventListener("click", resetNewQuiz);
+  librarySectionFilter.addEventListener("change", () => {
+    expandedScheduleQuizId = null;
+    showStatus(document.getElementById("libraryStatus"), "", false);
+    renderLibrary();
+  });
   libraryList.addEventListener("click", async (event) => {
     const schedule = event.target.closest("[data-schedule-quiz]");
     if (schedule && !scheduleBusy) {

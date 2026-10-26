@@ -174,7 +174,9 @@
 
       <section id="libraryView" class="quiz-view" hidden>
         <div class="quiz-library-heading"><div><span class="quiz-section-tag">YOUR QUIZZES</span><h2>Quiz library</h2><p>Schedule each quiz here or change when learners can access it.</p></div><button class="primary-btn quiz-primary" id="newQuizFromLibrary" type="button">＋ Create quiz</button></div>
+        <div class="quiz-library-filters"><label class="quiz-field"><span class="quiz-field-label">Filter by section</span><select class="quiz-input" id="librarySectionFilter" disabled><option value="">All sections</option></select></label><p class="quiz-status" id="libraryFilterCount" role="status" aria-live="polite"></p></div>
         <p class="quiz-status" id="libraryStatus" role="status" aria-live="polite"></p>
+        <p class="quiz-status" id="libraryFilterEmpty" hidden>No quizzes for the selected section yet.</p>
         <div id="quizLibraryList" class="quiz-library-list"></div>
         <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
       </section>

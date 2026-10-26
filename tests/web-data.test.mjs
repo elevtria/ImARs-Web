@@ -74,6 +74,22 @@ test("student imports, profile edits, QR scores, schedules, downloads and quiz s
   assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "generatedQuizzes/quiz1" }] }, cookie)).status, 200);
 });
 
+test("quiz releases can change between assigned sections while preserving questions and rejecting another teacher's section", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
+  const quiz = { id: "section-release", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A", section: "Section A", title: "Water", sourceFile: "water.pdf", type: "multiple-choice", difficulty: "Easy", questions: [{ id: "q1", text: "Which process turns ice into water?", options: ["Melting", "Freezing", "Evaporation", "Condensation"], correctIndex: 0 }], availability: "draft", availableAt: "", demo: false };
+  assert.equal((await app.call(save("generatedQuizzes/section-release", quiz, false), cookie)).status, 200);
+  const assigned = { ...app.data.get("generatedQuizzes/section-release"), sectionId: "C", section: "Section C", availability: "scheduled", availableAt: "2099-10-20T01:30:00.000Z" };
+  assert.equal((await app.call(save("generatedQuizzes/section-release", assigned, false), cookie)).status, 200);
+  const saved = structuredClone(app.data.get("generatedQuizzes/section-release"));
+  assert.equal(saved.sectionId, "C"); assert.equal(saved.section, "Section C");
+  assert.equal(saved.availableAt, assigned.availableAt); assert.deepEqual(saved.questions, quiz.questions);
+  assert.equal((await app.call(save("generatedQuizzes/section-release", { ...saved, sectionId: "B", section: "Section B" }, false), cookie)).status, 403);
+  const other = await app.login("TEACH1001");
+  assert.equal((await app.call(save("generatedQuizzes/section-release", { ...saved, teacherUid: "teacher-b", teacherProfileId: "TEACH1001", sectionId: "B" }, false), other)).status, 403);
+  assert.deepEqual(app.data.get("generatedQuizzes/section-release"), saved);
+});
+
 test("forged roles, UIDs, ownership, credentials, scores and arbitrary fields cannot reach the commit", async () => {
   const app = fixture(), cookie = await app.login();
   for (const operation of [save("users/0026271000", { role: "admin" }), save("users/0026271000", { uid: "teacher-a" }), save("users/0026271000", { password: "changed" }), save("users/0026271000", { classCode: "B" }), save("users/0026271001", { classCode: "A" }), save("users/TEACH1000", { role: "admin" }), save("webSettings/schoolYear", { startYear: 2028, endYear: 2029, updatedBy: "teacher-a", updatedAt: stamp }), save("users/0026271000/test_results/term_01/lessons/lesson_01", { lessonId: "lesson_01", preTestScore: 99, preTestTotalQuestions: 5, timestamp: stamp }), save("users/0026271000", { displayName: "Replacement" }, false)]) {
