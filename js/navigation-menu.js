@@ -8,12 +8,13 @@ if (navigationDrawer) {
     const desktop = window.matchMedia("(min-width:1000px)");
     const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
     let pointerInside = false;
+    let collapseTimer;
     const updateCompact = () => {
-      const focused = panel.contains(document.activeElement);
+      const focused = panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
       navigationDrawer.classList.toggle("is-compact", desktop.matches && hoverPointer.matches && !pointerInside && !focused);
     };
-    panel.addEventListener("pointerenter", () => { pointerInside = true; updateCompact(); });
-    panel.addEventListener("pointerleave", () => { pointerInside = false; updateCompact(); });
+    panel.addEventListener("pointerenter", () => { clearTimeout(collapseTimer); pointerInside = true; updateCompact(); });
+    panel.addEventListener("pointerleave", () => { pointerInside = false; clearTimeout(collapseTimer); collapseTimer = setTimeout(updateCompact, 220); });
     panel.addEventListener("focusin", updateCompact);
     panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
     hoverPointer.addEventListener("change", updateCompact);

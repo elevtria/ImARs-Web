@@ -4,6 +4,21 @@ import { getAuth, signInWithEmailAndPassword } from "./firebase-auth.js";
 const app = initializeApp();
 const auth = getAuth(app);
 
+
+async function saveBrowserPassword(optionId, identifier, password) {
+  if (!document.getElementById(optionId)?.checked || typeof window.PasswordCredential !== "function") return;
+  try {
+    if (window.navigator?.credentials?.store) {
+      const credential = new window.PasswordCredential({ id: identifier, password });
+      // Saving is optional and must never prevent a successful sign-in.
+      await Promise.race([
+        window.navigator.credentials.store(credential),
+        new Promise(resolve => setTimeout(resolve, 1500))
+      ]);
+    }
+  } catch { /* The browser owns password-manager consent and availability. */ }
+}
+
 function setSigningIn(button, pending, idleLabel) {
   button.disabled = pending;
   button.setAttribute("aria-busy", String(pending));
@@ -49,6 +64,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   let redirecting = false;
   try {
     await signInWithEmailAndPassword(auth, rawId, password, "teacher");
+    await saveBrowserPassword("saveTeacherPassword", rawId, password);
 
     window.location.href = "index.html";
     redirecting = true;
@@ -121,6 +137,7 @@ if (adminForm) {
     let redirecting = false;
     try {
       await signInWithEmailAndPassword(auth, rawInput, password, "admin");
+      await saveBrowserPassword("saveAdminPassword", rawInput, password);
 
 
       window.location.href = "admin-dashboard.html";

@@ -11,8 +11,11 @@
   <script src="js/tailwind.config.js"></script>
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/loading.css" />
+  <link rel="stylesheet" href="css/portal-design.css" />
+  <link rel="stylesheet" href="css/floating-cubes.css" />
 </head>
 <body data-auth-pending>
+  <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -55,6 +58,14 @@
         </div>
         <p class="scheduler-sync-status" id="quizScheduleStatus" role="status" aria-live="polite">Loading quizzes…</p>
         <div id="quizScheduleList" class="quiz-schedule-list"></div>
+      </section>
+
+      <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading">
+        <div class="quiz-scheduler-heading">
+          <div><h2 id="activitySchedulerHeading">Activity Schedule</h2><p class="scheduler-progress-copy">Choose when each lesson topic becomes available to learners.</p></div>
+        </div>
+        <p class="scheduler-sync-status" id="activityScheduleStatus" role="status" aria-live="polite">Loading activities…</p>
+        <div id="activityScheduleList" class="quiz-schedule-list"></div>
       </section>
 
       <section class="progress-card">

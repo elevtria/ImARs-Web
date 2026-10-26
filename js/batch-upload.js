@@ -6,7 +6,6 @@ import {
   query, 
   where, 
   getDocsWithLoading as getDocs,
-  getDocs as quietDocs,
   doc, 
   setDoc, 
   updateDoc, 
@@ -39,9 +38,11 @@ const browseBtn = document.getElementById("browseBtn");
 const importBtn = document.getElementById("importBtn");
 
 let currentTeacherId = null;
-let sections = []; // [{ classCode, label, rawName, count }]
+let sections = []; 
 let selectedFile = null;
 let parsedStudents = [];
+let previewData = [];
+let existingStudentIds = new Set();
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -83,10 +84,9 @@ sectionSelect.addEventListener("change", updateSelectedSection);
 
 // --- LOAD TEACHER SECTIONS & STUDENT COUNTS FROM FIRESTORE ---
 async function loadSectionsFromDB(user, { background = false } = {}) {
-  const read = background ? quietDocs : getDocs;
   try {
     const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
-    const userSnap = await read(userQ);
+    const userSnap = await getDocs(userQ);
 
     const teacher = userSnap.docs.find(entry => String(entry.data().role || "").toLowerCase() === "teacher");
     if (!teacher) throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
@@ -94,7 +94,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     const teacherData = teacher.data();
 
     const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
-    const classSnap = await read(classQ);
+    const classSnap = await getDocs(classQ);
 
     const loadedSections = [];
 
@@ -108,7 +108,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
         where("role", "==", "student"),
         where("classCode", "==", classDoc.id)
       );
-      const stuSnap = await read(stuQ);
+      const stuSnap = await getDocs(stuQ);
 
       loadedSections.push({
         classCode: classDoc.id,
@@ -133,8 +133,15 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     );
 
     if (!alreadyExists) {
-      const suffix = rawSection.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(-4) || "SEC1";
-      const newClassCode = `SCIG6_${suffix}`;
+      // BULLETPROOF CHECK: Bypass errors if classCodes are missing or malformed
+      let maxNum = 0;
+      loadedSections.forEach(s => {
+        if (s.classCode) {
+            const match = s.classCode.match(/^SCIG6A(\d+)$/);
+            if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+        }
+      });
+      const newClassCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
       await setDoc(doc(db, "classes", newClassCode), {
         SectionName: rawSection,
@@ -155,7 +162,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
-    throw err;
+    throw err; // Pass to the auth handler to display
   }
 }
 
@@ -166,10 +173,16 @@ onAuthStateChanged(auth, (user) => {
   }
   showTeacherView({ app, user, page: "batch-upload", load: options => loadSectionsFromDB(user, options),
     render: data => { currentTeacherId = data.teacherId; sections = data.sections; renderSections(); }
-  }).catch(error => { uploadStatus.hidden = false; uploadStatus.textContent = "Could not load your sections. Please refresh to try again."; console.error(error); });
+  }).catch(error => { 
+    // ERROR CATCHER: Visually show the error if it crashes
+    sectionNameEl.textContent = "Error loading data!";
+    sectionSelect.innerHTML = `<option>Failed to load</option>`;
+    alert("Script Error: " + error.message + "\n\nPlease clear your browser cache and refresh.");
+    console.error(error); 
+  });
 });
 
-// --- OFFICIAL TEMPLATE DOWNLOADS (First Name, Last Name, Student ID, Email) ---
+// --- OFFICIAL TEMPLATE DOWNLOADS ---
 const templateRows = [
   ["First Name", "Last Name", "Student ID", "Email"],
   ["Test", "Student", "0026271000", "name@email.com"],
@@ -191,7 +204,6 @@ document.getElementById("dlXlsx").onclick = () => {
   if (window.XLSX) {
     const ws = window.XLSX.utils.aoa_to_sheet(templateRows);
     const wb = window.XLSX.utils.book_new();
-    // Matches the exact sheet tab name "ImArs_Student_Template"
     window.XLSX.utils.book_append_sheet(wb, ws, "ImArs_Student_Template");
     window.XLSX.writeFile(wb, "ImArs_Student_Template.xlsx");
   }
@@ -238,8 +250,15 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    const cleanCode = rawSectionOnly.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6) || "SEC";
-    const classCode = `SCIG6${cleanCode}${Math.floor(10 + Math.random() * 89)}`;
+    // BULLETPROOF CHECK: Scan the current in-memory sections safely
+    let maxNum = 0;
+    sections.forEach(s => {
+      if (s.classCode) {
+        const match = s.classCode.match(/^SCIG6A(\d+)$/);
+        if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
+      }
+    });
+    const classCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
 
     await setDoc(doc(db, "classes", classCode), {
       SectionName: rawSectionOnly,
@@ -307,18 +326,13 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) handleFileSelected(fileInput.files[0]);
 });
 
-let existingStudentIds = new Set();
-let previewData = [];
-
 async function handleFileSelected(file) {
   selectedFile = file;
-  parsedStudents = [];
   previewData = [];
   uploadStatus.hidden = true;
   document.getElementById("previewSection").hidden = true;
   importBtn.hidden = true;
 
-  // 1. FILE SAFETY: Enforce 5 MB limit mandated by the expert report
   const MAX_FILE_SIZE_MB = 5;
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
     document.getElementById("dropTitle").textContent = "File is too large";
@@ -337,9 +351,8 @@ async function handleFileSelected(file) {
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
 
-    // 2. FILE SAFETY: Cap row counts to prevent browser/Cloudflare timeouts
     const MAX_ROWS = 100;
-    if (rows.length > MAX_ROWS + 1) { // +1 accounts for the header row
+    if (rows.length > MAX_ROWS + 1) { 
       document.getElementById("dropTitle").textContent = "Too many records";
       document.getElementById("dropHint").textContent = `Please batch your uploads to a maximum of ${MAX_ROWS} students at a time.`;
       return;
@@ -351,8 +364,6 @@ async function handleFileSelected(file) {
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     for (const id of await checkStudentIds([...new Set(candidateIds)])) existingStudentIds.add(id);
     const fileIds = new Set();
-    let validCount = 0;
-    let errorCount = 0;
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
@@ -378,9 +389,10 @@ async function handleFileSelected(file) {
          rowErrors.push("Invalid format (Letters found)");
       } else if (studentId.length < 9) {
          rowErrors.push("ID too short");
-      } else if (existingStudentIds.has(studentId)) {
-         rowErrors.push("Duplicate in database");
       }
+      
+      // Track existing records for Upsert instead of rejecting
+      const isExisting = existingStudentIds.has(studentId);
 
       if (fileIds.has(studentId)) rowErrors.push("Duplicate in file");
       fileIds.add(studentId);
@@ -390,23 +402,18 @@ async function handleFileSelected(file) {
       }
 
       const isValid = rowErrors.length === 0;
-      if (isValid) validCount++; else errorCount++;
-
       const fullName = `${firstName} ${lastName}`.trim();
       
       previewData.push({
         rowNum: i + 1,
         firstName, lastName, fullName, studentId, email,
         isValid,
+        isExisting, 
         errors: rowErrors
       });
-
-      if (isValid) {
-        parsedStudents.push({ firstName, lastName, fullName, studentId, email });
-      }
     }
 
-    renderPreviewTable(validCount, errorCount);
+    renderPreviewTable();
     
   } catch (err) {
     console.error("Failed to parse file:", err);
@@ -415,46 +422,122 @@ async function handleFileSelected(file) {
   }
 }
 
-function renderPreviewTable(validCount, errorCount) {
+// --- INLINE EDITING & UPDATING LOGIC ---
+function updateRowData(index, field, value) {
+  const item = previewData[index];
+  
+  if (field === 'email') {
+    item.email = value.trim().toLowerCase();
+  } else {
+    item[field] = value.trim();
+  }
+  
+  item.fullName = `${item.firstName} ${item.lastName}`.trim();
+
+  // Re-validate the specific row
+  let rowErrors = [];
+  if (!item.firstName) rowErrors.push("Missing First Name");
+  if (!item.lastName) rowErrors.push("Missing Last Name");
+  
+  // Retain formatting errors, but ignore database duplicate checks
+  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate in file") || e.includes("format") || e.includes("short"));
+  rowErrors.push(...prevIdErrors);
+
+  if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
+     rowErrors.push("Invalid email");
+  }
+
+  item.errors = [...new Set(rowErrors)];
+  item.isValid = item.errors.length === 0;
+
+  renderPreviewTable();
+}
+
+function renderPreviewTable() {
   const tbody = document.getElementById("previewTableBody");
   tbody.innerHTML = "";
   
-  previewData.forEach(item => {
+  let validCount = 0;
+  let errorCount = 0;
+  let updateCount = 0;
+
+  previewData.forEach((item, index) => {
+    if (item.isValid) {
+        validCount++;
+        if (item.isExisting) updateCount++;
+    } else {
+        errorCount++;
+    }
+
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
-    // Highlight rejected rows as requested by the expert
-    if (!item.isValid) tr.style.backgroundColor = "#fef2f2"; 
     
-    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate'));
+    // Set colors based on status (New, Update, or Error)
+    let statusBadge = '';
+    let statusColor = '';
+    
+    if (!item.isValid) {
+        tr.style.backgroundColor = "#fef2f2"; 
+        statusBadge = '⚠️ ' + item.errors.join(", ");
+        statusColor = '#dc2626'; 
+    } else if (item.isExisting) {
+        tr.style.backgroundColor = "#f0f9ff"; 
+        statusBadge = '🔄 Update Record';
+        statusColor = '#0284c7'; 
+    } else {
+        statusBadge = '✓ Ready (New)';
+        statusColor = '#16a34a'; 
+    }
+    
+    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
     const emailHasError = item.errors.some(e => e.includes('email'));
 
+    // Inject input fields for inline editing
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
-      <td style="padding: 10px 8px;">${item.firstName || '<em style="color:red">Missing</em>'}</td>
-      <td style="padding: 10px 8px;">${item.lastName || '<em style="color:red">Missing</em>'}</td>
+      <td style="padding: 10px 8px;">
+        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.firstName ? 'border-color: #dc2626;' : ''}">
+      </td>
+      <td style="padding: 10px 8px;">
+        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.lastName ? 'border-color: #dc2626;' : ''}">
+      </td>
       <td style="padding: 10px 8px; ${idHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.studentId || '<em style="color:red">Missing</em>'}</td>
-      <td style="padding: 10px 8px; ${emailHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.email}</td>
-      <td style="padding: 10px 8px; color: ${item.isValid ? '#16a34a' : '#dc2626'}; font-size: 0.85rem; font-weight: 500;">
-        ${item.isValid ? '✓ Ready' : '⚠️ ' + item.errors.join(", ")}
+      <td style="padding: 10px 8px;">
+        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 160px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626;' : ''}">
+      </td>
+      <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
+        ${statusBadge}
       </td>
     `;
     tbody.appendChild(tr);
   });
 
+  const inputs = tbody.querySelectorAll('input');
+  inputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+      updateRowData(e.target.dataset.index, e.target.dataset.field, e.target.value);
+    });
+  });
+
   document.getElementById("previewSection").hidden = false;
-  document.getElementById("previewSummary").textContent = `Found ${validCount} valid records and ${errorCount} errors.`;
+  
+  let summaryText = `Found ${validCount} valid records `;
+  if (updateCount > 0) summaryText += `(${updateCount} will be updated) `;
+  summaryText += `and ${errorCount} errors.`;
+  
+  document.getElementById("previewSummary").textContent = summaryText;
   
   const confirmBtn = document.getElementById("confirmPreviewBtn");
   if (validCount > 0) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = `Import ${validCount} Valid Records`;
+    confirmBtn.textContent = `Import/Update ${validCount} Records`;
   } else {
     confirmBtn.disabled = true;
     confirmBtn.textContent = "No valid records to import";
   }
   
   document.getElementById("dropTitle").textContent = selectedFile.name;
-  document.getElementById("dropHint").textContent = "Review the table below before importing.";
+  document.getElementById("dropHint").textContent = "Review the table below. You can edit names and emails directly to fix mistakes or update existing students.";
 }
 
 // --- IMPORT CONFIRMATION & FIRESTORE BATCH UPLOAD ---
@@ -462,12 +545,23 @@ const closeImportModal = () => importModal.classList.remove("open");
 
 document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
+  
+  parsedStudents = previewData
+    .filter(item => item.isValid)
+    .map(item => ({
+      firstName: item.firstName,
+      lastName: item.lastName,
+      fullName: item.fullName,
+      studentId: item.studentId,
+      email: item.email
+    }));
+
   if (!selectedFile || parsedStudents.length === 0) return;
 
   const targetSec = sections.find((s) => s.classCode === sectionSelect.value);
   const secLabel = targetSec ? targetSec.label : sectionSelect.value;
 
-  importSummary.textContent = `You are about to securely import ${parsedStudents.length} VALID student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
+  importSummary.textContent = `You are about to securely import/update ${parsedStudents.length} student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
   
   if (importPreviewNote) {
     const sampleNames = parsedStudents.slice(0, 3).map((s) => `${s.fullName} (${s.studentId})`).join(", ");
@@ -491,19 +585,18 @@ confirmImportBtn.addEventListener("click", async () => {
   }
 
   confirmImportBtn.disabled = true;
-  confirmImportBtn.textContent = "Importing...";
+  confirmImportBtn.textContent = "Processing...";
 
   try {
-    const existingIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
-    if (existingIds.size) throw new Error("Some student IDs were just registered. Upload the file again to refresh the preview.");
+    const finalIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
 
-    let importedCount = 0;
+    let newCount = 0;
+    let updateCount = 0;
     const savedList = [];
 
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
-
-      const isNewStudent = !existingIds.has(finalStudentId);
+      const isNewStudent = !finalIds.has(finalStudentId);
 
       const studentDocData = {
         schoolId: finalStudentId,
@@ -536,27 +629,29 @@ confirmImportBtn.addEventListener("click", async () => {
       await setDoc(doc(db, "users", finalStudentId), studentDocData, { merge: true });
       
       if (isNewStudent) {
-        existingIds.add(finalStudentId);
+        finalIds.add(finalStudentId);
         targetSec.count++;
+        newCount++;
+      } else {
+        updateCount++;
       }
-      importedCount++;
+      
       savedList.push(`${stu.fullName} (${finalStudentId})`);
     }
 
     updateSelectedSection();
     closeImportModal();
 
-    uploadStatus.textContent = `Successfully imported ${importedCount} student(s) to ${targetSec.label}! Students: ${savedList.slice(0, 4).join(", ")}${savedList.length > 4 ? "..." : ""}`;
+    uploadStatus.textContent = `Successfully added ${newCount} and updated ${updateCount} student(s) in ${targetSec.label}!`;
     uploadStatus.hidden = false;
 
-    // Reset dropzone
     importBtn.hidden = true;
     fileInput.value = "";
     document.getElementById("dropTitle").textContent = "Drag & drop your Excel file here";
     document.getElementById("dropHint").textContent = "or click to browse · .xlsx, .csv supported";
   } catch (err) {
     console.error("Batch import error:", err);
-    alert("Error importing students: " + err.message);
+    alert("Error processing students: " + err.message);
   } finally {
     confirmImportBtn.disabled = false;
     confirmImportBtn.textContent = "Confirm Import";

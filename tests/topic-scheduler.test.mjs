@@ -68,6 +68,20 @@ function scheduler() {
   return {
     element, records, emit, listeners, authChanged,
     denyWrites: () => { rejectWrite = true; },
+    activityClick: (value, mode, date = "") => {
+      const card = {
+        dataset: { activity: value },
+        querySelector: selector => selector === ".activity-schedule-mode"
+          ? { value: mode }
+          : { value: date, checkValidity: () => true }
+      };
+      return element("activityScheduleList").events.click({ target: {
+        closest: selector => selector === ".activity-schedule-save" ? { closest: () => card } : null
+      } });
+    },
+    activityTermClick: index => element("activityScheduleList").events.click({ target: {
+      closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
+    } }),
     click: (attribute, value) => element("terms").events.click({
       target: { closest: (selector) => selector === `[data-${attribute}]` ? { dataset: { [attribute]: value } } : null }
     })
@@ -96,6 +110,39 @@ test("individual and bulk buttons persist lock changes and update progress", asy
   assert.ok(app.records.get("term_01").every((topic) => !topic.isLocked && topic.scheduledDate === ""));
   assert.match(app.element("terms").innerHTML, /4\/4 unlocked/);
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="100"/);
+});
+
+test("activity schedule uses the same lesson records and updates the topic tiles", async () => {
+  const app = scheduler();
+  assert.match(app.element("activityScheduleStatus").textContent, /12 lesson/);
+  await app.activityClick("0-0", "scheduled", "2099-10-20");
+  assert.equal(app.records.get("term_01")[0].scheduledDate, "2099-10-20");
+  assert.match(app.element("activityScheduleList").innerHTML, /Scheduled/);
+  await app.activityClick("0-0", "now");
+  assert.equal(app.records.get("term_01")[0].scheduledDate, "");
+  assert.equal(app.records.get("term_01")[0].isLocked, false);
+  assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
+});
+
+test("activity schedule groups lessons in collapsible terms", async () => {
+  const app = scheduler();
+  const list = app.element("activityScheduleList");
+  assert.equal((list.innerHTML.match(/class="activity-term /g) || []).length, 3);
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="false"/);
+  assert.match(list.innerHTML, /id="activityTermRows0" hidden/);
+  await app.activityTermClick(0);
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
+  assert.match(list.innerHTML, /id="activityTermRows0"><article/);
+  await app.activityClick("0-0", "now");
+  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
+});
+
+test("a rejected activity access change keeps the confirmed lesson state", async () => {
+  const app = scheduler();
+  app.denyWrites();
+  await app.activityClick("0-0", "now");
+  assert.equal(app.records.get("term_01")[0].isLocked, true);
+  assert.match(app.element("activityScheduleStatus").textContent, /Could not save activity access/);
 });
 
 test("date save locks an unlocked topic until release and manual unlock cancels it", async () => {

@@ -38,7 +38,7 @@ function render() {
     return `<article class="quiz-schedule-card" data-quiz-id="${escapeHtml(quiz.id)}">
       <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(quiz.section || quiz.sectionId || "Section")}</span><h3>${escapeHtml(quiz.title)}</h3><p>${escapeHtml(badge)}</p></div>
       <div class="quiz-schedule-controls">
-        <label>Access <select class="quiz-schedule-mode" aria-label="Access for ${escapeHtml(quiz.title)}" ${saving ? "disabled" : ""}>
+        <label class="quiz-schedule-access">Access <select class="quiz-schedule-mode" aria-label="Access for ${escapeHtml(quiz.title)}" ${saving ? "disabled" : ""}>
           <option value="draft" ${mode === "draft" ? "selected" : ""}>Locked draft</option>
           <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
           <option value="scheduled" ${scheduled ? "selected" : ""}>Scheduled release</option>

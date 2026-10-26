@@ -15,7 +15,7 @@ const timestamp = value => value?.$type === "serverTimestamp" && Object.keys(val
 const date = value => typeof value === "string" && /^\d{4}-\d\d-\d\d$/.test(value) && Number.isFinite(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
 const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "displayName", "fullName", "firstName", "lastName", "providedEmail", "email",
   "subject", "sections", "section", "classCode", "teacherId", "adviserId", "teacher", "gradeSection", "sectionName", "className", "school", "roleLabel",
-  "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "avatarId", "isRegistered", "isClaimed", "joined"];
+  "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "archiveReason", "avatarId", "isRegistered", "isClaimed", "joined"];
 
 function reference(value) {
   if (!object(value) || !["document", "query"].includes(value.kind) || typeof value.path !== "string") throw fail("Invalid data request.", 400);
@@ -108,6 +108,7 @@ class Scope {
     const row = await this.get(ref.path), previous = row?.data, data = input.data;
     if (input.operation === "delete") {
       if (p[0] === "generatedQuizzes" && p.length === 2) await this.quiz(p[1]);
+      else if (p[0] === "users" && p.length === 2 && actor.role === "teacher" && previous?.role === "student" && previous.active === false) await this.student(p[1]);
       else if (!(p[0] === "users" && p.length === 2 && actor.role === "admin" && previous?.role === "teacher")) throw fail();
       if (!row) throw fail("This record no longer exists.", 409);
       return { ...input, updateTime: row.updateTime };
@@ -133,7 +134,7 @@ class Scope {
       }
       if (actor.role !== "teacher" || (row && previous.role !== "student")) throw fail();
       if (row) await this.student(p[1]);
-      const allowed = ["schoolId", "firstName", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "lastQrSyncAt"];
+      const allowed = ["schoolId", "firstName", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt"];
       if (!row) allowed.push("avatarId", "completedQuizzes", "gamification", "createdAt");
       if (!names(allowed) || (data.role !== undefined && data.role !== "student") || (data.schoolId !== undefined && data.schoolId !== p[1]) ||
           (data.teacherId !== undefined && data.teacherId !== actor.id) || (data.active !== undefined && typeof data.active !== "boolean")) throw fail("These student fields cannot be changed.", 403);
@@ -142,7 +143,8 @@ class Scope {
       for (const key of ["firstName", "lastName", "displayName", "fullName", "section", "avatarId"]) if (data[key] !== undefined && !text(data[key], 200)) throw fail("Enter valid student details.", 400);
       for (const key of ["providedEmail", "email"]) if (data[key] !== undefined && !email(data[key])) throw fail("Enter a valid email address.", 400);
       for (const key of ["updatedAt", "lastQrSyncAt", "createdAt"]) if (data[key] !== undefined && !timestamp(data[key])) throw fail("Invalid record timestamp.", 400);
-      if (data.deletedAt !== undefined && !(data.deletedAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.deletedAt.value)))) throw fail("Invalid archive date.", 400);
+      if (data.archiveReason !== undefined && !(data.archiveReason === null && data.active === true) && (data.active !== false || !["graduated", "dropped-out"].includes(data.archiveReason))) throw fail("Choose a valid archive reason.", 400);
+      if (data.deletedAt !== undefined && !(data.deletedAt === null && data.active === true) && !(data.deletedAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.deletedAt.value)))) throw fail("Invalid archive date.", 400);
       if (!row && ((data.completedQuizzes !== undefined && JSON.stringify(data.completedQuizzes) !== "{}") ||
           (data.gamification !== undefined && JSON.stringify(data.gamification) !== JSON.stringify({ badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 } })))) throw fail("New students must start without earned results.", 400);
       return { ...input, data: { ...data, teacherId: actor.id }, updateTime: row?.updateTime };

@@ -62,8 +62,8 @@ export function teacherViewCache() {
 export const invalidateTeacherViews = () => teacherViewCache().invalidate();
 
 const DISPLAY_FIELDS = new Set([
-  "displayName", "fullName", "active", "SectionName", "sectionName", "name", "title", "topicTitle", "lessonOrder", "isLocked", "scheduledDate",
-  "isPreTestCompleted", "isPostTestCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap",
+  "displayName", "fullName", "active", "archiveReason", "SectionName", "sectionName", "name", "title", "topicTitle", "gradeLevel", "GradeLevel", "grade", "Grade", "lessonOrder", "isLocked", "scheduledDate",
+  "isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted", "isARCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap", "activityScore", "activityTotalQuestions", "activityTotalPoints",
   "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice", "timestamp", "lastUpdated", "completedAt"
 ]);
 

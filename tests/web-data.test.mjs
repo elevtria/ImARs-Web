@@ -188,3 +188,30 @@ for (const [type, question] of [
     assert.equal((await app.call(save("generatedQuizzes/written1", invalid, false), cookie)).status, 400);
   });
 }
+
+test("teacher archives keep readable student records and validate reasons within class ownership", async () => {
+  const app = fixture(), cookie = await app.login();
+  const archive = reason => ({ action:"commit", writes:[{ operation:"update", path:"users/0026271000", data:{ active:false, archiveReason:reason, deletedAt:{ $type:"timestamp", value:new Date().toISOString() } } }] });
+  assert.equal((await app.call(archive("invalid"), cookie)).status, 400);
+  assert.equal((await app.call(archive("graduated"), cookie)).status, 200);
+  const result = await app.call(get("users/0026271000"), cookie);
+  assert.equal(result.status, 200);
+  assert.equal(JSON.stringify(await result.json()).includes("graduated"), true);
+  const other = archive("dropped-out"); other.writes[0].path = "users/0026271001";
+  assert.equal((await app.call(other, cookie)).status, 403);
+});
+
+test("teachers may restore or delete only archived student profiles in their assigned classes", async () => {
+ const app = fixture(), cookie = await app.login();
+ const remove = path => ({action:"commit", writes:[{operation:"delete", path}]});
+ assert.equal((await app.call(remove("users/0026271000"), cookie)).status, 403);
+ app.data.get("users/0026271000").active = false;
+ assert.equal((await app.call(save("users/0026271000", {active:true, archiveReason:null, deletedAt:null}), cookie)).status, 200);
+ assert.equal(app.data.get("users/0026271000").active, true);
+ assert.equal((await app.call(remove("users/0026271000"), cookie)).status, 403);
+ app.data.get("users/0026271001").active = false;
+ assert.equal((await app.call(remove("users/0026271001"), cookie)).status, 403);
+ app.data.get("users/0026271000").active = false;
+ assert.equal((await app.call(remove("users/0026271000"), cookie)).status, 200);
+ assert.equal(app.data.has("users/0026271000"), false);
+});
