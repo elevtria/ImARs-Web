@@ -1,5 +1,6 @@
-import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
-import { showTeacherView } from "./teacher-view.js";
+import { getDocs as quietDocs } from "./firebase-data.js";
+import { showTeacherView, prepareTeacherCache } from "./teacher-view.js";
+import { encodeView } from "./view-cache.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, query, where, doc, updateDoc, deleteDoc, writeBatch, getDocsWithLoading as getDocs } from "./firebase-data.js";
@@ -18,6 +19,29 @@ const archiveSectionButton = document.getElementById("archiveSectionBtn");
 
 let dynamicCards = [];
 let recordStatus = "active";
+let recordData = null;
+let recordOwnerUid = null;
+
+function updateStudentRows(ids, values, remove = false) {
+  const user = auth.currentUser;
+  if (!recordData || !user || user.uid !== recordOwnerUid) return;
+  const changed = new Set(ids);
+  const cards = new Map(dynamicCards.map(card => [card.dataset.studentId, card]));
+  for (const section of recordData.sections) {
+    section.students = section.students.flatMap(student => {
+      if (!changed.has(student.studentDoc.id)) return [student];
+      const old = cards.get(student.studentDoc.id);
+      if (remove) { old?.remove(); return []; }
+      const data = { ...student.studentDoc.data(), ...values };
+      const updated = { ...student, studentDoc: { ...student.studentDoc, data: () => data } };
+      old?.replaceWith(studentCard(section.classDoc, updated));
+      return [updated];
+    });
+  }
+  dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
+  applyFilters();
+  prepareTeacherCache(app, user).put(user.uid, "records", encodeView(recordData));
+}
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
 })[character]);
@@ -61,6 +85,132 @@ function formatMinutes(totalMinutes) {
 }
 
 
+function studentCard(classDoc, { studentDoc, results }) {
+  const classCode = classDoc.id;
+  const sectionName = classDoc.data().SectionName || classCode;
+  const sData = studentDoc.data();
+
+  const sName = sData.displayName || "Unknown Student";
+
+  // Generate Initials
+  const nameParts = sName.split(" ");
+  let initials = nameParts[0] ? nameParts[0][0] : "?";
+  if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
+  initials = initials.toUpperCase();
+
+  let studentPreSum = 0;
+  let studentPostSum = 0;
+  let testCount = 0;
+  let totalArTime = 0;
+  let totalModuleTime = 0;
+  let lastActiveDate = new Date(0);
+
+  // Check across all 3 terms
+  for (const { lessonsSnap } of results) {
+    lessonsSnap.forEach((lessonDoc) => {
+      const tData = lessonDoc.data();
+
+      // Pre-Test and Post-Test scores
+      if (tData.isPreTestCompleted && tData.isPostTestCompleted && tData.preTestTotalQuestions > 0 && tData.postTestTotalQuestions > 0) {
+        const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
+        const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
+        const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
+
+        studentPreSum += prePercent;
+        studentPostSum += postPercent;
+        testCount++;
+      }
+
+      // 1. AR Time (arTimeMinutes + arNavigationTimeMinutes)
+      if (typeof tData.arTimeMinutes === "number") {
+        totalArTime += tData.arTimeMinutes;
+      }
+      if (typeof tData.arNavigationTimeMinutes === "number" && !tData.arTimeMinutes) {
+        totalArTime += tData.arNavigationTimeMinutes;
+      }
+
+      // 2. Module Time (lessonTimeMinutes)
+      if (typeof tData.lessonTimeMinutes === "number") {
+        totalModuleTime += tData.lessonTimeMinutes;
+      } else if (tData.learningTimeByDevice && typeof tData.learningTimeByDevice === "object") {
+        // Fallback: sum lessonSeconds across devices if lessonTimeMinutes isn't top-level
+        Object.values(tData.learningTimeByDevice).forEach((dev) => {
+          if (dev && typeof dev.lessonSeconds === "number") {
+            totalModuleTime += dev.lessonSeconds / 60;
+          }
+        });
+      }
+
+      // Last Active Timestamp
+      const ts = tData.timestamp || tData.lastUpdated || tData.completedAt;
+      if (ts) {
+        const testDate = ts.toDate ? ts.toDate() : new Date(ts);
+        if (!isNaN(testDate.getTime()) && testDate > lastActiveDate) {
+          lastActiveDate = testDate;
+        }
+      }
+    });
+  }
+
+  // Formatting data strings
+  const avgPreStr = testCount > 0 ? `${Math.round(studentPreSum / testCount)}%` : "N/A";
+  const avgPostNum = testCount > 0 ? Math.round(studentPostSum / testCount) : 0;
+  const avgPostStr = testCount > 0 ? `${avgPostNum}%` : "N/A";
+  const overallPercent = avgPostNum;
+
+  const arTimeStr = formatMinutes(totalArTime);
+  const moduleTimeStr = formatMinutes(totalModuleTime);
+
+  const dateStr = lastActiveDate.getTime() > 0
+    ? `Last active ${lastActiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : "No activity recorded";
+
+  // Building the actual HTML Card
+  const card = document.createElement("article");
+  card.className = "record";
+  card.dataset.studentId = studentDoc.id;
+  card.dataset.archived = String(sData.active === false);
+  card.dataset.name = sName.toLowerCase();
+  card.dataset.section = classCode;
+
+  card.innerHTML = `
+    <div class="record-head">
+      <div class="student">
+        <div class="avatar">${escapeHTML(initials)}</div>
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <strong>${escapeHTML(sName)}</strong>
+            ${sData.active === false ? '<span class="student-archive-badge">' + (sData.archiveReason === "graduated" ? "Graduated" : sData.archiveReason === "dropped-out" ? "Dropped out" : "Archived") + '</span><button type="button" class="unarchive-student-btn">Unarchive</button><button type="button" class="remove-student-btn">Delete</button>' : '<button type="button" class="archive-student-btn">Archive</button>'}
+          </div>
+          <small>Grade 6 – ${escapeHTML(sectionName)} · ${dateStr}</small>
+        </div>
+      </div>
+      <span class="overall">${overallPercent}% overall</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>AR Time</span><b class="c-pink">${arTimeStr}</b></div>
+      <div class="stat"><span>Module Time</span><b class="c-cyan">${moduleTimeStr}</b></div>
+      <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
+      <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
+    </div>
+    <div class="record-progress-tile">
+      <span class="record-progress-title">Overall performance</span>
+      <div class="bar" role="progressbar" aria-label="Overall performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
+      <strong class="record-progress-value">${overallPercent}%</strong>
+    </div>
+  `;
+  for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
+  const button = card.querySelector(selector);
+  if (button) {
+    button.dataset.id = studentDoc.id;
+    button.dataset.name = sName;
+    button.setAttribute("aria-label", (selector === ".archive-student-btn" ? "Archive " : selector === ".unarchive-student-btn" ? "Unarchive " : "Delete ") + sName);
+  }
+
+  }
+  return card;
+}
+
 onAuthStateChanged(auth, async user => {
   if (!user) { window.location.href = "login.html"; return; }
   const timing = createPagePerformance("Records");
@@ -75,6 +225,8 @@ onAuthStateChanged(auth, async user => {
         return { sections, message: classes.empty ? "No sections were found for your account." : "" };
       }),
       render: ({ sections, message }) => timing.render(() => {
+        recordData = { sections, message };
+        recordOwnerUid = user.uid;
         recordsContainer.innerHTML = "";
         const selectedSection = sectionFilter.value;
         sectionFilter.innerHTML = '<option value="">All Sections</option>';
@@ -88,127 +240,7 @@ onAuthStateChanged(auth, async user => {
           sectionFilter.appendChild(sectionOption);
 
           for (const { studentDoc, results } of students) {
-            const sData = studentDoc.data();
-
-            const sName = sData.displayName || "Unknown Student";
-
-            // Generate Initials
-            const nameParts = sName.split(" ");
-            let initials = nameParts[0] ? nameParts[0][0] : "?";
-            if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
-            initials = initials.toUpperCase();
-
-            let studentPreSum = 0;
-            let studentPostSum = 0;
-            let testCount = 0;
-            let totalArTime = 0;
-            let totalModuleTime = 0;
-            let lastActiveDate = new Date(0);
-
-            // Check across all 3 terms
-            for (const { lessonsSnap } of results) {
-              lessonsSnap.forEach((lessonDoc) => {
-                const tData = lessonDoc.data();
-
-                // Pre-Test and Post-Test scores
-                if (tData.isPreTestCompleted && tData.isPostTestCompleted && tData.preTestTotalQuestions > 0 && tData.postTestTotalQuestions > 0) {
-                  const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
-                  const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
-                  const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
-
-                  studentPreSum += prePercent;
-                  studentPostSum += postPercent;
-                  testCount++;
-                }
-
-                // 1. AR Time (arTimeMinutes + arNavigationTimeMinutes)
-                if (typeof tData.arTimeMinutes === "number") {
-                  totalArTime += tData.arTimeMinutes;
-                }
-                if (typeof tData.arNavigationTimeMinutes === "number" && !tData.arTimeMinutes) {
-                  totalArTime += tData.arNavigationTimeMinutes;
-                }
-
-                // 2. Module Time (lessonTimeMinutes)
-                if (typeof tData.lessonTimeMinutes === "number") {
-                  totalModuleTime += tData.lessonTimeMinutes;
-                } else if (tData.learningTimeByDevice && typeof tData.learningTimeByDevice === "object") {
-                  // Fallback: sum lessonSeconds across devices if lessonTimeMinutes isn't top-level
-                  Object.values(tData.learningTimeByDevice).forEach((dev) => {
-                    if (dev && typeof dev.lessonSeconds === "number") {
-                      totalModuleTime += dev.lessonSeconds / 60;
-                    }
-                  });
-                }
-
-                // Last Active Timestamp
-                const ts = tData.timestamp || tData.lastUpdated || tData.completedAt;
-                if (ts) {
-                  const testDate = ts.toDate ? ts.toDate() : new Date(ts);
-                  if (!isNaN(testDate.getTime()) && testDate > lastActiveDate) {
-                    lastActiveDate = testDate;
-                  }
-                }
-              });
-            }
-
-            // Formatting data strings
-            const avgPreStr = testCount > 0 ? `${Math.round(studentPreSum / testCount)}%` : "N/A";
-            const avgPostNum = testCount > 0 ? Math.round(studentPostSum / testCount) : 0;
-            const avgPostStr = testCount > 0 ? `${avgPostNum}%` : "N/A";
-            const overallPercent = avgPostNum;
-
-            const arTimeStr = formatMinutes(totalArTime);
-            const moduleTimeStr = formatMinutes(totalModuleTime);
-
-            const dateStr = lastActiveDate.getTime() > 0
-              ? `Last active ${lastActiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-              : "No activity recorded";
-
-            // Building the actual HTML Card
-            const card = document.createElement("article");
-            card.className = "record";
-            card.dataset.studentId = studentDoc.id;
-            card.dataset.archived = String(sData.active === false);
-            card.dataset.name = sName.toLowerCase();
-            card.dataset.section = classCode;
-
-            card.innerHTML = `
-              <div class="record-head">
-                <div class="student">
-                  <div class="avatar">${escapeHTML(initials)}</div>
-                  <div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                      <strong>${escapeHTML(sName)}</strong>
-                      ${sData.active === false ? '<span class="student-archive-badge">' + (sData.archiveReason === "graduated" ? "Graduated" : sData.archiveReason === "dropped-out" ? "Dropped out" : "Archived") + '</span><button type="button" class="unarchive-student-btn">Unarchive</button><button type="button" class="remove-student-btn">Delete</button>' : '<button type="button" class="archive-student-btn">Archive</button>'}
-                    </div>
-                    <small>Grade 6 – ${escapeHTML(sectionName)} · ${dateStr}</small>
-                  </div>
-                </div>
-                <span class="overall">${overallPercent}% overall</span>
-              </div>
-              <div class="stats">
-                <div class="stat"><span>AR Time</span><b class="c-pink">${arTimeStr}</b></div>
-                <div class="stat"><span>Module Time</span><b class="c-cyan">${moduleTimeStr}</b></div>
-                <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
-                <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
-              </div>
-              <div class="record-progress-tile">
-                <span class="record-progress-title">Overall performance</span>
-                <div class="bar" role="progressbar" aria-label="Overall performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
-                <strong class="record-progress-value">${overallPercent}%</strong>
-              </div>
-            `;
-            for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
-            const button = card.querySelector(selector);
-            if (button) {
-              button.dataset.id = studentDoc.id;
-              button.dataset.name = sName;
-              button.setAttribute("aria-label", (selector === ".archive-student-btn" ? "Archive " : selector === ".unarchive-student-btn" ? "Unarchive " : "Delete ") + sName);
-            }
-
-            }
-            cards.appendChild(card);
+            cards.appendChild(studentCard(classDoc, { studentDoc, results }));
           }
         }
 
@@ -291,15 +323,18 @@ archiveForm.addEventListener("submit", async event => {
         const batch = writeBatch(db);
         for (const id of group) batch.update(doc(db, "users", id), data);
         await batch.commit();
+        updateStudentRows(group, data);
         archiveSectionTargets.splice(0, group.length);
         savedCount += group.length;
       }
-    } else await updateDoc(doc(db, "users", archiveTarget.id), data);
+    } else {
+      await updateDoc(doc(db, "users", archiveTarget.id), data);
+      updateStudentRows([archiveTarget.id], data);
+    }
     archiveModal.classList.remove("open");
-    window.location.reload();
   } catch (error) {
     console.error("Error archiving student:", error);
-    archiveError.textContent = savedCount ? savedCount + " students archived. Some could not be archived. Retry to finish the remaining students, or refresh to see the current list." : "Could not archive the selected students. Please try again.";
+    archiveError.textContent = savedCount ? savedCount + " students archived. Retry to finish the remaining students." : "Could not archive the selected students. Please try again.";
   } finally {
     archiveSave.disabled = false;
     archiveSave.textContent = archiveSectionTargets?.length ? "Retry remaining students" : "Archive student";
@@ -318,9 +353,14 @@ recordsContainer.addEventListener("click", async event => {
   button.disabled = true;
   try {
     const reference = doc(db, "users", button.dataset.id);
-    if (restore) await updateDoc(reference, { active: true, archiveReason: null, deletedAt: null });
-    else await deleteDoc(reference);
-    window.location.reload();
+    if (restore) {
+      const data = { active: true, archiveReason: null, deletedAt: null };
+      await updateDoc(reference, data);
+      updateStudentRows([button.dataset.id], data);
+    } else {
+      await deleteDoc(reference);
+      updateStudentRows([button.dataset.id], {}, true);
+    }
   } catch (error) {
     console.error("Student action failed:", error);
     window.alert(restore ? "Could not unarchive this student. Please try again." : "Could not delete this student. Please try again.");

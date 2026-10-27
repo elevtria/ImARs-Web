@@ -34,19 +34,12 @@ export async function showAdminView({ app, user, page, load = async () => null, 
   try {
     await showCachedView({ app, user, page: `admin:${page}`, painted,
       load: async ({ background }) => {
-        // If an admin edits while a quiet read is pending, fetch again so the
-        // older response cannot undo the edit displayed by its save handler.
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const version = teacherViewCache().version();
-          const quiet = background || attempt > 0;
-          const read = quiet ? getDocs : getDocsWithLoading;
-          const profile = await readAdminProfile(getFirestore(app), user, read);
-          if (auth.currentUser?.uid !== user.uid) return null;
-          verified(profile.id);
-          const data = await load({ read, background: quiet });
-          if (teacherViewCache().version() === version) return { profile: profile.display, data };
-        }
-        throw new Error("Data changed while refreshing. Reopen the page to load the latest changes.");
+        const read = background ? getDocs : getDocsWithLoading;
+        const profile = await readAdminProfile(getFirestore(app), user, read);
+        if (auth.currentUser?.uid !== user.uid) return null;
+        verified(profile.id);
+        const data = await load({ read, background });
+        return { profile: profile.display, data };
       },
       render: payload => { renderSidebar(payload.profile); render(payload.data, payload.profile); }
     });

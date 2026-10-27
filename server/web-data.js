@@ -156,8 +156,14 @@ class Scope {
       return { ...input, updateTime: row?.updateTime };
     }
     if (p[0] === "terms" && term(p[1]) && p[2] === "lessons" && lesson(p[3]) && p.length === 4 && row &&
-        names(["isLocked", "scheduledDate"]) && typeof data.isLocked === "boolean" && (data.scheduledDate === "" || date(data.scheduledDate))) {
-      return { ...input, updateTime: row.updateTime };
+        input.operation === "update" && names(["sectionId", "isLocked", "scheduledDate"]) &&
+        typeof data.isLocked === "boolean" && (data.scheduledDate === "" || date(data.scheduledDate))) {
+      await this.ownsClass(data.sectionId);
+      // This document was read in the same transaction. Retain every other
+      // section and the legacy default used by older mobile builds.
+      return { ...input, data: { sectionSchedules: { ...previous.sectionSchedules,
+        [data.sectionId]: { isLocked: data.isLocked, scheduledDate: data.scheduledDate }
+      } }, updateTime: row.updateTime };
     }
     if (p[0] === "users" && p[2] === "test_results" && term(p[3]) && p[4] === "lessons" && lesson(p[5]) && p.length === 6 && actor.role === "teacher") {
       await this.student(p[1]);

@@ -1,9 +1,9 @@
 import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
 import { showTeacherView, escapeHtml } from "./teacher-view.js";
-import { initializeApp } from "./firebase-auth.js";
-import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
-import { getFirestore, collection, query, where, getDocsWithLoading as getDocs, doc, getDocWithLoading as getDoc } from "./firebase-data.js";
+import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
+import { getFirestore, getDocsWithLoading as getDocs, getDocWithLoading as getDoc } from "./firebase-data.js";
 import { createPagePerformance } from "./page-performance.js";
+import { loadTeacherDashboard } from "./teacher-report-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -39,32 +39,11 @@ onAuthStateChanged(auth, async user => {
   if (!user) { window.location.href = "login.html"; return; }
   const timing = createPagePerformance("Dashboard");
   try {
-    await showTeacherView({ app, user, page: "dashboard",
+    await showTeacherView({ app, user, page: "dashboard", freshForMs: 10000,
       load: async ({ background }) => {
         const readDocs = background ? quietDocs : getDocs;
         const readDoc = background ? quietDoc : getDoc;
-        return timing.data(async () => {
-          const profile = await readDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-          if (profile.empty) throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
-          const teacher = profile.docs[0];
-          if (String(teacher.data().role || "").toLowerCase() !== "teacher") {
-            await signOut(auth); window.location.href = "login.html";
-            throw Object.assign(new Error("Teacher access required"), { code: "permission-denied" });
-          }
-          const [classes, termSnap, curriculumSnap] = await Promise.all([
-            readDocs(query(collection(db, "classes"), where("teacherId", "==", teacher.id))),
-            readDoc(doc(db, "terms", "term_01")),
-            readDocs(collection(db, "terms", "term_01", "lessons"))
-          ]);
-          const teacherName = teacher.data().displayName || "Teacher";
-          if (classes.empty) return { teacherName, noClass: true };
-          const classroom = classes.docs[0];
-          const studentSnap = await readDocs(query(collection(db, "users"), where("role", "==", "student"), where("classCode", "==", classroom.id)));
-          const reports = await Promise.all(studentSnap.docs.map(async studentDoc => ({
-            studentDoc, lessonsSnap: await readDocs(collection(db, "users", studentDoc.id, "test_results", "term_01", "lessons"))
-          })));
-          return { teacherName, sectionName: classroom.data().SectionName || classroom.id, studentSnap, reports, termSnap, curriculumSnap };
-        });
+        return timing.data(() => loadTeacherDashboard(db, user, readDocs, readDoc));
       },
       render: ({ teacherName, noClass, sectionName, studentSnap, reports, termSnap, curriculumSnap }) => timing.render(() => {
         document.getElementById("greeting").textContent = "Good " + part + ", " + teacherName + " !";

@@ -90,7 +90,7 @@ export function onSnapshot(reference, ...args) {
   const id = key(reference);
   let group = listeners.get(id);
   if (!group) {
-    group = { subscribers: new Set(), timer: null, running: false, dirty: false, last: null, revision: 0 };
+    group = { reference, subscribers: new Set(), timer: null, running: false, dirty: false, last: null, revision: 0 };
     listeners.set(id, group);
     group.refresh = async () => {
       if (group.running) { group.dirty = true; return; }
@@ -136,7 +136,11 @@ export const onSnapshotWithLoading = loadingReads.onSnapshot;
 async function commit(writes) {
   await request({ action: "commit", writes });
   invalidateTeacherViews();
-  for (const group of listeners.values()) { group.revision++; void group.refresh(); }
+  for (const group of listeners.values()) {
+    if (!writes.some(write => group.reference.kind === "document" ? write.path === group.reference.path : write.path.slice(0, write.path.lastIndexOf("/")) === group.reference.path)) continue;
+    group.revision++;
+    void group.refresh();
+  }
 }
 export const setDoc = (reference, data, options = {}) => commit([{ operation: "set", path: reference.path, data, merge: options.merge === true }]);
 export const updateDoc = (reference, data) => commit([{ operation: "update", path: reference.path, data }]);

@@ -65,7 +65,7 @@ test("student imports, profile edits, QR scores, schedules, downloads and quiz s
     save("users/0026271000/test_results/term_01/lessons/lesson_01", { lessonId: "lesson_01", preTestScore: 4, preTestTotalQuestions: 5, isPreTestCompleted: true, postTestScore: 8, postTestTotalQuestions: 10, isPostTestCompleted: true, isLessonCompleted: true, timestamp: stamp }),
     save("users/TEACH1000/recent_scans/scan1", { moduleName: "Student report", scanType: "qr", timestamp: stamp }),
     save("users/TEACH1000/offlineSync/markerDownloads", { requestedFiles: union("markers.zip"), updatedAt: stamp }),
-    { action: "commit", writes: [{ operation: "update", path: "terms/term_01/lessons/lesson_01", data: { isLocked: true, scheduledDate: "2027-01-01" } }] },
+    { action: "commit", writes: [{ operation: "update", path: "terms/term_01/lessons/lesson_01", data: { sectionId: "A", isLocked: true, scheduledDate: "2027-01-01" } }] },
     save("generatedQuizzes/quiz1", quiz, false)
   ];
   for (const operation of operations) { const response = await app.call(operation, cookie); assert.equal(response.status, 200, JSON.stringify(await response.json()) + JSON.stringify(operation)); }
@@ -88,6 +88,34 @@ test("quiz releases can change between assigned sections while preserving questi
   const other = await app.login("TEACH1001");
   assert.equal((await app.call(save("generatedQuizzes/section-release", { ...saved, teacherUid: "teacher-b", teacherProfileId: "TEACH1001", sectionId: "B" }, false), other)).status, 403);
   assert.deepEqual(app.data.get("generatedQuizzes/section-release"), saved);
+});
+
+test("lesson dates and locks are scoped to an owned section and retain other sections, defaults and lesson content", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
+  const path = "terms/term_01/lessons/lesson_01", record = app.data.get(path);
+  Object.assign(record, { title: "Original lesson", preTest: ["kept"], sectionSchedules: { B: { isLocked: true, scheduledDate: "2099-11-01" } } });
+  const change = data => ({ action: "commit", writes: [{ operation: "update", path, data }] });
+  const first = { sectionId: "A", isLocked: true, scheduledDate: "2099-10-20" };
+  assert.equal((await app.call(change(first), cookie)).status, 200);
+  assert.equal((await app.call(change({ sectionId: "C", isLocked: false, scheduledDate: "" }), cookie)).status, 200);
+  const saved = structuredClone(app.data.get(path));
+  assert.deepEqual(saved.sectionSchedules, {
+    A: { isLocked: true, scheduledDate: "2099-10-20" },
+    B: { isLocked: true, scheduledDate: "2099-11-01" }, C: { isLocked: false, scheduledDate: "" }
+  });
+  assert.equal(saved.isLocked, false); assert.equal(saved.scheduledDate, "");
+  assert.equal(saved.title, "Original lesson"); assert.deepEqual(saved.preTest, ["kept"]);
+  for (const data of [
+    { isLocked: false, scheduledDate: "" },
+    { ...first, sectionId: "B" }, { ...first, sectionId: "missing" },
+    { ...first, sectionSchedules: { B: { isLocked: false, scheduledDate: "" } } },
+    { ...first, scheduledDate: "2027-02-30" }
+  ]) assert.ok([400, 403].includes((await app.call(change(data), cookie)).status));
+  assert.deepEqual(app.data.get(path), saved);
+  app.store.conflict = true;
+  assert.equal((await app.call(change(first), cookie)).status, 409);
+  assert.deepEqual(app.data.get(path), saved);
 });
 
 test("forged roles, UIDs, ownership, credentials, scores and arbitrary fields cannot reach the commit", async () => {

@@ -5,6 +5,34 @@ import vm from "node:vm";
 import { createReadPool } from "../js/data-read-pool.js";
 import { wrapFirestoreReads } from "../js/firebase-loading.js";
 
+test("student changes refresh matching roster listeners without re-reading unrelated schedules or settings", async () => {
+  const paths = [];
+  const context = vm.createContext({ createReadPool, wrapFirestoreReads, performance, queueMicrotask,
+    invalidateTeacherViews() {}, startLoading: () => () => {}, withLoading: action => action(),
+    setTimeout: () => 0, clearTimeout() {},
+    window: { location: { pathname: "/student-records.html" }, addEventListener() {}, removeEventListener() {} },
+    document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
+    webRequest: async (_url, body) => {
+      if (body.action !== "reads") return {};
+      return { results: body.reads.map(read => {
+        paths.push(read.reference.path);
+        return read.action === "get" ? { document: { path: read.reference.path, id: "value", data: {} } } : { documents: [] };
+      }) };
+    }
+  });
+  const source = readFileSync(new URL("../js/firebase-data.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
+  const api = vm.runInContext(source + "\n({onSnapshot,updateDoc});", context);
+  const stops = [
+    {kind:"query",path:"users"}, {kind:"document",path:"users/other-student"},
+    {kind:"document",path:"webSettings/schoolYear"}, {kind:"query",path:"terms/term_01/lessons"}
+  ].map(ref => api.onSnapshot(ref, () => {}));
+  await new Promise(setImmediate); paths.length = 0;
+  await api.updateDoc({kind:"document",path:"users/student-a"}, {active:false});
+  await new Promise(setImmediate);
+  assert.deepEqual(paths, ["users"]);
+  stops.forEach(stop => stop());
+});
+
 test("successful Firestore writes and committed batches invalidate views; denied writes keep them", async () => {
   let invalidated = 0, rejectWrite = true;
   const operation = async () => { if (rejectWrite) throw new Error("permission-denied"); return "saved"; };

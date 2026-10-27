@@ -34,18 +34,27 @@ function showState(state, message = "") {
   if (status) { status.textContent = message; status.hidden = !message; }
 }
 
-export async function showTeacherView({ app, user, page, load, render, painted = () => {} }) {
+export async function showTeacherView({ app, user, page, load, render, painted = () => {}, freshForMs = 0 }) {
   if (getAuth(app).currentUser?.uid !== user.uid) return;
   const cache = prepareTeacherCache(app, user);
-  const version = cache.version();
+  let version = cache.version();
   let saved = cache.get(user.uid, page);
   if (saved) {
     try { render(decodeView(saved)); showState("saved"); painted(true); }
     catch { saved = null; }
   }
+  if (saved && freshForMs > 0 && cache.get(user.uid, page, freshForMs)) { showState("fresh"); return; }
   try {
-    const data = await load({ background: Boolean(saved) });
-    if (getAuth(app).currentUser?.uid !== user.uid) return;
+    let data;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      data = await load({ background: Boolean(saved) || attempt > 0 });
+      if (getAuth(app).currentUser?.uid !== user.uid) return;
+      if (cache.version() === version) break;
+      // A confirmed local change has already updated the current page and cache.
+      if (cache.get(user.uid, page)) { showState("fresh"); painted(true); return; }
+      if (attempt === 2) throw new Error("The records changed during refresh. Please try again.");
+      version = cache.version();
+    }
     let encoded = null;
     try { encoded = encodeView(data); } catch {}
     // Avoid re-rendering unchanged data and resetting the teacher's current filters.

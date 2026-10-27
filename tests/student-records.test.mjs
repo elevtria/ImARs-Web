@@ -24,7 +24,9 @@ class Element {
   get innerHTML() { return this.html || ""; }
   get options() { return this.children; }
   setAttribute(name, value) { this[name] = value; }
-  appendChild(child) { if (child.tag === "fragment") this.children.push(...child.children); else this.children.push(child); }
+  appendChild(child) { for (const item of child.tag === "fragment" ? child.children : [child]) { item.parent = this; this.children.push(item); } }
+  replaceWith(other) { const index = this.parent.children.indexOf(this); other.parent = this.parent; this.parent.children.splice(index, 1, other); }
+  remove() { this.parent.children.splice(this.parent.children.indexOf(this), 1); }
   querySelector(selector) { return this.buttons?.[selector] || null; }
   querySelectorAll(selector) { return selector === ".record" ? this.children.filter(child => child.className === "record") : []; }
   focus() {}
@@ -45,14 +47,15 @@ function harness() {
   const report = () => [{ classDoc: documentSnapshot("A", { SectionName: "A & B" }), students: [...profiles].map(([id, data]) => ({
     studentDoc: documentSnapshot(id, { ...data }), results: [{ lessonsSnap: snapshot([lesson]) }]
   })) }];
-  let authCallback, view, read = async ref => documentSnapshot(ref.id, profiles.get(ref.id)), confirmation = true, rejectWrite = false, reloads = 0;
+  let authCallback, view, read = async ref => documentSnapshot(ref.id, profiles.get(ref.id)), confirmation = true, rejectWrite = false, reloads = 0, reportReads = 0, cachedRecords;
   const writes = [], reads = [], alerts = [], auth = { currentUser: { uid: "teacher-a" } };
   const docs = async ref => snapshot(ref.path === "classes" ? [documentSnapshot("A", {})] : [documentSnapshot("T1", { role: "teacher" })]);
   const context = vm.createContext({ Date, console: { error() {} }, initializeApp: () => ({}), getAuth: () => auth, getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authCallback = callback; }, getDocs: docs, quietDocs: docs,
     quietDoc: ref => { reads.push(ref); return read(ref); }, doc: (_, collection, id) => ({ collection, id }),
     collection: (_, path) => ({ path }), query: ref => ref, where: () => ({}),
-    loadClassReports: async () => report(), createPagePerformance: () => ({ data: action => action(), render: action => action(), finish() {} }),
+    loadClassReports: async () => { reportReads++; return report(); }, createPagePerformance: () => ({ data: action => action(), render: action => action(), finish() {} }),
+    prepareTeacherCache: () => ({ put: (_, page, value) => { if (page === "records") cachedRecords = value; } }), encodeView,
     showTeacherView: async options => { view = options; options.render(await options.load({ background: false })); },
     updateDoc: async (ref, data) => { if (rejectWrite) throw Error("permission-denied"); writes.push({ ref, data }); Object.assign(profiles.get(ref.id), data); },
     writeBatch: () => {
@@ -73,7 +76,7 @@ function harness() {
     load: () => authCallback(auth.currentUser),
     renderSaved: () => view.render(decodeView(JSON.parse(JSON.stringify(encodeView({ sections: report(), message: "" }))))),
     setReader: value => { read = value; }, setConfirm: value => { confirmation = value; }, failWrites: () => { rejectWrite = true; },
-    get reloads() { return reloads; } };
+    get reloads() { return reloads; }, get reportReads() { return reportReads; }, get cachedRecords() { return cachedRecords; } };
 }
 
 
@@ -105,13 +108,28 @@ for (const reason of ["graduated", "dropped-out"]) test("archiving for " + reaso
  assert.equal(app.writes[0].data.archiveReason, reason);
  assert.ok(app.writes[0].data.deletedAt instanceof Date);
  assert.equal(app.profiles.has("S1"), true);
- assert.equal(app.reloads, 1);
+ assert.equal(app.reloads, 0);
+ assert.equal(app.reportReads, 1);
  app.renderSaved();
  assert.equal(app.ids.recordsContainer.children[0].classList.contains("hidden"), true);
  assert.match(app.ids.recordsContainer.children[0].innerHTML, reason === "graduated" ? /Graduated/ : /Dropped out/);
  await app.ids.archivedStudentsTab.emit("click");
  assert.equal(app.ids.recordsContainer.children[0].classList.contains("hidden"), false);
 });
+test("archiving updates only the affected card, preserves filters and stores the confirmed view without re-reading reports", async () => {
+ const app = harness(); await app.load();
+ const untouched = app.ids.recordsContainer.children[2];
+ app.ids.sectionFilter.value = "A"; await app.ids.sectionFilter.emit("change");
+ app.ids.studentSearch.value = "student"; await app.ids.studentSearch.emit("input");
+ await app.click(".archive-student-btn", app.ids.recordsContainer.children[0].querySelector(".archive-student-btn"));
+ app.ids.archiveReason.value = "graduated"; await app.ids.archiveStudentForm.emit("submit");
+ assert.equal(app.ids.recordsContainer.children[2], untouched);
+ assert.equal(app.ids.sectionFilter.value, "A"); assert.equal(app.ids.studentSearch.value, "student");
+ assert.equal(app.ids.activeStudentsCount.textContent, 1); assert.equal(app.ids.archivedStudentsCount.textContent, 2);
+ assert.equal(decodeView(app.cachedRecords).sections[0].students[0].studentDoc.data().active, false);
+ assert.equal(app.reportReads, 1); assert.equal(app.reloads, 0);
+});
+
 test("cancelled, invalid and denied archives do not remove students", async () => {
  const app = harness(); await app.load();
  await app.click(".archive-student-btn", app.ids.recordsContainer.children[0].querySelector(".archive-student-btn"));
@@ -144,7 +162,8 @@ test("archived profile deletion needs confirmation and deletes only the selected
  const button = app.ids.recordsContainer.children[1].querySelector(".remove-student-btn");
  app.setConfirm(false); await app.click(".remove-student-btn", button); assert.equal(app.writes.length, 0);
  app.setConfirm(true); await app.click(".remove-student-btn", button);
- assert.equal(app.profiles.has("S2"), false); assert.equal(app.profiles.has("S1"), true); assert.equal(app.reloads, 1);
+ assert.equal(app.profiles.has("S2"), false); assert.equal(app.profiles.has("S1"), true); assert.equal(app.reloads, 0);
+ assert.equal(app.ids.recordsContainer.children.length, 2);
 });
 
 test("section archive requires one section and includes all its active students despite name search", async () => {
@@ -160,7 +179,7 @@ test("section archive requires one section and includes all its active students 
  await app.ids.archiveStudentForm.emit("submit");
  assert.deepEqual(app.writes.map(write => write.ref.id), ["S1", "S3"]);
  assert.ok(app.writes.every(write => write.data.active === false && write.data.archiveReason === "graduated"));
- assert.equal(app.reloads, 1);
+ assert.equal(app.reloads, 0);
 });
 test("section archiving is disabled in the archive tab and denied writes preserve the roster", async () => {
  const app = harness(); await app.load();

@@ -23,11 +23,11 @@ export function createViewCache({ storage, versions, now = Date.now, maxAge = 15
       } catch {}
       owner = uid;
     },
-    get(uid, page) {
+    get(uid, page, maximumAge = maxAge) {
       if (!uid || uid !== owner) return null;
       try {
         const entry = JSON.parse(storage.getItem(PREFIX + page));
-        if (!entry || entry.uid !== uid || entry.version !== version() || now() - entry.savedAt > maxAge || entry.savedAt > now()) return null;
+        if (!entry || entry.uid !== uid || entry.version !== version() || now() - entry.savedAt > Math.min(maxAge, maximumAge) || entry.savedAt > now()) return null;
         return entry.value;
       } catch { return null; }
     },
@@ -62,7 +62,7 @@ export function teacherViewCache() {
 export const invalidateTeacherViews = () => teacherViewCache().invalidate();
 
 const DISPLAY_FIELDS = new Set([
-  "displayName", "fullName", "active", "archiveReason", "SectionName", "sectionName", "name", "title", "topicTitle", "gradeLevel", "GradeLevel", "grade", "Grade", "lessonOrder", "isLocked", "scheduledDate",
+  "displayName", "fullName", "active", "archiveReason", "SectionName", "sectionName", "name", "title", "topicTitle", "gradeLevel", "GradeLevel", "grade", "Grade", "lessonOrder", "isLocked", "scheduledDate", "sectionSchedules",
   "isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted", "isARCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap", "activityScore", "activityTotalQuestions", "activityTotalPoints",
   "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice", "timestamp", "lastUpdated", "completedAt"
 ]);

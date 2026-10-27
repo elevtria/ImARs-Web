@@ -4,12 +4,15 @@ import {
   collection,
   doc,
   getFirestore,
+  getDocsWithLoading,
+  query,
+  where,
   onSnapshotWithLoading as onSnapshot,
   onSnapshot as quietSnapshot,
   updateDoc,
   writeBatch
 } from "./firebase-data.js";
-import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate } from "./topic-availability.js";
+import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
 
@@ -69,6 +72,10 @@ terms.forEach((term, index) => {
 let isReady = false;
 let isSaving = false;
 let dateTarget = null;
+const sectionSelect = document.getElementById("scheduleSection");
+let assignedSections = [];
+let selectedSection = "";
+let latestSchedules = [];
 const syncStatus = document.getElementById("syncStatus");
 const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
@@ -133,6 +140,7 @@ function renderActivitySchedule() {
 }
 
 function render() {
+  sectionSelect.disabled = !assignedSections.length || isSaving;
   const root = document.getElementById("terms");
   root.innerHTML = terms.map((term, ti) => {
     const availability = termAvailability(term);
@@ -225,14 +233,49 @@ function sortLessons(docs) {
 let stopScheduleListeners = [];
 let scheduleGeneration = 0;
 
+function receiveSectionSchedule(termIndex, snapshot) {
+  const lessonDocs = sortLessons(snapshot.docs);
+  if (lessonDocs.length !== DEFAULT_TERMS[termIndex].topics.length) {
+    throw new Error(`${DEFAULT_TERMS[termIndex].name} needs 4 lesson documents; found ${lessonDocs.length}.`);
+  }
+  terms[termIndex].topics = DEFAULT_TERMS[termIndex].topics.map((topic, topicIndex) => {
+    const lessonDoc = lessonDocs[topicIndex], data = lessonDoc.data();
+    const schedule = sectionSchedule(data, selectedSection);
+    return { ...topic, title: typeof data.title === "string" && data.title.trim() ? data.title : topic.title,
+      docId: lessonDoc.id, date: schedule.scheduledDate, locked: schedule.isLocked };
+  });
+}
+
+sectionSelect.addEventListener("change", () => {
+  if (isSaving || !assignedSections.some(section => section.id === sectionSelect.value)) {
+    sectionSelect.value = selectedSection;
+    return;
+  }
+  selectedSection = sectionSelect.value;
+  isReady = latestSchedules.length === TERM_IDS.length && latestSchedules.every(Boolean);
+  dateTarget = null;
+  document.getElementById("dateModal").classList.remove("open");
+  activityMessage = "";
+  latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
+  document.getElementById("scheduleSectionInfo").textContent = `Topic dates, activity access and progress below apply to ${assignedSections.find(section => section.id === selectedSection).name}.`;
+  setSyncStatus(isReady ? "Connected · changes save to this section" : "Loading the section schedule…", isReady ? "success" : "");
+  render();
+});
+
+function sectionUpdate(fields) {
+  if (!assignedSections.some(section => section.id === selectedSection)) throw new Error("Select one of your assigned sections.");
+  return { ...fields, sectionId: selectedSection };
+}
+
 function watchScheduleFromFirestore(generation, user) {
   const cache = prepareTeacherCache(app, user);
-  const stored = cache.get(user.uid, "schedule");
+  const stored = cache.get(user.uid, "schedule:sections");
   let saved = null;
   try { if (stored) saved = decodeView(stored); } catch {}
   if (!Array.isArray(saved) || saved.length !== TERM_IDS.length || saved.some(snapshot => snapshot.docs?.length !== 4)) saved = null;
   setSyncStatus("Loading lesson schedule from Firebase…");
   const snapshots = Array(TERM_IDS.length).fill(null);
+  latestSchedules = snapshots;
   const showLoadError = (error, termIndex) => {
     if (generation !== scheduleGeneration) return;
     snapshots[termIndex] = null;
@@ -249,28 +292,14 @@ function watchScheduleFromFirestore(generation, user) {
     const receive = (snapshot) => {
       if (generation !== scheduleGeneration) return;
       try {
-        const lessonDocs = sortLessons(snapshot.docs);
-        if (lessonDocs.length !== DEFAULT_TERMS[termIndex].topics.length) {
-          throw new Error(`${DEFAULT_TERMS[termIndex].name} needs 4 lesson documents in terms/${termId}/lessons; found ${lessonDocs.length}.`);
-        }
+        receiveSectionSchedule(termIndex, snapshot);
         snapshots[termIndex] = snapshot;
-        terms[termIndex].topics = DEFAULT_TERMS[termIndex].topics.map((topic, topicIndex) => {
-          const lessonDoc = lessonDocs[topicIndex];
-          const data = lessonDoc.data();
-          return {
-            ...topic,
-            title: typeof data.title === "string" && data.title.trim() ? data.title : topic.title,
-            docId: lessonDoc.id,
-            date: typeof data.scheduledDate === "string" ? data.scheduledDate : "",
-            locked: data.isLocked === true
-          };
-        });
-        isReady = snapshots.every(Boolean);
+        isReady = Boolean(selectedSection) && snapshots.every(Boolean);
         render();
-        if (isReady && !isSaving) {
+        if (snapshots.every(Boolean) && !isSaving) {
           const cached = snapshots.some((item) => item.metadata.fromCache);
-          setSyncStatus(cached ? "Showing cached schedule · waiting for Firebase" : "Connected · changes save to Firebase", cached ? "" : "success");
-          if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule", encodeView(snapshots));
+          setSyncStatus(!selectedSection ? "Select a section to view and edit its schedule." : cached ? "Showing cached schedule · waiting for updates" : "Connected · changes save to this section", cached || !selectedSection ? "" : "success");
+          if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule:sections", encodeView(snapshots));
         }
       } catch (error) {
         showLoadError(error, termIndex);
@@ -290,11 +319,17 @@ function lessonRef(termIndex, topicIndex) {
   return doc(db, "terms", TERM_IDS[termIndex], "lessons", lessonId);
 }
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   const generation = ++scheduleGeneration;
   stopScheduleListeners.forEach((stop) => stop());
   stopScheduleListeners = [];
   isReady = false;
+  assignedSections = [];
+  selectedSection = "";
+  latestSchedules = [];
+  dateTarget = null;
+  document.getElementById("dateModal").classList.remove("open");
+  sectionSelect.innerHTML = '<option value="">Select a section</option>';
   activityMessage = "";
   render();
   if (!user) {
@@ -302,7 +337,23 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  watchScheduleFromFirestore(generation, user);
+  try {
+    const profiles = await getDocsWithLoading(query(collection(db, "users"), where("uid", "==", user.uid)));
+    if (generation !== scheduleGeneration) return;
+    if (profiles.size !== 1 || profiles.docs[0].data().role !== "teacher") throw new Error("Teacher access is required.");
+    const sections = await getDocsWithLoading(query(collection(db, "classes"), where("teacherId", "==", profiles.docs[0].id)));
+    if (generation !== scheduleGeneration) return;
+    assignedSections = sections.docs.map(section => ({ id: section.id, name: section.data().SectionName || section.id }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    sectionSelect.innerHTML = '<option value="">Select a section</option>' + assignedSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
+    render();
+    setSyncStatus(assignedSections.length ? "Select a section to view and edit its schedule." : "No sections are assigned to your account.");
+    if (!assignedSections.length) return;
+    watchScheduleFromFirestore(generation, user);
+  } catch (error) {
+    if (generation !== scheduleGeneration) return;
+    setSyncStatus(`Could not load your sections: ${error.message}`, "error");
+  }
 });
 
 activityList.addEventListener("change", event => {
@@ -338,7 +389,7 @@ activityList.addEventListener("click", async event => {
   activityMessage = `Saving access for ${topic.title}…`;
   render();
   try {
-    await updateDoc(lessonRef(termIndex, topicIndex), update);
+    await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(update));
     activityMessage = `Saved access for ${topic.title}.`;
     setSyncStatus("Connected · changes save to Firebase", "success");
   } catch (error) {
@@ -372,7 +423,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     render();
     setSyncStatus("Saving lesson access setting…");
     try {
-      await updateDoc(lessonRef(termIndex, topicIndex), manualAccessUpdate(nextLocked));
+      await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
       setSyncStatus("Connected · changes save to Firebase", "success");
     } catch (error) {
       console.error("Unable to save lesson lock:", error);
@@ -395,7 +446,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     try {
       const batch = writeBatch(db);
       term.topics.forEach((_, topicIndex) => {
-        batch.update(lessonRef(termIndex, topicIndex), manualAccessUpdate(nextLocked));
+        batch.update(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
       });
       await batch.commit();
       setSyncStatus("Connected · changes save to Firebase", "success");
@@ -443,7 +494,7 @@ document.getElementById("dateSave").onclick = async () => {
   setSyncStatus("Saving lesson date…");
   try {
     const dateUpdate = scheduledAccessUpdate(scheduledDate, topic);
-    await updateDoc(lessonRef(termIndex, topicIndex), dateUpdate);
+    await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(dateUpdate));
     closeDate();
     setSyncStatus("Connected · changes save to Firebase", "success");
   } catch (error) {

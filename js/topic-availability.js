@@ -8,6 +8,17 @@ function validDate(value) {
   return !Number.isNaN(date.getTime()) && todayISO(date) === value;
 }
 
+export function sectionSchedule(lesson, sectionId) {
+  const schedules = lesson.sectionSchedules;
+  if (schedules !== undefined && (!schedules || typeof schedules !== "object" || Array.isArray(schedules))) return { isLocked: true, scheduledDate: "" };
+  const value = schedules && Object.hasOwn(schedules, sectionId) ? schedules[sectionId] : lesson;
+  if (!value || typeof value.isLocked !== "boolean" ||
+      (value.scheduledDate !== undefined && value.scheduledDate !== "" && !validDate(value.scheduledDate))) {
+    return { isLocked: true, scheduledDate: "" };
+  }
+  return { isLocked: value.isLocked, scheduledDate: value.scheduledDate || "" };
+}
+
 export function topicAvailability(topic, today = todayISO()) {
   const scheduledDate = validDate(topic.date) ? topic.date : "";
   const locked = topic.locked === true && (!scheduledDate || scheduledDate > today);

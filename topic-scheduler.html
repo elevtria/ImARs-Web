@@ -45,6 +45,13 @@
         <div>
           <h1>Topic Scheduler</h1>
           <p>3 terms · 4 topics each · Schedule release dates and control student access</p>
+          <div class="quiz-schedule-controls">
+            <label class="quiz-schedule-access" for="scheduleSection">Schedule for section
+              <select id="scheduleSection" disabled><option value="">Loading your sections…</option></select>
+            </label>
+          </div>
+          <p class="scheduler-progress-copy" id="scheduleSectionInfo">Topic dates, activity access and progress below follow the selected section.</p>
+          <p class="scheduler-progress-copy">Section schedules apply in the updated mobile app. Older app versions keep the shared schedule.</p>
           <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite">Connecting to Firebase…</p>
         </div>
       </section>

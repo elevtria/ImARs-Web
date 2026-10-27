@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate } from "../js/topic-availability.js";
+import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule } from "../js/topic-availability.js";
 
 const today = "2026-10-14";
 const locked = { locked: true, date: "" };
 const unlocked = { locked: false, date: "" };
 const fromUpdate = (update) => ({ locked: update.isLocked, date: update.scheduledDate });
+
+test("section settings override the shared default and malformed overrides stay locked", () => {
+  const lesson = { isLocked: false, scheduledDate: "", sectionSchedules: {
+    A: { isLocked: true, scheduledDate: "2026-10-15" }, B: { isLocked: false, scheduledDate: "" }, C: null
+  } };
+  assert.deepEqual(sectionSchedule(lesson, "A"), { isLocked: true, scheduledDate: "2026-10-15" });
+  assert.equal(topicAvailability(fromUpdate(sectionSchedule(lesson, "A")), today).locked, true);
+  assert.equal(topicAvailability(fromUpdate(sectionSchedule(lesson, "A")), "2026-10-15").locked, false);
+  assert.equal(sectionSchedule(lesson, "B").isLocked, false);
+  assert.equal(sectionSchedule(lesson, "unconfigured").isLocked, false);
+  assert.deepEqual(sectionSchedule(lesson, "C"), { isLocked: true, scheduledDate: "" });
+  assert.deepEqual(sectionSchedule({}, "A"), { isLocked: true, scheduledDate: "" });
+  for (const sectionSchedules of [null, [], "invalid"]) assert.equal(sectionSchedule({ isLocked: false, sectionSchedules }, "A").isLocked, true);
+});
 
 test("progress counts unlocked topics, including ones with no date", () => {
   for (let count = 0; count <= 4; count++) {
