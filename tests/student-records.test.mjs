@@ -57,7 +57,7 @@ function harness(size=3) {
     updateDoc:async(ref,data)=>{if(denied)throw Error("Denied");writes.push({ref,data});Object.assign(profiles.get(ref.id),data);cache.invalidate();},
     deleteDoc:async ref=>{if(denied)throw Error("Denied");writes.push({ref,deleted:true});profiles.delete(ref.id);cache.invalidate();},
     writeBatch:()=>{const group=[];return {update(ref,data){group.push({ref,data});},async commit(){if(denied||++batches===failBatch)throw Error("Denied");for(const item of group){writes.push(item);Object.assign(profiles.get(item.ref.id),item.data);}cache.invalidate();}};},
-    window:{confirm:()=>confirmation,alert:v=>alerts.push(v),location:{reload(){assert.fail("data changes must not reload the page");}}},
+    window:{innerHeight:800,confirm:()=>confirmation,alert:v=>alerts.push(v),location:{reload(){assert.fail("data changes must not reload the page");}}},
     document:{getElementById:id=>ids[id],createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element("fragment")}
   });
   vm.runInContext(source,context);
@@ -65,6 +65,7 @@ function harness(size=3) {
   const performance=async id=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id}});await flush();};
   const archive=async id=>{await click(".archive-student-btn",ids.recordsContainer.children.find(c=>c.dataset.studentId===id).querySelector(".archive-student-btn"));ids.archiveReason.value="graduated";await ids.archiveStudentForm.emit("submit");};
   return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:()=>authChanged(auth.currentUser),refresh:()=>refresh(),
+    staleResults:()=>vm.runInContext('for(const section of recordData.sections) for(const student of section.students) student.resultsAt=0; cacheCurrentPage();',context),
     setPageReader:fn=>{pageReader=fn;},setResultReader:fn=>{resultReader=fn;},setConfirm:v=>{confirmation=v;},deny:()=>{denied=true;},failBatch:v=>{failBatch=v;}};
 }
 test("1000 students render only 25 profile cards and fetching one visible student reads only that student's selected term",async()=>{
@@ -137,4 +138,15 @@ test("switching student record terms reads only the selected term and ignores la
   pending.resolve(snap([]));await flush();
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/Term 2/);
   assert.equal(app.cache.get('teacher-a','records:results:term_01:S0000'),null);
+});
+
+test('quiet record updates refresh only visible selected-term results and keep unchanged cards',async()=>{
+ const app=harness(1000);await app.load();await app.performance('S0000');
+ let card=app.ids.recordsContainer.children[0];card.getBoundingClientRect=()=>({top:0,bottom:200});
+ app.staleResults();await app.refresh();await flush();
+ assert.equal(app.resultReads.length,2);assert.ok(app.resultReads.every(ref=>ref.path.includes('/term_01/')));
+ assert.equal(app.ids.recordsContainer.children[0],card,'an unchanged background result must not redraw its card');
+ app.setResultReader(async()=>snap([doc('lesson_01',{isPreTestCompleted:true,isPostTestCompleted:true,preTestScore:5,preTestTotalQuestions:5,postTestScore:10,postTestTotalQuestions:10})]));
+ app.staleResults();await app.refresh();await flush();
+ assert.equal(app.resultReads.length,3);assert.match(app.ids.recordsContainer.children[0].innerHTML,/100%/);
 });

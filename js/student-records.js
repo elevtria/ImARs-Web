@@ -189,6 +189,7 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
       const sameTerm = previous?.results[0]?.termId === filter.termId;
       const results = sameTerm && previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null;
       return { studentDoc: row.studentDoc, results: results || [], resultsLoaded: Boolean(results),
+        resultsAt: sameTerm ? previous?.resultsAt : 0,
         resultsLoading: sameTerm && previous?.resultsLoading || false, resultsError: sameTerm && previous?.resultsError || false };
     }) }));
     const data = { classes: result.classes, sections, counts: totals || [], cursor: after };
@@ -196,6 +197,10 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
     if (pageCacheKey !== key || !saved || JSON.stringify(saved) !== JSON.stringify(encoded)) renderRecords(data, key);
     if (scroll) recordsContainer.scrollIntoView?.({ block: "start" });
     cache.put(user.uid, key, encoded, version);
+    if (background) for (const card of dynamicCards) {
+      const bounds = card.getBoundingClientRect?.();
+      if (bounds && bounds.bottom >= 0 && bounds.top <= window.innerHeight && !card.classList.contains("hidden")) void loadStudentPerformance(card.dataset.studentId, { background: true });
+    }
   } catch (error) {
     if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || error.name === "AbortError") return;
     pageError = true;
@@ -213,39 +218,43 @@ function startRecordLoading(generation) {
   return () => { if (generation === pageGeneration) recordsContainer.removeAttribute("aria-busy"); };
 }
 
-async function loadStudentPerformance(id) {
+async function loadStudentPerformance(id, { background = false } = {}) {
   const user = auth.currentUser;
   const termId = pageFilter.termId || "term_01", requestKey = termId + ":" + id;
   const find = () => recordData?.sections.flatMap(section => section.students.map(student => ({ section, student }))).find(item => item.student.studentDoc.id === id);
   let row = find();
-  if (!user || !row || row.student.resultsLoaded || reportRequests.has(requestKey)) return;
+  if (!user || !row || (row.student.resultsLoaded && (!background || Date.now() - (row.student.resultsAt || 0) < 60000)) || reportRequests.has(requestKey)) return;
   const current = row.student;
-  current.resultsLoading = true; current.resultsError = false;
+  if (!background) { current.resultsLoading = true; current.resultsError = false; }
   const replace = () => {
     row = find();
     if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId || !row) return;
     dynamicCards.find(card => card.dataset.studentId === id)?.replaceWith(studentCard(row.section.classDoc, row.student));
     dynamicCards = Array.from(recordsContainer.querySelectorAll(".record")); applyFilters();
   };
-  replace();
+  if (!background) replace();
   const request = Promise.all([termId].map(async termId => ({
     termId, lessonsSnap: await quietDocs(collection(db, "users", id, "test_results", termId, "lessons"))
   })));
   reportRequests.set(requestKey, request);
+  let changed = false;
   try {
     const results = await request;
     if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
-    if (latest) Object.assign(latest.student, { results, resultsLoaded: true });
+    changed = !latest?.student.resultsLoaded || JSON.stringify(encodeView(latest.student.results)) !== JSON.stringify(encodeView(results));
+    if (latest) Object.assign(latest.student, { results, resultsLoaded: true, resultsAt: Date.now() });
+    if (background && !changed) return;
     prepareTeacherCache(app, user).put(user.uid, "records:results:" + termId + ":" + id, encodeView(results));
   } catch (error) {
     const latest = find();
-    if (latest && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
+    if (latest && !background && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
     console.error("Could not load this student's performance:", error);
   } finally {
     if (reportRequests.get(requestKey) === request) reportRequests.delete(requestKey);
     const latest = find(); if (latest && pageFilter.termId === termId) latest.student.resultsLoading = false;
-    replace(); cacheCurrentPage();
+    if (!background || changed) replace();
+    cacheCurrentPage();
   }
 }
 
