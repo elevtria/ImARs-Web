@@ -110,6 +110,9 @@ class Scope {
       if (p[0] === "generatedQuizzes" && p.length === 2) await this.quiz(p[1]);
       else if (p[0] === "users" && p.length === 2 && actor.role === "teacher" && previous?.role === "student" && previous.active === false) await this.student(p[1]);
       else if (!(p[0] === "users" && p.length === 2 && actor.role === "admin" && previous?.role === "teacher")) throw fail();
+      else if ((await this.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: p[1] }], limit: 1 })).length) {
+        throw fail("This teacher has assigned sections. Deactivate the account to keep student access and records intact.", 409);
+      }
       if (!row) throw fail("This record no longer exists.", 409);
       return { ...input, updateTime: row.updateTime };
     }
@@ -290,6 +293,35 @@ async function teacherReportPage(scope, body) {
   return { ...page, students, cursor: page.counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
 }
 
+async function sectionAssignments(scope, teacherId, profile, existingClasses) {
+  const ids = profile.sectionIds, names = profile.newSections;
+  if (!Array.isArray(ids) || ids.length > 50 || ids.some(id => !part(id)) || new Set(ids).size !== ids.length ||
+      !Array.isArray(names) || names.length > 50 || names.some(name => !text(name, 100)) || ids.length + names.length > 50) throw fail("Choose up to 50 sections.", 400);
+  const normalized = names.map(name => name.trim());
+  if (new Set(normalized.map(name => name.toLowerCase())).size !== normalized.length) throw fail("Section names must be different.", 400);
+  const all = existingClasses || await scope.store.query("classes"), selected = new Map();
+  for (const id of ids) {
+    const row = all.find(row => row.id === id);
+    if (!row || (row.data.teacherId && row.data.teacherId !== teacherId)) throw fail("A selected section is assigned to another teacher. Choose an unassigned section.", 409);
+    selected.set(id, row);
+  }
+  for (const name of normalized) {
+    if (all.some(row => (row.data.SectionName || row.id).trim().toLowerCase() === name.toLowerCase())) throw fail("That section name already exists. Select the existing section instead.", 409);
+    const id = "CLS" + crypto.randomUUID().replaceAll("-", "").toUpperCase();
+    selected.set(id, { id, data: { SectionName: name }, fresh: true });
+  }
+  const changed = [...all.filter(row => row.data.teacherId === teacherId && !selected.has(row.id) && teacherId),
+    ...[...selected.values()].filter(row => !row.fresh && row.data.teacherId !== teacherId)];
+  for (const row of changed) {
+    const students = await scope.store.query("users", { filters: [{ field: "role", op: "==", value: "student" }, { field: "classCode", op: "==", value: row.id }], limit: 1 });
+    if (students.length) throw fail("Sections containing students cannot be reassigned here. Keep the current assignment or deactivate the teacher account.", 409);
+  }
+  const writes = changed.map(row => ({ operation: "update", path: "classes/" + row.id, updateTime: row.updateTime, data: { teacherId: selected.has(row.id) ? teacherId : "" } }));
+  for (const row of selected.values()) if (row.fresh) writes.push({ operation: "set", path: "classes/" + row.id,
+    data: { SectionName: row.data.SectionName, teacherId, gradeLevel: "Grade 6", createdAt: { $type: "serverTimestamp" } } });
+  return { names: [...selected.values()].map(row => row.data.SectionName || row.id), writes };
+}
+
 export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
@@ -306,7 +338,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     const actorBefore = await authenticate(request, env, store);
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
-    if (["commit", "create-teacher"].includes(body.action)) { await store.begin(); started = true; }
+    if (["commit", "create-teacher", "save-teacher"].includes(body.action)) { await store.begin(); started = true; }
     // Re-read the actor inside the transaction so disabling the actor or
     // reassigning a class races safely with the write rather than granting it.
     const actor = started ? await authenticate(request, env, store) : actorBefore;
@@ -314,11 +346,42 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     const scope = new Scope(store, actor);
     if (body.action === "student-page") return respond(await studentPage(scope, body));
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body));
+    if (body.action === "staff-directory") {
+      if (actor.role !== "admin") throw fail();
+      if ([body.teacherCursor, body.sectionCursor].some(value => value !== undefined && value !== null && !part(value))) throw fail("Invalid directory page.", 400);
+      const [teachers, sections, total, archived] = await Promise.all([
+        body.teacherCursor === null ? [] : store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], after: body.teacherCursor, limit: 100 }),
+        body.sectionCursor === null ? [] : store.query("classes", { after: body.sectionCursor, limit: 100 }),
+        body.teacherCursor === undefined ? store.count("users", [{ field: "role", op: "==", value: "student" }]) : 0,
+        body.teacherCursor === undefined ? store.count("users", [{ field: "role", op: "==", value: "student" }, { field: "active", op: "==", value: false }]) : 0
+      ]);
+      const teacherFields = ["schoolId", "displayName", "fullName", "name", "email", "providedEmail", "subject", "active", "status", "createdAt", "joined"];
+      return respond({ teachers: teachers.map(row => ({ id: row.id, data: Object.fromEntries(Object.entries(row.data).filter(([key]) => teacherFields.includes(key))) })),
+        sections: sections.map(row => ({ id: row.id, data: { SectionName: typeof row.data.SectionName === "string" ? row.data.SectionName : row.id,
+          teacherId: typeof row.data.teacherId === "string" ? row.data.teacherId : "" } })),
+        teacherCursor: teachers.length === 100 ? teachers.at(-1).id : null, sectionCursor: sections.length === 100 ? sections.at(-1).id : null,
+        ...(body.teacherCursor === undefined ? { totalStudents: Math.max(0, total - archived) } : {}) });
+    }
+    if (body.action === "save-teacher") {
+      if (actor.role !== "admin") throw fail();
+      const profile = body.profile;
+      if (!part(body.id) || !object(profile) || !fields(profile, ["name", "subject", "sectionIds", "newSections"]) || !text(profile.name) || !text(profile.subject)) throw fail("Enter valid teacher details.", 400);
+      const teacher = await scope.get("users/" + body.id);
+      if (teacher?.data.role !== "teacher") throw fail();
+      const assignment = await sectionAssignments(scope, body.id, profile);
+      await store.commit([{ operation: "update", path: "users/" + body.id, updateTime: teacher.updateTime,
+        data: { fullName: profile.name.trim(), displayName: profile.name.trim(), subject: profile.subject.trim(), sections: assignment.names, updatedAt: { $type: "serverTimestamp" } } }, ...assignment.writes]);
+      started = false;
+      return respond({ ok: true });
+    }
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();
-      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections"]) || !text(profile.name) || !email(profile.email) || !text(profile.subject) ||
-          !Array.isArray(profile.sections) || profile.sections.length > 50 || profile.sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
+      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections", "sectionIds", "newSections"]) || !text(profile.name) || !email(profile.email) || !text(profile.subject)) throw fail("Enter valid teacher details.", 400);
+      const selection = { sectionIds: profile.sectionIds || [], newSections: profile.newSections ?? profile.sections ?? [] };
+      // Validate before reserving a teacher invitation.
+      const classes = await store.query("classes");
+      await sectionAssignments(scope, "", selection, classes);
       const existing = await store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }] });
       const normalizedEmail = profile.email.toLowerCase();
       if (existing.some(row => [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
@@ -328,13 +391,14 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
       const reserved = await stateCall(env, "staff-roster", "allocate-teacher", { minimum: maximum + 1, email: profile.email });
       if (!reserved.ok) throw new Error("Invitation allocation failed");
       const invitation = reserved.result;
+      const assignment = await sectionAssignments(scope, invitation.id, selection, classes);
       const teacher = { schoolId: invitation.id, displayName: profile.name, fullName: profile.name, providedEmail: invitation.email, email: invitation.email,
-        subject: profile.subject, sections: profile.sections, role: "teacher", active: true, status: "invited", isRegistered: false,
+        subject: profile.subject, sections: assignment.names, role: "teacher", active: true, status: "invited", isRegistered: false,
         webInvitationNonce: invitation.nonce, createdAt: { $type: "serverTimestamp" } };
       // The private reservation's nonce is committed only by this action.
       // Mobile registration merges UID fields into the existing invitation.
       await scope.get("users/" + invitation.id);
-      await store.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); started = false;
+      await store.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }, ...assignment.writes]); started = false;
       return respond({ id: invitation.id });
     }
     if (body.action === "check-student-ids") {

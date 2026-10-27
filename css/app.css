@@ -5,10 +5,11 @@ body[data-auth-pending] :is(main, main *, .side-user, .side-user *, .modal, .mod
   --ice: #bfc8e2;
   --sky: #a4b8d9;
   --steel: #81a2c1;
+  --action: #2d6287;
   --gold: #feb705;
   --ink: #2c3a4f;
   --muted: #6d7a8c;
-  --surface: rgba(255, 255, 255, 0.62);
+  --surface: #fff;
   --line: rgba(164, 184, 217, 0.45);
   --shadow: 0 10px 30px rgba(129, 162, 193, 0.16);
   --radius: 22px;
@@ -827,13 +828,6 @@ td {
 .quiz-scheduler-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
 .quiz-scheduler-heading h2 { margin-bottom: 0; }
 .quiz-schedule-list { display: grid; gap: 12px; }
-.activity-term { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
-.activity-term-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; border: 0; background: #f8fafd; color: var(--ink); text-align: left; cursor: pointer; }
-.activity-term-name { font-size: 16px; font-weight: 800; }
-.activity-term-summary { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
-.activity-term.open .chevron { transform: rotate(180deg); }
-.activity-term-rows { display: grid; gap: 12px; padding: 12px; border-top: 1px solid var(--line); }
-.activity-term-rows[hidden] { display: none; }
 .quiz-schedule-empty { padding: 22px; border: 1px dashed var(--steel); border-radius: 14px; color: var(--muted); }
 .quiz-schedule-card { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 610px); gap: 20px; align-items: center; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: #f8fafd; }
 .quiz-schedule-info { min-width: 0; }
@@ -929,11 +923,7 @@ td {
   color: #3f5c78;
 }
 
-.overall {
-  display: grid;
-  justify-items: center;
-  gap: 36px;
-}
+.overall { display:grid; grid-template-columns:200px minmax(0,1fr); align-items:center; gap:28px; }
 
 .record-head .overall, span.overall {
   background: var(--ice);
@@ -2030,7 +2020,7 @@ label {
 
 /* Reserve a stable icon rail so hovering never reflows dashboard content. */
 @media(min-width:1000px) {
-  body:has(#drawer) .app { margin-left:82px; transition:none; }
+  body:has(#drawer) .app { margin-left:var(--navigation-width); transition:none; }
   #drawer .drawer-panel { width:260px; overflow:hidden; }
   #drawer.is-compact .drawer-panel { width:82px; }
   #drawer .brand { height:86px; flex-wrap:nowrap; justify-content:flex-start; padding:22px; }

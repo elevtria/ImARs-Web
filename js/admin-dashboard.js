@@ -1,8 +1,8 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore } from "./firebase-data.js";
-import { loadAdminReports } from "./admin-report-data.js";
-import { showAdminView } from "./admin-view.js";
+import { showAdminTermReport } from "./admin-report-data.js";
+import { percentLabel, gainLabel } from "./activity-score.js";
 import { createPagePerformance } from "./page-performance.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 
@@ -64,8 +64,8 @@ function renderDashboard(report) {
     const schoolAvgPreNoteEl = document.getElementById("schoolAvgPreNote");
     const totalArHoursEl = document.getElementById("totalArHoursVal");
 
-    if (schoolAvgPostEl) schoolAvgPostEl.textContent = `${avgPostPct}%`;
-    if (schoolAvgPreNoteEl) schoolAvgPreNoteEl.textContent = `Up from ${avgPrePct}% pre-test`;
+    if (schoolAvgPostEl) schoolAvgPostEl.textContent = percentLabel(avgPostPct);
+    if (schoolAvgPreNoteEl) schoolAvgPreNoteEl.textContent = `Pre-test average: ${percentLabel(avgPrePct)}`;
     if (totalArHoursEl) totalArHoursEl.textContent = totalArHours;
 
     const ringPostEl = document.getElementById("ringPostScore");
@@ -77,18 +77,20 @@ function renderDashboard(report) {
     const meterPostBar = document.getElementById("meterPostBar");
     const meterGainBar = document.getElementById("meterGainBar");
 
-    if (ringPostEl) ringPostEl.textContent = `${avgPostPct}%`;
-    if (meterPreVal) meterPreVal.textContent = `${avgPrePct}%`;
-    if (meterPostVal) meterPostVal.textContent = `${avgPostPct}%`;
-    if (meterGainVal) meterGainVal.textContent = `${gainPct}%`;
+    if (ringPostEl) ringPostEl.textContent = `${avgPostPct || 0}%`;
+    if (meterPreVal) meterPreVal.textContent = percentLabel(avgPrePct);
+    if (meterPostVal) meterPostVal.textContent = percentLabel(avgPostPct);
+    if (meterGainVal) meterGainVal.textContent = gainLabel(gainPct);
 
-    if (meterPreBar) meterPreBar.style.width = `${avgPrePct}%`;
-    if (meterPostBar) meterPostBar.style.width = `${avgPostPct}%`;
-    if (meterGainBar) meterGainBar.style.width = `${gainPct}%`;
+    if (meterPreBar) meterPreBar.style.width = `${avgPrePct || 0}%`;
+    if (meterPostBar) meterPostBar.style.width = `${avgPostPct || 0}%`;
+    if (meterGainBar) meterGainBar.style.background = gainPct < 0 ? "#b42318" : "#2d6287";
+    if (meterGainBar) meterGainBar.style.background = gainPct < 0 ? "#b42318" : "#2d6287";
+    if (meterGainBar) meterGainBar.style.width = `${Math.abs(gainPct || 0)}%`;
 
     const ringEl = document.getElementById("learningRing");
     if (ringEl) {
-      ringEl.style.background = `conic-gradient(#6c5ce7 ${avgPostPct}%, #e2e8f0 0%)`;
+      ringEl.style.background = `conic-gradient(#2d6287 ${avgPostPct || 0}%, #e2e8f0 0%)`;
     }
 
     // 5. Populate Teacher Performance Snapshot Table
@@ -103,13 +105,13 @@ function renderDashboard(report) {
 
       const rows = document.createDocumentFragment();
       teachersMap.forEach((teacher) => {
-        const tAvgPre = teacher.preCount > 0 ? Math.round(teacher.prePctSum / teacher.preCount) : 0;
-        const tAvgPost = teacher.postCount > 0 ? Math.round(teacher.postPctSum / teacher.postCount) : 0;
-        const tGain = tAvgPost - tAvgPre;
-        const gainSign = tGain >= 0 ? `+${tGain}%` : `${tGain}%`;
+        const tAvgPre = teacher.pre;
+        const tAvgPost = teacher.post;
+        const tGain = teacher.gain;
+        const gainSign = gainLabel(tGain);
 
-        const tHours = teacher.arMinutes >= 60 
-          ? `${Math.round(teacher.arMinutes / 60)}h` 
+        const tHours = teacher.arMinutes >= 60
+          ? `${Math.round(teacher.arMinutes / 60)}h`
           : `${teacher.arMinutes}m`;
 
         const row = document.createElement("tr");
@@ -124,10 +126,10 @@ function renderDashboard(report) {
             </div>
           </td>
           <td>${teacher.studentCount}</td>
-          <td>${tAvgPre}%</td>
-          <td class="post-score">${tAvgPost}%</td>
+          <td>${percentLabel(tAvgPre)}</td>
+          <td class="post-score">${percentLabel(tAvgPost)}</td>
           <td>${tHours}</td>
-          <td><span class="gain-chip">${gainSign}</span></td>
+          <td><span class="gain-chip ${tGain < 0 ? "gain-negative" : ""}">${gainSign}</span></td>
         `;
         rows.appendChild(row);
       });
@@ -141,10 +143,6 @@ onAuthStateChanged(auth, async user => {
   initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Admin Dashboard");
   try {
-    await showAdminView({ app, user, page: "reports",
-      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
-      render: report => timing.render(() => renderDashboard(report)),
-      painted: cacheHit => timing.finish("loaded", { cacheHit })
-    });
+    await showAdminTermReport({ app, user, db, timing, render: renderDashboard });
   } catch (error) { timing.finish("error"); console.error("Error loading admin dashboard metrics:", error); }
 });

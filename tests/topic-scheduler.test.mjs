@@ -79,20 +79,6 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   return {
     element, records, emit, listeners, authChanged,
     denyWrites: () => { rejectWrite = true; },
-    activityClick: (value, mode, date = "") => {
-      const card = {
-        dataset: { activity: value },
-        querySelector: selector => selector === ".activity-schedule-mode"
-          ? { value: mode }
-          : { value: date, checkValidity: () => true }
-      };
-      return element("activityScheduleList").events.click({ target: {
-        closest: selector => selector === ".activity-schedule-save" ? { closest: () => card } : null
-      } });
-    },
-    activityTermClick: index => element("activityScheduleList").events.click({ target: {
-      closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
-    } }),
     click: (attribute, value) => element("terms").events.click({
       target: { closest: (selector) => selector === `[data-${attribute}]` ? { dataset: { [attribute]: value } } : null }
     })
@@ -123,39 +109,6 @@ test("individual and bulk buttons persist lock changes and update progress", asy
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="100"/);
 });
 
-test("activity schedule uses the same lesson records and updates the topic tiles", async () => {
-  const app = await scheduler();
-  assert.match(app.element("activityScheduleStatus").textContent, /12 lesson/);
-  await app.activityClick("0-0", "scheduled", "2099-10-20");
-  assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").scheduledDate, "2099-10-20");
-  assert.match(app.element("activityScheduleList").innerHTML, /Scheduled/);
-  await app.activityClick("0-0", "now");
-  assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").scheduledDate, "");
-  assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").isLocked, false);
-  assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
-});
-
-test("activity schedule groups lessons in collapsible terms", async () => {
-  const app = await scheduler();
-  const list = app.element("activityScheduleList");
-  assert.equal((list.innerHTML.match(/class="activity-term /g) || []).length, 3);
-  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="false"/);
-  assert.match(list.innerHTML, /id="activityTermRows0" hidden/);
-  await app.activityTermClick(0);
-  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
-  assert.match(list.innerHTML, /id="activityTermRows0"><article/);
-  await app.activityClick("0-0", "now");
-  assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
-});
-
-test("a rejected activity access change keeps the confirmed lesson state", async () => {
-  const app = await scheduler();
-  app.denyWrites();
-  await app.activityClick("0-0", "now");
-  assert.equal(app.records.get("term_01")[0].isLocked, true);
-  assert.match(app.element("activityScheduleStatus").textContent, /Could not save activity access/);
-});
-
 test("date save locks an unlocked topic until release and manual unlock cancels it", async () => {
   const app = await scheduler();
   await app.click("lock", "0-0");
@@ -184,11 +137,11 @@ test("signing out unsubscribes live listeners and removes progress claims", asyn
   const app = await scheduler();
   await app.authChanged(null);
   assert.equal(app.listeners.size, 0);
-  assert.match(app.element("terms").innerHTML, /Waiting for data/);
-  assert.match(app.element("yearProgress").innerHTML, /Waiting for data/);
+  assert.match(app.element("terms").innerHTML, /Select a section|No sections assigned|Loading sections/);
+  assert.match(app.element("yearProgress").innerHTML, /Select a section|No sections assigned|Loading sections/);
 });
 
-test("topic and activity saves follow one assigned section without changing other sections or legacy defaults", async () => {
+test("topic saves follow one assigned section without changing other sections or legacy defaults", async () => {
   const app = await scheduler();
   await app.click("lock", "0-0");
   const record = app.records.get("term_01")[0];
@@ -197,7 +150,9 @@ test("topic and activity saves follow one assigned section without changing othe
   app.element("scheduleSection").value = "C";
   app.element("scheduleSection").events.change();
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="0"/);
-  await app.activityClick("0-0", "scheduled", "2099-10-20");
+  await app.click("date", "0-0");
+  app.element("dateInput").value="2099-10-20";
+  await app.element("dateSave").onclick();
   assert.equal(availability.sectionSchedule(record, "C").scheduledDate, "2099-10-20");
   assert.equal(availability.sectionSchedule(record, "A").isLocked, false);
   app.element("scheduleSection").value = "B";
@@ -212,7 +167,7 @@ test("editing requires an explicit section and teachers without sections cannot 
   for (const app of [await scheduler({ chooseSection: false }), await scheduler({ sections: [] })]) {
     await app.click("lock", "0-0");
     assert.equal(app.records.get("term_01")[0].sectionSchedules, undefined);
-    assert.match(app.element("terms").innerHTML, /Waiting for data/);
+    assert.match(app.element("terms").innerHTML, /Select a section|No sections assigned|Loading sections/);
   }
 });
 

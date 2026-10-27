@@ -38,6 +38,14 @@ test("successful writes invalidate other tabs' views and prevent an old request 
   assert.equal(first.put("teacher-a", "records", [2], started), false);
 });
 
+test("report selections survive data invalidation but are cleared on account changes and sign-out",()=>{
+  const tab=storage(),versions=storage(),cache=createViewCache({storage:tab,versions});
+  cache.setOwner("a");cache.put("a","report:context",{termId:"term_02",sectionId:"A"});cache.put("a","report",{score:50});cache.invalidate();
+  assert.equal(cache.get("a","report"),null);assert.deepEqual(cache.get("a","report:context"),{termId:"term_02",sectionId:"A"});
+  const reopened=createViewCache({storage:tab,versions});reopened.setOwner("a");assert.equal(reopened.get("a","report:context").termId,"term_02");
+  reopened.setOwner(null);reopened.setOwner("a");assert.equal(reopened.get("a","report:context"),null);
+});
+
 test("a freshly prepared dashboard avoids a duplicate read while writes still require new data", async () => {
   const app = controller();
   await app.display({ load: async () => ({ score: 8 }) });

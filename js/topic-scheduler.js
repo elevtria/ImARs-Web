@@ -78,10 +78,7 @@ let selectedSection = "";
 let latestSchedules = [];
 let scheduleOwner = null;
 const syncStatus = document.getElementById("syncStatus");
-const activityStatus = document.getElementById("activityScheduleStatus");
-const activityList = document.getElementById("activityScheduleList");
-let activityMessage = "";
-const activityOpenTerms = [false, false, false];
+let sectionsLoaded = false;
 const setSyncStatus = (message, state = "") => {
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
@@ -106,48 +103,14 @@ const lockIcon = (locked) => locked
 
 const calIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
 
-function renderActivitySchedule() {
-  const activityCount = terms.reduce((total, term) => total + term.topics.length, 0);
-  activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
-  if (!isReady) {
-    activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
-    return;
-  }
-  activityList.innerHTML = terms.map((term, termIndex) => {
-    const open = activityOpenTerms[termIndex];
-    const rows = term.topics.map((topic, topicIndex) => {
-    const state = topicAvailability(topic);
-    const mode = state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now";
-    return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
-      <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${mode === "scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
-      <div class="quiz-schedule-controls">
-        <label class="quiz-schedule-access">Access <select class="activity-schedule-mode" aria-label="Access for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}>
-          <option value="locked" ${mode === "locked" ? "selected" : ""}>Locked</option>
-          <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
-          <option value="scheduled" ${mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
-        </select></label>
-        <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(topic.date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
-        <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
-      </div>
-    </article>`;
-    }).join("");
-    return `<section class="activity-term ${open ? "open" : ""}">
-      <button class="activity-term-toggle" type="button" data-activity-term="${termIndex}" aria-expanded="${open}" aria-controls="activityTermRows${termIndex}">
-        <span class="activity-term-name">${escapeHtml(term.name)}</span>
-        <span class="activity-term-summary">${term.topics.length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
-      </button>
-      <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}</div>
-    </section>`;
-  }).join("");
-}
-
 function render() {
   sectionSelect.disabled = !assignedSections.length || isSaving;
   const root = document.getElementById("terms");
   root.innerHTML = terms.map((term, ti) => {
     const availability = termAvailability(term);
     const { unlocked, locked, total } = availability;
-    const status = isReady ? availability : { label: "Waiting for data", cls: "st-upcoming" };
+    const waiting = !sectionsLoaded ? "Loading sections…" : !assignedSections.length ? "No sections assigned" : !selectedSection ? "Select a section" : "Loading schedule…";
+    const status = isReady ? availability : { label: waiting, cls: "st-upcoming" };
     const theme = THEMES[ti];
     const allLocked = locked === term.topics.length;
     return `
@@ -167,7 +130,7 @@ function render() {
         </button>
         <div class="term-body">
           ${term.topics.map((topic, ki) => {
-            const state = isReady ? topicAvailability(topic) : { label: "Waiting", cls: "pill-pending" };
+            const state = isReady ? topicAvailability(topic) : { label: !selectedSection ? "Select a section" : "Loading…", cls: "pill-pending" };
             return `
             <div class="topic-row">
               <div class="topic-left">
@@ -189,7 +152,7 @@ function render() {
             </div>
           `; }).join("")}
           <div class="term-foot">
-            <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "Waiting for lesson availability"}</span>
+            <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "Select a section to view lesson availability"}</span>
             <button class="lock-all" type="button" data-lockall="${ti}" ${!isReady || isSaving ? "disabled" : ""}>
               ${lockIcon(!allLocked)}
               ${allLocked ? "Unlock All" : "Lock All"}
@@ -209,11 +172,11 @@ function render() {
           <span>${term.name}</span>
           <span>${isReady ? `${pct}%` : "—"}</span>
         </div>
-        <div class="bar" role="progressbar" aria-label="${term.name} unlocked topics" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${isReady ? `${availability.unlocked} of ${availability.total} topics unlocked` : "Waiting for data"}"><i class="${FILLS[ti]}" style="width:${pct}%"></i></div>
+        <div class="bar" role="progressbar" aria-label="${term.name} unlocked topics" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-valuetext="${isReady ? `${availability.unlocked} of ${availability.total} topics unlocked` : "Select a section"}"><i class="${FILLS[ti]}" style="width:${pct}%"></i></div>
       </div>
     `;
   }).join("");
-  renderActivitySchedule();
+
 }
 
 const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
@@ -257,8 +220,8 @@ sectionSelect.addEventListener("change", () => {
   if (scheduleOwner) prepareTeacherCache(app, scheduleOwner).put(scheduleOwner.uid, "schedule:section", { id: selectedSection });
   isReady = latestSchedules.length === TERM_IDS.length && latestSchedules.every(Boolean);
   dateTarget = null;
-  document.getElementById("dateModal").classList.remove("open");
-  activityMessage = "";
+  closeDateDialog();
+
   latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
   setSyncStatus(isReady ? "" : "Loading…");
   render();
@@ -300,7 +263,7 @@ function watchScheduleFromFirestore(generation, user) {
         render();
         if (snapshots.every(Boolean) && !isSaving) {
           const cached = snapshots.some((item) => item.metadata.fromCache);
-          setSyncStatus(selectedSection && cached ? "Updating…" : "");
+          setSyncStatus(!selectedSection ? "Select a section to view its schedule." : cached ? "Updating…" : "");
           if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule:sections", encodeView(snapshots));
         }
       } catch (error) {
@@ -328,12 +291,13 @@ onAuthStateChanged(auth, async (user) => {
   stopScheduleListeners = [];
   isReady = false;
   assignedSections = [];
+  sectionsLoaded = false;
   selectedSection = "";
   latestSchedules = [];
   dateTarget = null;
-  document.getElementById("dateModal").classList.remove("open");
+  closeDateDialog();
   sectionSelect.innerHTML = '<option value="">Select a section</option>';
-  activityMessage = "";
+
   render();
   if (!user) {
     setSyncStatus("Sign in to load and edit the lesson schedule.", "error");
@@ -348,6 +312,7 @@ onAuthStateChanged(auth, async (user) => {
     if (generation !== scheduleGeneration) return;
     assignedSections = sections.docs.map(section => ({ id: section.id, name: section.data().SectionName || section.id }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    sectionsLoaded = true;
     sectionSelect.innerHTML = '<option value="">Select a section</option>' + assignedSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
     const previous = prepareTeacherCache(app, user).get(user.uid, "schedule:section");
     if (assignedSections.some(section => section.id === previous?.id)) {
@@ -361,52 +326,6 @@ onAuthStateChanged(auth, async (user) => {
   } catch (error) {
     if (generation !== scheduleGeneration) return;
     setSyncStatus(`Could not load your sections: ${error.message}`, "error");
-  }
-});
-
-activityList.addEventListener("change", event => {
-  if (!event.target.matches(".activity-schedule-mode")) return;
-  const card = event.target.closest("[data-activity]");
-  card.querySelector(".quiz-schedule-date").hidden = event.target.value !== "scheduled";
-});
-
-activityList.addEventListener("click", async event => {
-  const termToggle = event.target.closest("[data-activity-term]");
-  if (termToggle) {
-    const termIndex = Number(termToggle.dataset.activityTerm);
-    activityOpenTerms[termIndex] = !activityOpenTerms[termIndex];
-    renderActivitySchedule();
-    return;
-  }
-  const button = event.target.closest(".activity-schedule-save");
-  if (!button || !isReady || isSaving) return;
-  const card = button.closest("[data-activity]");
-  const [termIndex, topicIndex] = card.dataset.activity.split("-").map(Number);
-  const topic = terms[termIndex]?.topics[topicIndex];
-  if (!topic) return;
-  const mode = card.querySelector(".activity-schedule-mode").value;
-  const dateInput = card.querySelector(".quiz-schedule-date input");
-  if (mode === "scheduled" && (!dateInput.value || dateInput.value <= todayISO() || !dateInput.checkValidity())) {
-    activityMessage = "Choose a future release date for this activity.";
-    activityStatus.textContent = activityMessage;
-    dateInput.focus();
-    return;
-  }
-  const update = mode === "scheduled" ? scheduledAccessUpdate(dateInput.value, topic) : manualAccessUpdate(mode === "locked");
-  isSaving = true;
-  activityMessage = `Saving access for ${topic.title}…`;
-  render();
-  try {
-    await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(update));
-    activityMessage = `Saved access for ${topic.title}.`;
-    setSyncStatus("Saved", "success");
-  } catch (error) {
-    console.error("Unable to save activity access:", error);
-    activityMessage = `Could not save activity access: ${error.message}`;
-    setSyncStatus(activityMessage, "error");
-  } finally {
-    isSaving = false;
-    render();
   }
 });
 
@@ -478,11 +397,14 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     document.getElementById("dateTitle").textContent = `Set date · ${topic.title}`;
     dateInput.value = topic.date || "";
     document.getElementById("dateModal").classList.add("open");
+    document.getElementById("dateModal").showModal?.();
   }
 });
 
 const dateModal = document.getElementById("dateModal");
-const closeDate = () => { dateModal.classList.remove("open"); dateTarget = null; };
+function closeDateDialog() { const modal = document.getElementById("dateModal"); modal.classList.remove("open"); modal.close?.(); dateTarget = null; }
+const closeDate = closeDateDialog;
+dateModal.addEventListener("cancel", event => { event.preventDefault(); closeDateDialog(); });
 document.getElementById("dateCancel").onclick = closeDate;
 dateModal.onclick = (event) => { if (event.target === dateModal) closeDate(); };
 document.getElementById("dateSave").onclick = async () => {

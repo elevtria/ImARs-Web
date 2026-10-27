@@ -21,9 +21,10 @@ async function mount(store, { role = "teacher", selector = false } = {}) {
   const select = { value: "2026", disabled: true, options: [], events: {}, replaceChildren(...options) { this.options = options; },
     addEventListener(name, callback) { this.events[name] = callback; } };
   const status = { textContent: "", classList: { toggle() {} } };
+  const save = { disabled:true,events:{},addEventListener(name,callback){this.events[name]=callback;} };
   let ready;
   const context = vm.createContext({
-    document: { querySelectorAll: () => labels, getElementById: id => selector ? (id === "schoolYearSelect" ? select : status) : null,
+    document: { querySelectorAll: () => labels, getElementById: id => selector ? (id === "schoolYearSelect" ? select : id === "saveSchoolYear" ? save : status) : null,
       createElement: () => ({ value: "", textContent: "" }) },
     window: { location: { pathname: selector ? "/admin-dashboard" : "/teacher-manual" } },
     getApps: () => [{}], initializeApp: () => ({}), getAuth: () => auth, getFirestore: () => ({}),
@@ -39,7 +40,7 @@ async function mount(store, { role = "teacher", selector = false } = {}) {
   });
   vm.runInContext(source, context);
   await ready;
-  return { labels, select, status, profile, change: async year => { select.value = String(year); await select.events.change(); } };
+  return { labels, select, status, profile, save, choose:async year=>{select.value=String(year);await select.events.change();},change: async year => { select.value = String(year); await select.events.change(); await save.events.click(); } };
 }
 
 test("an admin change persists a shared school year and updates teacher labels and later page loads", async () => {
@@ -53,7 +54,7 @@ test("an admin change persists a shared school year and updates teacher labels a
     startYear: 2027, endYear: 2028, updatedBy: "admin-uid", updatedAt: "server-time"
   } });
   assert.ok(teacher.labels.every(element => element.textContent === "SY 2027–28"));
-  assert.match(admin.status.textContent, /Saved for all teachers/);
+  assert.match(admin.status.textContent, /Saved/);
   const reopened = await mount(store);
   assert.ok(reopened.labels.every(element => element.textContent === "SY 2027–28"));
 });
@@ -69,6 +70,13 @@ test("a failed save restores the confirmed year without changing teacher labels"
   assert.equal(store.writes.length, 0);
   assert.match(admin.status.textContent, /Could not save/);
   assert.ok(teacher.labels.every(element => element.textContent === "SY 2027–28"));
+});
+
+test("choosing a school year changes no saved data until Save is pressed",async()=>{
+  const store=database(),admin=await mount(store,{role:"admin",selector:true});
+  assert.equal(admin.save.disabled,true);await admin.choose(2028);
+  assert.equal(store.writes.length,0);assert.equal(admin.labels[0].textContent,"SY 2026–27");assert.equal(admin.save.disabled,false);
+  await admin.save.events.click();assert.equal(store.writes.length,1);assert.equal(admin.save.disabled,true);
 });
 
 test("the control refuses non-admins and rechecks an administrator's role before saving", async () => {

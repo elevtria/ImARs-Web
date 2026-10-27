@@ -63,6 +63,11 @@ function showState(state, message = "") {
 }
 
 export function showTeacherView(options) {
+  if (!options.refreshOnly && getAuth(options.app).currentUser?.uid === options.user.uid) {
+    const watchKey = options.watchKey || options.page;
+    refreshViews.get(watchKey)?.();
+    refreshViews.set(watchKey, watchVisibleData(options.app, options.user, () => showTeacherView({ ...options, refreshOnly: true })));
+  }
   const key = options.user.uid + ":" + options.page;
   if (pendingViews.has(key)) return pendingViews.get(key);
   const pending = renderTeacherView(options).finally(() => { if (pendingViews.get(key) === pending) pendingViews.delete(key); });
@@ -73,10 +78,6 @@ export function showTeacherView(options) {
 async function renderTeacherView(options) {
   const { app, user, page, load, render, painted = () => {}, freshForMs = 60000, refreshOnly = false } = options;
   if (getAuth(app).currentUser?.uid !== user.uid) return;
-  if (!refreshOnly) {
-    refreshViews.get(page)?.();
-    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true })));
-  }
   const cache = prepareTeacherCache(app, user);
   let version = cache.version();
   let saved = cache.get(user.uid, page);

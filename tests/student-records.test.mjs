@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { createViewCache, encodeView, decodeView } from "../js/view-cache.js";
+import { summarizeAssessments } from "../js/activity-score.js";
 const source = readFileSync(new URL("../js/student-records.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "");
 const doc = (id, data) => ({ id, exists: () => true, data: () => data });
 const snap = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: action => docs.forEach(action) });
@@ -48,7 +49,8 @@ function harness(size=3) {
     const rows=matches.slice(0,options.limit||25);
     return {classes,students:rows.map(([id,row])=>({classId:"A",studentDoc:doc(id,{...row})})),counts:options.includeCounts===false?null:[{classId:"A",active:all.filter(([,r])=>r.active!==false).length,archived:all.filter(([,r])=>r.active===false).length}],cursor:matches.length>rows.length?{classId:"A",id:rows.at(-1)[0]}:null};
   }
-  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,console:{error(){}},
+  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,summarizeAssessments,console:{error(){}},
+    reportContext:(_,user,changes)=>{const value={termId:"term_01",sectionId:"first",...cache.get(user.uid,"report:context"),...changes};if(changes)cache.put(user.uid,"report:context",value);return value;},
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,fn)=>{authChanged=fn;},
     watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},
     collection:(_, ...parts)=>({path:parts.join("/")}),doc:(_,name,id)=>({path:name+"/"+id,id}),

@@ -3,6 +3,14 @@ import { getAuth } from "./firebase-auth.js";
 import { encodeView, decodeView } from "./view-cache.js";
 import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
 
+export function reportContext(app, user, changes) {
+  const cache = prepareTeacherCache(app, user), saved = cache.get(user.uid, "report:context") || {};
+  const value = { termId: /^term_0[1-3]$/.test(saved.termId) ? saved.termId : "term_01",
+    sectionId: typeof saved.sectionId === "string" && /^(?:[A-Za-z0-9_-]{1,128})?$/.test(saved.sectionId) ? saved.sectionId : "first", ...changes };
+  if (changes) cache.put(user.uid, "report:context", value);
+  return value;
+}
+
 // Reports arrive in bounded pages. Leaving cancels further work; an automatic
 // check replaces one page instead of downloading the class again.
 export function createTeacherReport({ app, render, progress = () => {}, failed = () => {} }) {

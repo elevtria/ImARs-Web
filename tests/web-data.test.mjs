@@ -210,9 +210,44 @@ test("admin data access works through middleware, invitations use private reserv
   app.data.get("users/" + id).uid = "new-teacher";
   app.data.get("users/" + id).authEmailVerified = true;
   const dynamic = await app.login(id); assert.equal((await app.auth("identity", {}, dynamic)).status, 200);
+  assert.equal((await app.call({action:"save-teacher",id,profile:{name:"New Teacher",subject:"Science",sectionIds:[],newSections:[]}},admin)).status,200);
   assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
   assert.equal((await app.auth("identity", {}, dynamic)).status, 401);
-  const again = await app.call(invite, admin); assert.equal((await again.json()).id, "TEACH1003");
+  const again = await app.call({...invite,profile:{...invite.profile,sections:[]}}, admin); assert.equal((await again.json()).id, "TEACH1003");
+});
+
+test("staff directory exposes only bounded section metadata and staff display fields to administrators", async () => {
+  const app=fixture(),admin=await app.login("ADMIN1000","admin"),teacher=await app.login();
+  app.data.get("classes/A").privateField="private-section-secret";
+  assert.equal((await app.call({action:"staff-directory"})).status,401);
+  assert.equal((await app.call({action:"staff-directory"},teacher)).status,403);
+  assert.equal((await app.call(query("classes"),admin)).status,403,"generic unrestricted class queries remain denied");
+  const response=await app.call({action:"staff-directory"},admin);assert.equal(response.status,200);
+  const result=await response.json();assert.equal(result.totalStudents,2);
+  assert.deepEqual(Object.keys(result.sections[0].data).sort(),["SectionName","teacherId"]);
+  assert.doesNotMatch(JSON.stringify(result),/private-section-secret|must-never-leave-server|private-marker|student-a/);
+  for(let i=0;i<103;i++)app.data.set("classes/C"+String(i).padStart(3,"0"),{SectionName:"Section "+i,teacherId:""});
+  const page=await(await app.call({action:"staff-directory"},admin)).json();assert.equal(page.sections.length,100);assert.ok(page.sectionCursor);
+  const next=await(await app.call({action:"staff-directory",teacherCursor:page.teacherCursor,sectionCursor:page.sectionCursor},admin)).json();
+  assert.equal(next.teachers.length,0);assert.equal(next.sections.length,5);assert.equal(next.sectionCursor,null);
+});
+
+test("teacher edits create canonical sections atomically and protect occupied and foreign assignments",async()=>{
+  const app=fixture(),admin=await app.login("ADMIN1000","admin"),teacher=await app.login();
+  const edit={action:"save-teacher",id:"TEACH1000",profile:{name:"Updated Teacher",subject:"Science",sectionIds:["A"],newSections:["Section C"]}};
+  assert.equal((await app.call(edit,teacher)).status,403);
+  app.store.conflict=true;assert.equal((await app.call(edit,admin)).status,409);assert.equal(app.data.get("users/TEACH1000").displayName,undefined);assert.equal(app.data.size,10);
+  app.store.conflict=false;
+  assert.equal((await app.call(edit,admin)).status,200);
+  const classroom=[...app.data].find(([path,row])=>path.startsWith("classes/")&&row.SectionName==="Section C");assert.ok(classroom);assert.equal(classroom[1].teacherId,"TEACH1000");
+  const before=app.store.committed;
+  for(const profile of [{...edit.profile,sectionIds:[],newSections:[]},{...edit.profile,sectionIds:["A","B"],newSections:[]},{...edit.profile,role:"admin"}])assert.ok([400,409].includes((await app.call({...edit,profile},admin)).status));
+  assert.equal(app.store.committed,before);assert.equal(app.data.get("classes/A").teacherId,"TEACH1000");
+  assert.equal((await app.call({...edit,profile:{...edit.profile,newSections:[]}},admin)).status,200,"an empty section may be released");
+  assert.equal(app.data.get(classroom[0]).teacherId,"");
+  const assign={...edit,id:"TEACH1001",profile:{name:"Second",subject:"Science",sectionIds:["B",classroom[0].split("/")[1]],newSections:[]}};
+  assert.equal((await app.call(assign,admin)).status,200);assert.equal(app.data.get(classroom[0]).teacherId,"TEACH1001");
+  assert.equal((await app.call({action:"commit",writes:[{operation:"delete",path:"users/TEACH1000"}]},admin)).status,409);
 });
 
 test("a forged public teacher profile cannot enroll itself in the private website roster", async () => {

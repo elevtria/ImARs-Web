@@ -18,7 +18,7 @@ before(async () => {
 });
 after(async () => { await environment?.cleanup(); });
 
-test("website gateway REST transactions preserve existing fields, transform timestamps/arrays, query nested results and delete only authorized quizzes", async () => {
+function emulatorStore() {
   const store = new FirestoreAdmin({});
   store.request = async (suffix, options = {}) => {
     const response = await fetch("http://127.0.0.1:58087/v1/projects/" + projectId + "/databases/(default)/" + suffix, {
@@ -26,10 +26,17 @@ test("website gateway REST transactions preserve existing fields, transform time
       ...(options.body ? { body: options.body.replaceAll("imars-db-a733b", projectId) } : {})
     });
     if (response.status === 404) return null;
-    const result = await response.json();
+    // The adapter maps requests to the isolated demo project and maps returned
+    // document names back for the production client's strict batch validation.
+    const result = JSON.parse((await response.text()).replaceAll(projectId, "imars-db-a733b"));
     if (!response.ok) throw Object.assign(new Error("REST gateway failed: " + response.status + " " + JSON.stringify(result)), { status: response.status === 409 ? 409 : 503 });
     return result;
   };
+  return store;
+}
+
+test("website gateway REST transactions preserve existing fields, transform timestamps/arrays, query nested results and delete only authorized quizzes", async () => {
+  const store = emulatorStore();
   const authenticate = async (_request, _env, store) => {
     const row = await store.get("users/TEACH1000");
     assert.equal(row.data.uid, "teacher-a");
@@ -65,6 +72,20 @@ test("website gateway REST transactions preserve existing fields, transform time
   await store.begin();
   assert.equal((await store.query("users", { filters: [{ field: "role", value: "teacher" }] })).length, 2);
   await store.rollback();
+});
+
+test("admin section edits commit real class records atomically and refuse to detach occupied sections",async()=>{
+  const store=emulatorStore();
+  const authenticate=async()=>({id:"ADMIN1000",uid:"admin-a",role:"admin",row:await store.get("users/ADMIN1000")});
+  const call=body=>webData({env:{WEB_DATA_ENABLED:"true"},request:new Request("https://imars.example.test/api/web-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})},{store,authenticate});
+  const edit={action:"save-teacher",id:"TEACH1000",profile:{name:"Updated Teacher",subject:"Science",sectionIds:["A"],newSections:["New Section"]}};
+  const response=await call(edit);assert.equal(response.status,200,await response.text());
+  const created=(await store.query("classes")).find(row=>row.data.SectionName==="New Section");assert.ok(created);assert.equal(created.data.teacherId,"TEACH1000");
+  assert.deepEqual((await store.get("users/TEACH1000")).data.sections,["A","New Section"]);
+  assert.equal((await call({...edit,profile:{...edit.profile,name:"Must not save",sectionIds:[],newSections:[]}})).status,409);
+  assert.equal((await store.get("users/TEACH1000")).data.displayName,"Updated Teacher");
+  assert.equal((await store.get("classes/A")).data.teacherId,"TEACH1000");
+  assert.equal((await store.get("classes/"+created.id)).data.teacherId,"TEACH1000","rejected saves must not partially release empty sections");
 });
 const baseUsers = {
   ADMIN1000: { uid: "admin-a", role: "admin", active: true, displayName: "Admin" },

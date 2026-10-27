@@ -3,6 +3,30 @@ import { collection, getFirestore, getDocs, getDocsWithLoading, limit, query, wh
 import { showTeacherView as showCachedView } from "./teacher-view.js";
 import { decodeView, teacherViewCache } from "./view-cache.js";
 
+// Keep desktop navigation visible; the same menu button controls its label rail.
+if (typeof window.matchMedia === "function" && typeof MutationObserver === "function") {
+  const navigation = document.getElementById("adminNavigation"), menu = document.getElementById("adminMenuButton");
+  if (navigation && menu) {
+    const desktop = window.matchMedia("(min-width:1000px)");
+    let expanded = true;
+    try { expanded = sessionStorage.getItem("imars-admin-navigation-expanded") !== "false"; } catch {}
+    const sync = () => {
+      const hidden = String(!desktop.matches && !navigation.classList.contains("open"));
+      if (navigation.getAttribute("aria-hidden") !== hidden) navigation.setAttribute("aria-hidden", hidden);
+      if (desktop.matches) { expanded = navigation.classList.contains("open"); try { sessionStorage.setItem("imars-admin-navigation-expanded", String(expanded)); } catch {} }
+    };
+    navigation.classList.toggle("open", desktop.matches && expanded); menu.setAttribute("aria-expanded", String(desktop.matches && expanded));
+    desktop.addEventListener("change", () => { navigation.classList.toggle("open", desktop.matches && expanded); sync(); });
+    new MutationObserver(sync).observe(navigation, {attributes:true,attributeFilter:["class","aria-hidden"]});
+    for (const link of navigation.querySelectorAll(".admin-nav-link")) {
+      const label = link.textContent.trim(), span = document.createElement("span"); span.className = "admin-nav-label"; span.textContent = label;
+      for (const child of [...link.childNodes]) if (child.nodeType === Node.TEXT_NODE) child.remove();
+      link.append(span); link.title = label; link.setAttribute("aria-label", label);
+    }
+    sync();
+  }
+}
+
 export async function readAdminProfile(db, user, read = getDocs) {
   const profiles = await read(query(collection(db, "users"), where("uid", "==", user.uid), limit(2)));
   const profile = profiles.size === 1 ? profiles.docs[0] : null;
@@ -29,10 +53,10 @@ function renderSidebar(data) {
 
 // Reuse the same session cache and background refresh behavior as teacher views.
 // A cached display never supplies authorization or the document ID used to edit.
-export async function showAdminView({ app, user, page, load = async () => null, render, verified = () => {}, painted, freshForMs = 60000 }) {
+export async function showAdminView({ app, user, page, load = async () => null, render, verified = () => {}, painted, freshForMs = 60000, watchKey }) {
   const auth = getAuth(app);
   try {
-    await showCachedView({ app, user, page: `admin:${page}`, painted, freshForMs: 0,
+    await showCachedView({ app, user, page: `admin:${page}`, watchKey, painted, freshForMs: 0,
       load: async ({ background, refresh }) => {
         const read = background ? getDocs : getDocsWithLoading;
         const profile = await readAdminProfile(getFirestore(app), user, read);

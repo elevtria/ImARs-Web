@@ -43,17 +43,17 @@
     <main class="content">
       <section class="hero">
         <div>
-          <h1 id="greeting">Good morning, . !</h1>
-          <p id="classInfo">Loading class...</p>
+          <h1 id="greeting">Welcome back</h1>
+          <p id="classInfo">Class overview</p>
         </div>
-        <a class="scan-btn" href="sync-offline-results.html">
+        <div class="report-controls"><label class="select-wrap"><select id="dashboardTerm" aria-label="Report term"><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></label><label class="select-wrap"><select id="dashboardSection" aria-label="Report section"><option value="first">Your section</option></select><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></label></div></section><section class="dashboard-sync-action"><a class="scan-btn" href="sync-offline-results.html">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="7" height="7" rx="1.5" />
             <rect x="14" y="3" width="7" height="7" rx="1.5" />
             <rect x="3" y="14" width="7" height="7" rx="1.5" />
             <path d="M14 14h3v3h-3zM20 14v6M14 20h6" />
           </svg>
-          Scan QR (Offline Sync)
+          Sync Results
         </a>
       </section>
 
@@ -61,29 +61,29 @@
       <section class="stats" data-loading-path="users classes" data-loading-label="Loading class summary…">
         <a class="card stat stat-link" href="student-records.html" aria-label="View student records"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
           <div class="label c-purple">Students</div>
-          <div class="value" id="studentCountVal">0</div>
-          <div class="hint">Active this term</div>
+          <div class="value" id="studentCountVal">—</div>
+          <div class="hint">Active students in selected sections</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
         <a class="card stat stat-link" href="analytics.html" aria-label="View pre-test analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2h6v2M9 10h6M9 14h4"/></svg></span>
-          <div class="label c-slate">Avg Pre-Test</div>
-          <div class="value" id="avgPreTestVal">0/5</div>
-          <div class="hint">Before AR lessons</div>
+          <div class="label c-slate">Pre-Test Average</div>
+          <div class="value" id="avgPreTestVal">—</div>
+          <div class="hint">Completed pre-tests</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
         <a class="card stat stat-link" href="analytics.html" aria-label="View post-test analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
-          <div class="label c-green">Avg Post-Test</div>
-          <div class="value" id="avgPostTestVal">0/10</div>
-          <div class="hint">After AR lessons</div>
+          <div class="label c-green">Post-Test Average</div>
+          <div class="value" id="avgPostTestVal">—</div>
+          <div class="hint">Completed post-tests</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
         <a class="card stat stat-link" href="analytics.html" aria-label="View AR learning analytics"><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></span>
           <div class="label c-pink">Avg AR Time</div>
-          <div class="value" id="avgArTimeVal">0 min</div>
-          <div class="hint">Per student, this term</div>
+          <div class="value" id="avgArTimeVal">—</div>
+          <div class="hint">Per student with recorded AR time</div>
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
       </section>
-      
+
       <section class="card section" data-loading-path="terms" data-loading-label="Loading lesson topics…">
         <div class="section-head">
-          <h2 id="currentTermHeader">Current Term — Loading...</h2>
+          <h2 id="currentTermHeader">Lessons</h2>
           <a class="ghost-btn" href="topic-scheduler.html">View Schedule</a>
         </div>
         <div class="modules" id="modulesContainer">
@@ -101,7 +101,7 @@
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/><path d="m15 11 1.5 1.5L19 10"/></svg>
             </span>
             <span>
-              <h3>Quiz Generator</h3>
+              <h3>Quizzes</h3>
               <p>Create and schedule a quiz</p>
             </span>
           </a>
@@ -146,7 +146,7 @@
 
       <section class="card section">
         <div class="section-head">
-          <h2>Recent Student Activity</h2>
+          <h2>Student snapshot</h2>
           <a class="ghost-btn" href="student-records.html">See All</a>
         </div>
         <div class="table-wrap">
@@ -186,11 +186,11 @@
         </a>
         <a class="nav-item" href="topic-scheduler.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
-          Topic Scheduler
+          Lesson Schedule
         </a>
         <a class="nav-item" href="quiz-generator.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/><path d="m15 11 1.5 1.5L19 10"/></svg>
-          Quiz Generator
+          Quizzes
         </a>
         <a class="nav-item" href="analytics.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
@@ -200,17 +200,14 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
           Student Records
         </a>
-        <a class="nav-item" href="batch-upload.html">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
-          Batch Upload
-        </a>
+
         <a class="nav-item" href="offline-sync.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
-          Offline sync &amp; AR Markers
+          AR Markers
         </a>
         <a class="nav-item" href="sync-offline-results.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Scan QR (Offline Sync)
+          Sync Results
         </a>
         <a class="nav-item" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
@@ -233,15 +230,7 @@
     </div>
   </aside>
 
-  <div class="modal" id="scanModal">
-    <div class="modal-card">
-      <h3>Scan QR (Offline Sync)</h3>
-      <p>Scan a student's Grade QR code to sync offline learning results.</p>
-      <div class="qr-box">QR / AR Scanner</div>
-      <button class="scan-btn" id="closeScan" style="width:100%; justify-content:center;">Close</button>
-    </div>
-  </div>
-  <script type="module" src="js/dashboard.js"></script>
+<script type="module" src="js/dashboard.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
