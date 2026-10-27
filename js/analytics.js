@@ -1,8 +1,8 @@
 import { escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { createTeacherReport, reportContext } from "./teacher-report-data.js";
-import { activityPercent, summarizeAssessments, percentLabel, gainLabel } from "./activity-score.js";
+import { createTeacherReport } from "./teacher-report-data.js";
+import { activityPercent } from "./activity-score.js";
 import { buildStudentActivityRecords } from "./student-activity-record.js";
 
 const app = initializeApp();
@@ -139,8 +139,12 @@ termButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     termButtons.forEach((b) => {
       b.setAttribute("aria-pressed", "false");
+      b.style.background = "#fff";
+      b.style.color = "#374151";
     });
     btn.setAttribute("aria-pressed", "true");
+    btn.style.background = "#4f46e5";
+    btn.style.color = "#fff";
     currentTermFilter = btn.dataset.term;
     tablePage = 0;
     void openReport();
@@ -178,23 +182,24 @@ const report = createTeacherReport({ app,
           });
         });
     }
+      let totalClassPrePercentageSum = 0;
+      let totalClassPostPercentageSum = 0;
+      let totalStudentTestsCount = 0;
       let totalEnrolledStudents = 0;
 
+      if (sectionFilter) sectionFilter.innerHTML = '<option value="all">All Sections</option>';
       if (studentGrid) {
         studentGrid.innerHTML = "";
         if (empty) studentGrid.appendChild(empty);
       }
 
       if (sectionFilter) {
-        const options = [{id:"all",name:"All Sections"},...classes.map(row=>({id:row.id,name:"Grade 6 – " + (row.data().SectionName || row.id)}))];
-        const signature = JSON.stringify(options);
-        if (sectionFilter.dataset.options !== signature) {
-          sectionFilter.innerHTML = "";
-          for (const row of options) { const option = document.createElement("option"); option.value=row.id; option.textContent=row.name; sectionFilter.appendChild(option); }
-          sectionFilter.dataset.options = signature;
+        for (const classDoc of classes) {
+          const option = document.createElement("option"); option.value = classDoc.id;
+          option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
+          sectionFilter.appendChild(option);
         }
         sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || "all" : selectedSection || "all";
-        if (selectedSection === "first" && data.counts.length) { selectedSection = sectionFilter.value; reportContext(app, auth.currentUser, {termId:currentTermFilter,sectionId:selectedSection === "all" ? "" : selectedSection}); }
         if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
       }
       // Process only the selected term and sections.
@@ -213,6 +218,9 @@ const report = createTeacherReport({ app,
           let initials = nameParts[0] ? nameParts[0][0] : "?";
           if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
 
+          let studentPreSum = 0;
+          let studentPostSum = 0;
+          let testCount = 0;
           let studentActivitySum = 0;
           let activityCount = 0;
 
@@ -244,15 +252,33 @@ const report = createTeacherReport({ app,
                 });
               }
 
+              // Aggregate test scores
+              if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0 && tData.isPostTestCompleted && tData.postTestTotalQuestions > 0) {
+                const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
+                const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
+                const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
 
+                studentPreSum += prePercent;
+                studentPostSum += postPercent;
+                testCount++;
+              }
             });
           }
 
-          {
-            const summary = summarizeAssessments(results.flatMap(row => row.lessonsSnap.docs.map(lesson => lesson.data())));
-            const avgPre = summary.pre, avgPost = summary.post, improvement = summary.gain;
+          if (testCount > 0 || activityCount > 0) {
+            const avgPre = testCount ? Math.round(studentPreSum / testCount) : null;
+            const avgPost = testCount ? Math.round(studentPostSum / testCount) : null;
             const avgActivity = activityCount ? Math.round(studentActivitySum / activityCount) : null;
+            const improvement = testCount ? avgPost - avgPre : null;
+
+            if (testCount) {
+              totalClassPrePercentageSum += avgPre;
+              totalClassPostPercentageSum += avgPost;
+              totalStudentTestsCount++;
+            }
+
             const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
+            const impSign = improvement > 0 ? "+" : "";
 
             const html = `<tr class="student-row">
               <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
@@ -260,7 +286,7 @@ const report = createTeacherReport({ app,
               <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
               <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
               <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
-              <td><span class="improvement-value ${impClass}">${gainLabel(improvement)}</span></td>
+              <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
             </tr>`;
 
             dynamicRows.push({ name: sName.toLowerCase(), html });
@@ -272,28 +298,27 @@ const report = createTeacherReport({ app,
 
       // 5. Update Overall Class Averages
       {
-        const summary = summarizeAssessments(sections.flatMap(section => section.students.flatMap(student => student.results.flatMap(row => row.lessonsSnap.docs.map(lesson => lesson.data())))));
-        const finalPre = summary.pre, finalPost = summary.post, finalImp = summary.gain;
+        const finalPre = totalStudentTestsCount ? Math.round(totalClassPrePercentageSum / totalStudentTestsCount) : 0;
+        const finalPost = totalStudentTestsCount ? Math.round(totalClassPostPercentageSum / totalStudentTestsCount) : 0;
+        const finalImp = finalPost - finalPre;
 
         const preVal = document.getElementById("overallPreVal");
         const preFill = document.getElementById("overallPreFill");
-        if (preVal) preVal.textContent = percentLabel(finalPre);
-        if (preFill) preFill.style.width = `${finalPre || 0}%`;
+        if (preVal) preVal.textContent = `${finalPre}%`;
+        if (preFill) preFill.style.width = `${finalPre}%`;
 
         const postVal = document.getElementById("overallPostVal");
         const postFill = document.getElementById("overallPostFill");
-        if (postVal) postVal.textContent = percentLabel(finalPost);
-        if (postFill) postFill.style.width = `${finalPost || 0}%`;
+        if (postVal) postVal.textContent = `${finalPost}%`;
+        if (postFill) postFill.style.width = `${finalPost}%`;
 
         const impVal = document.getElementById("overallImpVal");
         const impFill = document.getElementById("overallImpFill");
-        if (impVal) impVal.textContent = gainLabel(finalImp);
-        if (impVal) impVal.classList.toggle("c-danger", finalImp < 0);
-        if (impFill) impFill.style.background = finalImp < 0 ? "#b42318" : "var(--action)";
-        if (impFill) impFill.style.width = `${Math.min(100, Math.abs(finalImp || 0))}%`;
+        if (impVal) impVal.textContent = `${finalImp >= 0 ? "+" : ""}${finalImp}%`;
+        if (impFill) impFill.style.width = `${Math.min(100, Math.abs(finalImp))}%`;
 
         const donutLabel = document.getElementById("donutValue");
-        if (donutLabel) donutLabel.textContent = percentLabel(finalPost);
+        if (donutLabel) donutLabel.textContent = `${finalPost}%`;
 
         const donutRing = document.getElementById("donutRing");
         if (donutRing) {
@@ -311,13 +336,10 @@ const report = createTeacherReport({ app,
 });
 function openReport() {
   if (!auth.currentUser) return;
-  reportContext(app, auth.currentUser, { termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection });
   document.getElementById("analyticsReportStatus").textContent = "Loading selected results…";
   return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection });
 }
 onAuthStateChanged(auth, user => {
   if (!user) { window.location.href = "login.html"; return; }
-  const selected = reportContext(app, user); currentTermFilter = selected.termId; selectedSection = selected.sectionId || "all";
-  for (const button of termButtons) { button.setAttribute("aria-pressed", String(button.dataset.term === currentTermFilter)); button.classList.toggle("active", button.dataset.term === currentTermFilter); }
   void openReport();
 });

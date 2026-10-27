@@ -133,20 +133,6 @@ remains necessary. Do not publish stricter rules ahead of compatible mobile apps
 
 ## Local verification
 
-Manage Teachers uses the admin-only `staff-directory` operation rather than
-loading student result collections. Directory pages contain at most 100 teachers
-and 100 sections, with independent cursors. Section output is limited to the ID,
-name and assigned teacher ID; student profiles, invitation nonces and credentials
-are not returned. Generic unfiltered class queries remain forbidden.
-
-`save-teacher` edits display names, subjects and canonical section assignments in
-one transaction. New sections also create Grade 6 class records; free-text profile
-labels alone do not grant access. Only empty, unassigned sections may be assigned,
-and occupied sections cannot be released or transferred through this operation.
-Teacher email/UID and role are immutable here. Deactivate teachers with assigned
-sections instead of deleting them. Existing student and schedule ownership checks
-remain in effect. These actions do not migrate or reassign existing students.
-
 ```powershell
 npm.cmd test
 npm.cmd run test:rules

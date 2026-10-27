@@ -31,15 +31,31 @@
 .teacher-info { min-width: 0; }
 .teacher-name-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .teacher-name-line strong { color: #182d4b; font-size: 16px; font-weight: 700; }
+.teacher-status { padding: 4px 10px; border-radius: 999px; color: #0d9f71; background: #e7fbf3; font-size: 11px; font-weight: 700; line-height: 1; }
+.teacher-status.inactive { color: #76879e; background: #edf1f6; }
 .teacher-contact { display: block; margin-top: 4px; color: #8494aa; font-size: 12px; }
 .section-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .section-chip { padding: 4px 10px; border-radius: 99px; color: #603cff; background: #f1edff; font-size: 10px; line-height: 1.1; white-space: nowrap; }
 
+.teacher-stats { display: grid; grid-template-columns: repeat(4, minmax(46px, auto)) auto; align-items: start; gap: clamp(10px, 1.8vw, 24px); }
+.teacher-stat { min-width: 36px; text-align: center; }
+.teacher-stat small { display: block; margin-bottom: 3px; color: #8a99af; font-size: 10px; white-space: nowrap; }
+.teacher-stat strong { display: block; color: #1d3352; font-size: 12px; font-weight: 700; }
 .teacher-actions { display: flex; align-items: center; gap: 7px; margin-left: 1px; }
 .record-action { display: grid; width: 26px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 7px; color: #a1afc1; background: transparent; }
 .record-action:hover { background: #f3f6fa; }
+.record-action svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.record-action.deactivate { color: #f08b00; }
+.record-action.activate { color: #10a56d; }
 .record-action.delete:hover { color: #e55353; }
 
+.teacher-progress { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 13px; padding-top: 10px; border-top: 1px solid #f3f5f8; }
+.progress-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 5px; color: #8393aa; font-size: 11px; }
+.progress-label strong { color: #12a8df; font-size: 11px; }
+.teacher-progress-item.post .progress-label strong { color: #10b981; }
+.progress-track { height: 6px; overflow: hidden; border-radius: 99px; background: #edf1f6; }
+.progress-track i { display: block; height: 100%; border-radius: inherit; background: #12a8df; }
+.teacher-progress-item.post .progress-track i { background: #10b981; }
 .no-teachers { margin: 0; padding: 24px 12px; border: 1px solid #e5ebf3; border-radius: 15px; color: #8292ab; background: #fff; text-align: center; font-size: 12px; }
 
 .teacher-dialog { width: min(450px, calc(100% - 28px)); max-height: calc(100% - 32px); padding: 0; overflow: auto; border: 1px solid #e4eaf2; border-radius: 18px; color: #1d3352; box-shadow: 0 20px 70px rgba(23,43,73,.2); }

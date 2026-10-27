@@ -6,11 +6,11 @@ const VERSION = "imars-view-version-v1";
 export function createViewCache({ storage, versions, now = Date.now, maxAge = 15 * 60 * 1000 } = {}) {
   let owner = null;
   const version = () => { try { return versions?.getItem(VERSION) || ""; } catch { return ""; } };
-  const clear = (keepContext = false) => {
+  const clear = () => {
     try {
       for (let i = storage.length - 1; i >= 0; i--) {
         const key = storage.key(i);
-        if (key?.startsWith(PREFIX) && !(keepContext && key === PREFIX + "report:context")) storage.removeItem(key);
+        if (key?.startsWith(PREFIX)) storage.removeItem(key);
       }
     } catch {}
   };
@@ -27,7 +27,7 @@ export function createViewCache({ storage, versions, now = Date.now, maxAge = 15
       if (!uid || uid !== owner) return null;
       try {
         const entry = JSON.parse(storage.getItem(PREFIX + page));
-        if (!entry || entry.uid !== uid || (page !== "report:context" && entry.version !== version()) || now() - entry.savedAt > Math.min(maxAge, maximumAge) || entry.savedAt > now()) return null;
+        if (!entry || entry.uid !== uid || entry.version !== version() || now() - entry.savedAt > Math.min(maxAge, maximumAge) || entry.savedAt > now()) return null;
         return entry.value;
       } catch { return null; }
     },
@@ -43,9 +43,7 @@ export function createViewCache({ storage, versions, now = Date.now, maxAge = 15
     },
     remove(page) { try { storage?.removeItem(PREFIX + page); } catch {} },
     invalidate() {
-      // Term/section choices contain no report data and survive successful saves.
-      // Switching accounts or signing out still clears them with every other view.
-      clear(true);
+      clear();
       try { versions?.setItem(VERSION, `${now()}:${Math.random()}`); } catch {}
     },
     clear

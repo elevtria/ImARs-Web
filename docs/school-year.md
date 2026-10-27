@@ -1,7 +1,7 @@
 # Shared website school year
 
-The school-year dropdown appears under School settings in Profile & Settings. Selecting
-a year prepares the change; Save school year saves it at `webSettings/schoolYear`. Teacher header badges,
+The school-year dropdown appears in the header on all four admin pages. Selecting
+a year saves it to Firestore at `webSettings/schoolYear`. Teacher header badges,
 the manual's printed year, the admin overview subtitle, and the login label listen
 for this shared setting. The default is SY 2026–27 until an admin selects a year.
 

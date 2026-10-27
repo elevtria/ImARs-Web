@@ -483,7 +483,7 @@ const firestore = getFirestore(firebaseApp);
     const allQuizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
     const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quiz.sectionId === librarySectionFilter.value) : allQuizzes;
     const count = String(allQuizzes.length);
-
+    document.getElementById("libraryCount").textContent = count;
     document.getElementById("libraryTabCount").textContent = count;
     document.getElementById("emptyLibrary").hidden = allQuizzes.length > 0;
     document.getElementById("libraryFilterEmpty").hidden = !allQuizzes.length || quizzes.length > 0;
@@ -758,7 +758,7 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("saveQuiz").addEventListener("click", saveCurrentQuiz);
   document.getElementById("createTab").addEventListener("click", () => setView("create"));
   document.getElementById("libraryTab").addEventListener("click", () => setView("library"));
-
+  document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
   document.getElementById("newQuizFromLibrary").addEventListener("click", resetNewQuiz);
   document.getElementById("emptyCreateQuiz").addEventListener("click", resetNewQuiz);
   librarySectionFilter.addEventListener("change", () => {

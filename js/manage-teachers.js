@@ -1,108 +1,295 @@
-import { loadStaffDirectory } from "./admin-report-data.js";
+import { loadAdminReports } from "./admin-report-data.js";
 import { showAdminView } from "./admin-view.js";
-import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
-import { webRequest, webProtectionEnabled } from "./web-login.js";
-import { invalidateTeacherViews } from "./view-cache.js";
+import { createPagePerformance } from "./page-performance.js";
+import { webProtectionEnabled } from "./web-login.js";
+import { initializeApp } from "./firebase-auth.js";
+import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
+import { webRequest } from "./web-login.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
+import { 
+  getFirestore, 
+  collection, 
+  query, 
+  where, 
+  getDocsWithLoading as getDocs,
+  doc, 
+  updateDoc, 
+  deleteDoc, 
+  createTeacher,
+  serverTimestamp 
+} from "./firebase-data.js";
 
-const app = initializeApp(), auth = getAuth(app), db = getFirestore(app);
-const menu = document.getElementById("adminMenuButton"), drawer = document.getElementById("adminNavigation");
-const setDrawer = open => { drawer.classList.toggle("open", open); drawer.setAttribute("aria-hidden", String(!open)); menu.setAttribute("aria-expanded", String(open)); };
-menu.addEventListener("click", () => setDrawer(!drawer.classList.contains("open")));
-document.getElementById("adminDrawerClose").addEventListener("click", () => setDrawer(false));
-drawer.addEventListener("click", event => { if (event.target === drawer) setDrawer(false); });
-document.addEventListener("keydown", event => { if (event.key === "Escape") setDrawer(false); });
+const app = initializeApp();
+const auth = getAuth(app);
+const db = getFirestore(app);
 
-const list = document.getElementById("teacherList"), search = document.getElementById("teacherSearch"), dialog = document.getElementById("teacherDialog"), form = document.getElementById("teacherForm");
-const add = document.getElementById("addTeacherButton"), choices = document.getElementById("teacherSections"), status = document.getElementById("teacherFormStatus");
-let teachers = [], sections = [], totalStudents = 0, ready = false, locks = false, editing = null, submitting = false;
-const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
-webProtectionEnabled().then(value => { locks = value; render(); }).catch(() => {});
+// Drawer Navigation Logic
+const menuButton = document.getElementById("adminMenuButton");
+const drawer = document.getElementById("adminNavigation");
+const closeButton = document.getElementById("adminDrawerClose");
+
+function setDrawerOpen(open) {
+  if (!drawer || !menuButton) return;
+  drawer.classList.toggle("open", open);
+  drawer.setAttribute("aria-hidden", String(!open));
+  menuButton.setAttribute("aria-expanded", String(open));
+}
+
+if (menuButton) menuButton.addEventListener("click", () => setDrawerOpen(!drawer.classList.contains("open")));
+if (closeButton) closeButton.addEventListener("click", () => setDrawerOpen(false));
+if (drawer) {
+  drawer.addEventListener("click", (event) => {
+    if (event.target === drawer) setDrawerOpen(false);
+  });
+}
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setDrawerOpen(false);
+});
+
+// UI Elements
+const list = document.getElementById("teacherList");
+const search = document.getElementById("teacherSearch");
+const noTeachers = document.getElementById("noTeachers");
+const dialog = document.getElementById("teacherDialog");
+const form = document.getElementById("teacherForm");
+
+let teachers = [];
+let adminReady = false;
+let webLocksEnabled = false;
+webProtectionEnabled().then(value => { webLocksEnabled = value; render(); }).catch(() => {});
+
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[char]));
+
+const initials = (name) => {
+  if (!name) return "TR";
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  return parts.map((part) => part[0] || "").join("").toUpperCase();
+};
+
 function render() {
-  const active = teachers.filter(row => row.active).length;
-  document.getElementById("activeCount").textContent = active;
-  document.getElementById("inactiveCount").textContent = teachers.length - active;
-  document.getElementById("teacherSummary").textContent = `${active} active · ${teachers.length} total`;
-  document.getElementById("sectionCount").textContent = sections.length;
-  document.getElementById("studentCount").textContent = totalStudents;
-  const query = search.value.trim().toLowerCase();
-  const visible = teachers.filter(row => [row.id,row.name,row.email,row.subject,...row.sections].join(" ").toLowerCase().includes(query));
-  list.innerHTML = visible.map(row => `<article class="teacher-record"><div class="teacher-record-top"><div class="teacher-profile">
-    <span class="record-avatar ${row.active ? "" : "inactive"}">${escape(row.name.trim().split(/\s+/).slice(0,2).map(part=>part[0]).join(""))}</span>
-    <div class="teacher-info"><div class="teacher-name-line"><strong>${escape(row.name)}</strong><span class="teacher-status ${row.active ? "" : "inactive"}">${row.active ? "Active" : "Inactive"}</span><span class="teacher-id-badge">${escape(row.id)}</span></div>
-    <small class="teacher-contact">${escape(row.email)} · ${escape(row.subject)}</small><div class="section-chips">${row.sections.length ? row.sections.map(name=>`<span class="section-chip">${escape(name)}</span>`).join("") : "No sections assigned"}</div></div></div>
-    <div class="teacher-actions"><button type="button" class="record-action" data-edit="${escape(row.id)}" ${ready ? "" : "disabled"}>Edit</button>
-    ${locks ? `<button type="button" class="record-action" data-unlock="${escape(row.id)}" ${ready ? "" : "disabled"}>Unlock login</button>` : ""}
-    <button type="button" class="record-action" data-toggle="${escape(row.id)}" ${ready ? "" : "disabled"}>${row.active ? "Deactivate" : "Activate"}</button>
-    <button type="button" class="record-action delete" data-delete="${escape(row.id)}" ${ready ? "" : "disabled"}>Remove</button></div></div></article>`).join("");
-  document.getElementById("noTeachers").hidden = visible.length !== 0;
+  const queryText = (search?.value || "").trim().toLowerCase();
+  const visible = teachers.filter((teacher) => {
+    const searchable = [
+      teacher.schoolId, // <-- Can now search by "TEACH1000"
+      teacher.name, 
+      teacher.email, 
+      teacher.subject, 
+      ...(teacher.sections || [])
+    ].join(" ").toLowerCase();
+    return searchable.includes(queryText);
+  });
+
+  const activeCount = teachers.filter((t) => t.active).length;
+  const inactiveCount = teachers.filter((t) => !t.active).length;
+  const totalStudents = teachers.reduce((sum, t) => sum + (t.students || 0), 0);
+  const totalSections = new Set(teachers.flatMap((t) => t.sections || [])).size;
+
+  const activeCountEl = document.getElementById("activeCount");
+  const inactiveCountEl = document.getElementById("inactiveCount");
+  const teacherSummaryEl = document.getElementById("teacherSummary");
+  const sectionCountEl = document.getElementById("sectionCount");
+  const studentCountEl = document.getElementById("studentCount");
+
+  if (activeCountEl) activeCountEl.textContent = activeCount;
+  if (inactiveCountEl) inactiveCountEl.textContent = inactiveCount;
+  if (teacherSummaryEl) teacherSummaryEl.textContent = `${activeCount} active · ${teachers.length} total`;
+  if (sectionCountEl) sectionCountEl.textContent = totalSections;
+  if (studentCountEl) studentCountEl.textContent = totalStudents;
+
+  if (!list) return;
+
+  list.innerHTML = visible.map((teacher) => `
+    <article class="teacher-record" data-teacher-id="${escapeHtml(teacher.id)}">
+      <div class="teacher-record-top">
+        <div class="teacher-profile">
+          <span class="record-avatar ${teacher.active ? "" : "inactive"}">${escapeHtml(initials(teacher.name))}</span>
+          <div class="teacher-info">
+            <div class="teacher-name-line" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <strong>${escapeHtml(teacher.name)}</strong>
+              <span class="teacher-status ${teacher.active ? "" : "inactive"}">${teacher.active ? "active" : "inactive"}</span>
+              <span class="teacher-id-badge" style="background: #eef2ff; color: #4f46e5; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
+            </div>
+            <small class="teacher-contact">${escapeHtml(teacher.email)} · ${escapeHtml(teacher.subject)} · Joined ${escapeHtml(teacher.joined)}</small>
+            <div class="section-chips">
+              ${(teacher.sections || []).map((sec) => `<span class="section-chip">${escapeHtml(sec)}</span>`).join("")}
+            </div>
+          </div>
+        </div>
+        <div class="teacher-stats" aria-label="${escapeHtml(teacher.name)} performance">
+          <div class="teacher-stat"><small>Students</small><strong>${teacher.students}</strong></div>
+          <div class="teacher-stat"><small>Pre-Test</small><strong>${teacher.pre}%</strong></div>
+          <div class="teacher-stat"><small>Post-Test</small><strong>${teacher.post}%</strong></div>
+          <div class="teacher-stat"><small>AR hrs</small><strong>${teacher.hours}</strong></div>
+          <div class="teacher-actions">
+            ${webLocksEnabled ? `<button class="record-action activate" type="button" ${adminReady ? "" : "disabled"} data-unlock-web-id="${escapeHtml(teacher.schoolId || teacher.id)}" aria-label="Unlock web login for ${escapeHtml(teacher.name)}" title="Unlock web login"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 8 0m-5 8v2"/></svg></button>` : ""}
+            <button class="record-action ${teacher.active ? "deactivate" : "activate"}" type="button" ${adminReady ? "" : "disabled"} data-toggle-id="${escapeHtml(teacher.id)}" aria-label="${teacher.active ? "Deactivate" : "Activate"} ${escapeHtml(teacher.name)}" title="${teacher.active ? "Deactivate" : "Activate"}">
+              ${teacher.active
+                ? `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m6 18 12-12"/></svg>`
+                : `<svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg>`}
+            </button>
+            <button class="record-action delete" type="button" ${adminReady ? "" : "disabled"} data-delete-id="${escapeHtml(teacher.id)}" aria-label="Remove ${escapeHtml(teacher.name)}" title="Remove teacher">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="teacher-progress">
+        <div class="teacher-progress-item">
+          <div class="progress-label"><span>Avg Pre-Test</span><strong>${teacher.pre}%</strong></div>
+          <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.pre))}%"></i></div>
+        </div>
+        <div class="teacher-progress-item post">
+          <div class="progress-label"><span>Avg Post-Test</span><strong>${teacher.post}%</strong></div>
+          <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.post))}%"></i></div>
+        </div>
+      </div>
+    </article>
+  `).join("");
+
+  if (noTeachers) noTeachers.hidden = visible.length !== 0;
 }
-async function load(fresh = false) {
-  const user = auth.currentUser; if (!user) return;
-  await showAdminView({ app, user, page:"staff-directory:v1", freshForMs:fresh ? 0 : 60000,
-    verified: () => { ready = true; add.disabled = false; }, load: loadStaffDirectory,
-    render: data => {
-      sections = data.sections; totalStudents = data.totalStudents;
-      teachers = data.teachers.map(({id,data})=>({id,name:data.fullName || data.displayName || data.name || "Teacher",email:data.providedEmail || data.email || "",subject:data.subject || "Science",
-        active:data.active !== false && !["inactive","disabled"].includes(data.status),sections:sections.filter(row=>row.data.teacherId===id).map(row=>row.data.SectionName)}));
-      render();
-    } });
-}
-add.disabled = true;
+
+// Reuse the shared school report when moving between admin pages.
+const addTeacherButton = document.getElementById("addTeacherButton");
+if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
-  ready = false; add.disabled = true;
-  if (!user) { window.location.href="login.html"; return; }
+  adminReady = false;
+  if (!user) { window.location.href = "login.html"; return; }
   initAdminIdleTimeout(auth);
-  try { await load(); } catch(error) { console.error("Teacher directory unavailable:",error); }
-});
-search.addEventListener("input",render);
-function edit(id = null) {
-  editing = id; form.reset(); status.textContent = "";
-  const teacher = teachers.find(row=>row.id===id);
-  form.elements.name.value = teacher?.name || ""; form.elements.email.value = teacher?.email || "";
-  form.elements.email.readOnly = Boolean(id); form.elements.subject.value = teacher?.subject || "Science";
-  document.getElementById("dialogTitle").textContent = id ? "Edit Teacher" : "Add Teacher";
-  document.getElementById("teacherDialogHint").textContent = id ? "Update account details and assigned sections. Email changes require account maintenance." : "Add a teacher account and assign its sections.";
-  form.querySelector('[type="submit"]').textContent = id ? "Save changes" : "Add Teacher";
-  choices.replaceChildren(...sections.filter(row=>!row.data.teacherId || row.data.teacherId===id).map(row=>{
-    const option=document.createElement("option"); option.value=row.id; option.textContent=row.data.SectionName; option.selected=row.data.teacherId===id; return option;
-  }));
-  dialog.showModal();
-}
-add.addEventListener("click",()=>edit());
-for (const id of ["closeTeacherDialog","cancelTeacherDialog"]) document.getElementById(id).addEventListener("click",()=>dialog.close());
-list.addEventListener("click",async event=>{
-  const button=event.target.closest("button"); if (!button || !ready || !auth.currentUser) return;
-  if (button.dataset.edit) { edit(button.dataset.edit); return; }
-  const id=button.dataset.toggle || button.dataset.delete || button.dataset.unlock, teacher=teachers.find(row=>row.id===id); if (!teacher) return;
-  const userId=auth.currentUser.uid; button.disabled=true;
+  const timing = createPagePerformance("Manage Teachers");
   try {
-    if (button.dataset.unlock) {
-      if (!confirm(`Restore web login for ${teacher.name}? This clears failed-attempt history.`)) return;
-      await webRequest("/api/web-auth/unlock",{identifier:id}); alert("Web login restored.");
-    } else if (button.dataset.toggle) {
-      await updateDoc(doc(db,"users",id),{active:!teacher.active,status:teacher.active ? "inactive" : "active"});
-      if (auth.currentUser?.uid===userId) { teacher.active=!teacher.active; render(); }
-    } else if (confirm(`Remove ${teacher.name}? Assigned sections must be removed first. Deactivation keeps the account and records.`)) {
-      await deleteDoc(doc(db,"users",id));
-      if (auth.currentUser?.uid===userId) { teachers=teachers.filter(row=>row.id!==id); render(); }
+    await showAdminView({ app, user, page: "reports",
+      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
+      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      render: report => timing.render(() => { teachers = report.teachers; render(); }),
+      painted: cacheHit => timing.finish("loaded", { cacheHit })
+    });
+  } catch (error) { timing.finish("error"); console.error("Error fetching teachers:", error); }
+});
+
+// Search input
+if (search) search.addEventListener("input", render);
+
+// Toggle & Delete actions
+if (list) {
+  list.addEventListener("click", async (event) => {
+    if (!adminReady || !auth.currentUser) return;
+    const unlock = event.target.closest("[data-unlock-web-id]");
+    if (unlock) {
+      const identifier = unlock.dataset.unlockWebId;
+      if (!window.confirm(`Restore web login for ${identifier}? This clears their failed-attempt history. Mobile access is unchanged.`)) return;
+      unlock.disabled = true;
+      try {
+        await webRequest("/api/web-auth/unlock", { identifier });
+        alert(`Web login restored for ${identifier}.`);
+      } catch (error) { alert(error.message); }
+      finally { unlock.disabled = false; }
+      return;
     }
-  } catch(error) { alert(error.message); } finally { button.disabled=false; }
-});
-form.addEventListener("submit",async event=>{
-  event.preventDefault(); if (!ready || !auth.currentUser || submitting) return;
-  const data=new FormData(form), sectionIds=[...choices.selectedOptions].map(option=>option.value);
-  const profile={name:String(data.get("name") || "").trim(),subject:String(data.get("subject") || "").trim(),sectionIds,
-    newSections:String(data.get("newSections") || "").split(",").map(name=>name.trim()).filter(Boolean)};
-  const userId=auth.currentUser.uid; submitting=true; status.textContent="Saving…";
-  const submit=form.querySelector('[type="submit"]'); submit.disabled=true;
-  try {
-    let id=editing;
-    if (id) { await webRequest("/api/web-data",{action:"save-teacher",id,profile}); invalidateTeacherViews(); }
-    else { ({id}=await createTeacher({...profile,email:String(data.get("email") || "").trim().toLowerCase()})); }
-    if (auth.currentUser?.uid!==userId) return;
-    dialog.close(); await load(true);
-    if (!editing) alert(`Teacher added. Teacher ID: ${id}`);
-  } catch(error) { status.textContent=error.message; } finally { submitting=false; submit.disabled=false; }
-});
+    // 1. Toggle Active / Inactive
+    const toggleButton = event.target.closest("[data-toggle-id]");
+    if (toggleButton) {
+      const teacherId = toggleButton.dataset.toggleId;
+      const teacher = teachers.find((t) => t.id === teacherId);
+      if (!teacher) return;
+
+      const nextStatus = !teacher.active;
+      try {
+        await updateDoc(doc(db, "users", teacherId), {
+          active: nextStatus,
+          status: nextStatus ? "active" : "inactive"
+        });
+        teacher.active = nextStatus;
+        render();
+      } catch (err) {
+        console.error("Failed to update status:", err);
+        alert("Error updating teacher status.");
+      }
+      return;
+    }
+
+    // 2. Delete Teacher
+    const deleteButton = event.target.closest("[data-delete-id]");
+    if (deleteButton) {
+      const teacherId = deleteButton.dataset.deleteId;
+      const teacher = teachers.find((t) => t.id === teacherId);
+      if (!teacher) return;
+
+      if (window.confirm(`Are you sure you want to remove ${teacher.name}?`)) {
+        try {
+          await deleteDoc(doc(db, "users", teacherId));
+          teachers = teachers.filter((t) => t.id !== teacherId);
+          render();
+        } catch (err) {
+          console.error("Failed to delete teacher:", err);
+          alert("Error deleting teacher.");
+        }
+      }
+    }
+  });
+}
+
+// Dialog & Add Teacher
+document.getElementById("addTeacherButton")?.addEventListener("click", () => dialog?.showModal());
+document.getElementById("closeTeacherDialog")?.addEventListener("click", () => dialog?.close());
+document.getElementById("cancelTeacherDialog")?.addEventListener("click", () => dialog?.close());
+if (dialog) {
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+}
+
+if (form) {
+  let submitting = false;
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!adminReady || !auth.currentUser || submitting) return;
+    const formData = new FormData(form);
+    const name = String(formData.get("name") || "").trim();
+    const email = String(formData.get("email") || "").trim().toLowerCase();
+    const subject = String(formData.get("subject") || "").trim();
+    const sections = String(formData.get("sections") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (!name || !email || !subject) return;
+
+    submitting = true;
+    const submitButton = form.querySelector('[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+    try {
+      const { id: nextTeacherId } = await createTeacher({ name, email, subject, sections });
+
+      teachers.unshift({
+        id: nextTeacherId,
+        schoolId: nextTeacherId,
+        name,
+        email,
+        subject,
+        joined: "Just now",
+        sections,
+        students: 0,
+        pre: 0,
+        post: 0,
+        hours: "0m",
+        active: true
+      });
+
+      form.reset();
+      dialog.close();
+      if (search) search.value = "";
+      render();
+
+      alert(`Teacher registered! Give the Teacher ID to the teacher:\n\nID: ${nextTeacherId}\nEmail: ${email}`);
+    } catch (err) {
+      console.error("Failed to add teacher to Firestore:", err);
+      alert("Error adding teacher: " + err.message);
+    } finally {
+      submitting = false;
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}

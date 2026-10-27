@@ -32,4 +32,3 @@ body { isolation:isolate; }
 @media(prefers-reduced-motion:reduce) { .floating-cube { animation:none; } }
 
 @media print { .login-cubes { display:none; } }
-body:not(.login-page) .floating-cube { opacity:.12; animation:none; filter:none; }

@@ -24,8 +24,15 @@
         <span class="current-page">Overview</span>
       </div>
       <div class="admin-topbar-right">
-
-        <span class="admin-year" data-school-year>SY 2026–27</span>
+        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
+          <span class="notification-dot" aria-hidden="true"></span>
+        </button>
+        <div class="school-year-control">
+          <label for="schoolYearSelect">School year for all teachers</label>
+          <select class="admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </div>
   </header>
@@ -40,22 +47,20 @@
         <a class="admin-nav-link active" href="admin-dashboard.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
         <a class="admin-nav-link" href="manage-teachers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
         <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
-        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Profile &amp; Settings</a>
+        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
       </nav>
-      <div class="admin-side-user"><span class="admin-side-avatar">AD</span><span><strong>Administrator</strong><small>School Administrator</small></span></div>
+      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
     </div>
   </aside>
 
   <main class="dashboard-content">
     <section class="page-intro">
       <div>
-        <h1>Admin Overview</h1><label class="report-term-control">Report term <select id="adminReportTerm"><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select></label>
-        <p>Selected-term performance · <span data-school-year>SY 2026–27</span></p>
+        <h1>Admin Overview</h1>
+        <p>School-wide performance · AR Learning Platform · <span data-school-year>SY 2026–27</span></p>
       </div>
     </section>
 
-    <p id="adminReportStatus" role="status"></p>
-    <div id="adminReportContent">
 <section class="metric-grid" aria-label="School summary" data-loading-path="users" data-loading-label="Loading school summary…">
       <article class="metric-card">
         <span class="metric-label purple">Total Teachers</span>
@@ -63,7 +68,7 @@
         <span class="metric-note" id="totalTeachersNote">0 registered</span>
       </article>
       <article class="metric-card">
-        <span class="metric-label cyan">Active Students</span>
+        <span class="metric-label cyan">Total Students</span>
         <strong class="metric-value" id="totalStudentsVal">0</strong>
         <span class="metric-note" id="totalStudentsNote">Across all sections</span>
       </article>
@@ -95,7 +100,7 @@
             <div class="meter"><i class="post-meter" id="meterPostBar" style="width:0%"></i></div>
           </div>
           <div class="learning-row">
-            <div class="learning-meta"><span>Learning gain</span><strong class="purple" id="meterGainVal">0%</strong></div>
+            <div class="learning-meta"><span>Average Improvement</span><strong class="purple" id="meterGainVal">0%</strong></div>
             <div class="meter"><i class="gain-meter" id="meterGainBar" style="width:0%"></i></div>
           </div>
         </div>
@@ -129,10 +134,9 @@
         </table>
       </div>
     </section>
-    </div>
   </main>
 
-
+  <button class="help-button" type="button" aria-label="Help">?</button>
   <script type="module" src="js/admin-dashboard.js"></script>
   <script type="module" src="js/school-year.js"></script>
 </body>

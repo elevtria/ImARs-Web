@@ -41,14 +41,14 @@
 
     <main class="content">
       <section class="hero">
-        <h1>AR Markers</h1>
+        <h1>Offline Sync &amp; AR Markers</h1>
         <p>Download AR markers for offline classroom use</p>
       </section>
 
       <section class="card">
         <div class="progress-head">
           <div>
-            <h2>Marker downloads</h2>
+            <h2>Sync Progress</h2>
             <p id="progressLabel">0 of 12 topic packs downloaded</p>
           </div>
           <button class="btn-purple" id="downloadAll" type="button">
@@ -102,7 +102,7 @@
         </a>
         <a class="nav-item" href="topic-scheduler.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
-          Lesson Schedule
+          Topic Scheduler
         </a>
         <a class="nav-item" href="analytics.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
@@ -112,14 +112,17 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
           Student Records
         </a>
-
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
         <a class="nav-item active" href="offline-sync.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
-          AR Markers
+          Offline sync &amp; AR Markers
         </a>
         <a class="nav-item" href="sync-offline-results.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Sync Results
+          Scan QR (Offline Sync)
         </a>
         <a class="nav-item" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
@@ -142,7 +145,15 @@
     </div>
   </aside>
 
-<script src="js/ui.js"></script>
+  <div class="modal" id="scanModal">
+    <div class="modal-card">
+      <h3>Scan QR (Offline Sync)</h3>
+      <p>Scan a student's Grade QR code to sync offline learning results.</p>
+      <div class="qr-box">QR / AR Scanner</div>
+      <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
+    </div>
+  </div>
+  <script src="js/ui.js"></script>
   <script type="module" src="js/offline-sync.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>

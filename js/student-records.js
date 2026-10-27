@@ -1,8 +1,6 @@
 import { getDocs as quietDocs } from "./firebase-data.js";
 import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
-import { summarizeAssessments } from "./activity-score.js";
-import { reportContext } from "./teacher-report-data.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
@@ -45,7 +43,6 @@ function encodeRecords(data) {
 function cacheCurrentPage() {
   const user = auth.currentUser;
   if (recordData && user?.uid === recordOwnerUid && pageCacheKey) {
-    reportContext(app, user, { termId: pageFilter.termId, sectionId: pageFilter.sectionId });
     try { prepareTeacherCache(app, user).put(user.uid, pageCacheKey, encodeRecords(recordData)); }
     catch { /* Optional browser caching must not turn loaded results into an error. */ }
   }
@@ -124,7 +121,6 @@ searchInput.addEventListener("input", () => { clearTimeout(searchTimer); applyFi
 sectionFilter.addEventListener("change", () => { applyFilters(); return resetPages(); });
 termFilter.addEventListener("change", () => {
   pageFilter.termId = termFilter.value;
-  if (auth.currentUser) reportContext(app, auth.currentUser, { termId: pageFilter.termId, sectionId: pageFilter.sectionId });
   reportRequests.clear();
   if (!recordData || pageBusy || pageError || recordOwnerUid !== auth.currentUser?.uid) return loadRecordsPage();
   // The roster does not depend on the term. Keep this page's profiles and
@@ -148,7 +144,6 @@ nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursor
 function resetPages() {
   pageIndex = 0; cursors = [null];
   pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: searchInput.value.trim(), termId: termFilter.value || "term_01" };
-  if (auth.currentUser) reportContext(app, auth.currentUser, { termId: pageFilter.termId, sectionId: pageFilter.sectionId });
   return loadRecordsPage();
 }
 
@@ -331,6 +326,9 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
   initials = initials.toUpperCase();
 
+  let studentPreSum = 0;
+  let studentPostSum = 0;
+  let testCount = 0;
   let totalArTime = 0;
   let totalModuleTime = 0;
   let lastActiveDate = new Date(0);
@@ -339,6 +337,17 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   for (const { lessonsSnap } of results) {
     lessonsSnap.forEach((lessonDoc) => {
       const tData = lessonDoc.data();
+
+      // Pre-Test and Post-Test scores
+      if (tData.isPreTestCompleted && tData.isPostTestCompleted && tData.preTestTotalQuestions > 0 && tData.postTestTotalQuestions > 0) {
+        const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
+        const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
+        const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
+
+        studentPreSum += prePercent;
+        studentPostSum += postPercent;
+        testCount++;
+      }
 
       // 1. AR Time (arTimeMinutes + arNavigationTimeMinutes)
       if (typeof tData.arTimeMinutes === "number") {
@@ -372,10 +381,9 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   }
 
   // Formatting data strings
-  const scores = summarizeAssessments(results.flatMap(result => result.lessonsSnap.docs.map(lesson => lesson.data())));
-  const avgPreStr = scores.pre === null ? "Not completed" : `${scores.pre}%`;
-  const avgPostNum = scores.post;
-  const avgPostStr = avgPostNum === null ? "Not completed" : `${avgPostNum}%`;
+  const avgPreStr = testCount > 0 ? `${Math.round(studentPreSum / testCount)}%` : "N/A";
+  const avgPostNum = testCount > 0 ? Math.round(studentPostSum / testCount) : 0;
+  const avgPostStr = testCount > 0 ? `${avgPostNum}%` : "N/A";
   const overallPercent = avgPostNum;
 
   const arTimeStr = formatMinutes(totalArTime);
@@ -407,7 +415,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
           <small>Grade 6 – ${escapeHTML(sectionName)}${hasResults ? ` · ${dateStr}` : ""}</small>
         </div>
       </div>
-      <span class="overall">${resultsLoaded ? hasResults ? overallPercent === null ? "Post-test pending" : `${overallPercent}%` : "No results" : "—"} · ${termLabel}</span>
+      <span class="overall">${resultsLoaded ? hasResults ? `${overallPercent}%` : "No results" : "—"} · ${termLabel}</span>
     </div>
     <div class="stats">
       <div class="stat"><span>AR Time</span><b class="c-pink">${resultsLoaded ? arTimeStr : "—"}</b></div>
@@ -415,7 +423,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
       <div class="stat"><span>Pre-Test</span><b class="c-amber">${resultsLoaded ? avgPreStr : "—"}</b></div>
       <div class="stat"><span>Post-Test</span><b class="c-green">${resultsLoaded ? avgPostStr : "—"}</b></div>
     </div>
-    ${resultsLoaded ? hasResults ? overallPercent === null ? '<p class="view-data-status">Post-test not completed yet.</p>' : `<div class="record-progress-tile">
+    ${resultsLoaded ? hasResults ? `<div class="record-progress-tile">
       <span class="record-progress-title">Term performance</span>
       <div class="bar" role="progressbar" aria-label="Term performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
       <strong class="record-progress-value">${overallPercent}%</strong>
@@ -445,12 +453,6 @@ onAuthStateChanged(auth, async user => {
     pageFilter = { ...saved.filter, termId: /^term_0[1-3]$/.test(saved.filter.termId) ? saved.filter.termId : "term_01" }; pageIndex = saved.pageIndex; cursors = saved.cursors;
     recordStatus = pageFilter.status; searchInput.value = pageFilter.search;
     for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").setAttribute("aria-pressed", String(recordStatus === status));
-  }
-  const shared = prepareTeacherCache(app, user).get(user.uid, "report:context");
-  if (shared) {
-    const context = reportContext(app, user);
-    if (context.sectionId !== "first" && context.sectionId !== pageFilter.sectionId) { pageFilter.sectionId = context.sectionId; pageIndex = 0; cursors = [null]; }
-    pageFilter.termId = context.termId;
   }
   termFilter.value = pageFilter.termId;
   await loadRecordsPage();

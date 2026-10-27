@@ -6,13 +6,18 @@ if (navigationDrawer) {
   if (panel && brand) {
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
-    let expanded = true;
-    try { expanded = sessionStorage.getItem("imars-navigation-expanded") !== "false"; } catch {}
+    const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
+    let pointerInside = false;
+    let collapseTimer;
     const updateCompact = () => {
-      navigationDrawer.classList.toggle("is-compact", desktop.matches && !expanded);
+      const focused = panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
+      navigationDrawer.classList.toggle("is-compact", desktop.matches && hoverPointer.matches && !pointerInside && !focused);
     };
+    panel.addEventListener("pointerenter", () => { clearTimeout(collapseTimer); pointerInside = true; updateCompact(); });
+    panel.addEventListener("pointerleave", () => { pointerInside = false; clearTimeout(collapseTimer); collapseTimer = setTimeout(updateCompact, 220); });
     panel.addEventListener("focusin", updateCompact);
     panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
+    hoverPointer.addEventListener("change", updateCompact);
     const syncLayout = () => {
       updateCompact();
       navigationDrawer.setAttribute("aria-hidden", String(!desktop.matches && !navigationDrawer.classList.contains("open")));
@@ -25,9 +30,7 @@ if (navigationDrawer) {
     document.getElementById("menuBtn")?.addEventListener("click", event => {
       if (!desktop.matches) return;
       event.stopImmediatePropagation();
-      expanded = !expanded;
-      try { sessionStorage.setItem("imars-navigation-expanded", String(expanded)); } catch {}
-      event.currentTarget.setAttribute("aria-expanded", String(expanded));
+      pointerInside = true;
       updateCompact();
     }, true);
     syncLayout();

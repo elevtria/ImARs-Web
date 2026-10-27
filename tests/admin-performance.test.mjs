@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { createViewCache, encodeView, decodeView } from "../js/view-cache.js";
-import { summarizeAssessments } from "../js/activity-score.js";
 
 const stripImports = source => source.replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
 const source = file => stripImports(readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8"));
@@ -13,7 +12,7 @@ const refs = {
   collection: (_, ...parts) => ({ path: parts.join("/") }),
   query: (ref, ...filters) => ({ ...ref, filters }), where: (field, op, value) => ({ field, op, value }), limit: count => ({ count })
 };
-const reportContext = vm.createContext({ ...refs, Map, Date, Promise, summarizeAssessments,webRequest:async()=>({teachers:[],sections:[],teacherCursor:null,sectionCursor:null,totalStudents:0}) });
+const reportContext = vm.createContext({ ...refs, Map, Date, Promise });
 vm.runInContext(source("admin-report-data.js"), reportContext);
 const { summarizeAdminReports, loadAdminReports } = reportContext;
 
@@ -27,14 +26,14 @@ test("admin summaries preserve score rounding, heatmap fallback, attribution, se
     { data: {}, lessons: [lesson, { ...lesson, preTestScore: 2, postTestScore: 3, arTimeMinutes: 5 }] },
     { data: { adviserId: "T1", gradeSection: "B" }, lessons: [{ ...lesson, isPreTestCompleted: false, isPostTestCompleted: false, arTimeMinutes: 0 }] }
   ]);
-  assert.equal(result.totalStudents, 3); assert.equal(result.pre, 44); assert.equal(result.post, 78); assert.equal(result.gain, 33); assert.equal(result.hours, "1h");
+  assert.equal(result.totalStudents, 3); assert.equal(result.pre, 44); assert.equal(result.post, 78); assert.equal(result.gain, 34); assert.equal(result.hours, "1h");
   assert.equal(result.teachers[0].name, "First Teacher"); assert.equal(result.teachers[0].analyticsName, "Teacher One");
-  assert.equal(result.teachers[0].students, 1); assert.equal(result.teachers[0].pre, null); assert.equal(result.teachers[0].post, null); assert.equal(result.teachers[0].hours, "0m");
+  assert.equal(result.teachers[0].students, 2); assert.equal(result.teachers[0].pre, 50); assert.equal(result.teachers[0].post, 83); assert.equal(result.teachers[0].hours, "45m");
   assert.equal(result.teachers[1].active, false); assert.equal(result.teachers[1].students, 1);
-  assert.deepEqual(Array.from(result.sections, section => section.name), ["C", "Unassigned section", "B"]);
+  assert.deepEqual(Array.from(result.sections, section => section.name), ["C", "A", "B"]);
   assert.equal(JSON.stringify(result).includes("never-cache"), false);
   const empty = summarizeAdminReports([], []);
-  assert.equal(empty.pre, null); assert.equal(empty.post, null); assert.equal(empty.hours, "0m");
+  assert.equal(empty.pre, 0); assert.equal(empty.post, 0); assert.equal(empty.hours, "0m");
 });
 
 test("admin report reads overlap without changing student order, and failed reports are not partial successes", async () => {
@@ -54,41 +53,6 @@ test("admin report reads overlap without changing student order, and failed repo
     if (ref.path !== "users") throw new Error("unavailable");
     return snapshot(ref.filters[0].value === "teacher" ? [] : [doc("S1", {})]);
   }), /unavailable/);
-});
-
-test("admin reports load only the selected term for active students and attribute results through canonical sections",async()=>{
-  const calls=[],previous=reportContext.webRequest;
-  reportContext.webRequest=async()=>({teachers:[],sections:[{id:"A",data:{SectionName:"Actual A",teacherId:"T2"}}],teacherCursor:null,sectionCursor:null,totalStudents:1});
-  try{
-    const result=await loadAdminReports({},async ref=>{
-      calls.push(ref.path);
-      if(ref.path==="users")return snapshot(ref.filters[0].value==="teacher"?[doc("T1",{name:"First"}),doc("T2",{name:"Second"})]:[doc("S1",{classCode:"A",teacherId:"T1"}),doc("S2",{active:false})]);
-      return snapshot([doc("lesson_01",{isPreTestCompleted:true,preTestScore:4,preTestTotalQuestions:5,isPostTestCompleted:true,postTestScore:5,postTestTotalQuestions:10})]);
-    },"term_02");
-    assert.equal(result.termId,"term_02");assert.equal(result.totalStudents,1);assert.equal(result.gain,-30);
-    assert.deepEqual(calls.filter(path=>path!=="users"),["users/S1/test_results/term_02/lessons"]);
-    assert.equal(result.teachers.find(row=>row.id==="T1").students,0);assert.equal(result.teachers.find(row=>row.id==="T2").students,1);assert.equal(result.sections[0].name,"Actual A");
-  }finally{reportContext.webRequest=previous;}
-});
-
-test("admin term switches cannot display a late previous-term report",async()=>{
-  const control={value:"",onchange:null},content={hidden:false},status={textContent:""},requests=[],painted=[];
-  const context=vm.createContext({...refs,summarizeAssessments,getAuth:()=>({currentUser:{uid:"admin-a"}}),reportContext:()=>({termId:"term_02"}),
-    document:{getElementById:id=>id==="adminReportTerm"?control:id==="adminReportContent"?content:status},
-    showAdminView:async options=>{requests.push(options);}});
-  const show=vm.runInContext(source("admin-report-data.js")+"\nshowAdminTermReport;",context);
-  await show({app:{},user:{uid:"admin-a"},db:{},render:report=>painted.push(report.termId),timing:{render:action=>action()}});
-  assert.equal(control.value,"term_02");control.value="term_03";control.onchange();
-  requests[0].render({termId:"term_02"});assert.deepEqual(painted,[]);assert.equal(content.hidden,true);
-  requests[1].render({termId:"term_03"});assert.deepEqual(painted,["term_03"]);assert.equal(content.hidden,false);assert.equal(status.textContent,"");
-  assert.equal(requests[0].watchKey,requests[1].watchKey);assert.notEqual(requests[0].page,requests[1].page);
-  control.value="term_02";control.onchange();requests[0].render({termId:"term_02"});
-  assert.deepEqual(painted,["term_03","term_02"],"returning to a still-pending term can use its original coalesced result");
-});
-
-test("sections sharing a display name keep separate totals and results",()=>{
-  const result=summarizeAdminReports([], [{data:{classCode:"A"},lessons:[]},{data:{classCode:"B"},lessons:[]}], [{id:"A",data:{SectionName:"Same name"}},{id:"B",data:{SectionName:"Same name"}}]);
-  assert.equal(result.sections.length,2);assert.deepEqual(Array.from(result.sections,row=>row.students),[1,1]);
 });
 
 function storage() {

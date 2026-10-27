@@ -3,11 +3,11 @@ import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
 import { showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
-import {
-  getFirestore,
-  doc,
-  setDoc,
-  serverTimestamp
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  serverTimestamp 
 } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -56,15 +56,15 @@ const getInitials = (name) => {
 };
 
 function updateProfileUI(data) {
-  const name = data.displayName || data.fullName || data.name || "Administrator";
-  const email = data.providedEmail || data.email || auth.currentUser?.email || "";
+  const name = data.displayName || data.fullName || data.name || "Dr. Maria Santos";
+  const email = data.providedEmail || data.email || auth.currentUser?.email || "admin@imars.edu";
   const school = data.school || "Pintong Gubat Elementary School";
   const roleLabel = data.roleLabel || "School Administrator";
-  const department = data.department || "";
-  const phone = data.phone || "";
+  const department = data.department || "Science & Technology";
+  const phone = data.phone || "+63 912 345 6789";
   const initials = getInitials(name);
 
-  let joinedText = "";
+let joinedText = "Admin since recently";
 
   if (data.adminSince) {
     // 1. Uses custom string if set in Firestore (e.g. "October 10, 2026")
@@ -99,10 +99,10 @@ function updateProfileUI(data) {
   document.getElementById("profileJoined").textContent = joinedText;
 
   document.getElementById("infoName").textContent = name;
-  document.getElementById("infoEmail").textContent = email || "Not provided";
+  document.getElementById("infoEmail").textContent = email;
   document.getElementById("infoSchool").textContent = school;
   document.getElementById("infoRole").textContent = roleLabel;
-  document.getElementById("infoDepartment").textContent = department || "Not provided";
+  document.getElementById("infoDepartment").textContent = department;
   document.getElementById("infoPhone").textContent = phone || "Not provided";
 
   // Drawer Sidebar

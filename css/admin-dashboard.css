@@ -5,7 +5,7 @@ body[data-auth-pending] :is(main, main *, .admin-side-user, .admin-side-user *, 
   --admin-bg: #f4f7fb;
   --admin-card: #fff;
   --admin-ink: #172b49;
-  --admin-muted: #586b84;
+  --admin-muted: #8292ab;
   --admin-line: #e7edf5;
   --admin-purple: #7048ff;
   --admin-cyan: #12a8df;
@@ -67,7 +67,7 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 .school-year-control { position: relative; }
-.school-year-control label { font-weight:700; }
+.school-year-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 select.admin-year { min-height: 38px; padding-right: 10px; border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 select.admin-year:focus-visible { outline: 3px solid rgba(77, 134, 176, .45); outline-offset: 3px; }
 select.admin-year:disabled { opacity: .7; cursor: wait; }

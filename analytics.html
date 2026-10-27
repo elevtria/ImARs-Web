@@ -48,20 +48,14 @@
         </div>
       </section>
 
-          <div class="report-controls"><label class="select-wrap">
-            <select id="sectionFilter" aria-label="Filter by section">
-              <option value="all">All Sections</option>
-            </select>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </label><div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
-            <button type="button" class="term-tab-btn active" data-term="term_01" aria-pressed="true">Term 1</button>
-            <button type="button" class="term-tab-btn" data-term="term_02">Term 2</button>
-            <button type="button" class="term-tab-btn" data-term="term_03">Term 3</button>
+          <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
+            <button type="button" class="term-tab-btn active" data-term="term_01" aria-pressed="true" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
+            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
+            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
-</div>
       <p class="view-data-status" id="analyticsReportStatus" role="status">Loading results…</p>
       <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…">
-        <h2>Class Average</h2><p class="scheduler-progress-copy">Averages use completed tests. Learning gain compares matching pre/post lesson pairs in percentage points (pp). A dash means no result is available.</p>
+        <h2>Class Average</h2>
         <div class="overall">
           <div class="donut" aria-label="post-test average">
             <svg viewBox="0 0 120 120">
@@ -88,7 +82,7 @@
               <div class="track"><div id="overallPostFill" class="fill green" style="width:0%"></div></div>
             </div>
             <div class="meter-row">
-              <span>Learning gain</span>
+              <span>Average Improvement</span>
               <b class="c-purple" id="overallImpVal">0%</b>
               <div class="track"><div id="overallImpFill" class="fill purple" style="width:0%"></div></div>
             </div>
@@ -101,7 +95,12 @@
           <h2>Individual Student Performance</h2>
         </div>
         <div class="performance-controls">
-
+          <label class="select-wrap">
+            <select id="sectionFilter" aria-label="Filter by section">
+              <option value="all">All Sections</option>
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
           <label class="search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="7" />
@@ -121,7 +120,6 @@
             </tbody>
           </table>
         </div>
-        <div class="student-detail-navigation" aria-label="Student performance pages"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
         <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
       </section>
 
@@ -137,7 +135,7 @@
         </div>
       </section>
 
-
+<div class="student-detail-navigation" aria-label="Student performance pages"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
 <!-- Topic Completion Rate Section -->
       <section class="card section">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
@@ -171,7 +169,7 @@
         </a>
         <a class="nav-item" href="topic-scheduler.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
-          Lesson Schedule
+          Topic Scheduler
         </a>
         <a class="nav-item active" href="analytics.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
@@ -181,14 +179,17 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
           Student Records
         </a>
-
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
         <a class="nav-item" href="offline-sync.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20v-4h4"/></svg>
-          AR Markers
+          Offline sync &amp; AR Markers
         </a>
         <a class="nav-item" href="sync-offline-results.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
-          Sync Results
+          Scan QR (Offline Sync)
         </a>
         <a class="nav-item" href="teacher-manual.html">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
@@ -211,7 +212,16 @@
     </div>
   </aside>
 
-<script src="js/ui.js"></script>
+  <div class="modal" id="scanModal">
+    <div class="modal-card">
+      <h3>Scan QR (Offline Sync)</h3>
+      <p>Scan a student's Grade QR code to sync offline learning results.</p>
+      <div class="qr-box">QR / AR Scanner</div>
+      <button class="scan-btn" id="closeScan" style="width:100%;">Close</button>
+    </div>
+  </div>
+  
+  <script src="js/ui.js"></script>
   <!-- Updated to type="module" -->
   <script type="module" src="js/analytics.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
-import { activityPercent, summarizeAssessments, percentLabel, gainLabel } from "../js/activity-score.js";
+import { activityPercent } from "../js/activity-score.js";
 import { buildStudentActivityRecords } from "../js/student-activity-record.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
@@ -33,15 +33,13 @@ function page(file, report) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   let authChanged;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, summarizeAssessments, percentLabel, gainLabel, buildStudentActivityRecords,
-    reportContext: () => ({termId:"term_01",sectionId:"first"}),
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
     showTeacherView: async options => options.render(report),
     createTeacherReport: options => ({ open: async () => { options.render(report); } }),
     showAdminView: async options => { options.verified(); options.render(report); },
-    loadStaffDirectory: async () => report,
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
     window: { location: {} },
@@ -91,12 +89,13 @@ test("scan-history labels cannot execute markup saved from a scanned code", asyn
 });
 
 test("teacher document IDs cannot break out of action-button attributes", async () => {
-  const app = page("manage-teachers.js", { sections:[],totalStudents:1,teachers: [{ id: attack, data:{ fullName: "Teacher", email: "teacher@example.test", subject: "Science", active: true } }] });
+  const app = page("manage-teachers.js", { teachers: [{ id: attack, name: "Teacher", email: "teacher@example.test",
+    subject: "Science", sections: ["A"], joined: "Today", active: true, students: 1, pre: 80, post: 90, hours: "0m" }] });
   await app.render();
   const html = app.element("teacherList").html();
   assertTextOnly(html);
-  assert.ok(html.includes('data-delete="&lt;img'));
-  assert.ok(html.includes('data-toggle="&lt;img'));
+  assert.ok(html.includes('data-delete-id="&lt;img'));
+  assert.ok(html.includes('data-toggle-id="&lt;img'));
 });
 
 function queuedScanner() {

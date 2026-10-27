@@ -8,7 +8,6 @@ const db = getFirestore(app);
 const reference = doc(db, "webSettings", "schoolYear");
 const labels = document.querySelectorAll("[data-school-year]");
 const select = document.getElementById("schoolYearSelect");
-const save = document.getElementById("saveSchoolYear");
 const status = document.getElementById("schoolYearStatus");
 let confirmedYear = 2026;
 let loaded = false;
@@ -26,7 +25,6 @@ function showStatus(message = "", error = false) {
 }
 function refreshControl() {
   if (select) select.disabled = !loaded || !canEdit || saving;
-  if (save) save.disabled = !loaded || !canEdit || saving || Number(select.value) === confirmedYear;
 }
 function displayYear(year) {
   confirmedYear = year;
@@ -65,9 +63,8 @@ onAuthStateChanged(auth, async user => {
     if (currentGeneration !== generation || snapshot.metadata.hasPendingWrites) return;
     const year = snapshot.exists() ? snapshot.data().startYear : 2026;
     if (!validYear(year)) { loaded = true; refreshControl(); showStatus("Choose a school year to replace the invalid saved setting.", true); return; }
-    const keepSelection = loaded && select && Number(select.value) !== confirmedYear && year === confirmedYear;
     loaded = true;
-    if (!keepSelection || saving) displayYear(year);
+    displayYear(year);
     refreshControl();
   }, () => {
     if (currentGeneration !== generation) return;
@@ -88,8 +85,7 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-select?.addEventListener("change", () => { refreshControl(); showStatus(""); });
-save?.addEventListener("click", async () => {
+select?.addEventListener("change", async () => {
   const year = Number(select.value);
   if (!canEdit || !loaded || saving || !validYear(year)) { select.value = String(confirmedYear); return; }
   const currentGeneration = generation;
@@ -104,7 +100,7 @@ save?.addEventListener("click", async () => {
     await setDoc(reference, { startYear: year, endYear: year + 1, updatedBy: user.uid, updatedAt: serverTimestamp() }, { merge: true });
     if (currentGeneration !== generation) return;
     displayYear(year);
-    showStatus("Saved");
+    showStatus("Saved for all teachers");
   } catch {
     if (currentGeneration !== generation) return;
     select.value = String(confirmedYear);
