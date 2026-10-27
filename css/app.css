@@ -905,6 +905,7 @@ td {
 
 .select-wrap select {
   appearance: none;
+  cursor: pointer;
   width: 100%;
   background: rgba(255, 255, 255, 0.8);
   border: 1px solid var(--line);
@@ -917,12 +918,15 @@ td {
 }
 
 .select-wrap svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
   position: absolute;
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: #5b6e84;
+  color: #3f5c78;
 }
 
 .overall {
