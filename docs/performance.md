@@ -58,6 +58,7 @@ after 150 ms. There is no page-wide loading indicator. The header and navigation
 remain visible during authentication; private content, account details and
 dialogs stay hidden until the live check succeeds. Fast reads show no indicator.
 This does not preserve unsaved form inputs or skip HTML/script loading.
+The authentication guard is silent: it displays no "Checking your sign-in" text.
 
 Analytics no longer falls back to querying all teachers, all classes, or all
 students when the signed-in teacher has no profile, sections, or students.
@@ -104,6 +105,49 @@ already needed just one query, so its initial load remains about the same;
 its benefit is the immediate saved display on return visits.
 
 ## Measure on your real account
+
+### Indexes and connection reuse
+
+The site uses static browser modules, Cloudflare Pages Functions and the
+Firestore HTTPS API. It does not open SQL connections, so a Node SQL connection
+pool is not applicable. The Google access token is reused until near expiry;
+concurrent refreshes for the same service-account key/email now share one pending
+request. A failed refresh is released so later requests can retry. Staff session
+and role checks still run as described above.
+
+A read-only Firebase CLI index check on 2026-10-27 returned no composite indexes
+and no field overrides. The current UID/teacher/class/role/active filters use
+Firestore's automatic single-field indexes and equality index merging. This
+does not make substring name search indexed: it still uses bounded scans.
+Prefix/full-text name search would require a separate data/search design.
+
+### Repeatable local load check
+
+Run `npm run test:load -- --vus 50 --iterations 6 --students 1000`.
+The command starts and stops a loopback HTTP server using the real middleware
+and data handlers against synthetic in-memory fixtures. It accepts no production
+URL or credentials and writes no student records. Virtual users share a fixture
+teacher session. Requests alternate between student pages and one-term report
+pages, advance cursors, check ownership/output bounds, and report failures,
+response sizes, throughput and latency percentiles. `--delay-ms N` optionally
+adds artificial delay to each fixture database operation; `--out path.json`
+saves the measured summary.
+
+Local run on 2026-10-27, 1,001 fixture students, no artificial delay:
+
+| Virtual users | Requests | Failures | p95 HTTP time |
+| --- | --- | --- | --- |
+| 10 | 60 | 0 | 84 ms |
+| 25 | 150 | 0 | 175 ms |
+| 50 | 300 | 0 | 341 ms |
+
+Every response held at most 25 students and every report batch requested at most
+100 selected-term lesson documents. These numbers measure this machine and
+fixture implementation; fixture queries scan memory rather than using Firestore
+indexes. They exclude Cloudflare, Google network latency, billing limits and
+real multi-account traffic. They do not establish production user capacity.
+Production capacity should be measured separately against an isolated staging
+deployment with representative test accounts/data and a tool such as k6.
 
 Student Records uses server-side cursor pages of at most 25 profiles. Active
 and archived totals use Firestore COUNT instead of downloading every profile.
@@ -179,5 +223,7 @@ backend/data-flow change. Do not cache private reports in a public CDN.
 
 References: [Firestore best practices](https://firebase.google.com/docs/firestore/best-practices#read_and_write_operations),
 [Firestore aggregation queries](https://firebase.google.com/docs/firestore/query-data/aggregation-queries),
+[Firestore indexes](https://firebase.google.com/docs/firestore/query-data/index-overview),
+[k6 scenarios](https://grafana.com/docs/k6/latest/using-k6/scenarios/),
 [Firestore caching behavior](https://firebase.google.com/docs/firestore/manage-data/enable-offline),
 [Cloudflare cache response headers](https://developers.cloudflare.com/cache/concepts/cache-responses/).

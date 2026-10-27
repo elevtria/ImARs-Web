@@ -170,10 +170,19 @@ test("administrative OAuth proof is signed on the server and has a fixed audienc
     assert.deepEqual(claims.scope.split(" "), ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit"]);
     return Response.json({ access_token: "fixture-private-token", expires_in: 3600 });
   };
-  assert.equal(await serviceToken(env, fetcher, 1000), "fixture-private-token");
+  const concurrent = await Promise.all(Array.from({ length: 25 }, () => serviceToken(env, fetcher, 1000)));
+  assert.ok(concurrent.every(token => token === "fixture-private-token"));
+  assert.equal(calls, 1, "concurrent requests must share one token refresh");
   assert.equal(await serviceToken(env, fetcher, 2000), "fixture-private-token"); assert.equal(calls, 1);
   assert.equal(await serviceToken(env, fetcher, 3_601_000), "fixture-private-token"); assert.equal(calls, 2);
   const store = new FirestoreAdmin(env, fetcher);
   assert.equal((await store.get("webSettings/schoolYear")).data.startYear, 2026);
   assert.equal((await store.identity("fixture-uid")).localId, "fixture-uid");
+  let failures = 0;
+  const rejected = await Promise.allSettled(Array.from({ length: 25 }, () => serviceToken(env, async () => {
+    failures++; return Response.json({ error: "temporary_failure" }, { status: 503 });
+  }, Date.now() + 3_600_000)));
+  assert.ok(rejected.every(result => result.status === "rejected"));
+  assert.equal(failures, 1);
+  assert.equal(await serviceToken(env, fetcher, Date.now() + 3_600_000), "fixture-private-token", "a failed shared refresh must allow retry");
 });

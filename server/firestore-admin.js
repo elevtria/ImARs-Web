@@ -2,6 +2,7 @@
 const encode = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const utf8 = value => new TextEncoder().encode(value);
 let cachedToken;
+let pendingToken;
 
 export function serviceAccount(env) {
   const value = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON || "null");
@@ -14,6 +15,14 @@ export function serviceAccount(env) {
 export async function serviceToken(env, fetcher = fetch, now = Date.now()) {
   const account = serviceAccount(env);
   if (cachedToken?.key === account.private_key && cachedToken.email === account.client_email && cachedToken.until > now + 60_000) return cachedToken.token;
+  if (pendingToken?.key === account.private_key && pendingToken.email === account.client_email) return pendingToken.promise;
+  const job = { key: account.private_key, email: account.client_email };
+  job.promise = requestServiceToken(account, fetcher, now).finally(() => { if (pendingToken === job) pendingToken = undefined; });
+  pendingToken = job;
+  return job.promise;
+}
+
+async function requestServiceToken(account, fetcher, now) {
   const issued = Math.floor(now / 1000);
   const payload = encode(utf8(JSON.stringify({ alg: "RS256", typ: "JWT" }))) + "." + encode(utf8(JSON.stringify({
     iss: account.client_email, scope: "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit",

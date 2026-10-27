@@ -1,5 +1,4 @@
 body[data-auth-pending] :is(main, main *, .admin-side-user, .admin-side-user *, .modal, .modal *, dialog, dialog *) { visibility: hidden !important; }
-body[data-auth-pending] main::before { content: "Checking your sign-in…"; display: block; visibility: visible; color: #64748b; font-size: 14px; }
 
 :root {
   color-scheme: light;
