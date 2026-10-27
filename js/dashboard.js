@@ -39,7 +39,7 @@ onAuthStateChanged(auth, async user => {
   if (!user) { window.location.href = "login.html"; return; }
   const timing = createPagePerformance("Dashboard");
   try {
-    await showTeacherView({ app, user, page: "dashboard", freshForMs: 10000,
+    await showTeacherView({ app, user, page: "dashboard",
       load: async ({ background }) => {
         const readDocs = background ? quietDocs : getDocs;
         const readDoc = background ? quietDoc : getDoc;

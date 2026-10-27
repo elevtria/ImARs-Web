@@ -43,7 +43,7 @@
     </header>
 
     <main class="content">
-      <section class="hero">
+      <section class="hero" data-loading-path="users classes" data-loading-label="Loading sections and student counts…">
         <div>
           <h1>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>
@@ -241,7 +241,7 @@
   <div class="modal" id="sectionModal">
     <form class="modal-card section-form" id="sectionForm" role="dialog" aria-modal="true" aria-labelledby="sectionModalTitle">
       <h3 id="sectionModalTitle">Add a class section</h3>
-      <p>Create a new section in Firebase for student uploads.</p>
+      <p>Create a section for student uploads.</p>
       <label for="newSectionName">Section name</label>
       <input id="newSectionName" name="sectionName" type="text" maxlength="60" placeholder="e.g. Section B" required />
       <div class="modal-actions">
@@ -255,7 +255,7 @@
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="importModalTitle">
       <h3 id="importModalTitle">Confirm student import</h3>
       <p id="importSummary"></p>
-      <p class="prototype-note" id="importPreviewNote">Students will be saved directly to the Firestore database with sequential Student IDs.</p>
+      <p class="prototype-note" id="importPreviewNote">Review the student details before saving.</p>
       <div class="modal-actions">
         <button class="btn-ghost" id="cancelImport" type="button">Cancel</button>
         <button class="btn-green" id="confirmImport" type="button">Confirm Import</button>

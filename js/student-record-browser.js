@@ -11,6 +11,8 @@ const id = row => row.dataset.studentId;
 function showRecord(row) {
   if (!row) return;
   selectedId = id(row);
+  list.dispatchEvent(new CustomEvent("student-record-open", { detail: { studentId: selectedId } }));
+  row = rows().find(candidate => id(candidate) === selectedId) || row;
   const current = rows();
   const index = current.indexOf(row);
   const detail = row.cloneNode(true);

@@ -74,7 +74,7 @@ function adminHarness() {
   context.showCachedView = vm.runInContext(source("teacher-view.js") + "\nshowTeacherView;", context);
   const show = vm.runInContext(source("admin-view.js") + "\nshowAdminView;", context);
   const renders = [], verifications = [];
-  const display = options => show({ app: {}, user: { uid: "admin-a" }, page: "reports", load: async () => ({ post: 60 }),
+  const display = options => show({ app: {}, user: { uid: "admin-a" }, page: "reports", freshForMs: 0, load: async () => ({ post: 60 }),
     render: value => renders.push(value), verified: id => verifications.push(id), ...options });
   return { cache, auth, main, context, renders, verifications, display, setReader: value => { reader = value; }, get foreground() { return foreground; }, get signouts() { return signouts; } };
 }
@@ -110,4 +110,13 @@ test("an admin write during background refresh discards older results and loads 
   } });
   assert.equal(reads, 2); assert.equal(app.renders.at(-1).post, 80);
   assert.equal(app.renders.some(value => value.post === 10), false);
+});
+
+test("switching admin pages reuses a recent report while live role verification still runs", async () => {
+  const app = adminHarness(); let reportReads = 0;
+  const options = { freshForMs: 60000, load: async () => { reportReads++; return { post: 75 }; } };
+  await app.display(options); await app.display(options);
+  assert.equal(reportReads, 1); assert.equal(app.verifications.length, 2);
+  app.cache.invalidate(); await app.display(options);
+  assert.equal(reportReads, 2); assert.equal(app.verifications.length, 3);
 });

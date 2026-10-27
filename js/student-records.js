@@ -1,11 +1,9 @@
 import { getDocs as quietDocs } from "./firebase-data.js";
-import { showTeacherView, prepareTeacherCache } from "./teacher-view.js";
-import { encodeView } from "./view-cache.js";
+import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
+import { encodeView, decodeView } from "./view-cache.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, collection, query, where, doc, updateDoc, deleteDoc, writeBatch, getDocsWithLoading as getDocs } from "./firebase-data.js";
-import { loadClassReports } from "./teacher-report-data.js";
-import { createPagePerformance } from "./page-performance.js";
+import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -21,16 +19,57 @@ let dynamicCards = [];
 let recordStatus = "active";
 let recordData = null;
 let recordOwnerUid = null;
+const previousPage = document.getElementById("previousRecordsPage");
+const nextPage = document.getElementById("nextRecordsPage");
+const pageStatus = document.getElementById("recordsPageStatus");
+let pageIndex = 0, cursors = [null], pageGeneration = 0, pageBusy = false, pageError = false, searchTimer, pageAbort, stopUpdates;
+let pageFilter = { sectionId: "", status: "active", search: "" };
+let pageCacheKey = "", counts = [], nextCursor = null;
+const reportRequests = new Map();
+const observedCards = typeof IntersectionObserver === "function" ? new IntersectionObserver(entries => {
+  for (const entry of entries) if (entry.isIntersecting && !entry.target.classList.contains("hidden")) {
+    observedCards.unobserve(entry.target);
+    void loadStudentPerformance(entry.target.dataset.studentId);
+  }
+}, { rootMargin: "120px" }) : null;
 
-function updateStudentRows(ids, values, remove = false) {
+function encodeRecords(data) {
+  return encodeView({ ...data, sections: data.sections.map(section => ({ ...section,
+    students: section.students.map(student => ({ ...student, resultsLoading: false }))
+  })) });
+}
+
+function cacheCurrentPage() {
+  const user = auth.currentUser;
+  if (recordData && user?.uid === recordOwnerUid && pageCacheKey) {
+    prepareTeacherCache(app, user).put(user.uid, pageCacheKey, encodeRecords(recordData));
+  }
+}
+
+function updateStudentRows(ids, values, remove = false, classId = null) {
   const user = auth.currentUser;
   if (!recordData || !user || user.uid !== recordOwnerUid) return;
   const changed = new Set(ids);
   const cards = new Map(dynamicCards.map(card => [card.dataset.studentId, card]));
+  if (classId) {
+    const totals = counts.find(item => item.classId === classId);
+    if (totals) { totals.active -= ids.length; totals.archived += ids.length; }
+  }
   for (const section of recordData.sections) {
     section.students = section.students.flatMap(student => {
       if (!changed.has(student.studentDoc.id)) return [student];
       const old = cards.get(student.studentDoc.id);
+      if (!classId) {
+        const totals = counts.find(item => item.classId === section.classDoc.id);
+        if (totals) {
+          const wasArchived = student.studentDoc.data().active === false;
+          if (remove) totals[wasArchived ? "archived" : "active"]--;
+          else if (typeof values.active === "boolean" && wasArchived !== !values.active) {
+            totals[wasArchived ? "archived" : "active"]--;
+            totals[values.active ? "active" : "archived"]++;
+          }
+        }
+      }
       if (remove) { old?.remove(); return []; }
       const data = { ...student.studentDoc.data(), ...values };
       const updated = { ...student, studentDoc: { ...student.studentDoc, data: () => data } };
@@ -40,7 +79,7 @@ function updateStudentRows(ids, values, remove = false) {
   }
   dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
   applyFilters();
-  prepareTeacherCache(app, user).put(user.uid, "records", encodeView(recordData));
+  cacheCurrentPage();
 }
 const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -59,23 +98,158 @@ const applyFilters = () => {
     if (visible) shown += 1;
   });
 
-  const sectionActive = dynamicCards.filter(card => card.dataset.section === selectedSection && card.dataset.archived !== "true");
-  archiveSectionButton.disabled = !selectedSection || recordStatus !== "active" || !sectionActive.length;
+  archiveSectionButton.disabled = pageBusy || pageError || !selectedSection || recordStatus !== "active" || !counts.some(item => item.classId === selectedSection && item.active > 0);
   archiveSectionButton.title = !selectedSection ? "Select a section first" : "Archive all active students in this section, including those hidden by search";
-  emptyState.hidden = shown > 0;
+  emptyState.hidden = shown > 0 || pageBusy || pageError;
   emptyState.textContent = "No " + recordStatus + " students match your filters.";
-  const inSection = dynamicCards.filter(card => !selectedSection || card.dataset.section === selectedSection);
-  document.getElementById("activeStudentsCount").textContent = inSection.filter(card => card.dataset.archived !== "true").length;
-  document.getElementById("archivedStudentsCount").textContent = inSection.filter(card => card.dataset.archived === "true").length;
+  document.getElementById("activeStudentsCount").textContent = recordData ? counts.reduce((sum, item) => sum + item.active, 0) : "—";
+  document.getElementById("archivedStudentsCount").textContent = recordData ? counts.reduce((sum, item) => sum + item.archived, 0) : "—";
+  previousPage.disabled = pageBusy || pageIndex === 0;
+  nextPage.disabled = pageBusy || !nextCursor;
+  for (const card of dynamicCards) if (!card.classList.contains("hidden") && card.dataset.autoLoad === "true") observedCards?.observe(card);
 };
 
 for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").addEventListener("click", () => {
   recordStatus = status;
   for (const value of ["active", "archived"]) document.getElementById(value + "StudentsTab").setAttribute("aria-pressed", String(status === value));
   applyFilters();
+  resetPages();
 });
-searchInput.addEventListener("input", applyFilters);
-sectionFilter.addEventListener("change", applyFilters);
+searchInput.addEventListener("input", () => { clearTimeout(searchTimer); applyFilters(); searchTimer = setTimeout(resetPages, 300); });
+sectionFilter.addEventListener("change", () => { applyFilters(); return resetPages(); });
+previousPage.addEventListener("click", () => { if (pageIndex > 0 && !pageBusy) { pageIndex--; return loadRecordsPage({ scroll: true }); } });
+nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursors[++pageIndex] = nextCursor; return loadRecordsPage({ scroll: true }); } });
+
+function resetPages() {
+  pageIndex = 0; cursors = [null];
+  pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: searchInput.value.trim() };
+  return loadRecordsPage();
+}
+
+function renderRecords(data, key) {
+  if (![data.classes, data.sections, data.counts].every(Array.isArray)) throw new Error("Invalid saved student page.");
+  pageError = false; pageCacheKey = key;
+  recordData = data; recordOwnerUid = auth.currentUser.uid;
+  counts = data.counts || []; nextCursor = data.cursor;
+  const selected = pageFilter.sectionId;
+  sectionFilter.innerHTML = '<option value="">All Sections</option>';
+  for (const classDoc of data.classes) {
+    const option = document.createElement("option"); option.value = classDoc.id;
+    option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
+    sectionFilter.appendChild(option);
+  }
+  sectionFilter.value = selected;
+  observedCards?.disconnect();
+  const cards = document.createDocumentFragment();
+  for (const section of data.sections) for (const student of section.students) cards.appendChild(studentCard(section.classDoc, student));
+  recordsContainer.replaceChildren(cards);
+  dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
+  pageStatus.textContent = `Page ${pageIndex + 1} · ${dynamicCards.length} students shown`;
+  applyFilters();
+}
+
+async function loadRecordsPage({ background = false, scroll = false } = {}) {
+  const user = auth.currentUser;
+  if (!user) return;
+  if (background && pageBusy) return;
+  const generation = ++pageGeneration, filter = { ...pageFilter }, cursor = cursors[pageIndex];
+  pageAbort?.abort();
+  pageAbort = typeof AbortController === "function" ? new AbortController() : null;
+  const signal = pageAbort?.signal;
+  const cache = prepareTeacherCache(app, user);
+  const key = "records:page:" + JSON.stringify({ filter, cursor });
+  pageBusy = false;
+  cache.put(user.uid, "records:state", { filter, pageIndex, cursors });
+  const version = cache.version();
+  const saved = cache.get(user.uid, key);
+  if (saved && !background) {
+    let restored = false;
+    try { renderRecords(decodeView(saved), key); restored = true; } catch {}
+    if (restored && cache.get(user.uid, key, 60000)) { if (scroll) recordsContainer.scrollIntoView?.({ block: "start" }); return; }
+  }
+  pageBusy = true;
+  const finish = background ? () => {} : startRecordLoading(generation);
+  if (!background) pageStatus.textContent = filter.search ? "Searching students…" : "Loading students…";
+  applyFilters();
+  try {
+    const rows = []; let result, after = cursor, totals;
+    do {
+      result = await getStudentPage({ ...filter, cursor: after, limit: 25 - rows.length, includeCounts: totals === undefined }, signal ? { signal } : {});
+      if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid) return;
+      totals ??= result.counts;
+      rows.push(...result.students); after = result.cursor;
+      if (!filter.search && totals?.reduce((sum, item) => sum + item[filter.status], 0) === 0) after = null;
+    } while (after && rows.length < 25);
+    if (cache.version() !== version) return;
+    const sections = result.classes.map(classDoc => ({ classDoc, students: rows.filter(row => row.classId === classDoc.id).map(row => {
+      const previous = recordData?.sections.flatMap(section => section.students).find(student => student.studentDoc.id === row.studentDoc.id);
+      const remembered = cache.get(user.uid, "records:results:" + row.studentDoc.id);
+      const results = previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null;
+      return { studentDoc: row.studentDoc, results: results || [], resultsLoaded: Boolean(results),
+        resultsLoading: previous?.resultsLoading || false, resultsError: previous?.resultsError || false };
+    }) }));
+    const data = { classes: result.classes, sections, counts: totals || [], cursor: after };
+    const encoded = encodeRecords(data);
+    if (pageCacheKey !== key || !saved || JSON.stringify(saved) !== JSON.stringify(encoded)) renderRecords(data, key);
+    if (scroll) recordsContainer.scrollIntoView?.({ block: "start" });
+    cache.put(user.uid, key, encoded, version);
+  } catch (error) {
+    if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || error.name === "AbortError") return;
+    pageError = true;
+    if (["permission-denied", "unauthenticated"].includes(error.code)) { recordsContainer.replaceChildren(); cache.invalidate(); }
+    pageStatus.textContent = "Could not update this student page. Check your connection; it will retry automatically.";
+    console.error("Student page update failed:", error);
+  } finally {
+    finish();
+    if (generation === pageGeneration) { pageBusy = false; applyFilters(); }
+  }
+}
+
+function startRecordLoading(generation) {
+  recordsContainer.setAttribute("aria-busy", "true");
+  return () => { if (generation === pageGeneration) recordsContainer.removeAttribute("aria-busy"); };
+}
+
+async function loadStudentPerformance(id) {
+  const user = auth.currentUser;
+  const find = () => recordData?.sections.flatMap(section => section.students.map(student => ({ section, student }))).find(item => item.student.studentDoc.id === id);
+  let row = find();
+  if (!user || !row || row.student.resultsLoaded || reportRequests.has(id)) return;
+  const current = row.student;
+  current.resultsLoading = true; current.resultsError = false;
+  const replace = () => {
+    row = find();
+    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || !row) return;
+    dynamicCards.find(card => card.dataset.studentId === id)?.replaceWith(studentCard(row.section.classDoc, row.student));
+    dynamicCards = Array.from(recordsContainer.querySelectorAll(".record")); applyFilters();
+  };
+  replace();
+  const request = Promise.all(["term_01", "term_02", "term_03"].map(async termId => ({
+    termId, lessonsSnap: await quietDocs(collection(db, "users", id, "test_results", termId, "lessons"))
+  })));
+  reportRequests.set(id, request);
+  try {
+    const results = await request;
+    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid) return;
+    const latest = find();
+    if (latest) Object.assign(latest.student, { results, resultsLoaded: true });
+    prepareTeacherCache(app, user).put(user.uid, "records:results:" + id, encodeView(results));
+  } catch (error) {
+    const latest = find();
+    if (latest && auth.currentUser?.uid === user.uid) latest.student.resultsError = true;
+    console.error("Could not load this student's performance:", error);
+  } finally {
+    if (reportRequests.get(id) === request) reportRequests.delete(id);
+    const latest = find(); if (latest) latest.student.resultsLoading = false;
+    replace(); cacheCurrentPage();
+  }
+}
+
+recordsContainer.addEventListener("student-record-open", event => { void loadStudentPerformance(event.detail.studentId); });
+recordsContainer.addEventListener("click", event => {
+  const button = event.target.closest(".load-student-results");
+  if (button) { event.stopPropagation(); void loadStudentPerformance(button.dataset.id); }
+});
 
 // Helper to format minutes nicely
 function formatMinutes(totalMinutes) {
@@ -85,7 +259,7 @@ function formatMinutes(totalMinutes) {
 }
 
 
-function studentCard(classDoc, { studentDoc, results }) {
+function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resultsLoading = false, resultsError = false }) {
   const classCode = classDoc.id;
   const sectionName = classDoc.data().SectionName || classCode;
   const sData = studentDoc.data();
@@ -172,6 +346,8 @@ function studentCard(classDoc, { studentDoc, results }) {
   card.dataset.archived = String(sData.active === false);
   card.dataset.name = sName.toLowerCase();
   card.dataset.section = classCode;
+  card.dataset.autoLoad = String(!resultsLoaded && !resultsLoading && !resultsError);
+  card.setAttribute("aria-busy", String(resultsLoading));
 
   card.innerHTML = `
     <div class="record-head">
@@ -182,22 +358,22 @@ function studentCard(classDoc, { studentDoc, results }) {
             <strong>${escapeHTML(sName)}</strong>
             ${sData.active === false ? '<span class="student-archive-badge">' + (sData.archiveReason === "graduated" ? "Graduated" : sData.archiveReason === "dropped-out" ? "Dropped out" : "Archived") + '</span><button type="button" class="unarchive-student-btn">Unarchive</button><button type="button" class="remove-student-btn">Delete</button>' : '<button type="button" class="archive-student-btn">Archive</button>'}
           </div>
-          <small>Grade 6 – ${escapeHTML(sectionName)} · ${dateStr}</small>
+          <small>Grade 6 – ${escapeHTML(sectionName)}${resultsLoaded ? ` · ${dateStr}` : ""}</small>
         </div>
       </div>
-      <span class="overall">${overallPercent}% overall</span>
+      <span class="overall">${resultsLoaded ? `${overallPercent}% overall` : "— overall"}</span>
     </div>
     <div class="stats">
-      <div class="stat"><span>AR Time</span><b class="c-pink">${arTimeStr}</b></div>
-      <div class="stat"><span>Module Time</span><b class="c-cyan">${moduleTimeStr}</b></div>
-      <div class="stat"><span>Pre-Test</span><b class="c-amber">${avgPreStr}</b></div>
-      <div class="stat"><span>Post-Test</span><b class="c-green">${avgPostStr}</b></div>
+      <div class="stat"><span>AR Time</span><b class="c-pink">${resultsLoaded ? arTimeStr : "—"}</b></div>
+      <div class="stat"><span>Module Time</span><b class="c-cyan">${resultsLoaded ? moduleTimeStr : "—"}</b></div>
+      <div class="stat"><span>Pre-Test</span><b class="c-amber">${resultsLoaded ? avgPreStr : "—"}</b></div>
+      <div class="stat"><span>Post-Test</span><b class="c-green">${resultsLoaded ? avgPostStr : "—"}</b></div>
     </div>
-    <div class="record-progress-tile">
+    ${resultsLoaded ? `<div class="record-progress-tile">
       <span class="record-progress-title">Overall performance</span>
       <div class="bar" role="progressbar" aria-label="Overall performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
       <strong class="record-progress-value">${overallPercent}%</strong>
-    </div>
+    </div>` : `<p class="view-data-status" role="status">${resultsLoading ? "Loading performance…" : resultsError ? "Performance could not load." : "Performance loads when viewed."}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
   `;
   for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
   const button = card.querySelector(selector);
@@ -212,54 +388,20 @@ function studentCard(classDoc, { studentDoc, results }) {
 }
 
 onAuthStateChanged(auth, async user => {
+  stopUpdates?.(); pageAbort?.abort(); reportRequests.clear(); observedCards?.disconnect();
   if (!user) { window.location.href = "login.html"; return; }
-  const timing = createPagePerformance("Records");
-  try {
-    await showTeacherView({ app, user, page: "records",
-      load: ({ background }) => timing.data(async () => {
-        const readDocs = background ? quietDocs : getDocs;
-        const profile = await readDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-        if (profile.empty || String(profile.docs[0].data().role || "").toLowerCase() !== "teacher") throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
-        const classes = await readDocs(query(collection(db, "classes"), where("teacherId", "==", profile.docs[0].id)));
-        const sections = await loadClassReports(db, classes.docs, ["term_01", "term_02", "term_03"], readDocs);
-        return { sections, message: classes.empty ? "No sections were found for your account." : "" };
-      }),
-      render: ({ sections, message }) => timing.render(() => {
-        recordData = { sections, message };
-        recordOwnerUid = user.uid;
-        recordsContainer.innerHTML = "";
-        const selectedSection = sectionFilter.value;
-        sectionFilter.innerHTML = '<option value="">All Sections</option>';
-        const cards = document.createDocumentFragment();
-        for (const { classDoc, students } of sections) {
-          const classCode = classDoc.id;
-          const sectionName = classDoc.data().SectionName || classCode;
-          const sectionOption = document.createElement("option");
-          sectionOption.value = classCode;
-          sectionOption.textContent = "Grade 6 – " + sectionName;
-          sectionFilter.appendChild(sectionOption);
-
-          for (const { studentDoc, results } of students) {
-            cards.appendChild(studentCard(classDoc, { studentDoc, results }));
-          }
-        }
-
-        recordsContainer.appendChild(cards);
-        // Update DOM cache array to make the search filter function work
-        dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
-        emptyState.textContent = "No students match the selected section or search.";
-        if (Array.from(sectionFilter.options).some(option => option.value === selectedSection)) sectionFilter.value = selectedSection;
-        applyFilters();
-        if (message) { emptyState.textContent = message; emptyState.hidden = false; }
-      }),
-      painted: cacheHit => timing.finish("loaded", { cacheHit })
-    });
-  } catch (error) {
-    console.error("Error loading student records:", error);
-    emptyState.textContent = "Could not load student records. Please refresh to try again.";
-    emptyState.hidden = false;
-    timing.finish("error");
+  if (recordOwnerUid !== user.uid) { recordData = null; counts = []; dynamicCards = []; recordsContainer.replaceChildren(); }
+  recordOwnerUid = user.uid;
+  prepareTeacherCache(app, user);
+  const saved = prepareTeacherCache(app, user).get(user.uid, "records:state");
+  if (saved && ["active", "archived"].includes(saved.filter?.status) && typeof saved.filter.search === "string" &&
+      Number.isInteger(saved.pageIndex) && saved.pageIndex >= 0 && saved.pageIndex < 5000 && Array.isArray(saved.cursors) && saved.cursors[saved.pageIndex] !== undefined) {
+    pageFilter = saved.filter; pageIndex = saved.pageIndex; cursors = saved.cursors;
+    recordStatus = pageFilter.status; searchInput.value = pageFilter.search;
+    for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").setAttribute("aria-pressed", String(recordStatus === status));
   }
+  await loadRecordsPage();
+  stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }));
 });
 
 
@@ -277,6 +419,7 @@ function resetArchiveReason() {
 }
 let archiveTarget;
 let archiveSectionTargets = null;
+let archiveSectionCode = null;
 document.getElementById("cancelArchiveStudent").addEventListener("click", () => {
   if (!archiveSave.disabled) archiveModal.classList.remove("open");
 });
@@ -284,6 +427,7 @@ recordsContainer.addEventListener("click", event => {
   const button = event.target.closest(".archive-student-btn");
   if (!button) return;
   archiveSectionTargets = null;
+  archiveSectionCode = null;
   archiveTarget = { id: button.dataset.id, name: button.dataset.name };
   document.getElementById("archiveStudentTitle").textContent = "Archive student";
   archiveSave.textContent = "Archive student";
@@ -295,13 +439,15 @@ recordsContainer.addEventListener("click", event => {
 });
 archiveSectionButton.addEventListener("click", () => {
   if (archiveSectionButton.disabled) return;
-  archiveSectionTargets = dynamicCards.filter(card => card.dataset.section === sectionFilter.value && card.dataset.archived !== "true").map(card => card.dataset.studentId);
-  if (!archiveSectionTargets.length) return;
+  const total = counts.find(item => item.classId === sectionFilter.value)?.active || 0;
+  if (!total) return;
+  archiveSectionCode = sectionFilter.value;
+  archiveSectionTargets = null;
   archiveTarget = null;
   const label = Array.from(sectionFilter.options).find(option => option.value === sectionFilter.value)?.textContent || sectionFilter.value;
   document.getElementById("archiveStudentTitle").textContent = "Archive section";
-  document.getElementById("archiveStudentName").textContent = label + " — " + archiveSectionTargets.length + " active students. This includes students hidden by the search filter.";
-  archiveSave.textContent = "Archive " + archiveSectionTargets.length + " students";
+  document.getElementById("archiveStudentName").textContent = label + " — " + total + " active students. This includes students on other pages and those hidden by search.";
+  archiveSave.textContent = "Archive " + total + " students";
   resetArchiveReason();
   archiveError.textContent = "";
   archiveModal.classList.add("open");
@@ -309,13 +455,21 @@ archiveSectionButton.addEventListener("click", () => {
 });
 archiveForm.addEventListener("submit", async event => {
   event.preventDefault();
-  if (archiveSave.disabled || (!archiveTarget && !archiveSectionTargets?.length) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
+  if (archiveSave.disabled || (!archiveTarget && !archiveSectionCode) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
   archiveSave.disabled = true;
   archiveSave.textContent = "Archiving…";
   archiveError.textContent = "";
   let savedCount = 0;
   try {
     const data = { active: false, deletedAt: new Date(), archiveReason: archiveReason.value };
+    if (archiveSectionCode && archiveSectionTargets === null) {
+      const ids = []; let cursor = null;
+      do {
+        const page = await getStudentPage({ sectionId: archiveSectionCode, status: "active", cursor, includeCounts: false });
+        ids.push(...page.students.map(row => row.studentDoc.id)); cursor = page.cursor;
+      } while (cursor);
+      archiveSectionTargets = [...new Set(ids)];
+    }
     if (archiveSectionTargets) {
       // The server accepts at most 100 writes per atomic batch.
       while (archiveSectionTargets.length) {
@@ -323,7 +477,7 @@ archiveForm.addEventListener("submit", async event => {
         const batch = writeBatch(db);
         for (const id of group) batch.update(doc(db, "users", id), data);
         await batch.commit();
-        updateStudentRows(group, data);
+        updateStudentRows(group, data, false, archiveSectionCode);
         archiveSectionTargets.splice(0, group.length);
         savedCount += group.length;
       }

@@ -44,21 +44,18 @@
       <section class="hero">
         <div>
           <h1>Topic Scheduler</h1>
-          <p>3 terms · 4 topics each · Schedule release dates and control student access</p>
-          <div class="quiz-schedule-controls">
+          <div class="quiz-schedule-controls" data-loading-path="users classes" data-loading-label="Loading your sections…">
             <label class="quiz-schedule-access" for="scheduleSection">Schedule for section
               <select id="scheduleSection" disabled><option value="">Loading your sections…</option></select>
             </label>
           </div>
-          <p class="scheduler-progress-copy" id="scheduleSectionInfo">Topic dates, activity access and progress below follow the selected section.</p>
-          <p class="scheduler-progress-copy">Section schedules apply in the updated mobile app. Older app versions keep the shared schedule.</p>
-          <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite">Connecting to Firebase…</p>
+          <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite">Loading…</p>
         </div>
       </section>
 
-      <section class="terms" id="terms"></section>
+      <section class="terms" id="terms" data-loading-path="terms" data-loading-label="Loading topic schedules…"></section>
 
-      <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading">
+      <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading" data-loading-path="terms" data-loading-label="Loading activity schedules…">
         <div class="quiz-scheduler-heading">
           <div><h2 id="activitySchedulerHeading">Activity Schedule</h2><p class="scheduler-progress-copy">Choose when each lesson topic becomes available to learners.</p></div>
         </div>

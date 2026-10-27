@@ -45,41 +45,46 @@ export function createLoadingTracker(render, { delayMs = 0, schedule = setTimeou
   };
 }
 
-let indicator;
-let hideScheduled = false;
-function renderLoading({ active, message }) {
-  if (!active) {
-    if (!indicator) return;
-    // Keep sequential reads in the same frame from flickering the status message.
-    if (hideScheduled) return;
-    hideScheduled = true;
-    requestAnimationFrame(() => {
-      hideScheduled = false;
-      if (tracker.pendingCount || !indicator) return;
-      indicator.hidden = true;
-    });
-    return;
-  }
-  if (!indicator) {
-    indicator = document.createElement("div");
-    indicator.id = "appLoadingIndicator";
-    indicator.className = "app-loading-indicator";
-    indicator.setAttribute("role", "status");
-    indicator.setAttribute("aria-live", "polite");
-    indicator.setAttribute("aria-atomic", "true");
-    indicator.hidden = true;
-    indicator.innerHTML = `
-      <div class="app-loading-card">
-        <img class="app-loading-logo" alt="" aria-hidden="true" />
-        <p class="app-loading-title" id="appLoadingTitle"></p>
-      </div>`;
-    indicator.querySelector("img").src = new URL("../assets/imars-loader-transparent.png", import.meta.url).href;
-    document.body.append(indicator);
-  }
-  indicator.querySelector("#appLoadingTitle").textContent = message?.title || "Loading your data…";
-  indicator.hidden = false;
+const regions = new WeakMap();
+
+// A read can mark its own data regions busy; it never changes the page shell.
+export function startLoading(message = {}) {
+  const path = message.reference?.path;
+  const targets = message.target ? [message.target] : path && typeof document !== "undefined"
+    ? [...document.querySelectorAll("[data-loading-path]")].filter(region =>
+      region.dataset.loadingPath.split(/\s+/).some(prefix => path === prefix || path.startsWith(prefix + "/"))) : [];
+  const finishes = targets.map(region => {
+    let state = regions.get(region);
+    if (!state) {
+      state = { status: null, priorBusy: null };
+      state.tracker = createLoadingTracker(({ active }) => {
+        if (!active) {
+          if (state.status) state.status.hidden = true;
+          if (state.priorBusy === null) region.removeAttribute("aria-busy");
+          else region.setAttribute("aria-busy", state.priorBusy);
+          return;
+        }
+        if (!state.status) {
+          state.status = document.createElement("p");
+          state.status.className = "section-data-loading";
+          state.status.setAttribute("role", "status");
+          state.status.setAttribute("aria-live", "polite");
+        }
+        // Rendering may replace children while another request is still pending.
+        if (state.status.parentNode !== region) region.prepend(state.status);
+        state.status.textContent = region.dataset.loadingLabel || message.title || "Loading this section…";
+        state.status.hidden = false;
+        region.setAttribute("aria-busy", "true");
+      }, { delayMs: 150 });
+      regions.set(region, state);
+    }
+    if (!state.tracker.pendingCount) state.priorBusy = region.getAttribute("aria-busy");
+    return state.tracker.start();
+  });
+  return () => finishes.forEach(finish => finish());
 }
 
-const tracker = createLoadingTracker(renderLoading, { delayMs: 150 });
-export const startLoading = (message) => tracker.start(message);
-export const withLoading = (operation, message) => tracker.run(operation, message);
+export async function withLoading(operation, message) {
+  const finish = startLoading(message);
+  try { return await operation(); } finally { finish(); }
+}

@@ -90,7 +90,7 @@ export class FirestoreAdmin {
       : await this.request("documents/" + path.split("/").map(encodeURIComponent).join("/"));
     return result ? { data: decodeFields(result.fields), wire: decodeFields(result.fields, true), updateTime: result.updateTime } : null;
   }
-  async query(path, { filters = [], order = [], limit = 5000 } = {}) {
+  async query(path, { filters = [], order = [], limit = 5000, after } = {}) {
     const parts = path.split("/");
     this.name(path);
     const parent = parts.slice(0, -1).join("/");
@@ -102,6 +102,8 @@ export class FirestoreAdmin {
         from: [{ collectionId: parts.at(-1) }],
         ...(conditions.length ? { where: conditions.length === 1 ? conditions[0] : { compositeFilter: { op: "AND", filters: conditions } } } : {}),
         ...(order.length ? { orderBy: order.map(({ field, direction }) => ({ field: { fieldPath: field }, direction: direction === "desc" ? "DESCENDING" : "ASCENDING" })) } : {}),
+        ...(after ? { orderBy: [{ field: { fieldPath: "__name__" }, direction: "ASCENDING" }],
+          startAt: { values: [{ referenceValue: this.name(path + "/" + after) }], before: false } } : {}),
         limit: limit + 1
       } })
     });
@@ -110,6 +112,23 @@ export class FirestoreAdmin {
     }));
     if (records.length > limit && limit === 5000) throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     return records.slice(0, limit);
+  }
+  async count(path, filters = []) {
+    this.name(path);
+    const parts = path.split("/"), parent = parts.slice(0, -1).join("/");
+    const conditions = filters.map(({ field, value }) => ({ fieldFilter: {
+      field: { fieldPath: field }, op: "EQUAL", value: encodeFields({ value }).value
+    } }));
+    const rows = await this.request(`documents${parent ? "/" + parent : ""}:runAggregationQuery`, {
+      method: "POST", body: JSON.stringify({ structuredAggregationQuery: {
+        structuredQuery: { from: [{ collectionId: parts.at(-1) }],
+          ...(conditions.length ? { where: conditions.length === 1 ? conditions[0] : { compositeFilter: { op: "AND", filters: conditions } } } : {}) },
+        aggregations: [{ alias: "total", count: {} }]
+      } })
+    });
+    const total = Number(rows?.find(row => row.result?.aggregateFields?.total)?.result.aggregateFields.total.integerValue);
+    if (!Number.isSafeInteger(total) || total < 0) throw new Error("Student totals are unavailable.");
+    return total;
   }
   async begin() {
     const result = await this.request("documents:beginTransaction", { method: "POST", body: JSON.stringify({ options: { readWrite: {} } }) });

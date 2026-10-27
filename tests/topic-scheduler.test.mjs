@@ -4,7 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import * as availability from "../js/topic-availability.js";
 
-async function scheduler({ chooseSection = true, sections = ["A", "C"] } = {}) {
+async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null } = {}) {
   const elements = new Map();
   const listeners = new Map();
   const records = new Map(["term_01", "term_02", "term_03"].map((term) => [term,
@@ -38,7 +38,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"] } = {}) {
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },
     getApps: () => [], initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
-    prepareTeacherCache: () => ({ get: () => null, put() {}, invalidate() {} }),
+    prepareTeacherCache: () => ({ get: (_, key) => key === "schedule:section" && rememberedSection ? { id: rememberedSection } : null, put() {}, invalidate() {} }),
     encodeView: value => value, decodeView: value => value,
     collection: (_, ...path) => path, doc: (_, ...path) => path,
     query: ref => ref, where: () => ({}),
@@ -214,4 +214,14 @@ test("editing requires an explicit section and teachers without sections cannot 
     assert.equal(app.records.get("term_01")[0].sectionSchedules, undefined);
     assert.match(app.element("terms").innerHTML, /Waiting for data/);
   }
+});
+
+test("return visits restore an assigned section but never a stale foreign section", async () => {
+  const restored = await scheduler({ chooseSection: false, rememberedSection: "C" });
+  assert.equal(restored.element("scheduleSection").value, "C");
+  await restored.click("lock", "0-0");
+  assert.equal(availability.sectionSchedule(restored.records.get("term_01")[0], "C").isLocked, false);
+  const removed = await scheduler({ chooseSection: false, rememberedSection: "B" });
+  await removed.click("lock", "0-0");
+  assert.equal(removed.records.get("term_01")[0].sectionSchedules, undefined);
 });

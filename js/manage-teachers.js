@@ -217,7 +217,7 @@ if (list) {
       const teacher = teachers.find((t) => t.id === teacherId);
       if (!teacher) return;
 
-      if (window.confirm(`Are you sure you want to remove ${teacher.name} from Firebase?`)) {
+      if (window.confirm(`Are you sure you want to remove ${teacher.name}?`)) {
         try {
           await deleteDoc(doc(db, "users", teacherId));
           teachers = teachers.filter((t) => t.id !== teacherId);

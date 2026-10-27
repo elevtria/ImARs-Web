@@ -78,14 +78,14 @@
       <article class="teacher-metric"><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">155</strong></div></article>
     </section>
 
-    <section class="teacher-list" id="teacherList" aria-label="Teacher accounts"></section>
+    <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…"></section>
     <p class="no-teachers" id="noTeachers" hidden>No teachers match your search.</p>
   </main>
 
   <dialog class="teacher-dialog" id="teacherDialog" aria-labelledby="dialogTitle">
     <form id="teacherForm" method="dialog">
       <div class="dialog-heading">
-        <div><h2 id="dialogTitle">Add Teacher</h2><p>Add a new teacher to Firebase</p></div>
+        <div><h2 id="dialogTitle">Add Teacher</h2><p>Add a teacher account.</p></div>
         <button class="dialog-close" id="closeTeacherDialog" type="button" aria-label="Close">×</button>
       </div>
       <label>Teacher name<input name="name" required placeholder="e.g. Alex Reyes" /></label>

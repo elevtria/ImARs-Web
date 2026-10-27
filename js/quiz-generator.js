@@ -112,7 +112,7 @@ const firestore = getFirestore(firebaseApp);
       renderLibrary();
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
-      showStatus(document.getElementById("libraryStatus"), "Firebase could not load quizzes. Check the Firestore rules for the generatedQuizzes collection.", true);
+      showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
     }
   }
 
@@ -450,7 +450,7 @@ const firestore = getFirestore(firebaseApp);
     renderLibrary();
     resetNewQuiz();
     setView("library");
-    showStatus(document.getElementById("libraryStatus"), "Quiz saved to Firebase. " + availabilityText(quiz) + ".", false);
+    showStatus(document.getElementById("libraryStatus"), "Saved. " + availabilityText(quiz) + ".", false);
   }
 
   function availabilityText(quiz) {
@@ -787,7 +787,7 @@ const firestore = getFirestore(firebaseApp);
         renderLibrary();
       } catch (error) {
         console.error("Could not delete quiz from Firestore:", error);
-        showStatus(document.getElementById("libraryStatus"), "Firebase blocked the delete. Check the Firestore rules for the generatedQuizzes collection.", true);
+        showStatus(document.getElementById("libraryStatus"), "Could not delete this quiz. Please try again.", true);
       }
     }
   });

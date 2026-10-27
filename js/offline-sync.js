@@ -49,7 +49,7 @@ const rowsRoot = document.getElementById("markerRows");
 const cloudStatus = document.getElementById("cloudSyncStatus");
 
 const setCloudStatus = (message) => {
-  if (cloudStatus) cloudStatus.textContent = message;
+  if (cloudStatus) { cloudStatus.textContent = message; cloudStatus.hidden = !message; }
 };
 
 markerPacks.forEach((pack) => {
@@ -116,15 +116,15 @@ const syncProgressToCloud = (files = [...downloaded]) => {
   cloudSyncQueue = cloudSyncQueue.then(async () => {
     if (!targetRef || !navigator.onLine) return;
     const { setDoc, arrayUnion, serverTimestamp } = window.imarsFirestore;
-    setCloudStatus("Syncing progress to your teacher account…");
+    setCloudStatus("Saving…");
     await setDoc(targetRef, {
       requestedFiles: arrayUnion(...filesToSync),
       updatedAt: serverTimestamp()
     }, { merge: true });
-    setCloudStatus("Progress synced to your teacher account.");
+    setCloudStatus("Saved");
   }).catch((error) => {
     console.error("Unable to sync marker download progress:", error);
-    setCloudStatus("Cloud sync failed. Progress is saved on this browser; check Firestore rules or connection.");
+    setCloudStatus("Could not save online. Your progress is saved on this device.");
   });
   return cloudSyncQueue;
 };
@@ -165,9 +165,9 @@ const attachCloudProgress = async (user, firestore) => {
   if (stopProgressListener) stopProgressListener();
   stopProgressListener = onSnapshot(progressRef, (snapshot) => {
     if (!snapshot.exists()) {
-      setCloudStatus("Connected. Saving this browser’s existing progress…");
+      setCloudStatus("Saving…");
       if (downloaded.size) void syncProgressToCloud();
-      else setCloudStatus("Connected. Progress will sync after a ZIP is requested.");
+      else setCloudStatus("");
       return;
     }
 
@@ -178,12 +178,12 @@ const attachCloudProgress = async (user, firestore) => {
     saveProgress();
     updateProgress();
     setCloudStatus(snapshot.metadata.hasPendingWrites
-      ? "Syncing progress to your teacher account…"
-      : "Progress synced to your teacher account.");
+      ? "Saving…"
+      : "Saved");
     if (localOnly.length) void syncProgressToCloud(localOnly);
   }, (error) => {
     console.error("Unable to read marker download progress:", error);
-    setCloudStatus("Cloud sync failed. Progress is saved on this browser; check Firestore rules or connection.");
+    setCloudStatus("Could not save online. Your progress is saved on this device.");
   });
 };
 
@@ -218,12 +218,12 @@ const startCloudSync = async () => {
         return;
       }
 
-      setCloudStatus("Connecting to your teacher account…");
+      setCloudStatus("Loading…");
       try {
         await attachCloudProgress(user, firestore);
       } catch (error) {
         console.error("Unable to connect marker download progress:", error);
-        setCloudStatus("Cloud sync failed. Progress is saved on this browser; check Firestore rules or connection.");
+        setCloudStatus("Could not save online. Your progress is saved on this device.");
       }
     }, (error) => {
       console.error("Unable to read sign-in state:", error);
@@ -231,7 +231,7 @@ const startCloudSync = async () => {
     });
   } catch (error) {
     console.error("Unable to load Firebase for marker progress sync:", error);
-    setCloudStatus("Cloud sync is unavailable. Progress is saved on this browser.");
+    setCloudStatus("Saved on this device. Online saving is unavailable.");
   } finally {
     cloudBooting = false;
   }

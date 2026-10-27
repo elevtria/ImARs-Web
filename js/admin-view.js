@@ -1,7 +1,7 @@
 import { getAuth, signOut } from "./firebase-auth.js";
 import { collection, getFirestore, getDocs, getDocsWithLoading, limit, query, where } from "./firebase-data.js";
 import { showTeacherView as showCachedView } from "./teacher-view.js";
-import { teacherViewCache } from "./view-cache.js";
+import { decodeView, teacherViewCache } from "./view-cache.js";
 
 export async function readAdminProfile(db, user, read = getDocs) {
   const profiles = await read(query(collection(db, "users"), where("uid", "==", user.uid), limit(2)));
@@ -29,17 +29,20 @@ function renderSidebar(data) {
 
 // Reuse the same session cache and background refresh behavior as teacher views.
 // A cached display never supplies authorization or the document ID used to edit.
-export async function showAdminView({ app, user, page, load = async () => null, render, verified = () => {}, painted }) {
+export async function showAdminView({ app, user, page, load = async () => null, render, verified = () => {}, painted, freshForMs = 60000 }) {
   const auth = getAuth(app);
   try {
-    await showCachedView({ app, user, page: `admin:${page}`, painted,
-      load: async ({ background }) => {
+    await showCachedView({ app, user, page: `admin:${page}`, painted, freshForMs: 0,
+      load: async ({ background, refresh }) => {
         const read = background ? getDocs : getDocsWithLoading;
         const profile = await readAdminProfile(getFirestore(app), user, read);
         if (auth.currentUser?.uid !== user.uid) return null;
         verified(profile.id);
-        const data = await load({ read, background });
-        return { profile: profile.display, data };
+        const saved = !refresh && freshForMs > 0 ? teacherViewCache().get(user.uid, `admin:${page}`) : null;
+        const previous = saved ? decodeView(saved) : null;
+        const recent = previous && Date.now() - previous.reportsAt < freshForMs;
+        const data = recent ? previous.data : await load({ read, background });
+        return { profile: profile.display, data, reportsAt: recent ? previous.reportsAt : Date.now() };
       },
       render: payload => { renderSidebar(payload.profile); render(payload.data, payload.profile); }
     });

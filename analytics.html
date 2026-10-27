@@ -48,7 +48,7 @@
         </div>
       </section>
 
-      <section class="card section">
+      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…">
         <h2>Overall Class Average</h2>
         <div class="overall">
           <div class="donut" aria-label="post-test average">
@@ -103,7 +103,7 @@
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
           </label>
         </div>
-        <div class="performance-table-wrap">
+        <div class="performance-table-wrap" data-loading-path="users classes" data-loading-label="Loading student performance…">
           <table class="performance-table" id="studentGrid">
             <thead>
               <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Activity Score</th><th scope="col">Improvement</th></tr>
@@ -140,7 +140,7 @@
             <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
         </div>
-        <div class="topics" id="topicsContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
+        <div class="topics" id="topicsContainer" data-loading-path="terms users" data-loading-label="Loading topic analytics…" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
           <p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">
             Loading topic analytics...
           </p>

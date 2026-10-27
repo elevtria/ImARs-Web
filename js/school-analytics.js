@@ -82,7 +82,7 @@ function renderSchoolAnalytics(report) {
     // 3. Render Teachers Analytics Cards
     if (teacherContainer) {
       if (teacherMap.size === 0) {
-        teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">No teachers found in the database.</p>`;
+        teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">No teachers found.</p>`;
       } else {
         teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher) => {
           const avgPre = teacher.preCount > 0 ? Math.round(teacher.prePctSum / teacher.preCount) : 0;

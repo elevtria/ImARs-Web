@@ -126,48 +126,33 @@ test("observer-style listeners and throwing callbacks release loading", () => {
   assert.equal(loading.pendingCount, 0);
 });
 
-test("loading status stays visible until all tasks finish without opening a dialog", async () => {
+test("slow reads mark only their data section busy and preserve the navigation and unrelated sections", async () => {
   const previousDocument = globalThis.document;
-  const previousFrame = globalThis.requestAnimationFrame;
-  globalThis.requestAnimationFrame = (callback) => queueMicrotask(callback);
-  const nodes = new Map(["img", "#appLoadingTitle"].map((name) => [name, {}]));
-  const indicator = {
-    hidden: true, attributes: {},
+  const region = path => ({ dataset: { loadingPath: path }, attributes: {}, children: [],
     setAttribute(name, value) { this.attributes[name] = value; },
-    querySelector(name) { return nodes.get(name); }
-  };
-  globalThis.document = { createElement(tag) {
-    assert.equal(tag, "div", "loading must not create a modal dialog");
-    return indicator;
-  }, body: { append() {} } };
+    getAttribute(name) { return this.attributes[name] ?? null; },
+    removeAttribute(name) { delete this.attributes[name]; },
+    prepend(child) { this.children.unshift(child); child.parentNode = this; }
+  });
+  const records = region("users classes"), topics = region("terms");
+  globalThis.document = { querySelectorAll: () => [records, topics], createElement(tag) {
+    assert.equal(tag, "p"); return { hidden: true, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+  }, body: { append() { assert.fail("data reads must not add a page-wide loader"); } } };
   try {
-    const finishA = startLoading(), finishB = startLoading();
-    assert.equal(indicator.hidden, true);
+    const finishA = startLoading({ reference: { path: "users" } }), finishB = startLoading({ reference: { path: "users/S1/test_results/term_01/lessons" } });
+    assert.equal(records.children.length, 0);
     await delay(170);
-    assert.equal(indicator.hidden, false);
-    assert.equal(indicator.attributes.role, "status");
-    assert.equal(indicator.attributes["aria-live"], "polite");
-    assert.equal(nodes.get("#appLoadingTitle").textContent, "Loading your data…");
-    assert.match(nodes.get("img").src, /imars-loader-transparent\.png$/);
+    assert.equal(records.attributes["aria-busy"], "true");
+    assert.equal(records.children[0].hidden, false);
+    assert.equal(records.children[0].attributes.role, "status");
+    assert.equal(topics.children.length, 0);
+    assert.equal(topics.attributes["aria-busy"], undefined);
     finishA();
-    await Promise.resolve();
-    assert.equal(indicator.hidden, false);
+    assert.equal(records.children[0].hidden, false);
     finishB();
-    await Promise.resolve();
-    assert.equal(indicator.hidden, true);
-
-    // A new short request during a queued hide keeps the status until it finishes.
-    const finishC = startLoading();
-    await delay(170);
-    finishC();
-    const finishD = startLoading();
-    await Promise.resolve();
-    assert.equal(indicator.hidden, false);
-    finishD();
-    await Promise.resolve();
-    assert.equal(indicator.hidden, true);
+    assert.equal(records.children[0].hidden, true);
+    assert.equal(records.attributes["aria-busy"], undefined);
   } finally {
     globalThis.document = previousDocument;
-    globalThis.requestAnimationFrame = previousFrame;
   }
 });

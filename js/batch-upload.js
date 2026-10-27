@@ -6,6 +6,7 @@ import {
   query, 
   where, 
   getDocsWithLoading as getDocs,
+  getStudentPage,
   doc, 
   setDoc, 
   updateDoc, 
@@ -103,18 +104,11 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
       const rawName = cData.SectionName || cData.sectionName || cData.name || classDoc.id;
       const label = formatSectionLabel(rawName);
 
-      const stuQ = query(
-        collection(db, "users"),
-        where("role", "==", "student"),
-        where("classCode", "==", classDoc.id)
-      );
-      const stuSnap = await getDocs(stuQ);
-
       loadedSections.push({
         classCode: classDoc.id,
         rawName: rawName,
         label: label,
-        count: stuSnap.size
+        count: 0
       });
     }
 
@@ -159,6 +153,11 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     }
   }
 
+    const totals = await getStudentPage({ includeStudents: false });
+    for (const section of loadedSections) {
+      const count = totals.counts.find(item => item.classId === section.classCode);
+      section.count = count ? count.active + count.archived : 0;
+    }
     return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
@@ -342,7 +341,7 @@ async function handleFileSelected(file) {
 
   try {
     document.getElementById("dropTitle").textContent = "Validating data...";
-    document.getElementById("dropHint").textContent = "Checking against database records...";
+    document.getElementById("dropHint").textContent = "Checking student details…";
 
     existingStudentIds.clear();
 

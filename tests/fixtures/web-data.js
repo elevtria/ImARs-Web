@@ -24,8 +24,12 @@ export function fixture() {
   const store = { env, data, began: 0, committed: 0, rolledBack: 0,
     async get(path) { return data.has(path) ? { data: structuredClone(data.get(path)), updateTime: String(revision) } : null; },
     async identity(uid) { const row = [...data.values()].find(row => row.uid === uid); return row ? { localId: uid, email: row.email, disabled: row.authDisabled, emailVerified: row.authEmailVerified } : null; },
-    async query(path, { filters = [], limit = 5000 } = {}) {
-      return [...data].filter(([name, row]) => name.startsWith(path + "/") && name.split("/").length === path.split("/").length + 1 && filters.every(filter => row[filter.field] === filter.value)).slice(0, limit).map(([name, row]) => ({ id: name.split("/").at(-1), data: structuredClone(row), updateTime: String(revision) }));
+    async count(path, filters) {
+      return [...data].filter(([name, row]) => name.startsWith(path + "/") && name.split("/").length === path.split("/").length + 1 && filters.every(filter => row[filter.field] === filter.value)).length;
+    },
+    async query(path, { filters = [], limit = 5000, after } = {}) {
+      return [...data].filter(([name, row]) => name.startsWith(path + "/") && name.split("/").length === path.split("/").length + 1 && (!after || name.split("/").at(-1) > after) && filters.every(filter => row[filter.field] === filter.value))
+        .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).slice(0, limit).map(([name, row]) => ({ id: name.split("/").at(-1), data: structuredClone(row), updateTime: String(revision) }));
     },
     async begin() { this.began++; this.transaction = true; this.onBegin?.(); },
     async rollback() { this.rolledBack++; this.transaction = false; },

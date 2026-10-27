@@ -60,7 +60,7 @@
               <circle cx="11" cy="11" r="7" />
               <path d="M20 20l-3.2-3.2" />
             </svg>
-            <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
+            <input id="studentSearch" type="search" maxlength="100" placeholder="Search student..." aria-label="Search student" />
           </label>
         </div>
       </section>
@@ -72,11 +72,16 @@
       <button type="button" id="archiveSectionBtn" class="ghost-btn archive-section-btn" disabled>Archive section</button>
       <p class="archive-section-hint">Select a section to archive its active students together.</p>
       <!-- Dynamic Student Records Container -->
-      <div id="recordsContainer" class="student-record-list" aria-label="Student list">
+      <div id="recordsContainer" class="student-record-list" aria-label="Student list" data-loading-path="classes users" data-loading-label="Loading student records…">
         <!-- Records will be injected here by JS -->
       </div>
 
       <p class="empty" id="emptyState" hidden>No students match that search.</p>
+      <div class="student-detail-navigation" aria-label="Student list pages">
+        <button type="button" class="ghost-btn" id="previousRecordsPage" disabled>Previous page</button>
+        <p id="recordsPageStatus" class="view-data-status" role="status" aria-live="polite">Loading students…</p>
+        <button type="button" class="ghost-btn" id="nextRecordsPage" disabled>Next page</button>
+      </div>
     </main>
   </div>
 

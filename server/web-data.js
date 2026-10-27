@@ -211,6 +211,59 @@ function output(path, row, id = path.split("/").at(-1)) {
   return { id, path, data };
 }
 
+async function studentPage(scope, body) {
+  if (scope.actor.role !== "teacher") throw fail();
+  const sectionId = body.sectionId || "", search = String(body.search || "").trim().toLowerCase();
+  const status = body.status || "active", maximum = body.limit ?? 25, cursor = body.cursor;
+  if ((sectionId && !part(sectionId)) || (body.search !== undefined && typeof body.search !== "string") ||
+      !["active", "archived"].includes(status) || search.length > 100 ||
+      !Number.isInteger(maximum) || maximum < 1 || maximum > 25 ||
+      (cursor != null && (!object(cursor) || !fields(cursor, ["classId", "id"]) || !part(cursor.classId) || (cursor.id !== null && !part(cursor.id))))) {
+    throw fail("Invalid student page.", 400);
+  }
+  const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
+  classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  if (sectionId) await scope.ownsClass(sectionId);
+  const selected = classes.filter(row => !sectionId || row.id === sectionId);
+  let index = cursor ? selected.findIndex(row => row.id === cursor.classId) : 0;
+  if (index < 0) throw fail();
+  let after = cursor?.id, scanned = 0;
+  const students = [];
+  const filters = classId => [{ field: "role", op: "==", value: "student" }, { field: "classCode", op: "==", value: classId }];
+  const countPromise = body.includeCounts === false ? null : (async () => {
+    const counts = [];
+    for (let offset = 0; offset < selected.length; offset += 4) counts.push(...await Promise.all(selected.slice(offset, offset + 4).map(async row => {
+      const [total, archived] = await Promise.all([
+        scope.store.count("users", filters(row.id)),
+        scope.store.count("users", [...filters(row.id), { field: "active", op: "==", value: false }])
+      ]);
+      return { classId: row.id, active: Math.max(0, total - archived), archived };
+    })));
+    return counts;
+  })().catch(error => ({ error }));
+  while (body.includeStudents !== false && index < selected.length && students.length < maximum && scanned < 100) {
+    const classId = selected[index].id, size = Math.min(maximum - students.length + 1, 100 - scanned);
+    const rows = await scope.store.query("users", { filters: filters(classId), limit: size, after });
+    let consumed = 0;
+    for (const row of rows) {
+      if (students.length === maximum) break;
+      after = row.id; consumed++; scanned++;
+      if (row.data.teacherId && row.data.teacherId !== scope.actor.id) continue;
+      const archived = row.data.active === false;
+      const matches = !search || [row.id, row.data.displayName, row.data.fullName, row.data.firstName, row.data.lastName]
+        .filter(Boolean).join(" ").toLowerCase().includes(search);
+      if (archived === (status === "archived") && matches) students.push({ classId, document: output("users/" + row.id, row) });
+    }
+    if (consumed === rows.length && rows.length < size) { index++; after = null; }
+    else if (students.length === maximum || scanned >= 100) break;
+  }
+  const counts = countPromise ? await countPromise : null;
+  if (counts?.error) throw counts.error;
+  return { classes: classes.map(row => output("classes/" + row.id, row)), students,
+    counts, scanned,
+    cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
+}
+
 export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
   if (!dataEnabled(env)) return json({ error: "Website data setup is incomplete." }, 503);
   let started = false;
@@ -230,6 +283,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     // reassigning a class races safely with the write rather than granting it.
     const actor = started ? await authenticate(request, env, store) : actorBefore;
     const scope = new Scope(store, actor);
+    if (body.action === "student-page") return json(await studentPage(scope, body));
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();

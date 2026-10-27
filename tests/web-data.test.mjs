@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { webData } from "../server/web-data.js";
+import { FirestoreAdmin } from "../server/firestore-admin.js";
 import { requireStaff, protectWebsite, staffProfile } from "../server/web-auth.js";
 import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js";
 
@@ -11,6 +12,66 @@ const union = (...values) => ({ $type: "arrayUnion", values });
 const get = path => ({ action: "get", reference: { kind: "document", path } });
 const query = (path, filters = []) => ({ action: "query", reference: { kind: "query", path, filters: filters.map(([field, value]) => ({ field, op: "==", value })) } });
 const save = (path, data, merge = true) => ({ action: "commit", writes: [{ operation: "set", path, data, merge }] });
+
+test("Firestore pagination uses a document cursor and totals use COUNT without downloading profiles", async () => {
+  const store = new FirestoreAdmin({}), requests = [];
+  store.request = async (path, options) => {
+    requests.push({ path, body: JSON.parse(options.body) });
+    return path.endsWith("runAggregationQuery") ? [{ result: { aggregateFields: { total: { integerValue: "1000" } } } }] : [];
+  };
+  await store.query("users", { filters: [{ field: "classCode", value: "A" }], limit: 26, after: "S0024" });
+  assert.equal(requests[0].body.structuredQuery.startAt.before, false);
+  assert.match(requests[0].body.structuredQuery.startAt.values[0].referenceValue, /\/documents\/users\/S0024$/);
+  assert.equal(requests[0].body.structuredQuery.orderBy[0].field.fieldPath, "__name__");
+  assert.equal(await store.count("users", [{ field: "classCode", value: "A" }]), 1000);
+  assert.deepEqual(requests[1].body.structuredAggregationQuery.aggregations, [{ alias: "total", count: {} }]);
+});
+
+test("a 1000-student class returns at most 25 profiles per page and exact counts without loading any lesson results", async () => {
+  const app = fixture(), cookie = await app.login();
+  for (const path of [...app.data.keys()]) if (path.startsWith("users/") && app.data.get(path).role === "student") app.data.delete(path);
+  for (let index = 0; index < 1000; index++) app.data.set("users/S" + String(index).padStart(4, "0"), {
+    role: "student", classCode: "A", teacherId: "TEACH1000", displayName: `Student ${index}`, active: index < 900,
+    password: "must-never-leave-server"
+  });
+  const queries = [], queryStore = app.store.query.bind(app.store);
+  app.store.query = (path, options) => { queries.push({ path, limit: options.limit }); return queryStore(path, options); };
+  const first = await app.call({ action: "student-page", status: "active" }, cookie);
+  assert.equal(first.status, 200);
+  const page = await first.json();
+  assert.equal(page.students.length, 25);
+  assert.deepEqual(page.counts, [{ classId: "A", active: 900, archived: 100 }]);
+  assert.ok(queries.filter(row => row.path === "users").every(row => row.limit <= 26));
+  assert.equal(queries.some(row => row.path.includes("test_results")), false);
+  assert.equal(JSON.stringify(page).includes("must-never-leave-server"), false);
+  const second = await (await app.call({ action: "student-page", status: "active", cursor: page.cursor }, cookie)).json();
+  assert.equal(second.students.length, 25);
+  const firstIds = new Set(page.students.map(row => row.document.id));
+  assert.equal(second.students.some(row => firstIds.has(row.document.id)), false);
+  queries.length = 0;
+  const totals = await (await app.call({ action: "student-page", includeStudents: false }, cookie)).json();
+  assert.equal(totals.students.length, 0); assert.equal(totals.cursor, null);
+  assert.equal(queries.some(row => row.path === "users"), false, "student totals must not download the roster");
+  for (const input of [{ sectionId: "B" }, { cursor: { classId: "B", id: null } }, { limit: 1000 }, { cursor: { classId: "A", id: "../ADMIN1000" } }]) {
+    assert.ok([400,403].includes((await app.call({ action: "student-page", ...input }, cookie)).status));
+  }
+});
+
+test("student page searches preserve case-insensitive name matching with bounded scans and cursors across sections", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  for (let index = 0; index < 160; index++) app.data.set("users/S" + String(index).padStart(3, "0"), {
+    role: "student", classCode: index < 120 ? "A" : "C", displayName: index === 159 ? "Target Learner" : "Another Learner", active: true
+  });
+  let cursor = null, found = [];
+  do {
+    const response = await app.call({ action: "student-page", search: "target", cursor }, cookie);
+    assert.equal(response.status, 200);
+    const page = await response.json(); assert.ok(page.scanned <= 100);
+    found.push(...page.students); cursor = page.cursor;
+  } while (cursor);
+  assert.deepEqual(found.map(row => row.document.id), ["S159"]);
+});
 
 test("website identity uses an HttpOnly cookie; anonymous, forged, cross-site and wrong-tab requests fail before database writes", async () => {
   const app = fixture(), cookie = await app.login();

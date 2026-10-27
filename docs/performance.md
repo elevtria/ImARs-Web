@@ -15,9 +15,10 @@ DOM batch, preserving their section/student order and existing score formulas.
 
 Dashboard, Analytics, Student Records, Batch Upload, and Topic Scheduler remember
 their last successfully loaded view in this browser tab's `sessionStorage`.
-After Firebase restores the same signed-in teacher, returning to one of these
-pages shows that view immediately. The page checks Firebase again in the
-background without showing a loading indicator. Changed results replace the
+After live website authentication confirms the same teacher, returning to one
+of these pages shows the saved view. Data refreshed within 60 seconds is reused
+without repeating report reads. Visible pages check for updates once a minute,
+and on returning to a stale tab. Hidden pages do not poll. Changed results replace the
 saved view; unchanged results do not redraw it. Search and section filters stay
 selected during a background update. Topic Scheduler continues using its live
 listeners after showing the saved schedule.
@@ -31,13 +32,12 @@ the saved view with a short notice; denied access clears it.
 Successful website writes (including imports, QR result sync, quiz saves, and
 schedule edits) invalidate these views. A version marker also invalidates saved
 views in other browser tabs. Results arriving from the mobile app are picked up
-by each report's background check on the next visit. A page with no saved view,
+by each report's quiet background check. A page with no saved view,
 an expired entry, or invalidated data still needs its normal initial load.
-During that initial load, a small logo and “Loading your data…” status appear
-at the bottom center after 150 ms if a request is still pending. The status has
-no backdrop or white card, does not take focus, and does not block navigation,
-clicking, or scrolling. It disappears when the pending reads finish, including
-when a read fails. Very fast loads do not show it.
+During initial loading, only the relevant data section shows a small status
+after 150 ms. There is no page-wide loading indicator. The header and navigation
+remain visible during authentication; private content, account details and
+dialogs stay hidden until the live check succeeds. Fast reads show no indicator.
 This does not preserve unsaved form inputs or skip HTML/script loading.
 
 Analytics no longer falls back to querying all teachers, all classes, or all
@@ -51,7 +51,9 @@ Admin Dashboard, School Analytics, Manage Teachers, and Admin Profile use the
 same session-scoped saved-view behavior and small, nonblocking initial loading
 status. Dashboard, School Analytics, and Manage Teachers share one summary, so
 visiting any one of them also prepares the saved display for the other two.
-Fresh reads still run on every visit. Admin Profile remembers only its display
+The administrator profile is verified on every visit; recent school reports are
+reused rather than downloaded again. Re-verifying a role does not extend a report's
+freshness. Admin Profile remembers only its display
 and contact fields; the reports store teacher display fields and aggregates,
 without storing student records or credentials in these entries.
 
@@ -84,7 +86,25 @@ its benefit is the immediate saved display on return visits.
 
 ## Measure on your real account
 
-1. Open a teacher report or admin page and wait for its data.
+Student Records uses server-side cursor pages of at most 25 profiles. Active
+and archived totals use Firestore COUNT instead of downloading every profile.
+Only visible/opened cards fetch their three term-result collections. Loaded
+results are reused within the authenticated tab; an error shows a local retry.
+Paging, archiving, restoring and deleting do not reload HTML or re-read other
+students' results. Bulk section archiving still includes off-page students and
+retries only unfinished batches.
+
+Name/ID searches retain case-insensitive matching over assigned sections, using
+bounded scans of at most 100 profiles per server request. A rare search may scan
+more than one batch; it does not fetch those students' lesson results. Counts
+and class ownership remain server-verified. Tests cover 1,000 sample profiles,
+page boundaries, cache reuse, denied writes and partial bulk failures.
+
+Full analytics reports still need their initial aggregate calculations from
+the existing per-student result collections. Their cached views avoid repeating
+that work on immediate tab returns; pagination does not change report formulas.
+
+1. Open a dashboard, Analytics or admin page and wait for its data.
 2. Press **F12**, open **Console**, and run:
 
    ```js
@@ -103,7 +123,7 @@ its benefit is the immediate saved display on return visits.
    application measurements, not billable Firestore read counts.
 
 3. In **Performance**, start recording and reload. Stop after data appears.
-   Look for **ImARs: Dashboard/Analytics/Records data** and **render** under
+   Look for **ImARs: Dashboard/Analytics data** and **render** under
    **Timings**. Network/long tasks can then be compared with these spans.
 4. In **Network**, enable **Preserve log**, reload, and sort by **Duration**.
    Use **Fetch/XHR** for database traffic and **All** for page/scripts/images.
@@ -127,5 +147,6 @@ server-generated summary documents, which would require a separately reviewed
 backend/data-flow change. Do not cache private reports in a public CDN.
 
 References: [Firestore best practices](https://firebase.google.com/docs/firestore/best-practices#read_and_write_operations),
+[Firestore aggregation queries](https://firebase.google.com/docs/firestore/query-data/aggregation-queries),
 [Firestore caching behavior](https://firebase.google.com/docs/firestore/manage-data/enable-offline),
 [Cloudflare cache response headers](https://developers.cloudflare.com/cache/concepts/cache-responses/).

@@ -1,10 +1,10 @@
 // Keep the loader tied to requests, rather than to authentication or timers.
 export function wrapFirestoreReads(firestore, loading) {
   return {
-    getDoc: (...args) => loading.run(() => firestore.getDoc(...args)),
-    getDocs: (...args) => loading.run(() => firestore.getDocs(...args)),
+    getDoc: (...args) => loading.run(() => firestore.getDoc(...args), { reference: args[0] }),
+    getDocs: (...args) => loading.run(() => firestore.getDocs(...args), { reference: args[0] }),
     onSnapshot(reference, ...args) {
-      const finish = loading.start();
+      const finish = loading.start({ reference });
       const observerIndex = args.findIndex((arg) => typeof arg === "function" || (arg && typeof arg === "object" && ("next" in arg || "error" in arg || "complete" in arg)));
       const observer = args[observerIndex];
       const next = typeof observer === "function" ? observer : (...values) => observer?.next?.(...values);

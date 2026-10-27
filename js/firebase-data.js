@@ -158,6 +158,11 @@ export function writeBatch() {
   return batch;
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
+export async function getStudentPage(options = {}, requestOptions = {}) {
+  const result = await webRequest("/api/web-data", encode({ ...options, action: "student-page" }), requestOptions);
+  return { ...result, classes: result.classes.map(snapshot),
+    students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document) })) };
+}
 export async function createTeacher(profile) {
   const result = await request({ action: "create-teacher", profile });
   invalidateTeacherViews();

@@ -107,7 +107,7 @@ function controller() {
   });
   const source = readFileSync(new URL("../js/teacher-view.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
   const run = vm.runInContext(source + "\nshowTeacherView;", context);
-  const display = options => run({ app: {}, user: auth.currentUser, page: "records", render: value => states.push(value), ...options });
+  const display = options => run({ app: {}, user: auth.currentUser, page: "records", freshForMs: 0, render: value => states.push(value), ...options });
   return { cache, auth, states, main, display };
 }
 test("return visits paint saved results immediately, refresh quietly, and keep unchanged filters intact", async () => {
@@ -155,4 +155,22 @@ test("unsupported cache contents still render fresh data normally", async () => 
   assert.equal(app.states[0], circular);
   assert.equal(app.main.dataset.viewState, "fresh");
   assert.equal(app.cache.get("a", "records"), null);
+});
+
+test("automatic data checks pause in hidden tabs, coalesce overlapping updates, and stop after the account changes", async () => {
+  let now = 0, calls = 0, release;
+  const events = new Map(), timers = new Map(); let timerId = 0;
+  const auth = { currentUser: { uid: "a" } }, document = { visibilityState: "visible", addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) };
+  const context = vm.createContext({ console: { warn() {} }, WeakSet, Map, Date: { now: () => now }, getAuth: () => auth, document,
+    window: { addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) },
+    setTimeout: fn => { timers.set(++timerId, fn); return timerId; }, clearTimeout: id => timers.delete(id) });
+  const source = readFileSync(new URL("../js/teacher-view.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
+  const watch = vm.runInContext(source + "\nwatchVisibleData;", context);
+  watch({}, { uid: "a" }, async () => { calls++; await new Promise(resolve => { release = resolve; }); });
+  now = 60000; document.visibilityState = "hidden"; events.get("focus")(); assert.equal(calls, 0);
+  document.visibilityState = "visible"; events.get("visibilitychange")(); assert.equal(calls, 1);
+  now += 60000; events.get("focus")(); assert.equal(calls, 1);
+  release(); await new Promise(setImmediate);
+  auth.currentUser = { uid: "b" }; events.get("focus")();
+  assert.equal(events.size, 0); assert.equal(timers.size, 0);
 });

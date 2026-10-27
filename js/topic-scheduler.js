@@ -76,6 +76,7 @@ const sectionSelect = document.getElementById("scheduleSection");
 let assignedSections = [];
 let selectedSection = "";
 let latestSchedules = [];
+let scheduleOwner = null;
 const syncStatus = document.getElementById("syncStatus");
 const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
@@ -84,6 +85,7 @@ const activityOpenTerms = [false, false, false];
 const setSyncStatus = (message, state = "") => {
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
+  syncStatus.hidden = !message;
 };
 const saveUiState = () => {
   localStorage.setItem(key, JSON.stringify(terms.map(({ open }) => ({ open }))));
@@ -252,13 +254,13 @@ sectionSelect.addEventListener("change", () => {
     return;
   }
   selectedSection = sectionSelect.value;
+  if (scheduleOwner) prepareTeacherCache(app, scheduleOwner).put(scheduleOwner.uid, "schedule:section", { id: selectedSection });
   isReady = latestSchedules.length === TERM_IDS.length && latestSchedules.every(Boolean);
   dateTarget = null;
   document.getElementById("dateModal").classList.remove("open");
   activityMessage = "";
   latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
-  document.getElementById("scheduleSectionInfo").textContent = `Topic dates, activity access and progress below apply to ${assignedSections.find(section => section.id === selectedSection).name}.`;
-  setSyncStatus(isReady ? "Connected · changes save to this section" : "Loading the section schedule…", isReady ? "success" : "");
+  setSyncStatus(isReady ? "" : "Loading…");
   render();
 });
 
@@ -273,7 +275,7 @@ function watchScheduleFromFirestore(generation, user) {
   let saved = null;
   try { if (stored) saved = decodeView(stored); } catch {}
   if (!Array.isArray(saved) || saved.length !== TERM_IDS.length || saved.some(snapshot => snapshot.docs?.length !== 4)) saved = null;
-  setSyncStatus("Loading lesson schedule from Firebase…");
+  setSyncStatus("Loading…");
   const snapshots = Array(TERM_IDS.length).fill(null);
   latestSchedules = snapshots;
   const showLoadError = (error, termIndex) => {
@@ -283,7 +285,7 @@ function watchScheduleFromFirestore(generation, user) {
     render();
     console.error("Unable to load Topic Scheduler from Firebase:", error);
     setSyncStatus(error.code === "permission-denied"
-      ? "Firebase denied access. Check the teacher Firestore rules."
+      ? "You do not have access to this schedule. Please sign in again."
       : `Could not load schedule: ${error.message}`, "error");
   };
 
@@ -298,7 +300,7 @@ function watchScheduleFromFirestore(generation, user) {
         render();
         if (snapshots.every(Boolean) && !isSaving) {
           const cached = snapshots.some((item) => item.metadata.fromCache);
-          setSyncStatus(!selectedSection ? "Select a section to view and edit its schedule." : cached ? "Showing cached schedule · waiting for updates" : "Connected · changes save to this section", cached || !selectedSection ? "" : "success");
+          setSyncStatus(selectedSection && cached ? "Updating…" : "");
           if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule:sections", encodeView(snapshots));
         }
       } catch (error) {
@@ -315,11 +317,12 @@ function watchScheduleFromFirestore(generation, user) {
 
 function lessonRef(termIndex, topicIndex) {
   const lessonId = terms[termIndex].topics[topicIndex].docId;
-  if (!lessonId) throw new Error("This lesson has not been linked to a Firestore document.");
+  if (!lessonId) throw new Error("This lesson is unavailable. Please try again.");
   return doc(db, "terms", TERM_IDS[termIndex], "lessons", lessonId);
 }
 
 onAuthStateChanged(auth, async (user) => {
+  scheduleOwner = user;
   const generation = ++scheduleGeneration;
   stopScheduleListeners.forEach((stop) => stop());
   stopScheduleListeners = [];
@@ -346,8 +349,13 @@ onAuthStateChanged(auth, async (user) => {
     assignedSections = sections.docs.map(section => ({ id: section.id, name: section.data().SectionName || section.id }))
       .sort((a, b) => a.name.localeCompare(b.name));
     sectionSelect.innerHTML = '<option value="">Select a section</option>' + assignedSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
+    const previous = prepareTeacherCache(app, user).get(user.uid, "schedule:section");
+    if (assignedSections.some(section => section.id === previous?.id)) {
+      selectedSection = previous.id;
+      sectionSelect.value = selectedSection;
+    }
     render();
-    setSyncStatus(assignedSections.length ? "Select a section to view and edit its schedule." : "No sections are assigned to your account.");
+    setSyncStatus(assignedSections.length ? "" : "No sections are assigned to your account.");
     if (!assignedSections.length) return;
     watchScheduleFromFirestore(generation, user);
   } catch (error) {
@@ -391,7 +399,7 @@ activityList.addEventListener("click", async event => {
   try {
     await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(update));
     activityMessage = `Saved access for ${topic.title}.`;
-    setSyncStatus("Connected · changes save to Firebase", "success");
+    setSyncStatus("Saved", "success");
   } catch (error) {
     console.error("Unable to save activity access:", error);
     activityMessage = `Could not save activity access: ${error.message}`;
@@ -421,10 +429,10 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     const nextLocked = !isTopicLocked(topic);
     isSaving = true;
     render();
-    setSyncStatus("Saving lesson access setting…");
+    setSyncStatus("Saving…");
     try {
       await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
-      setSyncStatus("Connected · changes save to Firebase", "success");
+      setSyncStatus("Saved", "success");
     } catch (error) {
       console.error("Unable to save lesson lock:", error);
       setSyncStatus(`Could not save lock: ${error.message}`, "error");
@@ -442,14 +450,14 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     const nextLocked = !term.topics.every(isTopicLocked);
     isSaving = true;
     render();
-    setSyncStatus(`${nextLocked ? "Locking" : "Unlocking"} all ${term.name} lessons…`);
+    setSyncStatus("Saving…");
     try {
       const batch = writeBatch(db);
       term.topics.forEach((_, topicIndex) => {
         batch.update(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
       });
       await batch.commit();
-      setSyncStatus("Connected · changes save to Firebase", "success");
+      setSyncStatus("Saved", "success");
     } catch (error) {
       console.error("Unable to update all lesson locks:", error);
       setSyncStatus(`Could not update lesson locks: ${error.message}`, "error");
@@ -491,12 +499,12 @@ document.getElementById("dateSave").onclick = async () => {
   const scheduledDate = dateInput.value;
   isSaving = true;
   render();
-  setSyncStatus("Saving lesson date…");
+  setSyncStatus("Saving…");
   try {
     const dateUpdate = scheduledAccessUpdate(scheduledDate, topic);
     await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(dateUpdate));
     closeDate();
-    setSyncStatus("Connected · changes save to Firebase", "success");
+    setSyncStatus("Saved", "success");
   } catch (error) {
     console.error("Unable to save lesson date:", error);
     setSyncStatus(`Could not save date: ${error.message}`, "error");
