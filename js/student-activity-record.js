@@ -14,10 +14,10 @@ export function activityMinutes(result) {
   return seconds > 0 ? seconds / 60 : null;
 }
 
-export function buildStudentActivityRecords(curriculum, sections, termLabels) {
+export function buildStudentActivityRecords(curriculum, sections, termLabels, termIds) {
   const records = [];
   curriculum.forEach((lessons, termIndex) => {
-    const termId = `term_0${termIndex + 1}`;
+    const termId = termIds?.[termIndex] || `term_0${termIndex + 1}`;
     lessons.docs.forEach(lesson => {
       const lessonData = lesson.data();
       for (const { classDoc, students } of sections) {

@@ -2,7 +2,7 @@ import { FirestoreAdmin } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion } from "../js/quiz-limits.js";
 
-const json = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
+const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
 const part = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const term = value => /^term_0[1-3]$/.test(value);
@@ -213,7 +213,8 @@ function output(path, row, id = path.split("/").at(-1)) {
 
 async function studentPage(scope, body) {
   if (scope.actor.role !== "teacher") throw fail();
-  const sectionId = body.sectionId || "", search = String(body.search || "").trim().toLowerCase();
+  let sectionId = body.sectionId || "";
+  const search = String(body.search || "").trim().toLowerCase();
   const status = body.status || "active", maximum = body.limit ?? 25, cursor = body.cursor;
   if ((sectionId && !part(sectionId)) || (body.search !== undefined && typeof body.search !== "string") ||
       !["active", "archived"].includes(status) || search.length > 100 ||
@@ -223,6 +224,7 @@ async function studentPage(scope, body) {
   }
   const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  if (body.firstSection === true && !sectionId) sectionId = classes[0]?.id || "";
   if (sectionId) await scope.ownsClass(sectionId);
   const selected = classes.filter(row => !sectionId || row.id === sectionId);
   let index = cursor ? selected.findIndex(row => row.id === cursor.classId) : 0;
@@ -264,17 +266,40 @@ async function studentPage(scope, body) {
     cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
 }
 
+async function teacherReportPage(scope, body) {
+  if (scope.actor.role !== "teacher") throw fail();
+  if (!term(body.termId)) throw fail("Choose one term.", 400);
+  const page = await studentPage(scope, { ...body, status: "active", search: "", limit: 25 });
+  // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
+  // their documents in one database round trip, only for verified roster rows.
+  const paths = page.students.flatMap(row => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`));
+  const records = paths.length ? await scope.store.getAll(paths) : new Map();
+  const students = page.students.map(row => ({ ...row, lessons: [1, 2, 3, 4].flatMap(index => {
+    const path = `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`, record = records.get(path);
+    return record ? [output(path, record)] : [];
+  }) }));
+  let curriculum;
+  if (body.includeCurriculum !== false) {
+    const path = "terms/" + body.termId;
+    const [row, lessons] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 })]);
+    curriculum = { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
+  }
+  return { ...page, students, cursor: page.counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
+}
+
 export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
-  if (!dataEnabled(env)) return json({ error: "Website data setup is incomplete." }, 503);
+  const requestStarted = Date.now(); let authenticationMs = 0;
+  const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
+  if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
   let started = false;
   try {
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
       const row = await store.get("webSettings/schoolYear");
       const startYear = row?.data.startYear;
-      return json({ startYear: Number.isInteger(startYear) && startYear >= 2000 && startYear <= 2100 ? startYear : 2026 });
+      return respond({ startYear: Number.isInteger(startYear) && startYear >= 2000 && startYear <= 2100 ? startYear : 2026 });
     }
-    if (request.method !== "POST") return json({ error: "Use POST." }, 405);
-    if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
+    if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
+    if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
     const actorBefore = await authenticate(request, env, store);
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
@@ -282,8 +307,10 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     // Re-read the actor inside the transaction so disabling the actor or
     // reassigning a class races safely with the write rather than granting it.
     const actor = started ? await authenticate(request, env, store) : actorBefore;
+    authenticationMs = Date.now() - requestStarted;
     const scope = new Scope(store, actor);
-    if (body.action === "student-page") return json(await studentPage(scope, body));
+    if (body.action === "student-page") return respond(await studentPage(scope, body));
+    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body));
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();
@@ -305,7 +332,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
       // Mobile registration merges UID fields into the existing invitation.
       await scope.get("users/" + invitation.id);
       await store.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); started = false;
-      return json({ id: invitation.id });
+      return respond({ id: invitation.id });
     }
     if (body.action === "check-student-ids") {
       if (actor.role !== "teacher" || !Array.isArray(body.ids) || body.ids.length > 500 || body.ids.some(id => !part(id))) throw fail("Check fewer student IDs at a time.", 400);
@@ -313,7 +340,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
       for (let index = 0; index < body.ids.length; index += 8) {
         await Promise.all(body.ids.slice(index, index + 8).map(async id => { if (await scope.get("users/" + id)) existing.push(id); }));
       }
-      return json({ existing });
+      return respond({ existing });
     }
     if (["get", "query", "reads"].includes(body.action)) {
       const requests = body.action === "reads" ? body.reads : [body];
@@ -343,7 +370,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
         }
         return { documents: records.map(row => output(ref.path + "/" + row.id, row, row.id)) };
       })));
-      return json(body.action === "reads" ? { results } : results[0]);
+      return respond(body.action === "reads" ? { results } : results[0]);
     }
     if (body.action === "commit") {
       if (!Array.isArray(body.writes) || !body.writes.length || body.writes.length > 100 || new Set(body.writes.map(write => write?.path)).size !== body.writes.length) throw fail("Save between 1 and 100 distinct records at a time.", 400);
@@ -357,13 +384,13 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
           if (!disabled.ok) throw new Error("Invitation update failed");
         }
       }
-      return json({ ok: true });
+      return respond({ ok: true });
     }
     throw fail("Unknown data operation.", 400);
   } catch (error) {
     if (started) await store.rollback().catch(() => {});
     const status = [400, 401, 403, 409, 413].includes(error.status) ? error.status : 503;
-    return json({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,
+    return respond({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,
       code: status === 401 ? "unauthenticated" : status === 403 ? "permission-denied" : status === 409 ? "aborted" : "unavailable" }, status);
   }
 }

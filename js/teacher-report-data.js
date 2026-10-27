@@ -1,50 +1,83 @@
-import { collection, getDocsWithLoading as getDocs, getDocs as quietDocs, getDoc as quietDoc, getFirestore, doc, query, where } from "./firebase-data.js";
+import { getTeacherReportPage } from "./firebase-data.js";
 import { getAuth } from "./firebase-auth.js";
-import { encodeView, teacherViewCache } from "./view-cache.js";
+import { encodeView, decodeView } from "./view-cache.js";
+import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
 
-export async function loadTeacherDashboard(db, user, readDocs = quietDocs, readDoc = quietDoc) {
-  const profile = await readDocs(query(collection(db, "users"), where("uid", "==", user.uid)));
-  if (profile.size !== 1 || profile.docs[0].data().role !== "teacher") {
-    throw Object.assign(new Error("Teacher access required."), { code: "permission-denied" });
-  }
-  const teacher = profile.docs[0];
-  const [classes, termSnap, curriculumSnap] = await Promise.all([
-    readDocs(query(collection(db, "classes"), where("teacherId", "==", teacher.id))),
-    readDoc(doc(db, "terms", "term_01")),
-    readDocs(collection(db, "terms", "term_01", "lessons"))
-  ]);
-  const teacherName = teacher.data().displayName || "Teacher";
-  if (classes.empty) return { teacherName, noClass: true };
-  const classroom = classes.docs[0];
-  const studentSnap = await readDocs(query(collection(db, "users"), where("role", "==", "student"), where("classCode", "==", classroom.id)));
-  const reports = await Promise.all(studentSnap.docs.map(async studentDoc => ({
-    studentDoc, lessonsSnap: await readDocs(collection(db, "users", studentDoc.id, "test_results", "term_01", "lessons"))
-  })));
-  return { teacherName, sectionName: classroom.data().SectionName || classroom.id, studentSnap, reports, termSnap, curriculumSnap };
-}
-
-export async function prepareDashboard(app, user) {
-  const auth = getAuth(app);
-  if (!user?.uid || user.role !== "teacher" || auth.currentUser?.uid !== user.uid) return;
-  const cache = teacherViewCache();
-  cache.setOwner(user.uid);
-  const version = cache.version();
-  const data = await loadTeacherDashboard(getFirestore(app), user);
-  if (auth.currentUser?.uid === user.uid) cache.put(user.uid, "dashboard", encodeView(data), version);
-}
-
-// All independent reads enter the shared pool (at most eight in flight).
-// Promise.all preserves section, student, and term order for rendering.
-export function loadClassReports(db, classDocs, terms, read = getDocs) {
-  return Promise.all(classDocs.map(async classDoc => {
-    const roster = await read(query(collection(db, "users"), where("role", "==", "student"), where("classCode", "==", classDoc.id)));
-    const students = await Promise.all(roster.docs.map(async studentDoc => ({
-      studentDoc,
-      results: await Promise.all(terms.map(async termId => ({
-        termId,
-        lessonsSnap: await read(collection(db, "users", studentDoc.id, "test_results", termId, "lessons"))
-      })))
-    })));
-    return { classDoc, students };
-  }));
+// Reports arrive in bounded pages. Leaving cancels further work; an automatic
+// check replaces one page instead of downloading the class again.
+export function createTeacherReport({ app, render, progress = () => {}, failed = () => {} }) {
+  let generation = 0, abort, timer, stopUpdates, state, user, options, cache, version, running = false;
+  const stop = () => { generation++; abort?.abort(); clearTimeout(timer); stopUpdates?.(); running = false; };
+  if (typeof window !== "undefined") window.addEventListener("pagehide", stop);
+  const current = token => token === generation && getAuth(app).currentUser?.uid === user?.uid;
+  const paint = () => {
+    const merged = new Map();
+    for (const page of state.pages) for (const row of page.students) merged.set(row.studentDoc.id, row);
+    const students = [...merged.values()];
+    const sections = state.classes.filter(classDoc => state.counts.some(row => row.classId === classDoc.id)).map(classDoc => ({ classDoc, students: students.filter(row => row.classId === classDoc.id) }));
+    const total = state.counts.reduce((sum, row) => sum + row.active, 0);
+    render({ ...state, sections, loaded: students.length, total, termId: options.termId, teacherName: user.displayName || "Teacher" });
+    progress({ loaded: students.length, total, complete: state.complete, termId: options.termId });
+  };
+  const remember = changedIndex => {
+    state.pages.forEach((page, index) => { if (changedIndex === undefined || index === changedIndex) cache.put(user.uid, options.key + ":" + index, encodeView(page), version); });
+    cache.put(user.uid, options.key, encodeView({ ...state, pages: state.pages.map((_, index) => index) }), version);
+  };
+  const update = async token => {
+    if (!current(token) || running || document.visibilityState === "hidden") return;
+    running = true;
+    const cursor = state.complete ? state.refreshCursor : state.cursor;
+    try {
+      abort = new AbortController();
+      const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
+        firstSection: options.sectionId === "first", cursor, includeCurriculum: !state.curriculumSnap }, { signal: abort.signal });
+      if (!current(token)) return;
+      if (cache.version() !== version) {
+        version = cache.version();
+        state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
+        timer = setTimeout(() => { void update(token); }, 0);
+        return;
+      }
+      const slot = state.pages.findIndex(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
+      const page = { cursor, students: result.students };
+      const changed = slot < 0 || JSON.stringify(encodeView(state.pages[slot])) !== JSON.stringify(encodeView(page)) || JSON.stringify(state.counts) !== JSON.stringify(result.counts);
+      if (slot < 0) state.pages.push(page); else state.pages[slot] = page;
+      state.classes = result.classes; state.counts = result.counts;
+      if (result.curriculum) Object.assign(state, result.curriculum);
+      let reindexed = false;
+      if (state.complete) {
+        if (!cursor) state.refreshSeen = [];
+        (state.refreshSeen ||= []).push(JSON.stringify(cursor));
+        state.refreshCursor = result.cursor;
+        if (!result.cursor) { state.pages = state.pages.filter(page => state.refreshSeen.includes(JSON.stringify(page.cursor))); reindexed = true; }
+      }
+      else { state.cursor = result.cursor; state.complete = !result.cursor; }
+      state.checkedAt = Date.now();
+      remember(reindexed ? undefined : slot < 0 ? state.pages.length - 1 : slot);
+      if (changed || !state.complete) paint();
+      // The first class report fills in gradually while this page is visible.
+      // Later automatic checks update one 25-student page per tick.
+      if (!state.complete) timer = setTimeout(() => { void update(token); }, 1000);
+    } catch (error) {
+      if (current(token) && error.name !== "AbortError") {
+        if (["permission-denied", "unauthenticated"].includes(error.code)) { cache.invalidate(); document.querySelector("main")?.replaceChildren(); stop(); }
+        else failed(error);
+      }
+    } finally { if (current(token)) running = false; }
+  };
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first" }) {
+    stop(); user = account; const token = generation;
+    cache = prepareTeacherCache(app, user); version = cache.version();
+    options = { termId, sectionId, key: "teacher-report:" + termId + ":" + (sectionId || "all") };
+    state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
+    const saved = cache.get(user.uid, options.key);
+    if (saved) try {
+      const restored = decodeView(saved);
+      const pages = restored.pages.map(index => { const page = cache.get(user.uid, options.key + ":" + index); if (!page) throw new Error("Incomplete cached report"); return decodeView(page); });
+      state = { ...restored, pages }; paint();
+    } catch { cache.remove(options.key); }
+    stopUpdates = watchVisibleData(app, user, () => update(token));
+    if (!state.pages.length || Date.now() - state.checkedAt >= 60000) await update(token);
+    else if (!state.complete) timer = setTimeout(() => { void update(token); }, 1000);
+  } };
 }

@@ -1,6 +1,5 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, signInWithEmailAndPassword } from "./firebase-auth.js";
-import { prepareDashboard } from "./teacher-report-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -64,12 +63,8 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   setSigningIn(teacherSubmitBtn, true, "Log in");
   let redirecting = false;
   try {
-    const { user } = await signInWithEmailAndPassword(auth, rawId, password, "teacher");
-    teacherSubmitBtn.querySelector("[data-login-label]").textContent = "Opening dashboard…";
-    await Promise.all([
-      prepareDashboard(app, user).catch(() => {}),
-      saveBrowserPassword("saveTeacherPassword", rawId, password)
-    ]);
+    await signInWithEmailAndPassword(auth, rawId, password, "teacher");
+    void saveBrowserPassword("saveTeacherPassword", rawId, password);
 
     window.location.href = "index.html";
     redirecting = true;

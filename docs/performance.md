@@ -4,12 +4,27 @@ The production build also versions public CSS, JavaScript, and brand images
 for browser reuse without repeat validation. See [Public file caching](static-caching.md)
 for its scope, update behavior, and deployment checks.
 
-Dashboard, Analytics, and Records now send independent result queries through a
-shared queue with at most eight reads in flight. Previously, results were read
-one student and one term at a time. Curriculum reads also run in parallel.
-Equivalent pending queries (such as the page and navigation fetching the same
-profile) share a request. Tables and record cards are inserted in one
-DOM batch, preserving their section/student order and existing score formulas.
+Teacher login redirects after authentication. It no longer prepares an entire
+student report before redirecting, waits for the optional password manager,
+or makes a redundant configuration request before submitting credentials.
+
+Dashboard and Analytics use authenticated report pages of at most 25 active
+students in one selected term. The server shares ownership checks and uses one
+Firestore batchGet for their four fixed lesson IDs (at most 100 documents).
+This removes 25 separate database network calls per report batch. Missing
+lesson documents are handled explicitly; document-read billing still applies,
+including missing document reads. Middleware session verification is
+reused only inside the exact same Request; live staff status still gets checked.
+Analytics defaults to the first assigned section and Term 1. Its term/section
+controls select what is fetched, rather than filtering a three-term download.
+
+The first report paints after its first batch. Remaining batches calculate the
+selected class average progressively while that page is visible, with an explicit
+"Results so far" count until the calculation is complete. Navigating away aborts
+the pending browser request and stops scheduling more batches. In-flight server
+reads may finish. Returning reuses completed batches and resumes the cursor;
+it does not restart at the first student. Dashboard and Analytics share these
+UID-owned, term/section-specific report pages. The result table displays 25 rows.
 
 ## Returning to a page
 
@@ -32,7 +47,11 @@ the saved view with a short notice; denied access clears it.
 Successful website writes (including imports, QR result sync, quiz saves, and
 schedule edits) invalidate these views. A version marker also invalidates saved
 views in other browser tabs. Results arriving from the mobile app are picked up
-by each report's quiet background check. A page with no saved view,
+by each report's quiet background check. Teacher report checks update one
+25-student batch per minute, rotating through the selected section. They do not
+re-download the entire report each minute. A mobile change to an off-batch
+student may take a full rotation to appear in the class summary; these summaries
+are not real-time. A page with no saved view,
 an expired entry, or invalidated data still needs its normal initial load.
 During initial loading, only the relevant data section shows a small status
 after 150 ms. There is no page-wide loading indicator. The header and navigation
@@ -88,7 +107,7 @@ its benefit is the immediate saved display on return visits.
 
 Student Records uses server-side cursor pages of at most 25 profiles. Active
 and archived totals use Firestore COUNT instead of downloading every profile.
-Only visible/opened cards fetch their three term-result collections. Loaded
+Only visible/opened cards fetch their selected term-result collection. Loaded
 results are reused within the authenticated tab; an error shows a local retry.
 Paging, archiving, restoring and deleting do not reload HTML or re-read other
 students' results. Bulk section archiving still includes off-page students and
@@ -100,11 +119,23 @@ more than one batch; it does not fetch those students' lesson results. Counts
 and class ownership remain server-verified. Tests cover 1,000 sample profiles,
 page boundaries, cache reuse, denied writes and partial bulk failures.
 
-Full analytics reports still need their initial aggregate calculations from
-the existing per-student result collections. Their cached views avoid repeating
-that work on immediate tab returns; pagination does not change report formulas.
+Exact class averages still require the initial selected-term result reads from
+the existing per-student collections. Background batching makes that calculation
+nonblocking, but does not eliminate its database reads. Stored summary documents
+maintained when mobile/offline results change would eliminate the repeated scan;
+that write-side aggregation is not implemented here. Redis or extra web servers
+would not remove this underlying read pattern by themselves.
 
-1. Open a dashboard, Analytics or admin page and wait for its data.
+For Dashboard and Analytics, inspect the teacher-report-page requests in Network.
+Each contains one termId and a cursor and returns at most 25 students. The
+Server-Timing response header separates handler authentication and data time.
+It excludes middleware/network time; compare it with browser TTFB and total
+duration. A 200 status is success; a duration alone is not evidence of a failed
+fetch. Student Records uses student-page followed by selected-term reads for
+visible cards.
+
+1. Open an admin report page and wait for its data. The diagnostic below applies
+   to the older admin loader, not the new teacher report-page endpoint.
 2. Press **F12**, open **Console**, and run:
 
    ```js

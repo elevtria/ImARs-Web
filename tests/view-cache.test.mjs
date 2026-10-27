@@ -50,40 +50,6 @@ test("a freshly prepared dashboard avoids a duplicate read while writes still re
   assert.equal(app.states.at(-1).score, 9);
 });
 
-test("login preparation reads private data only for the authenticated teacher and never caches it for a changed account", async () => {
-  const cache = createViewCache({ storage: storage(), versions: storage() });
-  const user = { uid: "a", role: "teacher" }, auth = { currentUser: null };
-  const calls = [];
-  const docs = (id, data) => ({ id, exists: () => true, data: () => data });
-  const list = values => ({ docs: values, size: values.length, empty: !values.length, forEach: action => values.forEach(action) });
-  let wait;
-  const context = vm.createContext({ Promise, encodeView, teacherViewCache: () => cache, getAuth: () => auth, getFirestore: () => ({}),
-    collection: (_, ...parts) => ({ path: parts.join("/") }), doc: (_, ...parts) => ({ path: parts.join("/") }),
-    query: (ref, ...filters) => ({ ...ref, filters }), where: (field, op, value) => ({ field, op, value }),
-    quietDocs: async ref => {
-      calls.push(ref);
-      if (ref.filters?.[0]?.field === "uid") { await wait; return list([docs("TEACH1000", { role: "teacher", displayName: "Teacher A", password: "never-cache" })]); }
-      if (ref.path === "classes") return list([docs("A", { SectionName: "A" })]);
-      if (ref.path === "users") return list([docs("S1", { displayName: "Student", password: "never-cache" })]);
-      return list([]);
-    }, quietDoc: async () => docs("term_01", { title: "Term 1" })
-  });
-  const source = readFileSync(new URL("../js/teacher-report-data.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
-  const prepare = vm.runInContext(source + "\nprepareDashboard;", context);
-  await prepare({}, user);
-  auth.currentUser = { uid: "admin", role: "admin" }; await prepare({}, auth.currentUser);
-  assert.equal(calls.length, 0, "anonymous and non-teacher pages cannot fetch student reports");
-  auth.currentUser = user;
-  await prepare({}, user);
-  assert.ok(cache.get("a", "dashboard"));
-  assert.equal(JSON.stringify(cache.get("a", "dashboard")).includes("never-cache"), false);
-  let resolve;
-  wait = new Promise(yes => { resolve = yes; });
-  const pending = prepare({}, user);
-  auth.currentUser = { uid: "b", role: "teacher" }; cache.setOwner("b");
-  resolve(); await pending;
-  assert.equal(cache.get("b", "dashboard"), null);
-});
 test("blocked storage degrades to normal fresh reads and date/snapshot contents round-trip", () => {
   const cache = createViewCache(); cache.setOwner("a");
   assert.equal(cache.get("a", "records"), null); assert.equal(cache.put("a", "records", {}), false);
@@ -173,4 +139,52 @@ test("automatic data checks pause in hidden tabs, coalesce overlapping updates, 
   release(); await new Promise(setImmediate);
   auth.currentUser = { uid: "b" }; events.get("focus")();
   assert.equal(events.size, 0); assert.equal(timers.size, 0);
+});
+
+function pagedReportHarness() {
+  let now=0, refresh, reader;
+  const timers=new Map(), events=new Map(),calls=[],paints=[],errors=[];
+  const auth={currentUser:{uid:'a',displayName:'Teacher A'}}, cache=createViewCache({storage:storage(),versions:storage()});
+  const document={visibilityState:'visible',querySelector:()=>({replaceChildren(){}})};
+  const record=(id,data)=>({id,exists:()=>true,data:()=>data});
+  const snap=docs=>({docs,size:docs.length,forEach:fn=>docs.forEach(fn)});
+  const makePage=options=>{
+    const start=options.cursor?25:0;
+    return {classes:[record('A',{SectionName:'A'})],counts:[{classId:'A',active:50,archived:0}],
+      students:Array.from({length:25},(_,i)=>({classId:'A',studentDoc:record('S'+(start+i),{displayName:'Student '+(start+i)}),results:[{termId:options.termId,lessonsSnap:snap([])}]})),
+      curriculum:options.includeCurriculum?{termSnap:record(options.termId,{title:options.termId}),curriculumSnap:snap([])}:null,
+      cursor:start?null:{classId:'A',id:'S24'}};
+  };
+  const context=vm.createContext({Date:class extends Date {static now(){return now;}},Map,Promise,AbortController,encodeView,decodeView,document,
+    window:{addEventListener:(name,fn)=>events.set(name,fn)},setTimeout:fn=>{const id={};timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
+    getAuth:()=>auth,prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},
+    getTeacherReportPage:async options=>{calls.push(options);return reader?reader(options):makePage(options);}
+  });
+  const source=readFileSync(new URL('../js/teacher-report-data.js',import.meta.url),'utf8').replace(/^import[^\n]+\r?\n/gm,'').replace(/^export /gm,'');
+  const create=vm.runInContext(source+'\ncreateTeacherReport;',context);
+  const report=create({app:{},render:value=>paints.push(value),failed:error=>errors.push(error)});
+  return {auth,cache,calls,paints,errors,document,makePage,open:options=>report.open({user:auth.currentUser,...options}),stop:report.stop,
+    time:value=>{now=value;},refresh:()=>refresh(),read:fn=>{reader=fn;},leave:()=>events.get('pagehide')(),
+    tick:async()=>{const entry=timers.entries().next().value;if(entry){timers.delete(entry[0]);entry[1]();for(let i=0;i<5;i++)await new Promise(setImmediate);}}};
+}
+
+test('reports paint the first 25 students before further background work and reuse cached pages on return',async()=>{
+  const app=pagedReportHarness();await app.open({});
+  assert.equal(app.calls.length,1);assert.equal(app.paints.at(-1).loaded,25);assert.equal(app.paints.at(-1).complete,false);
+  assert.equal(app.calls[0].termId,'term_01');assert.equal(app.calls[0].firstSection,true);
+  await app.tick();assert.equal(app.calls.length,2);assert.equal(app.paints.at(-1).loaded,50);assert.equal(app.paints.at(-1).complete,true);
+  await app.open({});assert.equal(app.calls.length,2,'a recent return must not reload the report');
+  app.time(60001);await app.refresh();assert.equal(app.calls.length,3,'one automatic check updates one page only');
+  assert.equal(app.calls[2].includeCurriculum,false);assert.equal(app.paints.at(-1).loaded,50);
+  app.leave();await app.tick();assert.equal(app.calls.length,3,'leaving stops further background reads');
+});
+
+test('changing terms cancels old work; a late old term or account response cannot paint',async()=>{
+  const app=pagedReportHarness();let release;
+  app.read(options=>options.termId==='term_02'?new Promise(resolve=>{release=()=>resolve(app.makePage(options));}):app.makePage(options));
+  const old=app.open({termId:'term_02'});await new Promise(setImmediate);
+  await app.open({termId:'term_03'});release();await old;
+  assert.ok(app.paints.every(value=>value.termId==='term_03'));
+  app.document.visibilityState='hidden';await app.tick();assert.equal(app.calls.length,2,'hidden tabs do not continue the class report');
+  app.document.visibilityState='visible';app.auth.currentUser={uid:'b'};await app.refresh();assert.equal(app.calls.length,2);
 });

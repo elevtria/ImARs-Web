@@ -19,6 +19,7 @@ class Element {
   set innerHTML(value) { this._html = value; this.children = []; }
   get innerHTML() { return this._html; }
   get options() { return this.children; }
+  get childNodes() { return this.children; }
   addEventListener() {}
   setAttribute() {}
   appendChild(child) { if (child.fragment) this.children.push(...child.children); else this.children.push(child); }
@@ -37,6 +38,7 @@ function page(file, report) {
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
     showTeacherView: async options => options.render(report),
+    createTeacherReport: options => ({ open: async () => { options.render(report); } }),
     showAdminView: async options => { options.verified(); options.render(report); },
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
@@ -57,8 +59,8 @@ function assertTextOnly(html) {
 
 test("dashboard names, sections, and lesson titles render as text rather than executable markup", async () => {
   const student = record("S1", { displayName: attack });
-  const app = page("dashboard.js", { teacherName: "Teacher", sectionName: attack, studentSnap: snapshot([student]),
-    reports: [{ studentDoc: student, lessonsSnap: snapshot([]) }],
+  const app = page("dashboard.js", { teacherName: "Teacher", total: 1, counts: [{ classId: "A", active: 1 }],
+    sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: student, results: [{ lessonsSnap: snapshot([]) }] }] }],
     termSnap: record("term_01", { title: "Term 1" }), curriculumSnap: snapshot([record("lesson_01", { title: attack })]) });
   await app.render();
   assertTextOnly(app.element("studentTableBody").html());
@@ -69,7 +71,8 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   const lesson = record("lesson_01", { isPreTestCompleted: true, preTestScore: 4, preTestTotalQuestions: 5,
     isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10,
     activityScore: 3, activityTotalQuestions: 4 });
-  const app = page("analytics.js", { curriculum: [snapshot([record("lesson_01", { title: attack })]), snapshot([]), snapshot([])],
+  const app = page("analytics.js", { curriculumSnap: snapshot([record("lesson_01", { title: attack })]), termId: "term_01", total: 1,
+    classes: [record("A", { SectionName: attack })], counts: [{ classId: "A", active: 1 }],
     sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: record("S1", { displayName: attack }),
       results: [{ termId: "term_01", lessonsSnap: snapshot([lesson]) }] }] }] });
   await app.render();

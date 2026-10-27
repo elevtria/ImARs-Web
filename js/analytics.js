@@ -1,22 +1,12 @@
-import { getDocs as quietDocs } from "./firebase-data.js";
-import { showTeacherView, escapeHtml } from "./teacher-view.js";
+import { escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import {
-  getFirestore,
-  collection,
-  query,
-  where,
-  getDocsWithLoading as getDocs
-} from "./firebase-data.js";
-import { loadClassReports } from "./teacher-report-data.js";
-import { createPagePerformance } from "./page-performance.js";
+import { createTeacherReport } from "./teacher-report-data.js";
 import { activityPercent } from "./activity-score.js";
 import { buildStudentActivityRecords } from "./student-activity-record.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 const empty = document.getElementById("emptyState");
 const search = document.getElementById("studentSearch");
@@ -27,10 +17,12 @@ const studentGrid = document.querySelector("#studentGrid tbody");
 const topicsContainer = document.getElementById("topicsContainer");
 const studentActivityBody = document.getElementById("studentActivityBody");
 const openActivities = new Set();
+const activityPages = new Map();
 
 let dynamicRows = [];
 let allTopicStats = []; // Store fetched topics globally for term filtering
-let currentTermFilter = "all";
+let currentTermFilter = "term_01";
+let selectedSection = "first", lastReport, tablePage = 0;
 
 // Term label map
 const termLabels = {
@@ -41,7 +33,7 @@ const termLabels = {
 
 function renderStudentActivities(curriculum, sections) {
   if (!studentActivityBody) return;
-  const records = buildStudentActivityRecords(curriculum, sections, termLabels);
+  const records = buildStudentActivityRecords(curriculum, sections, termLabels, [currentTermFilter]);
   if (!records.length) {
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
     return;
@@ -50,7 +42,8 @@ function renderStudentActivities(curriculum, sections) {
     const key = record.key;
     const open = openActivities.has(key);
     const detailId = `studentActivityDetail${index}`;
-    const learnerRows = record.learners.map(learner => {
+    const page = Math.min(activityPages.get(key) || 0, Math.max(0, Math.ceil(record.learners.length / 25) - 1));
+    const learnerRows = (open ? record.learners.slice(page * 25, (page + 1) * 25) : []).map(learner => {
       const initials = learner.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase();
       const score = learner.score === null ? "—" : `${learner.rawScore}/${learner.totalScore} · ${Math.round(learner.score)}%`;
       return `<tr><th scope="row"><span class="table-avatar">${escapeHtml(initials)}</span>${escapeHtml(learner.name)}</th><td><span class="activity-result-score${learner.score === null ? " is-empty" : ""}">${score}</span></td><td class="activity-result-time">${learner.minutes === null ? "—" : `${Math.round(learner.minutes)} min`}</td></tr>`;
@@ -62,6 +55,7 @@ function renderStudentActivities(curriculum, sections) {
     </tr><tr class="activity-record-detail" id="${detailId}" ${open ? "" : "hidden"}><td colspan="5">
       <div class="activity-record-detail-head"><div><strong>Student Results</strong><small>${escapeHtml(record.title)} · ${record.learners.length} learner records shown</small></div><span>Average score: ${record.averageScore === null ? "—" : `${record.averageScore}%`}</span></div>
       ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Score</th><th scope="col">Time to finish</th></tr></thead><tbody>${learnerRows}</tbody></table></div>` : '<p class="activity-record-empty">No student activity results recorded yet.</p>'}
+      ${open && record.learners.length > 25 ? `<div class="student-detail-navigation"><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page - 1}" ${page === 0 ? "disabled" : ""}>Previous page</button><span>Page ${page + 1}</span><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page + 1}" ${(page + 1) * 25 >= record.learners.length ? "disabled" : ""}>Next page</button></div>` : ""}
     </td></tr>`;
   }).join("");
   studentActivityBody.querySelectorAll(".activity-record-toggle").forEach(button => {
@@ -73,41 +67,32 @@ function renderStudentActivities(curriculum, sections) {
       button.setAttribute("aria-expanded", String(open));
       detail.hidden = !open;
       if (open) openActivities.add(key); else openActivities.delete(key);
+      renderStudentActivities(curriculum, sections);
     });
   });
+  studentActivityBody.querySelectorAll(".activity-result-page").forEach(button => button.addEventListener("click", () => {
+    activityPages.set(records[Number(button.dataset.record)].key, Math.max(0, Number(button.dataset.page)));
+    renderStudentActivities(curriculum, sections);
+  }));
 }
 
 // Filtering logic for students
 const filterStudents = () => {
   const queryText = (search?.value || "").trim().toLowerCase();
-  const selectedSection = sectionFilter?.value || "all";
-  let shown = 0;
-
-  dynamicRows.forEach((row) => {
-    const matchesName = row.dataset.name.includes(queryText);
-    const matchesSection = selectedSection === "all" || row.dataset.section === selectedSection;
-    const visible = matchesName && matchesSection;
-
-    if (visible) {
-      row.style.display = "";
-      shown += 1;
-    } else {
-      row.style.display = "none";
-    }
-  });
-
-  if (studentCount) studentCount.textContent = shown;
-  const selectedText = sectionFilter?.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
-  if (sectionSummary) sectionSummary.textContent = selectedSection === "all" ? "All Sections" : selectedText;
-
-  if (empty) {
-    empty.hidden = shown > 0;
-    if (shown === 0 && studentGrid) studentGrid.appendChild(empty);
-  }
+  const matches = dynamicRows.filter(row => row.name.includes(queryText));
+  const maximum = Math.max(0, Math.ceil(matches.length / 25) - 1);
+  tablePage = Math.min(tablePage, maximum);
+  studentGrid.innerHTML = matches.slice(tablePage * 25, (tablePage + 1) * 25).map(row => row.html).join("");
+  if (!matches.length) { empty.hidden = false; studentGrid.appendChild(empty); }
+  if (studentCount) studentCount.textContent = lastReport?.total ?? matches.length;
+  document.getElementById("analyticsPageStatus").textContent = `Page ${tablePage + 1} · ${matches.length} results loaded`;
+  document.getElementById("analyticsPrevious").disabled = tablePage === 0;
+  document.getElementById("analyticsNext").disabled = tablePage >= maximum;
 };
-
-if (search) search.addEventListener("input", filterStudents);
-if (sectionFilter) sectionFilter.addEventListener("change", filterStudents);
+search?.addEventListener("input", () => { tablePage = 0; filterStudents(); });
+sectionFilter?.addEventListener("change", () => { selectedSection = sectionFilter.value; tablePage = 0; return openReport(); });
+document.getElementById("analyticsPrevious").addEventListener("click", () => { if (tablePage > 0) { tablePage--; filterStudents(); } });
+document.getElementById("analyticsNext").addEventListener("click", () => { tablePage++; filterStudents(); });
 
 // Topic rendering by term filter
 function renderTopics(baseStudents) {
@@ -153,35 +138,31 @@ const termButtons = document.querySelectorAll(".term-tab-btn");
 termButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     termButtons.forEach((b) => {
+      b.setAttribute("aria-pressed", "false");
       b.style.background = "#fff";
       b.style.color = "#374151";
     });
+    btn.setAttribute("aria-pressed", "true");
     btn.style.background = "#4f46e5";
     btn.style.color = "#fff";
     currentTermFilter = btn.dataset.term;
-    renderTopics(window.totalStudentsBase || 1);
+    tablePage = 0;
+    void openReport();
   });
 });
 
 
-onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "login.html"; return; }
-  const timing = createPagePerformance("Analytics");
-  const terms = ["term_01", "term_02", "term_03"];
-  try {
-    await showTeacherView({ app, user, page: "analytics",
-      load: ({ background }) => timing.data(async () => {
-        const readDocs = background ? quietDocs : getDocs;
-        const [profile, curriculum] = await Promise.all([
-          readDocs(query(collection(db, "users"), where("uid", "==", user.uid))),
-          Promise.all(terms.map(termId => readDocs(collection(db, "terms", termId, "lessons"))))
-        ]);
-        const teacherId = profile.docs[0]?.id;
-        if (!teacherId || String(profile.docs[0].data().role || "").toLowerCase() !== "teacher") throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
-        const classes = await readDocs(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
-        return { curriculum, sections: await loadClassReports(db, classes.docs, terms, readDocs) };
-      }),
-      render: ({ curriculum, sections }) => timing.render(() => {
+const report = createTeacherReport({ app,
+  progress: ({ loaded, total, complete, termId }) => {
+    document.getElementById("analyticsReportStatus").textContent = complete ? "" : `Results so far · ${loaded} of ${total} students`;
+    document.getElementById("analyticsTermLabel").textContent = termLabels[termId];
+  },
+  failed: error => { console.error("Analytics update failed:", error); document.getElementById("analyticsReportStatus").textContent = "Could not update results. Retrying automatically."; },
+  render: data => {
+    lastReport = data;
+    const { sections, classes, curriculumSnap } = data;
+    const curriculum = [curriculumSnap], terms = [data.termId];
+    dynamicRows = [];
         const topicStatsMap = new Map();
         for (const [index, termLessonsSnap] of curriculum.entries()) {
         const termId = terms[index];
@@ -206,26 +187,27 @@ onAuthStateChanged(auth, async user => {
       let totalStudentTestsCount = 0;
       let totalEnrolledStudents = 0;
 
-      const selectedSection = sectionFilter?.value;
       if (sectionFilter) sectionFilter.innerHTML = '<option value="all">All Sections</option>';
       if (studentGrid) {
         studentGrid.innerHTML = "";
         if (empty) studentGrid.appendChild(empty);
       }
 
-      // 4. Process Classes and Students
+      if (sectionFilter) {
+        for (const classDoc of classes) {
+          const option = document.createElement("option"); option.value = classDoc.id;
+          option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
+          sectionFilter.appendChild(option);
+        }
+        sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || "all" : selectedSection || "all";
+        if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
+      }
+      // Process only the selected term and sections.
       const rows = document.createDocumentFragment();
       for (const { classDoc, students } of sections) {
         const classCode = classDoc.id;
         const cData = classDoc.data();
         const sectionName = cData.SectionName || cData.sectionName || cData.name || classCode;
-
-        if (sectionFilter) {
-          const opt = document.createElement("option");
-          opt.value = classCode;
-          opt.textContent = `Grade 6 – ${sectionName}`;
-          sectionFilter.appendChild(opt);
-        }
 
         for (const { studentDoc, results } of students) {
           totalEnrolledStudents++;
@@ -295,33 +277,23 @@ onAuthStateChanged(auth, async user => {
               totalStudentTestsCount++;
             }
 
-            const tr = document.createElement("tr");
-            tr.className = "student-row";
-            tr.dataset.name = sName.toLowerCase();
-            tr.dataset.section = classCode;
-
             const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
             const impSign = improvement > 0 ? "+" : "";
 
-            tr.innerHTML = `
+            const html = `<tr class="student-row">
               <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
               <td>Grade 6 – ${escapeHtml(sectionName)}</td>
               <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
               <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
               <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
               <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
-            `;
+            </tr>`;
 
-            rows.appendChild(tr);
+            dynamicRows.push({ name: sName.toLowerCase(), html });
           }
         }
       }
 
-      if (studentGrid) {
-        studentGrid.appendChild(rows);
-        dynamicRows = Array.from(studentGrid.querySelectorAll(".student-row"));
-      }
-      if (sectionFilter && Array.from(sectionFilter.options).some(option => option.value === selectedSection)) sectionFilter.value = selectedSection;
       filterStudents();
 
       // 5. Update Overall Class Averages
@@ -360,12 +332,14 @@ onAuthStateChanged(auth, async user => {
       window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
       renderTopics(window.totalStudentsBase);
       renderStudentActivities(curriculum, sections);
-      }),
-      painted: cacheHit => timing.finish("loaded", { cacheHit })
-    });
-  } catch (error) {
-    console.error("Error loading analytics:", error);
-    if (topicsContainer) topicsContainer.innerHTML = '<p style="grid-column: 1 / -1; text-align: center; color: #ef4444; padding: 20px;">Error loading topic rates.</p>';
-    timing.finish("error");
   }
+});
+function openReport() {
+  if (!auth.currentUser) return;
+  document.getElementById("analyticsReportStatus").textContent = "Loading selected results…";
+  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection });
+}
+onAuthStateChanged(auth, user => {
+  if (!user) { window.location.href = "login.html"; return; }
+  void openReport();
 });

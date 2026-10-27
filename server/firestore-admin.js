@@ -90,6 +90,21 @@ export class FirestoreAdmin {
       : await this.request("documents/" + path.split("/").map(encodeURIComponent).join("/"));
     return result ? { data: decodeFields(result.fields), wire: decodeFields(result.fields, true), updateTime: result.updateTime } : null;
   }
+  async getAll(paths) {
+    if (!Array.isArray(paths) || !paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
+    const names = paths.map(path => this.name(path));
+    const rows = await this.request("documents:batchGet", { method: "POST", body: JSON.stringify({ documents: names }) });
+    const records = new Map();
+    for (const row of rows || []) {
+      const name = row.found?.name || row.missing;
+      if (!name) continue;
+      const index = names.indexOf(name);
+      if (index < 0 || records.has(paths[index])) throw new Error("Unexpected report document.");
+      records.set(paths[index], row.found ? { data: decodeFields(row.found.fields), wire: decodeFields(row.found.fields, true), updateTime: row.found.updateTime } : null);
+    }
+    if (records.size !== paths.length) throw new Error("The report response was incomplete.");
+    return records;
+  }
   async query(path, { filters = [], order = [], limit = 5000, after } = {}) {
     const parts = path.split("/");
     this.name(path);

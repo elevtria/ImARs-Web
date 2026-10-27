@@ -49,7 +49,8 @@ export function webProtectionEnabled() {
   return configuration;
 }
 export async function protectedWebLogin(identifier, password, portal) {
-  await webProtectionEnabled();
+  // The login endpoint itself validates configuration and fails closed. A
+  // separate config round trip before submitting adds no authorization.
   const result = await webRequest("/api/web-auth/login", { identifier, password, portal });
   if (!result.user?.uid || result.user.role !== portal) throw new Error("Sign-in could not be verified.");
   return result.user;

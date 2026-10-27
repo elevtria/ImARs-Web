@@ -36,7 +36,7 @@ function page({ protection = true, denied = false, outage = false, search = "", 
       if (denied || !profileExists) throw Object.assign(new Error("Web login is locked. Contact your administrator."), { userMessage: "Web login is locked. Contact your administrator." });
       return { user: { uid: "teacher-a" } };
     },
-    prepareDashboard: async () => {},
+    prepareDashboard: async () => { assert.fail("Sign-in must never wait for student reports"); },
     signOut: async () => {}, doc: () => ({}), collection: () => ({}), where: () => ({}), query: () => ({}),
     getDoc: async () => { calls.push(["legacy-profile"]); return { exists: () => profileExists, data: () => ({ role: "teacher", email: "teacher@example.test" }) }; },
     getDocs: async () => ({ empty: false, docs: [{ data: () => ({ role: "teacher" }) }] })

@@ -320,3 +320,55 @@ test("teachers may restore or delete only archived student profiles in their ass
  assert.equal((await app.call(remove("users/0026271000"), cookie)).status, 200);
  assert.equal(app.data.has("users/0026271000"), false);
 });
+
+test("report pages read at most 25 students in one selected term and never query the other terms", async () => {
+  const app = fixture(), cookie = await app.login();
+  for (let i=0;i<1000;i++) {
+    const id='S'+String(i).padStart(4,'0');
+    app.data.set('users/'+id,{role:'student',classCode:'A',teacherId:'TEACH1000',active:true,displayName:'Sample '+i,password:'private'});
+    for (const termId of ['term_01','term_02','term_03']) app.data.set(`users/${id}/test_results/${termId}/lessons/lesson_01`,{postTestScore:4,postTestTotalQuestions:5});
+  }
+  const calls=[], gets=[], batches=[], query=app.store.query.bind(app.store), get=app.store.get.bind(app.store), getAll=app.store.getAll.bind(app.store);
+  app.store.getAll=async paths=>{batches.push(paths);return getAll(paths);};
+  app.store.query=async(path,options)=>{calls.push(path);return query(path,options);};
+  app.store.get=async path=>{gets.push(path);return get(path);};
+  const response=await app.call({action:'teacher-report-page',termId:'term_02',firstSection:true},cookie);
+  assert.equal(response.status,200); assert.match(response.headers.get('Server-Timing'),/auth;dur=\d+, data;dur=\d+/);
+  const result=await response.json();
+  assert.equal(result.students.length,25);assert.equal(result.counts[0].active,1001);
+  assert.equal(batches.length,1);assert.equal(batches[0].length,100);assert.ok(batches[0].every(path=>path.includes('/term_02/')));
+  assert.ok(!calls.some(path=>path.includes('test_results')));
+  assert.equal(gets.filter(path=>/^users\/S/.test(path)).length,0,'returned roster profiles already establish ownership');
+  assert.ok(!JSON.stringify(result).includes('private'));
+  calls.length=0;
+  const next=await app.call({action:'teacher-report-page',termId:'term_02',firstSection:true,cursor:result.cursor,includeCurriculum:false},cookie);
+  assert.equal(next.status,200);assert.equal(batches.length,2);assert.equal(batches[1].length,100);
+  assert.ok(!calls.some(path=>path.startsWith('terms/')));
+  assert.equal((await app.call({action:'teacher-report-page',termId:'all'},cookie)).status,400);
+  assert.equal((await app.call({action:'teacher-report-page',termId:'term_01',sectionId:'B'},cookie)).status,403);
+  assert.equal((await app.call({action:'teacher-report-page',termId:'term_01'})).status,401);
+});
+
+test("middleware and data share one request's session verification while account status remains live",async()=>{
+  const app=fixture(),cookie=await app.login(), binding=app.env.WEB_LOGIN_STATE;
+  let checks=0;
+  app.env.WEB_LOGIN_STATE={idFromName:binding.idFromName,get(name){const stub=binding.get(name);return {fetch(url,options){if(url.endsWith('/session'))checks++;return stub.fetch(url,options);}};}};
+  const body={action:'teacher-report-page',termId:'term_01'};
+  const request=app.request('/api/web-data',body,cookie);
+  const response=await protectWebsite({env:app.env,request,next:()=>webData({env:app.env,request},{store:app.store})});
+  assert.equal(response.status,200);assert.equal(checks,1,'the same request must not verify the session twice');
+  const denied=app.request('/api/web-data',body,cookie);
+  const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}});
+  assert.equal(blocked.status,403,'a verified session cannot bypass a disabled account');
+});
+
+test('Firestore report batchGet uses one request and preserves missing documents and unordered results',async()=>{
+ const store=new FirestoreAdmin({}),calls=[];
+ const paths=['users/S1/test_results/term_01/lessons/lesson_01','users/S1/test_results/term_01/lessons/lesson_02'];
+ store.request=async(path,options)=>{calls.push({path,body:JSON.parse(options.body)});return [{missing:store.name(paths[1])},{found:{name:store.name(paths[0]),fields:{postTestScore:{integerValue:'4'}},updateTime:'now'}}];};
+ const records=await store.getAll(paths);
+ assert.equal(calls.length,1);assert.equal(calls[0].path,'documents:batchGet');assert.deepEqual(calls[0].body.documents,paths.map(path=>store.name(path)));
+ assert.equal(records.get(paths[0]).data.postTestScore,4);assert.equal(records.get(paths[1]),null);
+ store.request=async()=>[];await assert.rejects(store.getAll(paths),/incomplete/);
+ await assert.rejects(store.getAll(Array.from({length:101},(_,i)=>'users/S'+i)),/100/);
+});

@@ -13,6 +13,7 @@ const recordsContainer = document.getElementById("recordsContainer");
 const emptyState = document.getElementById("emptyState");
 const searchInput = document.getElementById("studentSearch");
 const sectionFilter = document.getElementById("sectionFilter");
+const termFilter = document.getElementById("recordsTerm");
 const archiveSectionButton = document.getElementById("archiveSectionBtn");
 
 let dynamicCards = [];
@@ -23,7 +24,7 @@ const previousPage = document.getElementById("previousRecordsPage");
 const nextPage = document.getElementById("nextRecordsPage");
 const pageStatus = document.getElementById("recordsPageStatus");
 let pageIndex = 0, cursors = [null], pageGeneration = 0, pageBusy = false, pageError = false, searchTimer, pageAbort, stopUpdates;
-let pageFilter = { sectionId: "", status: "active", search: "" };
+let pageFilter = { sectionId: "", status: "active", search: "", termId: "term_01" };
 let pageCacheKey = "", counts = [], nextCursor = null;
 const reportRequests = new Map();
 const observedCards = typeof IntersectionObserver === "function" ? new IntersectionObserver(entries => {
@@ -117,12 +118,13 @@ for (const status of ["active", "archived"]) document.getElementById(status + "S
 });
 searchInput.addEventListener("input", () => { clearTimeout(searchTimer); applyFilters(); searchTimer = setTimeout(resetPages, 300); });
 sectionFilter.addEventListener("change", () => { applyFilters(); return resetPages(); });
+termFilter.addEventListener("change", () => { pageFilter.termId = termFilter.value; reportRequests.clear(); return loadRecordsPage(); });
 previousPage.addEventListener("click", () => { if (pageIndex > 0 && !pageBusy) { pageIndex--; return loadRecordsPage({ scroll: true }); } });
 nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursors[++pageIndex] = nextCursor; return loadRecordsPage({ scroll: true }); } });
 
 function resetPages() {
   pageIndex = 0; cursors = [null];
-  pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: searchInput.value.trim() };
+  pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: searchInput.value.trim(), termId: termFilter.value || "term_01" };
   return loadRecordsPage();
 }
 
@@ -183,10 +185,11 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
     if (cache.version() !== version) return;
     const sections = result.classes.map(classDoc => ({ classDoc, students: rows.filter(row => row.classId === classDoc.id).map(row => {
       const previous = recordData?.sections.flatMap(section => section.students).find(student => student.studentDoc.id === row.studentDoc.id);
-      const remembered = cache.get(user.uid, "records:results:" + row.studentDoc.id);
-      const results = previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null;
+      const remembered = cache.get(user.uid, "records:results:" + filter.termId + ":" + row.studentDoc.id, 60000);
+      const sameTerm = previous?.results[0]?.termId === filter.termId;
+      const results = sameTerm && previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null;
       return { studentDoc: row.studentDoc, results: results || [], resultsLoaded: Boolean(results),
-        resultsLoading: previous?.resultsLoading || false, resultsError: previous?.resultsError || false };
+        resultsLoading: sameTerm && previous?.resultsLoading || false, resultsError: sameTerm && previous?.resultsError || false };
     }) }));
     const data = { classes: result.classes, sections, counts: totals || [], cursor: after };
     const encoded = encodeRecords(data);
@@ -212,35 +215,36 @@ function startRecordLoading(generation) {
 
 async function loadStudentPerformance(id) {
   const user = auth.currentUser;
+  const termId = pageFilter.termId || "term_01", requestKey = termId + ":" + id;
   const find = () => recordData?.sections.flatMap(section => section.students.map(student => ({ section, student }))).find(item => item.student.studentDoc.id === id);
   let row = find();
-  if (!user || !row || row.student.resultsLoaded || reportRequests.has(id)) return;
+  if (!user || !row || row.student.resultsLoaded || reportRequests.has(requestKey)) return;
   const current = row.student;
   current.resultsLoading = true; current.resultsError = false;
   const replace = () => {
     row = find();
-    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || !row) return;
+    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId || !row) return;
     dynamicCards.find(card => card.dataset.studentId === id)?.replaceWith(studentCard(row.section.classDoc, row.student));
     dynamicCards = Array.from(recordsContainer.querySelectorAll(".record")); applyFilters();
   };
   replace();
-  const request = Promise.all(["term_01", "term_02", "term_03"].map(async termId => ({
+  const request = Promise.all([termId].map(async termId => ({
     termId, lessonsSnap: await quietDocs(collection(db, "users", id, "test_results", termId, "lessons"))
   })));
-  reportRequests.set(id, request);
+  reportRequests.set(requestKey, request);
   try {
     const results = await request;
-    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid) return;
+    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
     if (latest) Object.assign(latest.student, { results, resultsLoaded: true });
-    prepareTeacherCache(app, user).put(user.uid, "records:results:" + id, encodeView(results));
+    prepareTeacherCache(app, user).put(user.uid, "records:results:" + termId + ":" + id, encodeView(results));
   } catch (error) {
     const latest = find();
-    if (latest && auth.currentUser?.uid === user.uid) latest.student.resultsError = true;
+    if (latest && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
     console.error("Could not load this student's performance:", error);
   } finally {
-    if (reportRequests.get(id) === request) reportRequests.delete(id);
-    const latest = find(); if (latest) latest.student.resultsLoading = false;
+    if (reportRequests.get(requestKey) === request) reportRequests.delete(requestKey);
+    const latest = find(); if (latest && pageFilter.termId === termId) latest.student.resultsLoading = false;
     replace(); cacheCurrentPage();
   }
 }
@@ -279,7 +283,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   let totalModuleTime = 0;
   let lastActiveDate = new Date(0);
 
-  // Check across all 3 terms
+  // Only the selected term is loaded.
   for (const { lessonsSnap } of results) {
     lessonsSnap.forEach((lessonDoc) => {
       const tData = lessonDoc.data();
@@ -361,7 +365,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
           <small>Grade 6 – ${escapeHTML(sectionName)}${resultsLoaded ? ` · ${dateStr}` : ""}</small>
         </div>
       </div>
-      <span class="overall">${resultsLoaded ? `${overallPercent}% overall` : "— overall"}</span>
+      <span class="overall">${resultsLoaded ? `${overallPercent}%` : "—"} · Term ${pageFilter.termId?.slice(-1) || "1"}</span>
     </div>
     <div class="stats">
       <div class="stat"><span>AR Time</span><b class="c-pink">${resultsLoaded ? arTimeStr : "—"}</b></div>
@@ -370,8 +374,8 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
       <div class="stat"><span>Post-Test</span><b class="c-green">${resultsLoaded ? avgPostStr : "—"}</b></div>
     </div>
     ${resultsLoaded ? `<div class="record-progress-tile">
-      <span class="record-progress-title">Overall performance</span>
-      <div class="bar" role="progressbar" aria-label="Overall performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
+      <span class="record-progress-title">Term performance</span>
+      <div class="bar" role="progressbar" aria-label="Term performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
       <strong class="record-progress-value">${overallPercent}%</strong>
     </div>` : `<p class="view-data-status" role="status">${resultsLoading ? "Loading performance…" : resultsError ? "Performance could not load." : "Performance loads when viewed."}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
   `;
@@ -396,10 +400,11 @@ onAuthStateChanged(auth, async user => {
   const saved = prepareTeacherCache(app, user).get(user.uid, "records:state");
   if (saved && ["active", "archived"].includes(saved.filter?.status) && typeof saved.filter.search === "string" &&
       Number.isInteger(saved.pageIndex) && saved.pageIndex >= 0 && saved.pageIndex < 5000 && Array.isArray(saved.cursors) && saved.cursors[saved.pageIndex] !== undefined) {
-    pageFilter = saved.filter; pageIndex = saved.pageIndex; cursors = saved.cursors;
+    pageFilter = { ...saved.filter, termId: /^term_0[1-3]$/.test(saved.filter.termId) ? saved.filter.termId : "term_01" }; pageIndex = saved.pageIndex; cursors = saved.cursors;
     recordStatus = pageFilter.status; searchInput.value = pageFilter.search;
     for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").setAttribute("aria-pressed", String(recordStatus === status));
   }
+  termFilter.value = pageFilter.termId;
   await loadRecordsPage();
   stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }));
 });

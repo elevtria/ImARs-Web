@@ -34,7 +34,7 @@ class Element {
   async emit(k,event={}) { for(const fn of this.listeners[k] || []) await fn({preventDefault(){},stopPropagation(){},...event}); }
 }
 function harness(size=3) {
-  const names=["recordsContainer","emptyState","studentSearch","sectionFilter","activeStudentsTab","archivedStudentsTab","activeStudentsCount","archivedStudentsCount","archiveStudentModal","archiveStudentForm","archiveReason","confirmArchiveStudent","archiveStudentError","cancelArchiveStudent","archiveStudentName","archiveStudentTitle","archiveSectionBtn","previousRecordsPage","nextRecordsPage","recordsPageStatus"];
+  const names=["recordsContainer","emptyState","studentSearch","sectionFilter","activeStudentsTab","archivedStudentsTab","activeStudentsCount","archivedStudentsCount","archiveStudentModal","archiveStudentForm","archiveReason","confirmArchiveStudent","archiveStudentError","cancelArchiveStudent","archiveStudentName","archiveStudentTitle","archiveSectionBtn","previousRecordsPage","nextRecordsPage","recordsPageStatus","recordsTerm"];
   const ids=Object.fromEntries(names.map(id=>[id,new Element(id === "sectionFilter" ? "select" : "div")]));
   const profiles=new Map(Array.from({length:size},(_,i)=>["S"+String(i).padStart(4,"0"),{displayName:i===0?'A <Student> "One"':"Student "+i,active:size===3&&i===1?false:true,classCode:"A"}]));
   const cache=createViewCache({storage:storage(),versions:storage()}), auth={currentUser:{uid:"teacher-a"}};
@@ -67,12 +67,12 @@ function harness(size=3) {
   return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:()=>authChanged(auth.currentUser),refresh:()=>refresh(),
     setPageReader:fn=>{pageReader=fn;},setResultReader:fn=>{resultReader=fn;},setConfirm:v=>{confirmation=v;},deny:()=>{denied=true;},failBatch:v=>{failBatch=v;}};
 }
-test("1000 students render only 25 profile cards and fetching one visible student reads only that student's three terms",async()=>{
+test("1000 students render only 25 profile cards and fetching one visible student reads only that student's selected term",async()=>{
   const app=harness(1000);await app.load();
   assert.equal(app.pageReads.length,1);assert.equal(app.ids.recordsContainer.children.length,25);assert.equal(app.resultReads.length,0);
   assert.equal(app.ids.activeStudentsCount.textContent,1000);assert.doesNotMatch(app.ids.recordsContainer.children[0].innerHTML,/0% overall|No activity recorded/);
-  await app.performance("S0000");assert.equal(app.resultReads.length,3);assert.ok(app.resultReads.every(r=>r.path.startsWith("users/S0000/")));
-  assert.match(app.ids.recordsContainer.children[0].innerHTML,/50%/);await app.performance("S0000");assert.equal(app.resultReads.length,3);
+  await app.performance("S0000");assert.equal(app.resultReads.length,1);assert.ok(app.resultReads.every(r=>r.path.startsWith("users/S0000/")));
+  assert.match(app.ids.recordsContainer.children[0].innerHTML,/50%/);await app.performance("S0000");assert.equal(app.resultReads.length,1);
 });
 test("next, previous and a return visit reuse page caches without reading the entire roster or any results",async()=>{
   const app=harness(1000);await app.load();await app.ids.nextRecordsPage.emit("click");assert.equal(app.pageReads.length,2);
@@ -83,7 +83,7 @@ test("archiving changes only the selected card, retains safe names and adjusts e
   const app=harness();await app.load();await app.performance("S0000");const untouched=app.ids.recordsContainer.children[1];await app.archive("S0000");
   assert.equal(app.ids.recordsContainer.children[1],untouched);assert.equal(app.ids.recordsContainer.children[0].classList.contains("hidden"),true);
   assert.equal(app.ids.activeStudentsCount.textContent,1);assert.equal(app.ids.archivedStudentsCount.textContent,2);
-  assert.equal(app.pageReads.length,1);assert.equal(app.resultReads.length,3);assert.equal(app.writes[0].data.archiveReason,"graduated");
+  assert.equal(app.pageReads.length,1);assert.equal(app.resultReads.length,1);assert.equal(app.writes[0].data.archiveReason,"graduated");
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/A &lt;Student&gt; &quot;One&quot;/);
 });
 test("archived profiles retain restore and delete confirmations; cancelled and denied writes preserve rows",async()=>{
@@ -127,4 +127,14 @@ test("an initial network failure does not report zero students or a successful e
   const app=harness();app.setPageReader(async()=>{throw Error("Network unavailable");});await app.load();
   assert.equal(app.ids.activeStudentsCount.textContent,"—");assert.equal(app.ids.emptyState.hidden,true);
   assert.match(app.ids.recordsPageStatus.textContent,/Could not update/);
+});
+
+test("switching student record terms reads only the selected term and ignores late previous-term results",async()=>{
+  const app=harness();await app.load();const pending=deferred();app.setResultReader(ref=>ref.path.includes('/term_01/')?pending.promise:Promise.resolve(snap([])));
+  await app.performance('S0000');
+  app.ids.recordsTerm.value='term_02';await app.ids.recordsTerm.emit('change');await app.performance('S0000');
+  assert.equal(app.resultReads.length,2);assert.ok(app.resultReads[1].path.includes('/term_02/'));
+  pending.resolve(snap([]));await flush();
+  assert.match(app.ids.recordsContainer.children[0].innerHTML,/Term 2/);
+  assert.equal(app.cache.get('teacher-a','records:results:term_01:S0000'),null);
 });

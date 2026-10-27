@@ -163,6 +163,14 @@ export async function getStudentPage(options = {}, requestOptions = {}) {
   return { ...result, classes: result.classes.map(snapshot),
     students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document) })) };
 }
+export async function getTeacherReportPage(options = {}, requestOptions = {}) {
+  const result = await webRequest("/api/web-data", encode({ ...options, action: "teacher-report-page" }), requestOptions);
+  const list = rows => { const docs = rows.map(snapshot); return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback) }; };
+  return { ...result, classes: result.classes.map(snapshot),
+    students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document),
+      results: [{ termId: result.termId, lessonsSnap: list(row.lessons) }] })),
+    curriculum: result.curriculum ? { termSnap: snapshot(result.curriculum.term), curriculumSnap: list(result.curriculum.lessons) } : null };
+}
 export async function createTeacher(profile) {
   const result = await request({ action: "create-teacher", profile });
   invalidateTeacherViews();

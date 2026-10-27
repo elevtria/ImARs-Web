@@ -100,6 +100,9 @@ export async function webSession(request, env, now = Date.now(), store) {
 }
 
 const identities = new WeakMap();
+// Share the middleware's verified session only inside this exact Request.
+// Roles and active status are still checked from the current staff profile.
+const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
   const row = await store.get("users/" + account.id), profile = row?.data;
   if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
@@ -133,7 +136,8 @@ export async function requireStaff(request, env, store = new FirestoreAdmin(env)
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
     throw Object.assign(new Error("Use the ImARs website."), { status: 403 });
   }
-  const account = await webSession(request, env, Date.now(), store);
+  const verified = requestSessions.get(request);
+  const account = verified?.env === env ? verified.account : await webSession(request, env, Date.now(), store);
   if (!account || (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== account.uid)) {
     throw Object.assign(new Error("Please sign in to the website."), { status: 401 });
   }
@@ -279,6 +283,7 @@ export async function protectWebsite(context, now = Date.now()) {
     }
     const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
     if (!path.startsWith("/api/") && account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
+    requestSessions.set(request, { env, account });
     const response = await context.next();
     const protectedResponse = new Response(response.body, response);
     protectedResponse.headers.set("Cache-Control", "private, no-store");

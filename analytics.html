@@ -44,12 +44,18 @@
       <section class="hero">
         <div>
           <h1>Class Analytics</h1>
-          <p>Performance overview — Term 1 · <span id="sectionSummary">Loading...</span> (<span id="studentCount">0</span> students)</p>
+          <p>Performance overview — <span id="analyticsTermLabel">Term 1</span> · <span id="sectionSummary">Loading...</span> (<span id="studentCount">0</span> students)</p>
         </div>
       </section>
 
+          <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
+            <button type="button" class="term-tab-btn active" data-term="term_01" aria-pressed="true" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
+            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
+            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
+          </div>
+      <p class="view-data-status" id="analyticsReportStatus" role="status">Loading results…</p>
       <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…">
-        <h2>Overall Class Average</h2>
+        <h2>Class Average</h2>
         <div class="overall">
           <div class="donut" aria-label="post-test average">
             <svg viewBox="0 0 120 120">
@@ -129,16 +135,12 @@
         </div>
       </section>
 
+<div class="student-detail-navigation" aria-label="Student performance pages"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
 <!-- Topic Completion Rate Section -->
       <section class="card section">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
           <h2 style="margin: 0;">Topic Completion Rate</h2>
-          <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
-            <button type="button" class="term-tab-btn active" data-term="all" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">All Terms</button>
-            <button type="button" class="term-tab-btn" data-term="term_01" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
-            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
-            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
-          </div>
+
         </div>
         <div class="topics" id="topicsContainer" data-loading-path="terms users" data-loading-label="Loading topic analytics…" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
           <p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">

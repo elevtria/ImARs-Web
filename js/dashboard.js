@@ -1,13 +1,9 @@
-import { getDocs as quietDocs, getDoc as quietDoc } from "./firebase-data.js";
-import { showTeacherView, escapeHtml } from "./teacher-view.js";
+import { escapeHtml } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, getDocsWithLoading as getDocs, getDocWithLoading as getDoc } from "./firebase-data.js";
-import { createPagePerformance } from "./page-performance.js";
-import { loadTeacherDashboard } from "./teacher-report-data.js";
+import { createTeacherReport } from "./teacher-report-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 // --- EXISTING UI LOGIC ---
 const drawer = document.getElementById("drawer");
@@ -35,17 +31,14 @@ const hour = new Date().getHours();
 const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
 
 
-onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "login.html"; return; }
-  const timing = createPagePerformance("Dashboard");
-  try {
-    await showTeacherView({ app, user, page: "dashboard",
-      load: async ({ background }) => {
-        const readDocs = background ? quietDocs : getDocs;
-        const readDoc = background ? quietDoc : getDoc;
-        return timing.data(() => loadTeacherDashboard(db, user, readDocs, readDoc));
-      },
-      render: ({ teacherName, noClass, sectionName, studentSnap, reports, termSnap, curriculumSnap }) => timing.render(() => {
+const report = createTeacherReport({ app,
+      failed: error => { console.error("Dashboard update failed:", error); document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically."; },
+      progress: ({ loaded, total, complete }) => { document.getElementById("dashboardReportStatus").textContent = complete ? "" : `Class averages so far · ${loaded} of ${total} students`; },
+      render: ({ teacherName, sections, counts, termSnap, curriculumSnap, total }) => {
+        const section = sections.find(row => counts.some(count => count.classId === row.classDoc.id));
+        const noClass = !section;
+        const sectionName = section?.classDoc.data().SectionName || section?.classDoc.id;
+        const reports = (section?.students || []).map(row => ({ studentDoc: row.studentDoc, lessonsSnap: row.results[0].lessonsSnap }));
         document.getElementById("greeting").textContent = "Good " + part + ", " + teacherName + " !";
         if (noClass) {
           document.getElementById("classInfo").textContent = "No classes assigned yet.";
@@ -58,7 +51,7 @@ onAuthStateChanged(auth, async user => {
           return;
         }
         document.getElementById("classInfo").textContent = "Grade 6 – " + sectionName;
-            document.getElementById("studentCountVal").textContent = studentSnap.size;
+            document.getElementById("studentCountVal").textContent = total;
 
             let totalPreTestSum = 0;
             let preTestCount = 0;
@@ -152,6 +145,7 @@ onAuthStateChanged(auth, async user => {
                 }
 
                 // Inject the row into the table
+                if (rows.childNodes.length >= 25) continue;
                 const tr = document.createElement("tr");
                 tr.innerHTML = `
                   <td>
@@ -168,7 +162,7 @@ onAuthStateChanged(auth, async user => {
                   <td class="muted-cell">${sArTimeStr}</td>
                   <td class="muted-cell">${dateStr}</td>
                 `;
-                rows.appendChild(tr);
+                if (rows.childNodes.length < 25) rows.appendChild(tr);
             }
             studentTableBody.appendChild(rows);
 
@@ -219,13 +213,9 @@ onAuthStateChanged(auth, async user => {
 
                 lessonCounter++;
             });
-      }),
-      painted: cacheHit => timing.finish("loaded", { cacheHit })
-    });
-  } catch (error) {
-    console.error("Error fetching teacher data:", error);
-    const info = document.getElementById("classInfo");
-    if (info) info.textContent = "Could not load your class data. Please refresh to try again.";
-    timing.finish("error");
-  }
+      }
+});
+onAuthStateChanged(auth, async user => {
+  if (!user) { window.location.href = "login.html"; return; }
+  await report.open({ user });
 });
