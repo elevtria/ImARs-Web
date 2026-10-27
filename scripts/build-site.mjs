@@ -1,6 +1,9 @@
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
 import { assertPublicClientContent, cacheStaticAssets, minifyPublicAssets } from "./cache-static-assets.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -19,6 +22,23 @@ for (const name of publicPaths) {
     recursive: true,
     filter: (source) => !basename(source).startsWith(".") && !source.endsWith(".map")
   });
+}
+
+// Reuse the existing theme, but compile utilities once instead of running the
+// Play CDN compiler and its DOM observer on every page in production.
+const theme = { tailwind: {} };
+runInNewContext(await readFile(join(root, "js/tailwind.config.js"), "utf8"), theme, { timeout: 1000 });
+const utilityStyles = await postcss([tailwindcss({ ...theme.tailwind.config,
+  content: [join(root, "*.html").replaceAll("\\", "/"), join(root, "js", "*.js").replaceAll("\\", "/"),
+    "!" + join(root, "js", "*.min.js").replaceAll("\\", "/")]
+})]).process("@tailwind base; @tailwind components; @tailwind utilities;", { from: undefined });
+await writeFile(join(output, "css/utilities.css"), utilityStyles.css);
+for (const page of pages) {
+  const path = join(output, page), source = await readFile(path, "utf8");
+  if (!source.includes("https://cdn.tailwindcss.com")) continue;
+  const html = source.replace(/\s*<script\b[^>]*src=["'](?:https:\/\/cdn\.tailwindcss\.com|\/?js\/tailwind\.config\.js)["'][^>]*>\s*<\/script>/gi, "")
+    .replace("</head>", '<link rel="stylesheet" href="css/utilities.css" />\n</head>');
+  await writeFile(path, html);
 }
 
 const minified = await minifyPublicAssets(output, pages);

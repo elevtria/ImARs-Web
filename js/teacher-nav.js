@@ -1,6 +1,5 @@
 import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
-import { collection, getDocs, getFirestore, query, where } from "./firebase-data.js";
 import { initWebSession } from "./web-session.js";
 
 const nameElement = document.querySelector(".side-user .user-meta strong");
@@ -26,16 +25,13 @@ if (nameElement && avatarElement) {
   const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
   const auth = getAuth(app);
   initWebSession(auth);
-  const db = getFirestore(app);
 
-  onAuthStateChanged(auth, async (user) => {
+  onAuthStateChanged(auth, (user) => {
     if (!user) return;
 
     try {
-      const userQuery = query(collection(db, "users"), where("uid", "==", user.uid));
-      const userSnapshot = await getDocs(userQuery);
-      const userData = userSnapshot.empty ? {} : userSnapshot.docs[0].data();
-      const teacherName = userData.displayName || user.displayName || "Teacher";
+      // Identity already returns the name from the current verified profile.
+      const teacherName = user.displayName || "Teacher";
 
       nameElement.textContent = teacherName;
 

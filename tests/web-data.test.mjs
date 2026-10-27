@@ -372,3 +372,24 @@ test('Firestore report batchGet uses one request and preserves missing documents
  store.request=async()=>[];await assert.rejects(store.getAll(paths),/incomplete/);
  await assert.rejects(store.getAll(Array.from({length:101},(_,i)=>'users/S'+i)),/100/);
 });
+
+test('visible student performance reads share bounded profile and result batches and reject foreign students',async()=>{
+ const app=fixture(),cookie=await app.login(),batches=[],queries=[];
+ for(let i=0;i<30;i++){
+  app.data.set('users/VISIBLE'+i,{role:'student',classCode:'A',teacherId:'TEACH1000'});
+  app.data.set(`users/VISIBLE${i}/test_results/term_02/lessons/lesson_02`,{postTestScore:i});
+ }
+ const getAll=app.store.getAll.bind(app.store),query=app.store.query.bind(app.store);
+ app.store.getAll=async paths=>{batches.push(paths);return getAll(paths);};
+ app.store.query=async(...args)=>{queries.push(args[0]);return query(...args);};
+ const read=id=>({action:'query',reference:{kind:'query',path:`users/${id}/test_results/term_02/lessons`}});
+ const body={action:'reads',reads:Array.from({length:30},(_,i)=>read('VISIBLE'+i))};
+ const response=await app.call(body,cookie);assert.equal(response.status,200);
+ const result=await response.json();assert.equal(result.results.length,30);
+ assert.ok(result.results.every((row,i)=>row.documents.length===1&&row.documents[0].data.postTestScore===i));
+ assert.deepEqual(batches.map(paths=>paths.length),[30,100,20]);assert.equal(queries.length,0);
+ batches.length=0;
+ const denied=await app.call({action:'reads',reads:[read('VISIBLE0'),read('0026271001')]},cookie);
+ assert.equal(denied.status,403);
+ assert.ok(batches.every(paths=>paths.every(path=>!path.includes('/test_results/'))),'a foreign student must fail before loading any result documents');
+});

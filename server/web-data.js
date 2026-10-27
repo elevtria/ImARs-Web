@@ -223,6 +223,7 @@ async function studentPage(scope, body) {
     throw fail("Invalid student page.", 400);
   }
   const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
+  for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   if (body.firstSection === true && !sectionId) sectionId = classes[0]?.id || "";
   if (sectionId) await scope.ownsClass(sectionId);
@@ -270,6 +271,11 @@ async function teacherReportPage(scope, body) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
   const page = await studentPage(scope, { ...body, status: "active", search: "", limit: 25 });
+  const curriculumPromise = body.includeCurriculum === false ? null : (async () => {
+    const path = "terms/" + body.termId;
+    const [row, lessons] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 })]);
+    return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
+  })().then(value => ({ value }), error => ({ error }));
   // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
   // their documents in one database round trip, only for verified roster rows.
   const paths = page.students.flatMap(row => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`));
@@ -278,12 +284,9 @@ async function teacherReportPage(scope, body) {
     const path = `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`, record = records.get(path);
     return record ? [output(path, record)] : [];
   }) }));
-  let curriculum;
-  if (body.includeCurriculum !== false) {
-    const path = "terms/" + body.termId;
-    const [row, lessons] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 })]);
-    curriculum = { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
-  }
+  const curriculumResult = await curriculumPromise;
+  if (curriculumResult?.error) throw curriculumResult.error;
+  const curriculum = curriculumResult?.value;
   return { ...page, students, cursor: page.counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
 }
 
@@ -350,12 +353,33 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
         if (!["get", "query"].includes(item.action) || (item.action === "get") !== (ref.kind === "document")) throw fail("Invalid data request.", 400);
         return ref;
       });
+      const resultQueries = refs.filter(ref => ref.kind === "query" && /^users\/[A-Za-z0-9_-]+\/test_results\/term_0[1-3]\/lessons$/.test(ref.path) &&
+        !ref.filters.length && !ref.order.length && ref.limit >= 4);
+      // A visible group shares two batch reads: current student profiles for
+      // ownership, then their fixed lesson documents. Never return any results
+      // until every reference in the request has passed authorization.
+      if (resultQueries.length > 1) {
+        const paths = [...new Set(resultQueries.map(ref => "users/" + ref.parts[1]))];
+        const profiles = await store.getAll(paths);
+        for (const path of paths) scope.reads.set(path, Promise.resolve(profiles.get(path)));
+      }
       // Authorize the whole group before returning any records; memoized class
       // checks are shared across a page's concurrent report requests.
       await Promise.all(refs.map(ref => scope.authorizeRead(ref)));
+      const batchedResults = new Map();
+      for (let index = 0; index < resultQueries.length; index += 25) {
+        const group = resultQueries.slice(index, index + 25);
+        const paths = [...new Set(group.flatMap(ref => [1, 2, 3, 4].map(number => ref.path + "/lesson_0" + number)))];
+        const rows = await store.getAll(paths);
+        for (const ref of group) batchedResults.set(ref.path, [1, 2, 3, 4].flatMap(number => {
+          const path = ref.path + "/lesson_0" + number, row = rows.get(path);
+          return row ? [output(path, row)] : [];
+        }));
+      }
       const results = [];
       for (let index = 0; index < refs.length; index += 8) results.push(...await Promise.all(refs.slice(index, index + 8).map(async ref => {
         if (ref.kind === "document") return { document: output(ref.path, await scope.get(ref.path)) };
+        if (batchedResults.has(ref.path)) return { documents: batchedResults.get(ref.path) };
         if (ref.path === "users" && ref.filters.some(filter => filter.field === "uid")) {
           return { documents: [output("users/" + actor.id, await scope.get("users/" + actor.id), actor.id)] };
         }

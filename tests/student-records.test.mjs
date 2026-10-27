@@ -135,10 +135,17 @@ test("switching student record terms reads only the selected term and ignores la
   const app=harness();await app.load();const pending=deferred();app.setResultReader(ref=>ref.path.includes('/term_01/')?pending.promise:Promise.resolve(snap([])));
   await app.performance('S0000');
   app.ids.recordsTerm.value='term_02';await app.ids.recordsTerm.emit('change');await app.performance('S0000');
+  assert.equal(app.pageReads.length,1,'changing term must reuse the roster instead of fetching its profiles again');
   assert.equal(app.resultReads.length,2);assert.ok(app.resultReads[1].path.includes('/term_02/'));
   pending.resolve(snap([]));await flush();
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/Term 2/);
   assert.equal(app.cache.get('teacher-a','records:results:term_01:S0000'),null);
+});
+
+test('background student refresh preserves the existing section options while its menu is open',async()=>{
+ const app=harness();await app.load();const option=app.ids.sectionFilter.children[1];
+ await app.refresh();
+ assert.equal(app.ids.sectionFilter.children[1],option,'unchanged native options must not be replaced during background work');
 });
 
 test('quiet record updates refresh only visible selected-term results and keep unchanged cards',async()=>{

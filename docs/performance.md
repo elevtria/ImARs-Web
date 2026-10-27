@@ -8,6 +8,12 @@ Teacher login redirects after authentication. It no longer prepares an entire
 student report before redirecting, waits for the optional password manager,
 or makes a redundant configuration request before submitting credentials.
 
+The production build compiles the existing Tailwind theme and utility classes
+to a versioned CSS file. It removes the Play CDN compiler and its DOM observer
+from published pages. Fonts retain their existing provider; app styles and
+authentication are unchanged. The sidebar uses the teacher name returned by
+the verified identity response instead of a second profile request.
+
 Dashboard and Analytics use authenticated report pages of at most 25 active
 students in one selected term. The server shares ownership checks and uses one
 Firestore batchGet for their four fixed lesson IDs (at most 100 documents).
@@ -17,6 +23,8 @@ including missing document reads. Middleware session verification is
 reused only inside the exact same Request; live staff status still gets checked.
 Analytics defaults to the first assigned section and Term 1. Its term/section
 controls select what is fetched, rather than filtering a three-term download.
+Class totals are counted on the first page of a report/refresh rotation and
+reused for its later pages. Curriculum reads run alongside the lesson batch.
 
 The first report paints after its first batch. Remaining batches calculate the
 selected class average progressively while that page is visible, with an explicit
@@ -156,6 +164,14 @@ results are reused within the authenticated tab; an error shows a local retry.
 Paging, archiving, restoring and deleting do not reload HTML or re-read other
 students' results. Bulk section archiving still includes off-page students and
 retries only unfinished batches.
+Changing the Student Records term also reuses the current roster page instead
+of downloading its profiles and counts again. Unchanged section options are
+retained during quiet refreshes so a native dropdown is not closed by rebuilding
+its children. Grouped fixed-lesson reads use a profile batch for live ownership
+checks followed by bounded lesson batches (at most 100 documents each), instead
+of one lesson collection query per student. The entire group must be authorized
+before lesson results are read or returned. These changes reduce round trips,
+not Firestore's per-document read charges.
 
 Name/ID searches retain case-insensitive matching over assigned sections, using
 bounded scans of at most 100 profiles per server request. A rare search may scan
@@ -215,11 +231,11 @@ visible cards.
 Firebase. The diagnostic object contains timing/count information only, without student
 names, IDs, scores, or tokens. It is local to the open page and is not uploaded.
 
-There is still one query per student per requested term because that is how the
-existing mobile app stores results. Parallel reads reduce waiting; they do not
-eliminate those queries. A sustained problem with very large classes may warrant
-server-generated summary documents, which would require a separately reviewed
-backend/data-flow change. Do not cache private reports in a public CDN.
+The older admin report loader still scans student results. The teacher report
+loader batches selected-term reads, but still scans the selected class for exact
+averages on a cold load. Neither is a write-time summary pipeline. Production
+latency and capacity have not been established by the local fixture tests.
+Do not cache private reports in a public CDN.
 
 References: [Firestore best practices](https://firebase.google.com/docs/firestore/best-practices#read_and_write_operations),
 [Firestore aggregation queries](https://firebase.google.com/docs/firestore/query-data/aggregation-queries),

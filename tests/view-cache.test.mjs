@@ -150,7 +150,7 @@ function pagedReportHarness() {
   const snap=docs=>({docs,size:docs.length,forEach:fn=>docs.forEach(fn)});
   const makePage=options=>{
     const start=options.cursor?25:0;
-    return {classes:[record('A',{SectionName:'A'})],counts:[{classId:'A',active:50,archived:0}],
+    return {classes:[record('A',{SectionName:'A'})],counts:options.includeCounts===false?null:[{classId:'A',active:50,archived:0}],
       students:Array.from({length:25},(_,i)=>({classId:'A',studentDoc:record('S'+(start+i),{displayName:'Student '+(start+i)}),results:[{termId:options.termId,lessonsSnap:snap([])}]})),
       curriculum:options.includeCurriculum?{termSnap:record(options.termId,{title:options.termId}),curriculumSnap:snap([])}:null,
       cursor:start?null:{classId:'A',id:'S24'}};
@@ -173,6 +173,7 @@ test('reports paint the first 25 students before further background work and reu
   assert.equal(app.calls.length,1);assert.equal(app.paints.at(-1).loaded,25);assert.equal(app.paints.at(-1).complete,false);
   assert.equal(app.calls[0].termId,'term_01');assert.equal(app.calls[0].firstSection,true);
   await app.tick();assert.equal(app.calls.length,2);assert.equal(app.paints.at(-1).loaded,50);assert.equal(app.paints.at(-1).complete,true);
+  assert.equal(app.calls[1].includeCounts,false);assert.equal(app.paints.at(-1).total,50,'later pages reuse the first page totals');
   await app.open({});assert.equal(app.calls.length,2,'a recent return must not reload the report');
   app.time(60001);await app.refresh();assert.equal(app.calls.length,3,'one automatic check updates one page only');
   assert.equal(app.calls[2].includeCurriculum,false);assert.equal(app.paints.at(-1).loaded,50);

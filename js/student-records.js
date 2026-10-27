@@ -119,7 +119,25 @@ for (const status of ["active", "archived"]) document.getElementById(status + "S
 });
 searchInput.addEventListener("input", () => { clearTimeout(searchTimer); applyFilters(); searchTimer = setTimeout(resetPages, 300); });
 sectionFilter.addEventListener("change", () => { applyFilters(); return resetPages(); });
-termFilter.addEventListener("change", () => { pageFilter.termId = termFilter.value; reportRequests.clear(); return loadRecordsPage(); });
+termFilter.addEventListener("change", () => {
+  pageFilter.termId = termFilter.value;
+  reportRequests.clear();
+  if (!recordData || pageBusy || pageError || recordOwnerUid !== auth.currentUser?.uid) return loadRecordsPage();
+  // The roster does not depend on the term. Keep this page's profiles and
+  // replace only the selected-term results, including any recently saved ones.
+  pageGeneration++; pageAbort?.abort();
+  const user = auth.currentUser, cache = prepareTeacherCache(app, user);
+  const key = "records:page:" + JSON.stringify({ filter: pageFilter, cursor: cursors[pageIndex] });
+  const sections = recordData.sections.map(section => ({ ...section, students: section.students.map(student => {
+    const saved = cache.get(user.uid, "records:results:" + pageFilter.termId + ":" + student.studentDoc.id, 60000);
+    let results = [];
+    if (saved) try { results = decodeView(saved); } catch {}
+    return { studentDoc: student.studentDoc, results, resultsLoaded: Boolean(saved && results.length), resultsLoading: false, resultsError: false };
+  }) }));
+  cache.put(user.uid, "records:state", { filter: pageFilter, pageIndex, cursors });
+  renderRecords({ ...recordData, sections }, key);
+  cacheCurrentPage();
+});
 previousPage.addEventListener("click", () => { if (pageIndex > 0 && !pageBusy) { pageIndex--; return loadRecordsPage({ scroll: true }); } });
 nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursors[++pageIndex] = nextCursor; return loadRecordsPage({ scroll: true }); } });
 
@@ -135,11 +153,17 @@ function renderRecords(data, key) {
   recordData = data; recordOwnerUid = auth.currentUser.uid;
   counts = data.counts || []; nextCursor = data.cursor;
   const selected = pageFilter.sectionId;
-  sectionFilter.innerHTML = '<option value="">All Sections</option>';
-  for (const classDoc of data.classes) {
-    const option = document.createElement("option"); option.value = classDoc.id;
-    option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
-    sectionFilter.appendChild(option);
+  const choices = data.classes.map(classDoc => ({ id: classDoc.id, name: "Grade 6 – " + (classDoc.data().SectionName || classDoc.id) }));
+  const choicesKey = JSON.stringify(choices);
+  // Replacing native options while a menu is open closes it. A quiet refresh
+  // must leave unchanged controls alone.
+  if (sectionFilter.dataset.choices !== choicesKey) {
+    sectionFilter.innerHTML = '<option value="">All Sections</option>';
+    for (const choice of choices) {
+      const option = document.createElement("option"); option.value = choice.id;
+      option.textContent = choice.name; sectionFilter.appendChild(option);
+    }
+    sectionFilter.dataset.choices = choicesKey;
   }
   sectionFilter.value = selected;
   observedCards?.disconnect();

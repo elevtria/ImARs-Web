@@ -30,7 +30,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     try {
       abort = new AbortController();
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
-        firstSection: options.sectionId === "first", cursor, includeCurriculum: !state.curriculumSnap }, { signal: abort.signal });
+        firstSection: options.sectionId === "first", cursor, includeCounts: !cursor, includeCurriculum: !state.curriculumSnap }, { signal: abort.signal });
       if (!current(token)) return;
       if (cache.version() !== version) {
         version = cache.version();
@@ -40,9 +40,9 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
       const slot = state.pages.findIndex(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
       const page = { cursor, students: result.students };
-      const changed = slot < 0 || JSON.stringify(encodeView(state.pages[slot])) !== JSON.stringify(encodeView(page)) || JSON.stringify(state.counts) !== JSON.stringify(result.counts);
+      const changed = slot < 0 || JSON.stringify(encodeView(state.pages[slot])) !== JSON.stringify(encodeView(page)) || (result.counts && JSON.stringify(state.counts) !== JSON.stringify(result.counts));
       if (slot < 0) state.pages.push(page); else state.pages[slot] = page;
-      state.classes = result.classes; state.counts = result.counts;
+      state.classes = result.classes; if (result.counts) state.counts = result.counts;
       if (result.curriculum) Object.assign(state, result.curriculum);
       let reindexed = false;
       if (state.complete) {
