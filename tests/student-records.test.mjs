@@ -7,7 +7,7 @@ const source = readFileSync(new URL("../js/student-records.js", import.meta.url)
 const doc = (id, data) => ({ id, exists: () => true, data: () => data });
 const snap = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: action => docs.forEach(action) });
 const flush = async () => { for (let i = 0; i < 5; i++) await new Promise(setImmediate); };
-const deferred = () => { let resolve; const promise = new Promise(yes => { resolve = yes; }); return { promise, resolve }; };
+const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 function storage() {
   const rows = new Map(); return { get length() { return rows.size; }, key: i => [...rows.keys()][i], getItem: k => rows.get(k) ?? null,
     setItem: (k, v) => rows.set(k, String(v)), removeItem: k => rows.delete(k) };
@@ -65,6 +65,7 @@ function harness(size=3) {
   const performance=async id=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id}});await flush();};
   const archive=async id=>{await click(".archive-student-btn",ids.recordsContainer.children.find(c=>c.dataset.studentId===id).querySelector(".archive-student-btn"));ids.archiveReason.value="graduated";await ids.archiveStudentForm.emit("submit");};
   return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:()=>authChanged(auth.currentUser),refresh:()=>refresh(),
+    setEncoder:encode=>{context.encodeView=encode;},
     staleResults:()=>vm.runInContext('for(const section of recordData.sections) for(const student of section.students) student.resultsAt=0; cacheCurrentPage();',context),
     setPageReader:fn=>{pageReader=fn;},setResultReader:fn=>{resultReader=fn;},setConfirm:v=>{confirmation=v;},deny:()=>{denied=true;},failBatch:v=>{failBatch=v;}};
 }
@@ -149,4 +150,49 @@ test('quiet record updates refresh only visible selected-term results and keep u
  app.setResultReader(async()=>snap([doc('lesson_01',{isPreTestCompleted:true,isPostTestCompleted:true,preTestScore:5,preTestTotalQuestions:5,postTestScore:10,postTestTotalQuestions:10})]));
  app.staleResults();await app.refresh();await flush();
  assert.equal(app.resultReads.length,3);assert.match(app.ids.recordsContainer.children[0].innerHTML,/100%/);
+});
+
+test('empty Term 2 results use a genuine empty state, without an error or zero score',async()=>{
+ const app=harness();app.setResultReader(async()=>snap([]));await app.load();
+ app.ids.recordsTerm.value='term_02';await app.ids.recordsTerm.emit('change');await app.performance('S0000');
+ const html=app.ids.recordsContainer.children[0].innerHTML;
+ assert.match(html,/No Term 2 results yet/);assert.doesNotMatch(html,/Retry performance|could not load|0%/);
+});
+
+test('a failed card is not cached as a permanent failure on returning to the page',async()=>{
+ const app=harness();await app.load();app.setResultReader(async()=>{throw Error('Offline');});await app.performance('S0000');
+ assert.match(app.ids.recordsContainer.children[0].innerHTML,/Retry performance/);
+ await app.load();assert.match(app.ids.recordsContainer.children[0].innerHTML,/Performance loads when viewed/);
+ app.setResultReader(async()=>snap([]));await app.performance('S0000');
+ assert.match(app.ids.recordsContainer.children[0].innerHTML,/No Term 1 results yet/);
+});
+
+test('a successful performance read stays successful if optional caching cannot encode it',async()=>{
+ const app=harness();await app.load();app.setEncoder(()=>{throw TypeError('Unsupported cached value');});
+ await app.performance('S0000');const html=app.ids.recordsContainer.children[0].innerHTML;
+ assert.match(html,/50%/);assert.doesNotMatch(html,/could not load|Retry performance/);
+});
+
+test('a temporary result failure retries once and an access denial never retries',async()=>{
+ const app=harness();await app.load();let attempts=0;
+ app.setResultReader(async()=>{if(++attempts===1)throw Object.assign(Error('Unavailable'),{status:503,code:'unavailable'});return snap([]);});
+ await app.performance('S0000');await new Promise(resolve=>setTimeout(resolve,400));await flush();
+ assert.equal(attempts,2);assert.match(app.ids.recordsContainer.children[0].innerHTML,/No Term 1 results yet/);
+ const denied=harness();await denied.load();denied.setResultReader(async()=>{throw Object.assign(Error('Denied'),{code:'permission-denied',status:403});});
+ await denied.performance('S0000');assert.equal(denied.resultReads.length,1);assert.equal(denied.ids.recordsContainer.children.length,0);
+});
+
+test('changing terms during retry backoff cannot request or paint the previous term again',async()=>{
+ const app=harness();await app.load();app.setResultReader(async ref=>{if(ref.path.includes('/term_01/'))throw Object.assign(Error('Unavailable'),{status:503});return snap([]);});
+ await app.performance('S0000');app.ids.recordsTerm.value='term_02';await app.ids.recordsTerm.emit('change');await app.performance('S0000');
+ await new Promise(resolve=>setTimeout(resolve,400));await flush();
+ assert.equal(app.resultReads.length,2);assert.match(app.ids.recordsContainer.children[0].innerHTML,/No Term 2 results yet/);
+});
+
+test('a late denied result from the previous account cannot clear the new account cards',async()=>{
+ const app=harness();await app.load();const pending=deferred();app.setResultReader(()=>pending.promise);await app.performance('S0000');
+ app.auth.currentUser={uid:'teacher-b'};
+ app.setPageReader(async()=>({classes:[doc('B',{SectionName:'B'})],students:[{classId:'B',studentDoc:doc('B1',{displayName:'Other student',classCode:'B'})}],counts:[{classId:'B',active:1,archived:0}],cursor:null}));
+ await app.load();pending.reject(Object.assign(Error('Denied'),{code:'permission-denied',status:403}));await flush();
+ assert.equal(app.ids.recordsContainer.children.length,1);assert.equal(app.ids.recordsContainer.children[0].dataset.studentId,'B1');
 });

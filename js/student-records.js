@@ -36,14 +36,15 @@ const observedCards = typeof IntersectionObserver === "function" ? new Intersect
 
 function encodeRecords(data) {
   return encodeView({ ...data, sections: data.sections.map(section => ({ ...section,
-    students: section.students.map(student => ({ ...student, resultsLoading: false }))
+    students: section.students.map(student => ({ ...student, resultsLoading: false, resultsError: false }))
   })) });
 }
 
 function cacheCurrentPage() {
   const user = auth.currentUser;
   if (recordData && user?.uid === recordOwnerUid && pageCacheKey) {
-    prepareTeacherCache(app, user).put(user.uid, pageCacheKey, encodeRecords(recordData));
+    try { prepareTeacherCache(app, user).put(user.uid, pageCacheKey, encodeRecords(recordData)); }
+    catch { /* Optional browser caching must not turn loaded results into an error. */ }
   }
 }
 
@@ -233,22 +234,36 @@ async function loadStudentPerformance(id, { background = false } = {}) {
     dynamicCards = Array.from(recordsContainer.querySelectorAll(".record")); applyFilters();
   };
   if (!background) replace();
-  const request = Promise.all([termId].map(async termId => ({
-    termId, lessonsSnap: await quietDocs(collection(db, "users", id, "test_results", termId, "lessons"))
-  })));
+  const request = (async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try { return [{ termId, lessonsSnap: await quietDocs(collection(db, "users", id, "test_results", termId, "lessons")) }]; }
+      catch (error) {
+        const transient = error.code === "unavailable" || [408, 502, 503, 504].includes(error.status) || ["TimeoutError", "TypeError"].includes(error.name);
+        if (attempt || !transient) throw error;
+        await new Promise(resolve => setTimeout(resolve, 350));
+        if (auth.currentUser?.uid !== user.uid || pageFilter.termId !== termId || !find()) throw Object.assign(new Error("The view changed."), { name: "AbortError" });
+      }
+    }
+  })();
   reportRequests.set(requestKey, request);
   let changed = false;
   try {
     const results = await request;
     if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
-    changed = !latest?.student.resultsLoaded || JSON.stringify(encodeView(latest.student.results)) !== JSON.stringify(encodeView(results));
-    if (latest) Object.assign(latest.student, { results, resultsLoaded: true, resultsAt: Date.now() });
+    changed = true;
+    if (latest?.student.resultsLoaded) try { changed = JSON.stringify(encodeView(latest.student.results)) !== JSON.stringify(encodeView(results)); } catch {}
+    if (latest) Object.assign(latest.student, { results, resultsLoaded: true, resultsError: false, resultsAt: Date.now() });
     if (background && !changed) return;
-    prepareTeacherCache(app, user).put(user.uid, "records:results:" + termId + ":" + id, encodeView(results));
+    try { prepareTeacherCache(app, user).put(user.uid, "records:results:" + termId + ":" + id, encodeView(results)); }
+    catch { /* The live result remains usable when caching is unavailable. */ }
   } catch (error) {
+    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
-    if (latest && !background && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
+    if (["permission-denied", "unauthenticated"].includes(error.code)) {
+      prepareTeacherCache(app, user).invalidate(); recordData = null; dynamicCards = []; recordsContainer.replaceChildren(); pageError = true;
+      pageStatus.textContent = "Access to these results changed. Please sign in again.";
+    } else if (latest && !background && error.name !== "AbortError" && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
     console.error("Could not load this student's performance:", error);
   } finally {
     if (reportRequests.get(requestKey) === request) reportRequests.delete(requestKey);
@@ -273,6 +288,8 @@ function formatMinutes(totalMinutes) {
 
 
 function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resultsLoading = false, resultsError = false }) {
+  const hasResults = resultsLoaded && results.some(row => row.lessonsSnap.size > 0);
+  const termLabel = "Term " + (pageFilter.termId?.slice(-1) || "1");
   const classCode = classDoc.id;
   const sectionName = classDoc.data().SectionName || classCode;
   const sData = studentDoc.data();
@@ -371,10 +388,10 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
             <strong>${escapeHTML(sName)}</strong>
             ${sData.active === false ? '<span class="student-archive-badge">' + (sData.archiveReason === "graduated" ? "Graduated" : sData.archiveReason === "dropped-out" ? "Dropped out" : "Archived") + '</span><button type="button" class="unarchive-student-btn">Unarchive</button><button type="button" class="remove-student-btn">Delete</button>' : '<button type="button" class="archive-student-btn">Archive</button>'}
           </div>
-          <small>Grade 6 – ${escapeHTML(sectionName)}${resultsLoaded ? ` · ${dateStr}` : ""}</small>
+          <small>Grade 6 – ${escapeHTML(sectionName)}${hasResults ? ` · ${dateStr}` : ""}</small>
         </div>
       </div>
-      <span class="overall">${resultsLoaded ? `${overallPercent}%` : "—"} · Term ${pageFilter.termId?.slice(-1) || "1"}</span>
+      <span class="overall">${resultsLoaded ? hasResults ? `${overallPercent}%` : "No results" : "—"} · ${termLabel}</span>
     </div>
     <div class="stats">
       <div class="stat"><span>AR Time</span><b class="c-pink">${resultsLoaded ? arTimeStr : "—"}</b></div>
@@ -382,11 +399,11 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
       <div class="stat"><span>Pre-Test</span><b class="c-amber">${resultsLoaded ? avgPreStr : "—"}</b></div>
       <div class="stat"><span>Post-Test</span><b class="c-green">${resultsLoaded ? avgPostStr : "—"}</b></div>
     </div>
-    ${resultsLoaded ? `<div class="record-progress-tile">
+    ${resultsLoaded ? hasResults ? `<div class="record-progress-tile">
       <span class="record-progress-title">Term performance</span>
       <div class="bar" role="progressbar" aria-label="Term performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
       <strong class="record-progress-value">${overallPercent}%</strong>
-    </div>` : `<p class="view-data-status" role="status">${resultsLoading ? "Loading performance…" : resultsError ? "Performance could not load." : "Performance loads when viewed."}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
+    </div>` : `<p class="view-data-status">No ${termLabel} results yet.</p>` : `<p class="view-data-status" role="status">${resultsLoading ? "Loading performance…" : resultsError ? "Performance could not load." : "Performance loads when viewed."}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
   `;
   for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
   const button = card.querySelector(selector);

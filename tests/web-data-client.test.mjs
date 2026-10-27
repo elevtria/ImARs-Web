@@ -4,6 +4,7 @@ import vm from "node:vm";
 import test from "node:test";
 import { createReadPool } from "../js/data-read-pool.js";
 import { wrapFirestoreReads } from "../js/firebase-loading.js";
+import { fixture as dataFixture } from "./fixtures/web-data.js";
 
 const source = readFileSync(new URL("../js/firebase-data.js", import.meta.url), "utf8").replace(/^import[^\n]+\n/gm, "").replace(/^export /gm, "");
 const flush = async () => { for (let index = 0; index < 3; index++) await new Promise(resolve => setImmediate(resolve)); };
@@ -74,4 +75,13 @@ test("a pre-save response cannot repaint an older snapshot after the write succe
   assert.deepEqual(values, []);
   for (const callback of [...app.timers.values()]) callback();
   await flush(); assert.deepEqual(values, [2027]); stop();
+});
+
+test('empty Term 2 collections survive the real data handler and batched client transport',async()=>{
+ const backend=dataFixture(),cookie=await backend.login();
+ for(let i=0;i<15;i++)backend.data.set('users/EMPTY'+i,{role:'student',classCode:'A',teacherId:'TEACH1000'});
+ const app=fixture(async body=>{const response=await backend.call(body,cookie);assert.equal(response.status,200);return response.json();});
+ const rows=await Promise.all(Array.from({length:15},(_,i)=>app.api.getDocs(app.api.collection({},'users','EMPTY'+i,'test_results','term_02','lessons'))));
+ assert.ok(rows.every(row=>row.empty&&row.size===0&&row.docs.length===0));
+ assert.ok(app.calls.every(call=>call.body.reads.every(item=>item.reference.path.includes('/term_02/'))));
 });
