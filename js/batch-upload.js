@@ -596,22 +596,16 @@ confirmImportBtn.addEventListener("click", async () => {
       let finalStudentId = stu.studentId;
       const isNewStudent = !finalIds.has(finalStudentId);
 
-      // Core fields that are safe to update for EVERYONE
-      const safeUpdateData = {
-        firstName: stu.firstName,
-        lastName: stu.lastName,
-        displayName: stu.fullName,
-        fullName: stu.fullName,
-        classCode: targetSec.classCode,
-        section: targetSec.label,
-        email: stu.email || `${finalStudentId}@imars.edu`,
-        updatedAt: serverTimestamp()
-      };
-
       if (isNewStudent) {
-        // If it's a NEW student, build the full document with locked fields
+        // Build the full document for a brand NEW student
         const newStudentData = {
-          ...safeUpdateData,
+          firstName: stu.firstName,
+          lastName: stu.lastName,
+          displayName: stu.fullName,
+          fullName: stu.fullName,
+          classCode: targetSec.classCode,
+          section: targetSec.label,
+          email: stu.email || `${finalStudentId}@imars.edu`,
           schoolId: finalStudentId,
           role: "student",
           teacherId: currentTeacherId || "",
@@ -622,15 +616,24 @@ confirmImportBtn.addEventListener("click", async () => {
           gamification: {
             badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 }
           },
-          createdAt: serverTimestamp()
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
         };
         await setDoc(doc(db, "users", finalStudentId), newStudentData);
         finalIds.add(finalStudentId);
         targetSec.count++;
         newCount++;
       } else {
-        // If it's an EXISTING student, ONLY update the safe fields!
-        await updateDoc(doc(db, "users", finalStudentId), safeUpdateData);
+        // For EXISTING students, ONLY update their name and timestamp.
+        // We do NOT touch their classCode, section, role, or email!
+        const strictUpdateData = {
+          firstName: stu.firstName,
+          lastName: stu.lastName,
+          displayName: stu.fullName,
+          fullName: stu.fullName,
+          updatedAt: serverTimestamp()
+        };
+        await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
         updateCount++;
       }
       
