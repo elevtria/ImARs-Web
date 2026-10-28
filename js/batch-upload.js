@@ -361,26 +361,30 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- NEW: FETCH EXISTING IDS AND THEIR CLASS CODES ---
+    // --- SAFE FETCH: Use the existing checkStudentIds function to prevent query errors ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
-      // Query Firestore in chunks of 10
-      for (let i = 0; i < uniqueCandidateIds.length; i += 10) {
-        const chunk = uniqueCandidateIds.slice(i, i + 10);
-        const q = query(collection(db, "users"), where("__name__", "in", chunk));
-        const snap = await getDocs(q);
-        
-        snap.forEach(docSnap => {
-          existingStudentIds.add(docSnap.id);
-          // Store their current classCode
-          const data = docSnap.data();
-          dbExistingStudentClassCodes[docSnap.id] = data.classCode || "";
-        });
+      // First, get the list of IDs that actually exist in the DB
+      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
+      
+      // Then, only query for those specific existing IDs to get their classCode
+      if (verifiedExisting.length > 0) {
+          for (let i = 0; i < verifiedExisting.length; i += 10) {
+              const chunk = verifiedExisting.slice(i, i + 10);
+              const q = query(collection(db, "users"), where("__name__", "in", chunk));
+              const snap = await getDocs(q);
+              
+              snap.forEach(docSnap => {
+                  existingStudentIds.add(docSnap.id);
+                  const dbData = docSnap.data();
+                  dbExistingStudentClassCodes[docSnap.id] = dbData.classCode || "";
+              });
+          }
       }
     }
 
-    // Build the raw data structure (Wait to validate until the whole table is parsed)
+    // Build the raw data structure
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row || row.join("").trim() === "") continue;
@@ -398,7 +402,7 @@ async function handleFileSelected(file) {
       previewData.push({
         rowNum: i + 1,
         firstName, lastName, fullName, studentId, email,
-        isValid: false, // Calculated in validateAllRows
+        isValid: false, 
         isExisting, 
         errors: []
       });
@@ -423,13 +427,12 @@ function validateAllRows() {
   previewData.forEach(row => {
     if (row.studentId) idCounts[row.studentId] = (idCounts[row.studentId] || 0) + 1;
     if (row.fullName) {
-      const nameKey = row.fullName.toLowerCase().replace(/\s+/g, ' '); // Strict spacing
+      const nameKey = row.fullName.toLowerCase().replace(/\s+/g, ' '); 
       nameCounts[nameKey] = (nameCounts[nameKey] || 0) + 1;
     }
     if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
   });
 
-  // Get the ACTIVE classCode from the dropdown
   const targetSecCode = String(sectionSelect.value).trim();
 
   // 2. Apply errors globally
@@ -440,7 +443,6 @@ function validateAllRows() {
     // Evaluate if they exist AND if they belong to this specific section
     const existsInDb = existingStudentIds.has(row.studentId);
     
-    // STRICT CHECK: The classCode in the DB must exactly match the dropdown value
     const studentDbClassCode = String(dbExistingStudentClassCodes[row.studentId] || "").trim();
     row.isExisting = existsInDb && (studentDbClassCode === targetSecCode);
 
@@ -482,7 +484,7 @@ function updateRowData(index, field, value) {
   else item[field] = value.trim();
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
-  validateAllRows(); // Trigger a full re-scan on every edit!
+  validateAllRows(); 
 }
 
 function renderPreviewTable() {
