@@ -127,7 +127,6 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     );
 
     if (!alreadyExists) {
-      // BULLETPROOF CHECK: Bypass errors if classCodes are missing or malformed
       let maxNum = 0;
       loadedSections.forEach(s => {
         if (s.classCode) {
@@ -161,7 +160,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
     return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
-    throw err; // Pass to the auth handler to display
+    throw err; 
   }
 }
 
@@ -173,7 +172,6 @@ onAuthStateChanged(auth, (user) => {
   showTeacherView({ app, user, page: "batch-upload", load: options => loadSectionsFromDB(user, options),
     render: data => { currentTeacherId = data.teacherId; sections = data.sections; renderSections(); }
   }).catch(error => { 
-    // ERROR CATCHER: Visually show the error if it crashes
     sectionNameEl.textContent = "Error loading data!";
     sectionSelect.innerHTML = `<option>Failed to load</option>`;
     alert("Script Error: " + error.message + "\n\nPlease clear your browser cache and refresh.");
@@ -249,7 +247,6 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 
   try {
-    // BULLETPROOF CHECK: Scan the current in-memory sections safely
     let maxNum = 0;
     sections.forEach(s => {
       if (s.classCode) {
@@ -335,7 +332,7 @@ async function handleFileSelected(file) {
   const MAX_FILE_SIZE_MB = 5;
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
     document.getElementById("dropTitle").textContent = "File is too large";
-    document.getElementById("dropHint").textContent = `Please limit your upload to ${MAX_FILE_SIZE_MB}MB to ensure safe processing.`;
+    document.getElementById("dropHint").textContent = `Please limit your upload to ${MAX_FILE_SIZE_MB}MB.`;
     return;
   }
 
@@ -353,7 +350,7 @@ async function handleFileSelected(file) {
     const MAX_ROWS = 100;
     if (rows.length > MAX_ROWS + 1) { 
       document.getElementById("dropTitle").textContent = "Too many records";
-      document.getElementById("dropHint").textContent = `Please batch your uploads to a maximum of ${MAX_ROWS} students at a time.`;
+      document.getElementById("dropHint").textContent = `Limit uploads to ${MAX_ROWS} students at a time.`;
       return;
     }
 
@@ -361,9 +358,12 @@ async function handleFileSelected(file) {
       const id = String(row[2] ?? "").trim();
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
-    for (const id of await checkStudentIds([...new Set(candidateIds)])) existingStudentIds.add(id);
-    const fileIds = new Set();
+    
+    for (const id of await checkStudentIds([...new Set(candidateIds)])) {
+        existingStudentIds.add(id);
+    }
 
+    // Build the raw data structure (Wait to validate until the whole table is parsed)
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       if (!row || row.join("").trim() === "") continue;
@@ -373,46 +373,21 @@ async function handleFileSelected(file) {
       let studentId = String(row[2] ?? "").trim();
       const email = String(row[3] ?? "").trim().toLowerCase();
 
-      if (studentId && /^\d{8}$/.test(studentId)) {
-        studentId = "00" + studentId;
-      }
+      if (studentId && /^\d{8}$/.test(studentId)) studentId = "00" + studentId;
 
-      let rowErrors = [];
-
-      if (!firstName) rowErrors.push("Missing First Name");
-      if (!lastName) rowErrors.push("Missing Last Name");
-      
-      if (!studentId) {
-         rowErrors.push("Missing Student ID");
-      } else if (!/^\d+$/.test(studentId)) {
-         rowErrors.push("Invalid format (Letters found)");
-      } else if (studentId.length < 9) {
-         rowErrors.push("ID too short");
-      }
-      
-      // Track existing records for Upsert instead of rejecting
       const isExisting = existingStudentIds.has(studentId);
-
-      if (fileIds.has(studentId)) rowErrors.push("Duplicate in file");
-      fileIds.add(studentId);
-
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-         rowErrors.push("Invalid email");
-      }
-
-      const isValid = rowErrors.length === 0;
       const fullName = `${firstName} ${lastName}`.trim();
       
       previewData.push({
         rowNum: i + 1,
         firstName, lastName, fullName, studentId, email,
-        isValid,
+        isValid: false, // Calculated in validateAllRows
         isExisting, 
-        errors: rowErrors
+        errors: []
       });
     }
 
-    renderPreviewTable();
+    validateAllRows();
     
   } catch (err) {
     console.error("Failed to parse file:", err);
@@ -421,57 +396,60 @@ async function handleFileSelected(file) {
   }
 }
 
-// --- INLINE EDITING & UPDATING LOGIC ---
-function updateRowData(index, field, value) {
-  const item = previewData[index];
-  
-  if (field === 'email') {
-    item.email = value.trim().toLowerCase();
-  } else {
-    item[field] = value.trim();
-  }
-  
-  item.fullName = `${item.firstName} ${item.lastName}`.trim();
+// --- GLOBAL TABLE VALIDATION ENGINE ---
+function validateAllRows() {
+  const idCounts = {};
+  const nameCounts = {};
+  const emailCounts = {};
 
-  // 1. Re-validate basic fields for this specific row
-  let rowErrors = [];
-  if (!item.firstName) rowErrors.push("Missing First Name");
-  if (!item.lastName) rowErrors.push("Missing Last Name");
-  
-  // Retain ID format errors (but clear out old duplicate flags)
-  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("format") || e.includes("short"));
-  rowErrors.push(...prevIdErrors);
-
-  if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
-     rowErrors.push("Invalid email");
-  }
-  item.errors = [...new Set(rowErrors)];
-
-  // 2. NEW LOGIC: Re-scan the entire table for duplicates!
-  const allIds = new Set();
-  const duplicateIds = new Set();
-  
+  // 1. Scan the entire table to count frequencies
   previewData.forEach(row => {
-    if (row.studentId) {
-      if (allIds.has(row.studentId)) duplicateIds.add(row.studentId);
-      allIds.add(row.studentId);
+    if (row.studentId) idCounts[row.studentId] = (idCounts[row.studentId] || 0) + 1;
+    if (row.fullName) {
+      const nameKey = row.fullName.toLowerCase();
+      nameCounts[nameKey] = (nameCounts[nameKey] || 0) + 1;
     }
+    if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
   });
 
-  // 3. Apply the duplicate error flag to ANY row sharing that ID
+  // 2. Apply errors globally
   previewData.forEach(row => {
-    const hasDupFlag = row.errors.includes("Duplicate in file");
+    let rowErrors = [];
     
-    if (duplicateIds.has(row.studentId)) {
-      if (!hasDupFlag) row.errors.push("Duplicate in file");
-    } else {
-      if (hasDupFlag) row.errors = row.errors.filter(e => e !== "Duplicate in file");
+    if (!row.firstName) rowErrors.push("Missing First Name");
+    if (!row.lastName) rowErrors.push("Missing Last Name");
+    
+    // ID Checks
+    if (!row.studentId) rowErrors.push("Missing Student ID");
+    else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
+    else if (row.studentId.length < 9) rowErrors.push("ID too short");
+    else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
+    
+    // Name Checks
+    if (row.fullName && nameCounts[row.fullName.toLowerCase()] > 1) {
+      rowErrors.push("Duplicate Name in file");
     }
     
-    row.isValid = row.errors.length === 0;
+    // Email Checks
+    if (row.email) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) rowErrors.push("Invalid email");
+      else if (emailCounts[row.email] > 1) rowErrors.push("Duplicate Email in file");
+    }
+
+    row.errors = rowErrors;
+    row.isValid = rowErrors.length === 0;
   });
 
   renderPreviewTable();
+}
+
+function updateRowData(index, field, value) {
+  const item = previewData[index];
+  if (field === 'email') item.email = value.trim().toLowerCase();
+  else item[field] = value.trim();
+  
+  item.fullName = `${item.firstName} ${item.lastName}`.trim();
+  validateAllRows(); // Trigger a full re-scan on every edit!
 }
 
 function renderPreviewTable() {
@@ -493,7 +471,6 @@ function renderPreviewTable() {
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
     
-    // Set colors based on status (New, Update, or Error)
     let statusBadge = '';
     let statusColor = '';
     
@@ -511,16 +488,16 @@ function renderPreviewTable() {
     }
     
     const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
-    const emailHasError = item.errors.some(e => e.includes('email'));
+    const nameHasError = item.errors.some(e => e.includes('Name'));
+    const emailHasError = item.errors.some(e => e.includes('Email') || e.includes('email'));
 
-    // Inject input fields for inline editing
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.firstName ? 'border-color: #dc2626;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${!item.lastName ? 'border-color: #dc2626;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626;' : ''}">
       </td>
       <td style="padding: 10px 8px; ${idHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.studentId || '<em style="color:red">Missing</em>'}</td>
       <td style="padding: 10px 8px;">
