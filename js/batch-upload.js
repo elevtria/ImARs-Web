@@ -596,41 +596,41 @@ confirmImportBtn.addEventListener("click", async () => {
       let finalStudentId = stu.studentId;
       const isNewStudent = !finalIds.has(finalStudentId);
 
-      const studentDocData = {
-        schoolId: finalStudentId,
+      // Core fields that are safe to update for EVERYONE
+      const safeUpdateData = {
         firstName: stu.firstName,
         lastName: stu.lastName,
         displayName: stu.fullName,
         fullName: stu.fullName,
-        role: "student",
         classCode: targetSec.classCode,
         section: targetSec.label,
-        teacherId: currentTeacherId || "",
-        providedEmail: stu.email || `${finalStudentId}@imars.edu`,
         email: stu.email || `${finalStudentId}@imars.edu`,
-        avatarId: "scientist_01",
-        active: true,
         updatedAt: serverTimestamp()
       };
 
       if (isNewStudent) {
-        studentDocData.completedQuizzes = {};
-        studentDocData.gamification = {
-          badgeCounts: {
-            AccuracyBadgeCount: 0,
-            OnFireBadgeCount: 0
-          }
+        // If it's a NEW student, build the full document with locked fields
+        const newStudentData = {
+          ...safeUpdateData,
+          schoolId: finalStudentId,
+          role: "student",
+          teacherId: currentTeacherId || "",
+          providedEmail: stu.email || `${finalStudentId}@imars.edu`,
+          avatarId: "scientist_01",
+          active: true,
+          completedQuizzes: {},
+          gamification: {
+            badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 }
+          },
+          createdAt: serverTimestamp()
         };
-        studentDocData.createdAt = serverTimestamp();
-      }
-
-      await setDoc(doc(db, "users", finalStudentId), studentDocData, { merge: true });
-      
-      if (isNewStudent) {
+        await setDoc(doc(db, "users", finalStudentId), newStudentData);
         finalIds.add(finalStudentId);
         targetSec.count++;
         newCount++;
       } else {
+        // If it's an EXISTING student, ONLY update the safe fields!
+        await updateDoc(doc(db, "users", finalStudentId), safeUpdateData);
         updateCount++;
       }
       
