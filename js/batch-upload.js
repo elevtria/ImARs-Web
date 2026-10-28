@@ -429,7 +429,8 @@ function validateAllRows() {
     if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
   });
 
-  const targetSecCode = sectionSelect.value;
+  // Get the ACTIVE classCode from the dropdown
+  const targetSecCode = String(sectionSelect.value).trim();
 
   // 2. Apply errors globally
   previewData.forEach(row => {
@@ -438,7 +439,10 @@ function validateAllRows() {
     
     // Evaluate if they exist AND if they belong to this specific section
     const existsInDb = existingStudentIds.has(row.studentId);
-    row.isExisting = existsInDb && dbExistingStudentClassCodes[row.studentId] === targetSecCode;
+    
+    // STRICT CHECK: The classCode in the DB must exactly match the dropdown value
+    const studentDbClassCode = String(dbExistingStudentClassCodes[row.studentId] || "").trim();
+    row.isExisting = existsInDb && (studentDbClassCode === targetSecCode);
 
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
@@ -448,8 +452,11 @@ function validateAllRows() {
     else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
     else if (row.studentId.length < 9) rowErrors.push("ID too short");
     else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
+    
     // NEW: Block cross-section imports!
-    else if (existsInDb && !row.isExisting) rowErrors.push("Student belongs to another section");
+    else if (existsInDb && !row.isExisting) {
+        rowErrors.push("Student belongs to another section");
+    }
     
     // Name Checks
     if (nameKey && nameCounts[nameKey] > 1) {
@@ -513,7 +520,7 @@ function renderPreviewTable() {
         statusColor = '#16a34a'; 
     }
     
-    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short'));
+    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short') || e.includes('section'));
     const nameHasError = item.errors.some(e => e.includes('Name'));
     const emailHasError = item.errors.some(e => e.includes('Email') || e.includes('email'));
 
