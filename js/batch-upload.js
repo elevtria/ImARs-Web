@@ -433,21 +433,43 @@ function updateRowData(index, field, value) {
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
 
-  // Re-validate the specific row
+  // 1. Re-validate basic fields for this specific row
   let rowErrors = [];
   if (!item.firstName) rowErrors.push("Missing First Name");
   if (!item.lastName) rowErrors.push("Missing Last Name");
   
-  // Retain formatting errors, but ignore database duplicate checks
-  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("Duplicate in file") || e.includes("format") || e.includes("short"));
+  // Retain ID format errors (but clear out old duplicate flags)
+  const prevIdErrors = item.errors.filter(e => e.includes("ID") || e.includes("format") || e.includes("short"));
   rowErrors.push(...prevIdErrors);
 
   if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
      rowErrors.push("Invalid email");
   }
-
   item.errors = [...new Set(rowErrors)];
-  item.isValid = item.errors.length === 0;
+
+  // 2. NEW LOGIC: Re-scan the entire table for duplicates!
+  const allIds = new Set();
+  const duplicateIds = new Set();
+  
+  previewData.forEach(row => {
+    if (row.studentId) {
+      if (allIds.has(row.studentId)) duplicateIds.add(row.studentId);
+      allIds.add(row.studentId);
+    }
+  });
+
+  // 3. Apply the duplicate error flag to ANY row sharing that ID
+  previewData.forEach(row => {
+    const hasDupFlag = row.errors.includes("Duplicate in file");
+    
+    if (duplicateIds.has(row.studentId)) {
+      if (!hasDupFlag) row.errors.push("Duplicate in file");
+    } else {
+      if (hasDupFlag) row.errors = row.errors.filter(e => e !== "Duplicate in file");
+    }
+    
+    row.isValid = row.errors.length === 0;
+  });
 
   renderPreviewTable();
 }
