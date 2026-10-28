@@ -82,6 +82,8 @@ const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
 let activityMessage = "";
 const activityOpenTerms = [false, false, false];
+const activityDrafts = new Map();
+const activityKey = (termIndex, topicIndex, sectionId = selectedSection) => `${sectionId}:${termIndex}-${topicIndex}`;
 const setSyncStatus = (message, state = "") => {
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
@@ -117,20 +119,23 @@ function renderActivitySchedule() {
     activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
     return;
   }
+  if (!isSaving && activityList.contains(document.activeElement) && document.activeElement.matches("select, input")) return;
   activityList.innerHTML = terms.map((term, termIndex) => {
     const open = activityOpenTerms[termIndex];
     const rows = activityTopics[termIndex].map(({ topic, topicIndex }) => {
     const state = topicAvailability(topic);
-    const mode = state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now";
+    const draft = activityDrafts.get(activityKey(termIndex, topicIndex));
+    const mode = draft?.mode || (state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now");
+    const date = draft?.date ?? topic.date;
     return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
-      <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${mode === "scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
+      <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${state.label === "Scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
       <div class="quiz-schedule-controls">
         <label class="quiz-schedule-access">Access <select class="activity-schedule-mode" aria-label="Access for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}>
           <option value="locked" ${mode === "locked" ? "selected" : ""}>Locked</option>
           <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
           <option value="scheduled" ${mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
         </select></label>
-        <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(topic.date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+        <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
         <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
       </div>
     </article>`;
@@ -258,6 +263,7 @@ sectionSelect.addEventListener("change", () => {
     return;
   }
   selectedSection = sectionSelect.value;
+  activityDrafts.clear();
   if (scheduleOwner) prepareTeacherCache(app, scheduleOwner).put(scheduleOwner.uid, "schedule:section", { id: selectedSection });
   isReady = latestSchedules.length === TERM_IDS.length && latestSchedules.every(Boolean);
   dateTarget = null;
@@ -271,6 +277,33 @@ sectionSelect.addEventListener("change", () => {
 function sectionUpdate(fields) {
   if (!assignedSections.some(section => section.id === selectedSection)) throw new Error("Select one of your assigned sections.");
   return { ...fields, sectionId: selectedSection };
+}
+
+async function saveAccess(termIndex, topicIndexes, update) {
+  const generation = scheduleGeneration, sectionId = selectedSection;
+  const changes = topicIndexes.map(topicIndex => ({ topicIndex, ref: lessonRef(termIndex, topicIndex), data: sectionUpdate(update) }));
+  if (changes.length === 1) await updateDoc(changes[0].ref, changes[0].data);
+  else {
+    const batch = writeBatch(db);
+    changes.forEach(change => batch.update(change.ref, change.data));
+    await batch.commit();
+  }
+  if (generation !== scheduleGeneration) return false;
+  // A successful write can finish before its subscription refresh. Keep the
+  // acknowledged values in the displayed snapshots, including section switches.
+  const snapshot = latestSchedules[termIndex];
+  if (!snapshot) return false;
+  const docs = snapshot.docs.map(lesson => {
+    if (!changes.some(change => change.ref.id === lesson.id)) return lesson;
+    const data = lesson.data();
+    return { ...lesson, data: () => ({ ...data, sectionSchedules: { ...data.sectionSchedules, [sectionId]: { ...update } } }) };
+  });
+  latestSchedules[termIndex] = { ...snapshot, docs, forEach: callback => docs.forEach(callback) };
+  changes.forEach(change => activityDrafts.delete(activityKey(termIndex, change.topicIndex, sectionId)));
+  receiveSectionSchedule(termIndex, latestSchedules[termIndex]);
+  if (scheduleOwner && latestSchedules.every(Boolean))
+    prepareTeacherCache(app, scheduleOwner).put(scheduleOwner.uid, "schedule:sections", encodeView(latestSchedules));
+  return true;
 }
 
 function watchScheduleFromFirestore(generation, user) {
@@ -338,6 +371,7 @@ onAuthStateChanged(auth, async (user) => {
   document.getElementById("dateModal").classList.remove("open");
   sectionSelect.innerHTML = '<option value="">Select a section</option>';
   activityMessage = "";
+  activityDrafts.clear();
   render();
   if (!user) {
     setSyncStatus("Sign in to load and edit the lesson schedule.", "error");
@@ -368,11 +402,17 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-activityList.addEventListener("change", event => {
-  if (!event.target.matches(".activity-schedule-mode")) return;
+function rememberActivityDraft(event) {
+  const modeChanged = event.target.matches(".activity-schedule-mode");
+  if (!modeChanged && !event.target.matches(".quiz-schedule-date input")) return;
   const card = event.target.closest("[data-activity]");
-  card.querySelector(".quiz-schedule-date").hidden = event.target.value !== "scheduled";
-});
+  const [termIndex, topicIndex] = card.dataset.activity.split("-").map(Number);
+  const mode = card.querySelector(".activity-schedule-mode").value;
+  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: card.querySelector(".quiz-schedule-date input").value });
+  if (modeChanged) card.querySelector(".quiz-schedule-date").hidden = mode !== "scheduled";
+}
+activityList.addEventListener("change", rememberActivityDraft);
+activityList.addEventListener("input", rememberActivityDraft);
 
 activityList.addEventListener("click", async event => {
   const termToggle = event.target.closest("[data-activity-term]");
@@ -397,11 +437,12 @@ activityList.addEventListener("click", async event => {
     return;
   }
   const update = mode === "scheduled" ? scheduledAccessUpdate(dateInput.value, topic) : manualAccessUpdate(mode === "locked");
+  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: dateInput.value });
   isSaving = true;
   activityMessage = `Saving access for ${topic.title}…`;
   render();
   try {
-    await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(update));
+    if (!await saveAccess(termIndex, [topicIndex], update)) return;
     activityMessage = `Saved access for ${topic.title}.`;
     setSyncStatus("Saved", "success");
   } catch (error) {
@@ -435,7 +476,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     render();
     setSyncStatus("Saving…");
     try {
-      await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
+      if (!await saveAccess(termIndex, [topicIndex], manualAccessUpdate(nextLocked))) return;
       setSyncStatus("Saved", "success");
     } catch (error) {
       console.error("Unable to save lesson lock:", error);
@@ -456,11 +497,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     render();
     setSyncStatus("Saving…");
     try {
-      const batch = writeBatch(db);
-      term.topics.forEach((_, topicIndex) => {
-        batch.update(lessonRef(termIndex, topicIndex), sectionUpdate(manualAccessUpdate(nextLocked)));
-      });
-      await batch.commit();
+      if (!await saveAccess(termIndex, term.topics.map((_, topicIndex) => topicIndex), manualAccessUpdate(nextLocked))) return;
       setSyncStatus("Saved", "success");
     } catch (error) {
       console.error("Unable to update all lesson locks:", error);
@@ -506,7 +543,7 @@ document.getElementById("dateSave").onclick = async () => {
   setSyncStatus("Saving…");
   try {
     const dateUpdate = scheduledAccessUpdate(scheduledDate, topic);
-    await updateDoc(lessonRef(termIndex, topicIndex), sectionUpdate(dateUpdate));
+    if (!await saveAccess(termIndex, [topicIndex], dateUpdate)) return;
     closeDate();
     setSyncStatus("Saved", "success");
   } catch (error) {

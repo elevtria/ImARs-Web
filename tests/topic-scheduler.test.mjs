@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import * as availability from "../js/topic-availability.js";
+import { encodeView, decodeView } from "../js/view-cache.js";
 
-async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null } = {}) {
+async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null, emitAfterWrite = true } = {}) {
   const elements = new Map();
   const listeners = new Map();
+  const savedViews = new Map();
   const records = new Map(["term_01", "term_02", "term_03"].map((term) => [term,
     Array.from({ length: 4 }, (_, index) => ({ id: `lesson_0${index + 1}`, isLocked: true, scheduledDate: "", lessonOrder: index + 1 }))
   ]));
@@ -16,15 +18,17 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     if (!elements.has(id)) elements.set(id, {
       innerHTML: "", textContent: "", value: "", dataset: {}, events: {},
       classList: { add() {}, remove() {} },
+      contains() { return false; },
       addEventListener(name, callback) { this.events[name] = callback; },
       checkValidity() { return true; }, reportValidity() {}
     });
     return elements.get(id);
   }
   function emit(term) {
+    const docs = records.get(term).map(({ id, ...data }) => ({ id, exists: () => true, data: () => data }));
     listeners.get(term)?.({
       metadata: { fromCache: false },
-      docs: records.get(term).map(({ id, ...data }) => ({ id, data: () => data }))
+      docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback)
     });
   }
   function update(ref, fields) {
@@ -38,9 +42,9 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },
     getApps: () => [], initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
-    prepareTeacherCache: () => ({ get: (_, key) => key === "schedule:section" && rememberedSection ? { id: rememberedSection } : null, put() {}, invalidate() {} }),
-    encodeView: value => value, decodeView: value => value,
-    collection: (_, ...path) => path, doc: (_, ...path) => path,
+    prepareTeacherCache: () => ({ get: (_, key) => key === "schedule:section" && rememberedSection ? { id: rememberedSection } : null, put: (_, key, value) => savedViews.set(key, value), invalidate() {} }),
+    encodeView, decodeView,
+    collection: (_, ...path) => path, doc: (_, ...path) => Object.assign(path, { id: path.at(-1) }),
     query: ref => ref, where: () => ({}),
     getDocsWithLoading: async ref => ref[0] === "users"
       ? { size: 1, docs: [{ id: "TEACH1000", data: () => ({ role: "teacher" }) }] }
@@ -53,7 +57,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     updateDoc: async (ref, fields) => {
       if (rejectWrite) throw new Error("permission-denied");
       update(ref, fields);
-      emit(ref[1]);
+      if (emitAfterWrite) emit(ref[1]);
     },
     writeBatch: () => {
       const changes = [];
@@ -62,7 +66,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
         commit: async () => {
           if (rejectWrite) throw new Error("permission-denied");
           changes.forEach(([ref, fields]) => update(ref, fields));
-          [...new Set(changes.map(([ref]) => ref[1]))].forEach(emit);
+          if (emitAfterWrite) [...new Set(changes.map(([ref]) => ref[1]))].forEach(emit);
         }
       };
     }
@@ -77,7 +81,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     element("scheduleSection").events.change();
   }
   return {
-    element, records, emit, listeners, authChanged,
+    element, records, emit, listeners, authChanged, savedViews,
     denyWrites: () => { rejectWrite = true; },
     activityClick: (value, mode, date = "") => {
       const card = {
@@ -93,6 +97,11 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     activityTermClick: index => element("activityScheduleList").events.click({ target: {
       closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
     } }),
+    activityChange: (value, mode, date = "") => {
+      const dateControl = { value: date };
+      const card = { dataset: { activity: value }, querySelector: selector => selector === ".activity-schedule-mode" ? { value: mode } : dateControl };
+      element("activityScheduleList").events.change({ target: { value: mode, matches: selector => selector === ".activity-schedule-mode", closest: () => card } });
+    },
     click: (attribute, value) => element("terms").events.click({
       target: { closest: (selector) => selector === `[data-${attribute}]` ? { dataset: { [attribute]: value } } : null }
     })
@@ -133,6 +142,59 @@ test("activity schedule uses the same lesson records and updates the topic tiles
   assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").scheduledDate, "");
   assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").isLocked, false);
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
+});
+
+test("a confirmed activity lock stays selected before the delayed listener refresh arrives", async () => {
+  const app = await scheduler({ emitAfterWrite: false });
+  app.records.get("term_01")[0].isLocked = false;
+  app.emit("term_01");
+  await app.activityClick("0-0", "locked");
+  assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").isLocked, true);
+  const saved = decodeView(app.savedViews.get("schedule:sections"));
+  assert.equal(availability.sectionSchedule(saved[0].docs[0].data(), "A").isLocked, true, "return-visit cache contains the acknowledged lock");
+  const card = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
+  assert.match(card, /value="locked" selected/);
+  app.element("scheduleSection").value = "C"; app.element("scheduleSection").events.change();
+  app.element("scheduleSection").value = "A"; app.element("scheduleSection").events.change();
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="locked" selected/);
+  app.emit("term_01");
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="locked" selected/);
+});
+
+test("background snapshots retain unsaved activity access choices", async () => {
+  const app = await scheduler();
+  app.records.get("term_01")[0].isLocked = false; app.emit("term_01");
+  app.activityChange("0-0", "locked");
+  app.emit("term_02");
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="locked" selected/);
+});
+
+test("release-date drafts survive background updates and are cleared when changing sections", async () => {
+  const app = await scheduler();
+  app.records.get("term_01")[0].isLocked = false; app.emit("term_01");
+  app.activityChange("0-0", "scheduled", "2099-10-20"); app.emit("term_03");
+  const html = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
+  assert.match(html, /value="scheduled" selected/);
+  assert.match(html, /value="2099-10-20"/);
+  assert.match(html, /<p>Unlocked<\/p>/, "drafts do not claim a completed save");
+  app.element("scheduleSection").value = "C"; app.element("scheduleSection").events.change();
+  const otherSection = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
+  assert.match(otherSection, /value="now" selected/);
+  assert.doesNotMatch(otherSection, /value="2099-10-20"/);
+});
+
+test("topic lock, bulk access and dates acknowledge successful writes before delayed subscription updates", async () => {
+  const app = await scheduler({ emitAfterWrite: false });
+  await app.click("lock", "0-0");
+  assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
+  await app.click("lockall", "0");
+  await app.click("lockall", "0");
+  assert.match(app.element("terms").innerHTML, /4\/4 unlocked/);
+  await app.click("date", "0-0"); app.element("dateInput").value = "2099-10-20";
+  await app.element("dateSave").onclick();
+  assert.match(app.element("terms").innerHTML, /Scheduled/);
+  const card = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
+  assert.match(card, /value="scheduled" selected/);
 });
 
 test("activity schedule groups lessons in collapsible terms", async () => {
