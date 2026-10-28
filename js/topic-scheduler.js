@@ -107,7 +107,11 @@ const lockIcon = (locked) => locked
 const calIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
 
 function renderActivitySchedule() {
-  const activityCount = terms.reduce((total, term) => total + term.topics.length, 0);
+  // Longitudinal Waves uses the Term 3 entry in the activity list.
+  const activityTopics = terms.map((term, termIndex) => term.topics
+    .map((topic, topicIndex) => ({ topic, topicIndex }))
+    .filter(({ topic }) => TERM_IDS[termIndex] !== "term_02" || topic.docId !== "lesson_04"));
+  const activityCount = activityTopics.reduce((total, topics) => total + topics.length, 0);
   activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
   if (!isReady) {
     activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
@@ -115,7 +119,7 @@ function renderActivitySchedule() {
   }
   activityList.innerHTML = terms.map((term, termIndex) => {
     const open = activityOpenTerms[termIndex];
-    const rows = term.topics.map((topic, topicIndex) => {
+    const rows = activityTopics[termIndex].map(({ topic, topicIndex }) => {
     const state = topicAvailability(topic);
     const mode = state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now";
     return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
@@ -134,7 +138,7 @@ function renderActivitySchedule() {
     return `<section class="activity-term ${open ? "open" : ""}">
       <button class="activity-term-toggle" type="button" data-activity-term="${termIndex}" aria-expanded="${open}" aria-controls="activityTermRows${termIndex}">
         <span class="activity-term-name">${escapeHtml(term.name)}</span>
-        <span class="activity-term-summary">${term.topics.length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+        <span class="activity-term-summary">${activityTopics[termIndex].length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
       </button>
       <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}</div>
     </section>`;

@@ -125,7 +125,7 @@ test("individual and bulk buttons persist lock changes and update progress", asy
 
 test("activity schedule uses the same lesson records and updates the topic tiles", async () => {
   const app = await scheduler();
-  assert.match(app.element("activityScheduleStatus").textContent, /12 lesson/);
+  assert.match(app.element("activityScheduleStatus").textContent, /11 lesson/);
   await app.activityClick("0-0", "scheduled", "2099-10-20");
   assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").scheduledDate, "2099-10-20");
   assert.match(app.element("activityScheduleList").innerHTML, /Scheduled/);
@@ -146,6 +146,19 @@ test("activity schedule groups lessons in collapsible terms", async () => {
   assert.match(list.innerHTML, /id="activityTermRows0"><article/);
   await app.activityClick("0-0", "now");
   assert.match(list.innerHTML, /data-activity-term="0" aria-expanded="true"/);
+});
+
+test("activity schedule omits the repeated Term 2 activity and retains the Term 3 lesson mapping", async () => {
+  const app = await scheduler();
+  const html = app.element("activityScheduleList").innerHTML;
+  assert.equal((html.match(/data-activity="\d-\d"/g) || []).length, 11);
+  assert.equal((html.match(/data-activity="1-\d"/g) || []).length, 3);
+  assert.doesNotMatch(html, /data-activity="1-3"/);
+  assert.match(html, /data-activity="2-0"/);
+  assert.match(app.element("terms").innerHTML, /data-lock="1-3"/, "the curriculum topic is retained");
+  await app.activityClick("2-0", "scheduled", "2099-10-20");
+  assert.equal(availability.sectionSchedule(app.records.get("term_03")[0], "A").scheduledDate, "2099-10-20");
+  assert.equal(availability.sectionSchedule(app.records.get("term_02")[3], "A").scheduledDate, "");
 });
 
 test("a rejected activity access change keeps the confirmed lesson state", async () => {

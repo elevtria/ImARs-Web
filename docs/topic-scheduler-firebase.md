@@ -5,6 +5,11 @@ Scheduler, Activity Schedule and Year Progress all follow that selection.
 Each available topic adds 25% to its four-topic term. Switching sections reuses
 loaded lessons without reloading the page.
 
+Activity Schedule lists 11 unique activities: four in Term 1, three in Term 2,
+and four in Term 3. It omits the repeated Term 2 `lesson_04` activity and uses
+Term 3 `lesson_01` for Longitudinal and Transverse Waves. Topic Scheduler keeps
+all 12 curriculum lessons and their existing section schedules.
+
 ## Stored settings and authorization
 
 Keep the existing four documents in each `terms/term_0{1,2,3}/lessons` collection.
