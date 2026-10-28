@@ -8,7 +8,6 @@ import {
   getDocsWithLoading as getDocs,
   getStudentPage,
   doc, 
-  getDoc,
   setDoc, 
   updateDoc, 
   arrayUnion, 
@@ -343,7 +342,7 @@ async function handleFileSelected(file) {
     document.getElementById("dropHint").textContent = "Checking student details…";
 
     existingStudentIds.clear();
-    dbExistingStudentClassCodes = {}; // Reset the class code cache
+    dbExistingStudentClassCodes = {};
 
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
@@ -362,24 +361,29 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- SAFE FETCH: Use your exact original working logic ---
+    // --- NEW, 100% SAFE FETCH LOGIC ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
-        const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
-        for (const id of verifiedExisting) {
-            existingStudentIds.add(id);
-            
-            // Immediately fetch this user's document to get their specific classCode
-            try {
-                const userDoc = await getDoc(doc(db, "users", id));
-                if (userDoc.exists()) {
-                    dbExistingStudentClassCodes[id] = String(userDoc.data().classCode || "").trim();
-                }
-            } catch (err) {
-                console.warn(`Failed to fetch classCode for existing ID ${id}`, err);
-            }
-        }
+      // 1. Verify existence globally to prevent overwriting other users
+      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
+      for (const id of verifiedExisting) {
+          existingStudentIds.add(id);
+      }
+      
+      // 2. Fetch the teacher's roster using the existing getDocs method to safely map classCodes
+      try {
+          if (currentTeacherId) {
+              const rosterQ = query(collection(db, "users"), where("teacherId", "==", currentTeacherId));
+              const rosterSnap = await getDocs(rosterQ);
+              
+              rosterSnap.forEach(docSnap => {
+                  dbExistingStudentClassCodes[docSnap.id] = String(docSnap.data().classCode || "").trim();
+              });
+          }
+      } catch (err) {
+          console.warn("Failed to fetch teacher roster for validation.", err);
+      }
     }
 
     // Build the raw data structure
@@ -441,7 +445,7 @@ function validateAllRows() {
     // Evaluate if they exist AND if they belong to this specific section
     const existsInDb = existingStudentIds.has(row.studentId);
     
-    const studentDbClassCode = dbExistingStudentClassCodes[row.studentId] || "";
+    const studentDbClassCode = String(dbExistingStudentClassCodes[row.studentId] || "").trim();
     row.isExisting = existsInDb && (studentDbClassCode === targetSecCode);
 
     if (!row.firstName) rowErrors.push("Missing First Name");
