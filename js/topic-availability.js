@@ -8,6 +8,35 @@ function validDate(value) {
   return !Number.isNaN(date.getTime()) && todayISO(date) === value;
 }
 
+const SCHOOL_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+export function validateActivityDeadlineUtc(value, releaseDate = "") {
+  if (value === "") return value;
+  if (typeof value !== "string" || !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 19) !== value.slice(0, 19))
+    throw new Error("Enter a valid activity deadline.");
+  if (releaseDate && (!validDate(releaseDate) || Date.parse(value) <= Date.parse(`${releaseDate}T00:00:00+08:00`)))
+    throw new Error("The activity deadline must be after its release date begins (Philippine time).");
+  return value;
+}
+
+export function activityDeadlineInput(value) {
+  if (!value) return "";
+  try {
+    validateActivityDeadlineUtc(value);
+    return new Date(Date.parse(value) + SCHOOL_UTC_OFFSET_MS).toISOString().slice(0, 16);
+  } catch { return ""; }
+}
+
+export function activityDeadlineFromInput(value) {
+  if (value === "") return "";
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error("Enter a valid activity deadline.");
+  const deadline = new Date(`${value}:00+08:00`);
+  if (!Number.isFinite(deadline.getTime()) || activityDeadlineInput(deadline.toISOString()) !== value)
+    throw new Error("Enter a valid activity deadline.");
+  return deadline.toISOString();
+}
+
 export function sectionSchedule(lesson, sectionId) {
   const schedules = lesson.sectionSchedules;
   if (schedules !== undefined && (!schedules || typeof schedules !== "object" || Array.isArray(schedules))) return { isLocked: true, scheduledDate: "" };

@@ -35,7 +35,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     const record = records.get(ref[1]).find((record) => record.id === ref[3]);
     const { sectionId, ...schedule } = fields;
     assert.ok(sections.includes(sectionId));
-    record.sectionSchedules = { ...record.sectionSchedules, [sectionId]: schedule };
+    record.sectionSchedules = { ...record.sectionSchedules, [sectionId]: { activityDeadlineUtc: "", ...record.sectionSchedules?.[sectionId], ...schedule } };
   }
   const context = vm.createContext({
     ...availability, console: { error() {} }, Date,
@@ -83,12 +83,12 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   return {
     element, records, emit, listeners, authChanged, savedViews,
     denyWrites: () => { rejectWrite = true; },
-    activityClick: (value, mode, date = "") => {
+    activityClick: (value, mode, date = "", deadline = "") => {
       const card = {
         dataset: { activity: value },
         querySelector: selector => selector === ".activity-schedule-mode"
           ? { value: mode }
-          : { value: date, checkValidity: () => true }
+          : { value: selector === ".activity-schedule-deadline" ? deadline : date, checkValidity: () => true, focus() {} }
       };
       return element("activityScheduleList").events.click({ target: {
         closest: selector => selector === ".activity-schedule-save" ? { closest: () => card } : null
@@ -97,9 +97,9 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     activityTermClick: index => element("activityScheduleList").events.click({ target: {
       closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
     } }),
-    activityChange: (value, mode, date = "") => {
+    activityChange: (value, mode, date = "", deadline = "") => {
       const dateControl = { value: date };
-      const card = { dataset: { activity: value }, querySelector: selector => selector === ".activity-schedule-mode" ? { value: mode } : dateControl };
+      const card = { dataset: { activity: value }, querySelector: selector => selector === ".activity-schedule-mode" ? { value: mode } : selector === ".activity-schedule-deadline" ? { value: deadline } : dateControl };
       element("activityScheduleList").events.change({ target: { value: mode, matches: selector => selector === ".activity-schedule-mode", closest: () => card } });
     },
     click: (attribute, value) => element("terms").events.click({
@@ -181,6 +181,53 @@ test("release-date drafts survive background updates and are cleared when changi
   const otherSection = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
   assert.match(otherSection, /value="now" selected/);
   assert.doesNotMatch(otherSection, /value="2099-10-20"/);
+});
+
+test("activity deadline drafts survive refreshes, save as UTC and remain scoped to one section", async () => {
+  const app = await scheduler({ emitAfterWrite: false });
+  app.activityChange("0-0", "scheduled", "2099-10-20", "2099-10-20T07:30"); app.emit("term_02");
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="2099-10-20T07:30"/);
+  await app.activityClick("0-0", "scheduled", "2099-10-20", "2099-10-20T07:30");
+  const record = app.records.get("term_01")[0];
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, "2099-10-19T23:30:00.000Z");
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="2099-10-20T07:30"/);
+  const cached = decodeView(app.savedViews.get("schedule:sections"));
+  assert.equal(cached[0].docs[0].data().sectionSchedules.A.activityDeadlineUtc, "2099-10-19T23:30:00.000Z");
+  app.element("scheduleSection").value = "C"; app.element("scheduleSection").events.change();
+  assert.doesNotMatch(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="2099-10-20T07:30"/);
+});
+
+test("activity and topic access changes preserve deadline precision and allow explicit removal", async () => {
+  const app = await scheduler({ emitAfterWrite: false });
+  const record = app.records.get("term_01")[0], deadline = "2099-10-19T23:30:12.123Z";
+  record.sectionSchedules = { A: { isLocked: false, scheduledDate: "", activityDeadlineUtc: deadline } }; app.emit("term_01");
+  await app.activityClick("0-0", "locked", "", "2099-10-20T07:30");
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, deadline);
+  await app.click("lock", "0-0"); await app.click("lockall", "0");
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, deadline);
+  const cached = decodeView(app.savedViews.get("schedule:sections"));
+  assert.equal(cached[0].docs[0].data().sectionSchedules.A.activityDeadlineUtc, deadline);
+  await app.activityClick("0-0", "locked", "", "");
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, "");
+});
+
+test("an activity deadline before release is rejected before saving", async () => {
+  const app = await scheduler();
+  await app.activityClick("0-0", "scheduled", "2099-10-20", "2099-10-19T23:59");
+  assert.equal(app.records.get("term_01")[0].sectionSchedules, undefined);
+  assert.match(app.element("activityScheduleStatus").textContent, /after/);
+});
+
+test("editing a released activity deadline retains its original release date for validation", async () => {
+  const app = await scheduler();
+  const record = app.records.get("term_01")[0];
+  record.sectionSchedules = { A: { isLocked: true, scheduledDate: "2000-11-03", activityDeadlineUtc: "" } }; app.emit("term_01");
+  await app.activityClick("0-0", "now", "", "2000-11-02T23:59");
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, "");
+  assert.match(app.element("activityScheduleStatus").textContent, /after/);
+  await app.activityClick("0-0", "now", "", "2000-11-03T07:30");
+  assert.equal(record.sectionSchedules.A.scheduledDate, "2000-11-03");
+  assert.equal(record.sectionSchedules.A.activityDeadlineUtc, "2000-11-02T23:30:00.000Z");
 });
 
 test("topic lock, bulk access and dates acknowledge successful writes before delayed subscription updates", async () => {

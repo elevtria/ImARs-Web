@@ -12,7 +12,7 @@ import {
   updateDoc,
   writeBatch
 } from "./firebase-data.js";
-import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule } from "./topic-availability.js";
+import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
 
@@ -127,6 +127,7 @@ function renderActivitySchedule() {
     const draft = activityDrafts.get(activityKey(termIndex, topicIndex));
     const mode = draft?.mode || (state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now");
     const date = draft?.date ?? topic.date;
+    const deadline = draft?.deadline ?? activityDeadlineInput(topic.activityDeadlineUtc);
     return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
       <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${state.label === "Scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
       <div class="quiz-schedule-controls">
@@ -135,7 +136,10 @@ function renderActivitySchedule() {
           <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
           <option value="scheduled" ${mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
         </select></label>
-        <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+        <div class="quiz-schedule-dates">
+          <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+          <label>Deadline (optional, Philippine time)<input class="activity-schedule-deadline" type="datetime-local" value="${escapeHtml(deadline)}" ${mode === "scheduled" && date ? `min="${escapeHtml(date)}T00:00"` : ""} aria-label="Activity deadline for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+        </div>
         <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
       </div>
     </article>`;
@@ -253,7 +257,8 @@ function receiveSectionSchedule(termIndex, snapshot) {
     const lessonDoc = lessonDocs[topicIndex], data = lessonDoc.data();
     const schedule = sectionSchedule(data, selectedSection);
     return { ...topic, title: typeof data.title === "string" && data.title.trim() ? data.title : topic.title,
-      docId: lessonDoc.id, date: schedule.scheduledDate, locked: schedule.isLocked };
+      docId: lessonDoc.id, date: schedule.scheduledDate, locked: schedule.isLocked,
+      activityDeadlineUtc: data.sectionSchedules?.[selectedSection]?.activityDeadlineUtc ?? "" };
   });
 }
 
@@ -296,7 +301,9 @@ async function saveAccess(termIndex, topicIndexes, update) {
   const docs = snapshot.docs.map(lesson => {
     if (!changes.some(change => change.ref.id === lesson.id)) return lesson;
     const data = lesson.data();
-    return { ...lesson, data: () => ({ ...data, sectionSchedules: { ...data.sectionSchedules, [sectionId]: { ...update } } }) };
+    const existing = data.sectionSchedules?.[sectionId];
+    return { ...lesson, data: () => ({ ...data, sectionSchedules: { ...data.sectionSchedules,
+      [sectionId]: { ...existing, activityDeadlineUtc: existing?.activityDeadlineUtc ?? "", ...update } } }) };
   });
   latestSchedules[termIndex] = { ...snapshot, docs, forEach: callback => docs.forEach(callback) };
   changes.forEach(change => activityDrafts.delete(activityKey(termIndex, change.topicIndex, sectionId)));
@@ -404,11 +411,14 @@ onAuthStateChanged(auth, async (user) => {
 
 function rememberActivityDraft(event) {
   const modeChanged = event.target.matches(".activity-schedule-mode");
-  if (!modeChanged && !event.target.matches(".quiz-schedule-date input")) return;
+  if (!modeChanged && !event.target.matches(".quiz-schedule-date input, .activity-schedule-deadline")) return;
   const card = event.target.closest("[data-activity]");
   const [termIndex, topicIndex] = card.dataset.activity.split("-").map(Number);
   const mode = card.querySelector(".activity-schedule-mode").value;
-  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: card.querySelector(".quiz-schedule-date input").value });
+  const date = card.querySelector(".quiz-schedule-date input").value;
+  const deadlineInput = card.querySelector(".activity-schedule-deadline");
+  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date, deadline: deadlineInput.value });
+  deadlineInput.min = mode === "scheduled" && date ? `${date}T00:00` : "";
   if (modeChanged) card.querySelector(".quiz-schedule-date").hidden = mode !== "scheduled";
 }
 activityList.addEventListener("change", rememberActivityDraft);
@@ -436,8 +446,22 @@ activityList.addEventListener("click", async event => {
     dateInput.focus();
     return;
   }
-  const update = mode === "scheduled" ? scheduledAccessUpdate(dateInput.value, topic) : manualAccessUpdate(mode === "locked");
-  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: dateInput.value });
+  const update = mode === "scheduled" ? scheduledAccessUpdate(dateInput.value, topic)
+    : mode === "now" && !isTopicLocked(topic) && topic.date ? { isLocked: topic.locked, scheduledDate: topic.date }
+    : manualAccessUpdate(mode === "locked");
+  const deadlineInput = card.querySelector(".activity-schedule-deadline");
+  activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: dateInput.value, deadline: deadlineInput.value });
+  try {
+    if (!deadlineInput.checkValidity()) throw new Error("Enter a valid activity deadline after its release date.");
+    if (deadlineInput.value !== activityDeadlineInput(topic.activityDeadlineUtc))
+      update.activityDeadlineUtc = activityDeadlineFromInput(deadlineInput.value);
+    validateActivityDeadlineUtc(update.activityDeadlineUtc ?? topic.activityDeadlineUtc, update.scheduledDate);
+  } catch (error) {
+    activityMessage = error.message;
+    activityStatus.textContent = activityMessage;
+    deadlineInput.focus();
+    return;
+  }
   isSaving = true;
   activityMessage = `Saving access for ${topic.title}…`;
   render();

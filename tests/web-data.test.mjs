@@ -162,8 +162,8 @@ test("lesson dates and locks are scoped to an owned section and retain other sec
   assert.equal((await app.call(change({ sectionId: "C", isLocked: false, scheduledDate: "" }), cookie)).status, 200);
   const saved = structuredClone(app.data.get(path));
   assert.deepEqual(saved.sectionSchedules, {
-    A: { isLocked: true, scheduledDate: "2099-10-20" },
-    B: { isLocked: true, scheduledDate: "2099-11-01" }, C: { isLocked: false, scheduledDate: "" }
+    A: { isLocked: true, scheduledDate: "2099-10-20", activityDeadlineUtc: "" },
+    B: { isLocked: true, scheduledDate: "2099-11-01" }, C: { isLocked: false, scheduledDate: "", activityDeadlineUtc: "" }
   });
   assert.equal(saved.isLocked, false); assert.equal(saved.scheduledDate, "");
   assert.equal(saved.title, "Original lesson"); assert.deepEqual(saved.preTest, ["kept"]);
@@ -177,6 +177,44 @@ test("lesson dates and locks are scoped to an owned section and retain other sec
   app.store.conflict = true;
   assert.equal((await app.call(change(first), cookie)).status, 409);
   assert.deepEqual(app.data.get(path), saved);
+});
+
+test("activity deadlines are stored as UTC strings per section and survive access changes", async () => {
+  const app = fixture(), cookie = await app.login(), path = "terms/term_01/lessons/lesson_01";
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  const change = data => app.call({ action: "commit", writes: [{ operation: "update", path, data }] }, cookie);
+  const deadline = "2099-10-19T23:30:00.123Z"; // October 20, 07:30 in the Philippines.
+  assert.equal((await change({ sectionId: "A", isLocked: true, scheduledDate: "2099-10-20", activityDeadlineUtc: deadline })).status, 200);
+  for (const isLocked of [true, false]) {
+    assert.equal((await change({ sectionId: "A", isLocked, scheduledDate: "" })).status, 200);
+    assert.equal(app.data.get(path).sectionSchedules.A.activityDeadlineUtc, deadline);
+  }
+  assert.equal((await change({ sectionId: "C", isLocked: false, scheduledDate: "", activityDeadlineUtc: "2099-11-01T10:00:00Z" })).status, 200);
+  assert.equal(app.data.get(path).sectionSchedules.A.activityDeadlineUtc, deadline);
+  const read = await (await app.call(get(path), cookie)).json();
+  assert.equal(typeof read.document.data.sectionSchedules.A.activityDeadlineUtc, "string");
+  assert.equal(read.document.data.sectionSchedules.A.activityDeadlineUtc, deadline);
+  const before = structuredClone(app.data.get(path));
+  assert.equal((await change({ sectionId: "A", isLocked: true, scheduledDate: "2099-10-21" })).status, 400, "release changes also validate the preserved deadline");
+  assert.deepEqual(app.data.get(path), before);
+  assert.equal((await change({ sectionId: "A", isLocked: true, scheduledDate: "2099-10-21", activityDeadlineUtc: "" })).status, 200);
+  assert.equal(app.data.get(path).sectionSchedules.A.activityDeadlineUtc, "");
+  assert.deepEqual(app.data.get(path).sectionSchedules.C, before.sectionSchedules.C);
+});
+
+test("invalid or foreign-section deadlines cannot modify stored schedules", async () => {
+  const app = fixture(), cookie = await app.login(), path = "terms/term_01/lessons/lesson_01";
+  const request = value => ({ action: "commit", writes: [{ operation: "update", path, data: value }] });
+  const base = { sectionId: "A", isLocked: true, scheduledDate: "2099-10-20" };
+  const before = structuredClone(app.data.get(path));
+  for (const activityDeadlineUtc of [null, 123, {}, "invalid", "2099-02-30T12:00:00Z", "2099-10-20T12:00:00", "2099-10-20T12:00:00+08:00", "2099-10-19T15:59:00Z", "2099-10-19T16:00:00Z"]) {
+    assert.equal((await app.call(request({ ...base, activityDeadlineUtc }), cookie)).status, 400);
+    assert.deepEqual(app.data.get(path), before);
+  }
+  const valid = { ...base, activityDeadlineUtc: "2099-10-20T10:00:00Z" };
+  assert.equal((await app.call(request({ ...valid, sectionId: "B" }), cookie)).status, 403);
+  assert.equal((await app.call(request(valid))).status, 401);
+  assert.deepEqual(app.data.get(path), before);
 });
 
 test("forged roles, UIDs, ownership, credentials, scores and arbitrary fields cannot reach the commit", async () => {

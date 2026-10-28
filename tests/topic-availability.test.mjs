@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule } from "../js/topic-availability.js";
+import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, validateActivityDeadlineUtc, activityDeadlineInput, activityDeadlineFromInput } from "../js/topic-availability.js";
 
 const today = "2026-10-14";
 const locked = { locked: true, date: "" };
 const unlocked = { locked: false, date: "" };
 const fromUpdate = (update) => ({ locked: update.isLocked, date: update.scheduledDate });
+
+test("activity deadlines round-trip between Philippine input time and UTC across day boundaries", () => {
+  assert.equal(activityDeadlineFromInput("2026-11-03T07:30"), "2026-11-02T23:30:00.000Z");
+  assert.equal(activityDeadlineInput("2026-11-02T23:30:00.000Z"), "2026-11-03T07:30");
+  assert.equal(activityDeadlineInput(""), ""); assert.equal(activityDeadlineFromInput(""), "");
+  assert.equal(validateActivityDeadlineUtc("2026-11-02T23:30:00Z", "2026-11-03"), "2026-11-02T23:30:00Z");
+  assert.equal(validateActivityDeadlineUtc("", "2026-11-03"), "");
+});
+
+test("deadline validation rejects invalid timestamps and deadlines at or before the release day starts", () => {
+  for (const value of [null, 123, "tomorrow", "2026-02-30T12:00:00Z", "2026-11-03T12:00:00", "2026-11-03T12:00:00+08:00", "2026-11-03T24:00:00Z"])
+    assert.throws(() => validateActivityDeadlineUtc(value));
+  for (const value of ["2026-11-02T15:59:00Z", "2026-11-02T16:00:00Z"])
+    assert.throws(() => validateActivityDeadlineUtc(value, "2026-11-03"), /after/);
+  assert.doesNotThrow(() => validateActivityDeadlineUtc("2026-11-02T16:00:00.001Z", "2026-11-03"));
+  for (const value of ["2026-02-30T12:00", "2026-11-03T24:00", "2026-11-03", "bad"])
+    assert.throws(() => activityDeadlineFromInput(value));
+});
 
 test("section settings override the shared default and malformed overrides stay locked", () => {
   const lesson = { isLocked: false, scheduledDate: "", sectionSchedules: {

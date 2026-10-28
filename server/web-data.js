@@ -1,6 +1,7 @@
 import { FirestoreAdmin } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion } from "../js/quiz-limits.js";
+import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -156,13 +157,17 @@ class Scope {
       return { ...input, updateTime: row?.updateTime };
     }
     if (p[0] === "terms" && term(p[1]) && p[2] === "lessons" && lesson(p[3]) && p.length === 4 && row &&
-        input.operation === "update" && names(["sectionId", "isLocked", "scheduledDate"]) &&
+        input.operation === "update" && names(["sectionId", "isLocked", "scheduledDate", "activityDeadlineUtc"]) &&
         typeof data.isLocked === "boolean" && (data.scheduledDate === "" || date(data.scheduledDate))) {
       await this.ownsClass(data.sectionId);
+      const existing = object(previous.sectionSchedules?.[data.sectionId]) ? previous.sectionSchedules[data.sectionId] : {};
+      const activityDeadlineUtc = Object.hasOwn(data, "activityDeadlineUtc") ? data.activityDeadlineUtc : existing.activityDeadlineUtc ?? "";
+      try { validateActivityDeadlineUtc(activityDeadlineUtc, data.scheduledDate); }
+      catch (error) { throw fail(error.message, 400); }
       // This document was read in the same transaction. Retain every other
       // section and the legacy default used by older mobile builds.
       return { ...input, data: { sectionSchedules: { ...previous.sectionSchedules,
-        [data.sectionId]: { isLocked: data.isLocked, scheduledDate: data.scheduledDate }
+        [data.sectionId]: { ...existing, isLocked: data.isLocked, scheduledDate: data.scheduledDate, activityDeadlineUtc }
       } }, updateTime: row.updateTime };
     }
     if (p[0] === "users" && p[2] === "test_results" && term(p[3]) && p[4] === "lessons" && lesson(p[5]) && p.length === 6 && actor.role === "teacher") {
