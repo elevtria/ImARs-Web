@@ -44,6 +44,7 @@ let selectedFile = null;
 let parsedStudents = [];
 let previewData = [];
 let existingStudentIds = new Set();
+let dbExistingStudentClassCodes = {};
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -341,6 +342,7 @@ async function handleFileSelected(file) {
     document.getElementById("dropHint").textContent = "Checking student details…";
 
     existingStudentIds.clear();
+    dbExistingStudentClassCodes = {};
 
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
@@ -359,8 +361,23 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    for (const id of await checkStudentIds([...new Set(candidateIds)])) {
-        existingStudentIds.add(id);
+    // --- NEW: FETCH EXISTING IDS AND THEIR CLASS CODES ---
+    const uniqueCandidateIds = [...new Set(candidateIds)];
+    
+    if (uniqueCandidateIds.length > 0) {
+      // Query Firestore in chunks of 10
+      for (let i = 0; i < uniqueCandidateIds.length; i += 10) {
+        const chunk = uniqueCandidateIds.slice(i, i + 10);
+        const q = query(collection(db, "users"), where("__name__", "in", chunk));
+        const snap = await getDocs(q);
+        
+        snap.forEach(docSnap => {
+          existingStudentIds.add(docSnap.id);
+          // Store their current classCode
+          const data = docSnap.data();
+          dbExistingStudentClassCodes[docSnap.id] = data.classCode || "";
+        });
+      }
     }
 
     // Build the raw data structure (Wait to validate until the whole table is parsed)
@@ -406,16 +423,23 @@ function validateAllRows() {
   previewData.forEach(row => {
     if (row.studentId) idCounts[row.studentId] = (idCounts[row.studentId] || 0) + 1;
     if (row.fullName) {
-      const nameKey = row.fullName.toLowerCase();
+      const nameKey = row.fullName.toLowerCase().replace(/\s+/g, ' '); // Strict spacing
       nameCounts[nameKey] = (nameCounts[nameKey] || 0) + 1;
     }
     if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
   });
 
+  const targetSecCode = sectionSelect.value;
+
   // 2. Apply errors globally
   previewData.forEach(row => {
     let rowErrors = [];
+    const nameKey = row.fullName ? row.fullName.toLowerCase().replace(/\s+/g, ' ') : '';
     
+    // Evaluate if they exist AND if they belong to this specific section
+    const existsInDb = existingStudentIds.has(row.studentId);
+    row.isExisting = existsInDb && dbExistingStudentClassCodes[row.studentId] === targetSecCode;
+
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
     
@@ -424,9 +448,11 @@ function validateAllRows() {
     else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
     else if (row.studentId.length < 9) rowErrors.push("ID too short");
     else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
+    // NEW: Block cross-section imports!
+    else if (existsInDb && !row.isExisting) rowErrors.push("Student belongs to another section");
     
     // Name Checks
-    if (row.fullName && nameCounts[row.fullName.toLowerCase()] > 1) {
+    if (nameKey && nameCounts[nameKey] > 1) {
       rowErrors.push("Duplicate Name in file");
     }
     
@@ -526,12 +552,12 @@ function renderPreviewTable() {
   document.getElementById("previewSummary").textContent = summaryText;
   
   const confirmBtn = document.getElementById("confirmPreviewBtn");
-  if (validCount > 0) {
+  if (validCount > 0 && errorCount === 0) {
     confirmBtn.disabled = false;
     confirmBtn.textContent = `Import/Update ${validCount} Records`;
   } else {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = "No valid records to import";
+    confirmBtn.textContent = errorCount > 0 ? "Fix errors to proceed" : "No valid records to import";
   }
   
   document.getElementById("dropTitle").textContent = selectedFile.name;
@@ -551,7 +577,8 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
       lastName: item.lastName,
       fullName: item.fullName,
       studentId: item.studentId,
-      email: item.email
+      email: item.email,
+      isExisting: item.isExisting // pass this through
     }));
 
   if (!selectedFile || parsedStudents.length === 0) return;
@@ -586,17 +613,14 @@ confirmImportBtn.addEventListener("click", async () => {
   confirmImportBtn.textContent = "Processing...";
 
   try {
-    const finalIds = new Set(await checkStudentIds(parsedStudents.map(student => student.studentId)));
-
     let newCount = 0;
     let updateCount = 0;
     const savedList = [];
 
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
-      const isNewStudent = !finalIds.has(finalStudentId);
 
-      if (isNewStudent) {
+      if (!stu.isExisting) {
         // Build the full document for a brand NEW student
         const newStudentData = {
           firstName: stu.firstName,
@@ -620,17 +644,17 @@ confirmImportBtn.addEventListener("click", async () => {
           updatedAt: serverTimestamp()
         };
         await setDoc(doc(db, "users", finalStudentId), newStudentData);
-        finalIds.add(finalStudentId);
         targetSec.count++;
         newCount++;
       } else {
-        // For EXISTING students, ONLY update their name and timestamp.
-        // We do NOT touch their classCode, section, role, or email!
+        // For EXISTING students, ONLY update their name, email, and timestamp.
+        // We do NOT touch their classCode, section, or role!
         const strictUpdateData = {
           firstName: stu.firstName,
           lastName: stu.lastName,
           displayName: stu.fullName,
           fullName: stu.fullName,
+          email: stu.email || `${finalStudentId}@imars.edu`,
           updatedAt: serverTimestamp()
         };
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
