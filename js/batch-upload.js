@@ -8,6 +8,7 @@ import {
   getDocsWithLoading as getDocs,
   getStudentPage,
   doc, 
+  getDoc,
   setDoc, 
   updateDoc, 
   arrayUnion, 
@@ -342,7 +343,7 @@ async function handleFileSelected(file) {
     document.getElementById("dropHint").textContent = "Checking student details…";
 
     existingStudentIds.clear();
-    dbExistingStudentClassCodes = {};
+    dbExistingStudentClassCodes = {}; // Reset the class code cache
 
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
@@ -361,27 +362,24 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- SAFE FETCH: Use the existing checkStudentIds function to prevent query errors ---
+    // --- SAFE FETCH: Use your exact original working logic ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
-      // First, get the list of IDs that actually exist in the DB
-      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
-      
-      // Then, only query for those specific existing IDs to get their classCode
-      if (verifiedExisting.length > 0) {
-          for (let i = 0; i < verifiedExisting.length; i += 10) {
-              const chunk = verifiedExisting.slice(i, i + 10);
-              const q = query(collection(db, "users"), where("__name__", "in", chunk));
-              const snap = await getDocs(q);
-              
-              snap.forEach(docSnap => {
-                  existingStudentIds.add(docSnap.id);
-                  const dbData = docSnap.data();
-                  dbExistingStudentClassCodes[docSnap.id] = dbData.classCode || "";
-              });
-          }
-      }
+        const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
+        for (const id of verifiedExisting) {
+            existingStudentIds.add(id);
+            
+            // Immediately fetch this user's document to get their specific classCode
+            try {
+                const userDoc = await getDoc(doc(db, "users", id));
+                if (userDoc.exists()) {
+                    dbExistingStudentClassCodes[id] = String(userDoc.data().classCode || "").trim();
+                }
+            } catch (err) {
+                console.warn(`Failed to fetch classCode for existing ID ${id}`, err);
+            }
+        }
     }
 
     // Build the raw data structure
@@ -443,7 +441,7 @@ function validateAllRows() {
     // Evaluate if they exist AND if they belong to this specific section
     const existsInDb = existingStudentIds.has(row.studentId);
     
-    const studentDbClassCode = String(dbExistingStudentClassCodes[row.studentId] || "").trim();
+    const studentDbClassCode = dbExistingStudentClassCodes[row.studentId] || "";
     row.isExisting = existsInDb && (studentDbClassCode === targetSecCode);
 
     if (!row.firstName) rowErrors.push("Missing First Name");
