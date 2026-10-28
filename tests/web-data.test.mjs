@@ -349,6 +349,23 @@ test("report pages read at most 25 students in one selected term and never query
   assert.equal((await app.call({action:'teacher-report-page',termId:'term_01'})).status,401);
 });
 
+test("all-term dashboard pages stay bounded, cover assigned sections and never read another teacher's results",async()=>{
+  const app=fixture(),cookie=await app.login(),batches=[],original=app.store.getAll.bind(app.store);
+  app.data.set("classes/C",{teacherId:"TEACH1000",SectionName:"C"});
+  for(let index=0;index<28;index++){
+    const id="OWN"+String(index).padStart(3,"0");app.data.set("users/"+id,{role:"student",classCode:index<14?"A":"C",teacherId:"TEACH1000",active:index!==27});
+    for(const termId of ["term_01","term_02","term_03"])app.data.set(`users/${id}/test_results/${termId}/lessons/lesson_01`,{postTestScore:8,postTestTotalQuestions:10});
+  }
+  app.store.getAll=async paths=>{batches.push(paths);return original(paths);};
+  const request={action:"teacher-report-page",termId:"term_01",allTerms:true,includeCurriculum:false};
+  const response=await app.call(request,cookie);assert.equal(response.status,200);const first=await response.json();
+  assert.equal(first.students.length,25);assert.deepEqual(batches.map(paths=>paths.length),[100,100,100]);assert.equal(first.counts.reduce((sum,row)=>sum+row.active,0),28);
+  assert.ok(first.students.some(row=>row.classId==="C"));assert.ok(first.students.every(row=>row.termResults.length===3));
+  assert.ok(batches.flat().every(path=>!path.includes("0026271001")&&!path.includes("OWN027")));
+  const next=await(await app.call({...request,cursor:first.cursor,includeCounts:false},cookie)).json();assert.equal(next.students.length,3);assert.equal(next.cursor,null);assert.equal(next.counts,null);
+  assert.equal((await app.call({...request,sectionId:"B"},cookie)).status,403);assert.equal((await app.call({...request,allTerms:"true"},cookie)).status,400);assert.equal((await app.call(request)).status,401);
+});
+
 test("middleware and data share one request's session verification while account status remains live",async()=>{
   const app=fixture(),cookie=await app.login(), binding=app.env.WEB_LOGIN_STATE;
   let checks=0;

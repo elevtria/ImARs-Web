@@ -189,3 +189,10 @@ test('changing terms cancels old work; a late old term or account response canno
   app.document.visibilityState='hidden';await app.tick();assert.equal(app.calls.length,2,'hidden tabs do not continue the class report');
   app.document.visibilityState='visible';app.auth.currentUser={uid:'b'};await app.refresh();assert.equal(app.calls.length,2);
 });
+
+test('combined dashboard reports retain bounded background loading and a separate cache from single-term analytics',async()=>{
+  const app=pagedReportHarness();await app.open({allTerms:true,sectionId:""});assert.equal(app.calls[0].allTerms,true);assert.equal(app.calls[0].firstSection,false);
+  await app.tick();assert.equal(app.calls.length,2);assert.equal(app.calls[1].includeCounts,false);
+  await app.open({allTerms:true,sectionId:""});assert.equal(app.calls.length,2);
+  await app.open({termId:"term_01"});assert.equal(app.calls.length,3);assert.equal(app.calls[2].allTerms,undefined);assert.equal(app.calls[2].firstSection,true);
+});

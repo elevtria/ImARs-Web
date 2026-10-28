@@ -30,6 +30,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     try {
       abort = new AbortController();
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
+        ...(options.allTerms ? { allTerms: true } : {}),
         firstSection: options.sectionId === "first", cursor, includeCounts: !cursor, includeCurriculum: !state.curriculumSnap }, { signal: abort.signal });
       if (!current(token)) return;
       if (cache.version() !== version) {
@@ -65,10 +66,10 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first" }) {
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false }) {
     stop(); user = account; const token = generation;
     cache = prepareTeacherCache(app, user); version = cache.version();
-    options = { termId, sectionId, key: "teacher-report:" + termId + ":" + (sectionId || "all") };
+    options = { termId, sectionId, allTerms, key: "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all") };
     state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
     const saved = cache.get(user.uid, options.key);
     if (saved) try {

@@ -31,14 +31,14 @@ class Element {
 function page(file, report) {
   const elements = new Map();
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
-  let authChanged;
+  let authChanged, requested;
   const timing = { data: action => action(), render: action => action(), finish() {} };
   const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
     showTeacherView: async options => options.render(report),
-    createTeacherReport: options => ({ open: async () => { options.render(report); } }),
+    createTeacherReport: options => ({ open: async input => { requested=input; options.render(report); } }),
     showAdminView: async options => { options.verified(); options.render(report); },
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
@@ -47,7 +47,7 @@ function page(file, report) {
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, context, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, context, requested:()=>requested, render: () => authChanged({ uid: "teacher-a" }) };
 }
 
 function assertTextOnly(html) {
@@ -60,11 +60,30 @@ function assertTextOnly(html) {
 test("dashboard names, sections, and lesson titles render as text rather than executable markup", async () => {
   const student = record("S1", { displayName: attack });
   const app = page("dashboard.js", { teacherName: "Teacher", total: 1, counts: [{ classId: "A", active: 1 }],
-    sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: student, results: [{ lessonsSnap: snapshot([]) }] }] }],
+    sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: student, results: [{ lessonsSnap: snapshot([record("lesson_01",{timestamp:"2026-10-27T00:00:00Z"})]) }] }] }],
     termSnap: record("term_01", { title: "Term 1" }), curriculumSnap: snapshot([record("lesson_01", { title: attack })]) });
   await app.render();
   assertTextOnly(app.element("studentTableBody").html());
   assertTextOnly(app.element("modulesContainer").html());
+});
+
+test("dashboard cards combine sections and terms while recent activity excludes unused accounts and sorts newest first",async()=>{
+  const lesson=(id,pre,post,time,ar)=>record(id,{isPreTestCompleted:pre!==null,preTestScore:pre,preTestTotalQuestions:5,isPostTestCompleted:post!==null,postTestScore:post,postTestTotalQuestions:10,timestamp:time,arTimeMinutes:ar});
+  const student=(id,name,results)=>({studentDoc:record(id,{displayName:name,updatedAt:"2099-01-01T00:00:00Z"}),results});
+  const term=(termId,docs)=>({termId,lessonsSnap:snapshot(docs)});
+  const app=page("dashboard.js",{teacherName:"Teacher",total:3,termSnap:record("term_01",{title:"Term 1"}),curriculumSnap:snapshot([]),sections:[
+    {classDoc:record("A",{SectionName:"A"}),students:[student("S1","Older learner",[term("term_01",[lesson("lesson_01",1,3,"2026-10-20T00:00:00Z",10)]),term("term_03",[lesson("lesson_01",5,null,"2026-10-25T00:00:00Z",0)])]),student("S3","Never used app",[term("term_01",[])])]},
+    {classDoc:record("C",{SectionName:"C"}),students:[student("S2","Newest learner",[term("term_02",[lesson("lesson_01",3,9,"2026-10-26T00:00:00Z",20)])])]}]});
+  await app.render();
+  assert.equal(app.requested().allTerms,true);assert.equal(app.requested().sectionId,"");
+  assert.equal(app.element("studentCountVal").textContent,3);assert.equal(app.element("avgPreTestVal").textContent,"3/5");assert.equal(app.element("avgPostTestVal").textContent,"6/10");assert.equal(app.element("avgArTimeVal").textContent,"10 min");
+  const html=app.element("studentTableBody").html();assert.doesNotMatch(html,/Never used app/);assert.ok(html.indexOf("Newest learner")<html.indexOf("Older learner"));assert.match(html,/Grade 6 – C/);
+});
+
+test("dashboard orders activity before limiting rows and keeps earned zeroes",async()=>{
+  const students=Array.from({length:30},(_,index)=>({studentDoc:record("S"+index,{displayName:"Learner "+index}),results:[{termId:"term_03",lessonsSnap:snapshot([record("lesson_01",{timestamp:new Date(Date.UTC(2026,9,index+1)).toISOString(),isPreTestCompleted:true,preTestScore:0,preTestTotalQuestions:5})])}]}));
+  const app=page("dashboard.js",{teacherName:"Teacher",total:30,sections:[{classDoc:record("A",{SectionName:"A"}),students}],curriculumSnap:snapshot([])});await app.render();
+  const rows=app.element("studentTableBody").children;assert.equal(rows.length,25);assert.match(rows[0].innerHTML,/Learner 29/);assert.doesNotMatch(app.element("studentTableBody").html(),/>Learner 0</);assert.equal(app.element("avgPreTestVal").textContent,"0/5");
 });
 
 test("analytics names, sections, and topic titles cannot inject HTML into reports", async () => {

@@ -18,7 +18,7 @@ function fixture(transport) {
     document: { visibilityState: "visible", addEventListener(name, callback) { events.set(name, callback); }, removeEventListener(name) { events.delete(name); } },
     webRequest: async (path, body) => { calls.push({ path, body }); return transport(body); }
   });
-  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion});", context);
+  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion,getTeacherReportPage});", context);
   return { api, calls, timers, context, events, invalidated: () => invalidated };
 }
 const document = (path, data) => ({ id: path.split("/").at(-1), path, data });
@@ -84,4 +84,28 @@ test('empty Term 2 collections survive the real data handler and batched client 
  const rows=await Promise.all(Array.from({length:15},(_,i)=>app.api.getDocs(app.api.collection({},'users','EMPTY'+i,'test_results','term_02','lessons'))));
  assert.ok(rows.every(row=>row.empty&&row.size===0&&row.docs.length===0));
  assert.ok(app.calls.every(call=>call.body.reads.every(item=>item.reference.path.includes('/term_02/'))));
+});
+
+test("combined dashboard transport decodes all three terms without changing single-term reports", async () => {
+  const backend = dataFixture(), cookie = await backend.login();
+  for (let index = 1; index <= 3; index++) {
+    backend.data.set(`users/0026271000/test_results/term_0${index}/lessons/lesson_01`, {
+      preTestScore: index, preTestTotalQuestions: 5, isPreTestCompleted: true,
+      timestamp: { $type: "timestamp", value: `2026-10-2${index}T00:00:00Z` }
+    });
+  }
+  const app = fixture(async body => {
+    const response = await backend.call(body, cookie);
+    assert.equal(response.status, 200);
+    return response.json();
+  });
+  const combined = await app.api.getTeacherReportPage({ termId: "term_01", allTerms: true });
+  const results = combined.students[0].results;
+  assert.deepEqual(Array.from(results, result => result.termId), ["term_01", "term_02", "term_03"]);
+  assert.deepEqual(Array.from(results, result => result.lessonsSnap.docs[0].data().preTestScore), [1, 2, 3]);
+  assert.equal(results[2].lessonsSnap.docs[0].data().timestamp.toDate().toISOString(), "2026-10-23T00:00:00.000Z");
+  const single = await app.api.getTeacherReportPage({ termId: "term_02" });
+  assert.equal(single.students[0].results.length, 1);
+  assert.equal(single.students[0].results[0].termId, "term_02");
+  assert.equal(single.students[0].results[0].lessonsSnap.docs[0].data().preTestScore, 2);
 });

@@ -26,196 +26,90 @@ document.getElementById("helpBtn").onclick = () => {
   window.location.href = "teacher-manual.html";
 };
 
-// --- FIREBASE AUTH & FIRESTORE LOGIC ---
-const hour = new Date().getHours();
-const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+function assessmentPoints(result, kind, maximum) {
+  const prefix = kind === "pre" ? "preTest" : "postTest";
+  if (result[kind === "pre" ? "isPreTestCompleted" : "isPostTestCompleted"] !== true) return null;
+  const total = result[prefix + "TotalQuestions"];
+  const score = result[prefix + "Score"] ?? (kind === "post" && Array.isArray(result.postTestHeatmap) ? result.postTestHeatmap.filter(value => value === true).length : null);
+  return typeof score === "number" && typeof total === "number" && Number.isFinite(score) && Number.isFinite(total) && total > 0 && score >= 0 && score <= total ? score / total * maximum : null;
+}
 
+function activityTime(value) {
+  try {
+    const date = value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value || 0);
+    return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.getTime() : 0;
+  } catch { return 0; }
+}
+const minutes = value => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
+const scoreLabel = (sum, count, maximum) => count ? `${Math.round(sum / count)}/${maximum}` : "N/A";
+
+function studentSummary(classDoc, student) {
+  let preSum = 0, preCount = 0, postSum = 0, postCount = 0, arMinutes = 0, lastActive = 0, hasActivity = false;
+  for (const result of student.results) for (const lesson of result.lessonsSnap.docs) {
+    const data = lesson.data(), pre = assessmentPoints(data, "pre", 5), post = assessmentPoints(data, "post", 10);
+    if (pre !== null) { preSum += pre; preCount++; }
+    if (post !== null) { postSum += post; postCount++; }
+    const ar = minutes(data.arTimeMinutes) || minutes(data.arNavigationTimeMinutes);
+    arMinutes += ar;
+    const time = Math.max(activityTime(data.timestamp), activityTime(data.lastUpdated), activityTime(data.completedAt));
+    lastActive = Math.max(lastActive, time);
+    const deviceTime = Object.values(data.learningTimeByDevice || {}).some(device => minutes(device?.lessonSeconds) > 0 || minutes(device?.arSeconds) > 0);
+    hasActivity ||= time > 0 || pre !== null || post !== null || ar > 0 || minutes(data.lessonTimeMinutes) > 0 || deviceTime ||
+      data.isLessonCompleted === true || data.isARCompleted === true || data.completed === true ||
+      (typeof data.activityScore === "number" && data.activityScore >= 0 && (data.activityTotalQuestions > 0 || data.activityTotalPoints > 0));
+  }
+  const profile = student.studentDoc.data();
+  return { id: student.studentDoc.id, name: profile.displayName || profile.fullName || "Student", section: classDoc.data().SectionName || classDoc.id,
+    preSum, preCount, postSum, postCount, arMinutes, lastActive, hasActivity };
+}
 
 const report = createTeacherReport({ app,
-      failed: error => { console.error("Dashboard update failed:", error); document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically."; },
-      progress: ({ loaded, total, complete }) => { document.getElementById("dashboardReportStatus").textContent = complete ? "" : `Class averages so far · ${loaded} of ${total} students`; },
-      render: ({ teacherName, sections, counts, termSnap, curriculumSnap, total }) => {
-        const section = sections.find(row => counts.some(count => count.classId === row.classDoc.id));
-        const noClass = !section;
-        const sectionName = section?.classDoc.data().SectionName || section?.classDoc.id;
-        const reports = (section?.students || []).map(row => ({ studentDoc: row.studentDoc, lessonsSnap: row.results[0].lessonsSnap }));
-        document.getElementById("greeting").textContent = "Good " + part + ", " + teacherName + " !";
-        if (noClass) {
-          document.getElementById("classInfo").textContent = "No classes assigned yet.";
-          document.getElementById("studentTableBody").replaceChildren();
-          document.getElementById("modulesContainer").replaceChildren();
-          document.getElementById("studentCountVal").textContent = "0";
-          document.getElementById("avgPreTestVal").textContent = "0/5";
-          document.getElementById("avgPostTestVal").textContent = "0/10";
-          document.getElementById("avgArTimeVal").textContent = "0 min";
-          return;
-        }
-        document.getElementById("classInfo").textContent = "Grade 6 – " + sectionName;
-            document.getElementById("studentCountVal").textContent = total;
+  failed: error => {
+    console.error("Dashboard update failed:", error);
+    document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
+  },
+  progress: ({ loaded, total, complete }) => {
+    document.getElementById("dashboardReportStatus").textContent = complete ? "" : `Class averages so far · ${loaded} of ${total} students`;
+  },
+  render: ({ teacherName, sections, termSnap, curriculumSnap, total }) => {
+    const hour = new Date().getHours(), part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+    document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} !`;
+    document.getElementById("classInfo").textContent = sections.length > 1 ? "Grade 6 – All assigned sections" : sections.length ? "Grade 6 – " + (sections[0].classDoc.data().SectionName || sections[0].classDoc.id) : "No classes assigned yet.";
+    const students = sections.flatMap(({classDoc, students}) => students.filter(student => student.studentDoc.data().active !== false).map(student => studentSummary(classDoc, student)));
+    const sums = students.reduce((sum, row) => ({ preSum:sum.preSum+row.preSum, preCount:sum.preCount+row.preCount,
+      postSum:sum.postSum+row.postSum, postCount:sum.postCount+row.postCount, arMinutes:sum.arMinutes+row.arMinutes }), {preSum:0,preCount:0,postSum:0,postCount:0,arMinutes:0});
+    document.getElementById("studentCountVal").textContent = total;
+    document.getElementById("avgPreTestVal").textContent = scoreLabel(sums.preSum, sums.preCount, 5);
+    document.getElementById("avgPostTestVal").textContent = scoreLabel(sums.postSum, sums.postCount, 10);
+    document.getElementById("avgArTimeVal").textContent = `${students.length ? Math.round(sums.arMinutes / students.length) : 0} min`;
 
-            let totalPreTestSum = 0;
-            let preTestCount = 0;
-            let totalPostTestSum = 0;
-            let postTestCount = 0;
+    const table = document.getElementById("studentTableBody"); table.innerHTML = "";
+    const recent = students.filter(row => row.hasActivity).sort((a,b) => b.lastActive-a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0,25);
+    const rows = document.createDocumentFragment();
+    for (const student of recent) {
+      const initials = student.name.trim().split(/\s+/).slice(0,2).map(part => part[0] || "").join("").toUpperCase();
+      const lastActive = student.lastActive ? new Date(student.lastActive).toLocaleString("en-US", {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"}) : "Not recorded";
+      const row = document.createElement("tr");
+      row.innerHTML = `<td><div class="student"><div class="avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(student.name)}</strong><small>Grade 6 – ${escapeHtml(student.section)}</small></div></div></td>
+        <td class="muted-cell">${scoreLabel(student.preSum,student.preCount,5)}</td><td class="${student.postCount ? "score-up" : "muted-cell"}">${scoreLabel(student.postSum,student.postCount,10)}</td>
+        <td class="muted-cell">${Math.round(student.arMinutes)} min</td><td class="muted-cell">${lastActive}</td>`;
+      rows.appendChild(row);
+    }
+    if (!recent.length) { const row=document.createElement("tr"); row.innerHTML='<td colspan="5" class="muted-cell">No saved app activity yet.</td>'; rows.appendChild(row); }
+    table.appendChild(rows);
 
-            // ADDED: Class-wide AR trackers
-            let totalClassArTime = 0;
-            let studentsWithArTime = 0;
-
-            const activeLessons = new Set();
-
-            // 2. Clear the table body to inject dynamic rows
-            const studentTableBody = document.getElementById("studentTableBody");
-            studentTableBody.innerHTML = "";
-
-            const rows = document.createDocumentFragment();
-            for (const { studentDoc, lessonsSnap } of reports) {
-                const sData = studentDoc.data();
-
-                // Generate Initials (e.g., Ana Cruz -> AC)
-                const sName = sData.displayName || "Unknown Student";
-                const nameParts = sName.split(" ");
-                let initials = nameParts[0] ? nameParts[0][0] : "?";
-                if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
-                initials = initials.toUpperCase();
-
-                // Variables to track stats specific to this one student
-                let sPreSum = 0, sPreCount = 0;
-                let sPostSum = 0, sPostCount = 0;
-                let lastActiveDate = new Date(0); // Epoch start
-
-                // ADDED: Track individual student AR time
-                let studentTotalArTime = 0;
-
-                lessonsSnap.forEach((lessonDoc) => {
-                    const testData = lessonDoc.data();
-
-                    if (testData.isPreTestCompleted || testData.isPostTestCompleted) {
-                        activeLessons.add(lessonDoc.id);
-                    }
-
-                    if (testData.isPreTestCompleted && testData.preTestTotalQuestions > 0) {
-                        totalPreTestSum += testData.preTestScore;
-                        preTestCount++;
-                        sPreSum += testData.preTestScore;
-                        sPreCount++;
-                    }
-
-                    if (testData.isPostTestCompleted && testData.postTestTotalQuestions > 0) {
-                        const postScore = testData.postTestScore !== undefined
-                            ? testData.postTestScore
-                            : (testData.postTestHeatmap || []).filter(Boolean).length;
-
-                        const normalizedPost = (postScore / testData.postTestTotalQuestions) * 10;
-                        totalPostTestSum += normalizedPost;
-                        postTestCount++;
-                        sPostSum += normalizedPost;
-                        sPostCount++;
-                    }
-
-                    // ADDED: Fetch AR Time from Firebase
-                    if (testData.arTimeMinutes) {
-                        studentTotalArTime += testData.arTimeMinutes;
-                    }
-
-                    // Parse timestamp to find the most recent activity
-                    if (testData.timestamp) {
-                        const testDate = testData.timestamp.toDate ? testData.timestamp.toDate() : new Date(testData.timestamp);
-                        if (testDate > lastActiveDate) lastActiveDate = testDate;
-                    }
-                });
-
-                // ADDED: Update class-wide AR totals if this student had any AR time
-                if (studentTotalArTime > 0) {
-                    totalClassArTime += studentTotalArTime;
-                    studentsWithArTime++;
-                }
-
-                // Format row data for this student as whole numbers (integers)
-                const sPreStr = sPreCount > 0 ? `${Math.round(sPreSum / sPreCount)}/5` : "N/A";
-                const sPostStr = sPostCount > 0 ? `${Math.round(sPostSum / sPostCount)}/10` : "N/A";
-                const sPostStyle = sPostCount > 0 ? "score-up" : "muted-cell"; // Make it green if they have a score
-
-                // ADDED: Format AR Time string for the table
-                const sArTimeStr = studentTotalArTime > 0 ? `${studentTotalArTime} min` : "-- min";
-
-                let dateStr = "No activity";
-                if (lastActiveDate.getTime() > 0) {
-                    dateStr = lastActiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                }
-
-                // Inject the row into the table
-                if (rows.childNodes.length >= 25) continue;
-                const tr = document.createElement("tr");
-                tr.innerHTML = `
-                  <td>
-                    <div class="student">
-                      <div class="avatar">${escapeHtml(initials)}</div>
-                      <div>
-                        <strong>${escapeHtml(sName)}</strong>
-                        <small>Grade 6 – ${escapeHtml(sectionName)}</small>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="muted-cell">${sPreStr}</td>
-                  <td class="${sPostStyle}">${sPostStr}</td>
-                  <td class="muted-cell">${sArTimeStr}</td>
-                  <td class="muted-cell">${dateStr}</td>
-                `;
-                if (rows.childNodes.length < 25) rows.appendChild(tr);
-            }
-            studentTableBody.appendChild(rows);
-
-            // Finalize Global Class Averages as whole numbers (integers)
-            const avgPre = preTestCount > 0 ? Math.round(totalPreTestSum / preTestCount) : 0;
-            const avgPost = postTestCount > 0 ? Math.round(totalPostTestSum / postTestCount) : 0;
-
-            // ADDED: Calculate overall average AR Time
-            const avgArTime = studentsWithArTime > 0 ? Math.round(totalClassArTime / studentsWithArTime) : 0;
-
-            document.getElementById("avgPreTestVal").textContent = `${avgPre}/5`;
-            document.getElementById("avgPostTestVal").textContent = `${avgPost}/10`;
-
-            // ADDED: Push calculated AR time to the top stat card
-            const avgArEl = document.getElementById("avgArTimeVal");
-            if (avgArEl) avgArEl.textContent = `${avgArTime} min`;
-
-            // --- FETCH & RENDER CURRICULUM MODULES ---
-            if (termSnap.exists()) {
-                const termTitle = termSnap.data().title || "Term 1";
-                document.getElementById("currentTermHeader").textContent = `Current Term — ${termTitle}`;
-            }
-
-            const modulesContainer = document.getElementById("modulesContainer");
-            modulesContainer.innerHTML = "";
-
-            const sortedLessons = curriculumSnap.docs.sort((a, b) => a.id.localeCompare(b.id));
-
-            let lessonCounter = 1;
-            sortedLessons.forEach((lessonDoc) => {
-                const lessonData = lessonDoc.data();
-                const lessonTitle = lessonData.title || `Lesson ${lessonCounter}`;
-
-                const isStarted = activeLessons.has(lessonDoc.id);
-                const badgeClass = isStarted ? "done" : "next";
-                const statusText = isStarted ? "Active/Completed" : "Upcoming";
-
-                const moduleHTML = `
-                  <article class="module">
-                    <div class="badge ${badgeClass}">${lessonCounter}</div>
-                    <div>
-                      <h3>${escapeHtml(lessonTitle)}</h3>
-                      <span>${statusText}</span>
-                    </div>
-                  </article>
-                `;
-                modulesContainer.insertAdjacentHTML('beforeend', moduleHTML);
-
-                lessonCounter++;
-            });
-      }
+    const termTitle = termSnap?.exists() ? termSnap.data().title || "Term 1" : "Term 1";
+    document.getElementById("currentTermHeader").textContent = `Current Term — ${termTitle}`;
+    const modules = document.getElementById("modulesContainer"); modules.innerHTML = "";
+    if (!sections.length) return;
+    const activeLessons = new Set(sections.flatMap(section => section.students.flatMap(student => student.results.filter(result => result.termId === "term_01" || !result.termId).flatMap(result => result.lessonsSnap.docs.filter(lesson => lesson.data().isPreTestCompleted || lesson.data().isPostTestCompleted).map(lesson => lesson.id)))));
+    [...(curriculumSnap?.docs || [])].sort((a,b)=>a.id.localeCompare(b.id)).forEach((lesson,index)=>{
+      const active = activeLessons.has(lesson.id);
+      modules.insertAdjacentHTML("beforeend",`<article class="module"><div class="badge ${active ? "done" : "next"}">${index+1}</div><div><h3>${escapeHtml(lesson.data().title || "Lesson "+(index+1))}</h3><span>${active ? "Active/Completed" : "Upcoming"}</span></div></article>`);
+    });
+  }
 });
 onAuthStateChanged(auth, async user => {
   if (!user) { window.location.href = "login.html"; return; }
-  await report.open({ user });
+  await report.open({ user, sectionId:"", allTerms:true });
 });

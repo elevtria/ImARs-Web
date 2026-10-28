@@ -270,6 +270,8 @@ async function studentPage(scope, body) {
 async function teacherReportPage(scope, body) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
+  if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
+  const termIds = body.allTerms === true ? ["term_01", "term_02", "term_03"] : [body.termId];
   const page = await studentPage(scope, { ...body, status: "active", search: "", limit: 25 });
   const curriculumPromise = body.includeCurriculum === false ? null : (async () => {
     const path = "terms/" + body.termId;
@@ -277,13 +279,18 @@ async function teacherReportPage(scope, body) {
     return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
   })().then(value => ({ value }), error => ({ error }));
   // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
-  // their documents in one database round trip, only for verified roster rows.
-  const paths = page.students.flatMap(row => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`));
-  const records = paths.length ? await scope.store.getAll(paths) : new Map();
-  const students = page.students.map(row => ({ ...row, lessons: [1, 2, 3, 4].flatMap(index => {
-    const path = `users/${row.document.id}/test_results/${body.termId}/lessons/lesson_0${index}`, record = records.get(path);
-    return record ? [output(path, record)] : [];
-  }) }));
+  // their documents in batches of at most 100, only for verified roster rows.
+  const paths = page.students.flatMap(row => termIds.flatMap(termId => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`)));
+  const batches = [];
+  for (let offset = 0; offset < paths.length; offset += 100) batches.push(scope.store.getAll(paths.slice(offset, offset + 100)));
+  const records = new Map((await Promise.all(batches)).flatMap(rows => [...rows]));
+  const students = page.students.map(row => {
+    const results = termIds.map(termId => ({ termId, lessons: [1, 2, 3, 4].flatMap(index => {
+      const path = `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`, record = records.get(path);
+      return record ? [output(path, record)] : [];
+    }) }));
+    return { ...row, ...(body.allTerms === true ? { termResults: results } : { lessons: results[0].lessons }) };
+  });
   const curriculumResult = await curriculumPromise;
   if (curriculumResult?.error) throw curriculumResult.error;
   const curriculum = curriculumResult?.value;

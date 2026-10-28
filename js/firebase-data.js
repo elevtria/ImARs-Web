@@ -168,7 +168,7 @@ export async function getTeacherReportPage(options = {}, requestOptions = {}) {
   const list = rows => { const docs = rows.map(snapshot); return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback) }; };
   return { ...result, classes: result.classes.map(snapshot),
     students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document),
-      results: [{ termId: result.termId, lessonsSnap: list(row.lessons) }] })),
+      results: (row.termResults || [{ termId: result.termId, lessons: row.lessons }]).map(term => ({ termId: term.termId, lessonsSnap: list(term.lessons) })) })),
     curriculum: result.curriculum ? { termSnap: snapshot(result.curriculum.term), curriculumSnap: list(result.curriculum.lessons) } : null };
 }
 export async function createTeacher(profile) {
