@@ -179,6 +179,9 @@ test("each activity term releases only its own activities and preserves other se
     }
     assert.match(app.element("activityScheduleStatus").textContent, new RegExp(`activities in Term ${termIndex + 1} are available`));
     assert.match(app.element("activityScheduleList").innerHTML, new RegExp(`data-activity-unlockall="${termIndex}"[^>]*disabled`));
+    const completedButton = app.element("activityScheduleList").innerHTML.match(new RegExp(`data-activity-unlockall="${termIndex}"([\\s\\S]*?)</button>`))[0];
+    assert.match(completedButton, /All available/);
+    assert.doesNotMatch(completedButton, /Make all available/);
   }
   assert.doesNotMatch(app.element("activityScheduleList").innerHTML, /value="(?:locked|scheduled)" selected/);
   const cache = decodeView(app.savedViews.get("schedule:sections"));

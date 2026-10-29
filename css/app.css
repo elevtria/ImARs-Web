@@ -799,6 +799,7 @@ td {
 }
 
 .lock-all:hover { background: var(--ice); }
+.activity-term [data-activity-unlockall]:disabled { cursor: default; }
 
 .progress-card {
   margin-top: 18px;

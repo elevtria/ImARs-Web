@@ -126,6 +126,8 @@ function renderActivitySchedule() {
   if (!isSaving && activityList.contains(document.activeElement) && document.activeElement.matches("select, input")) return;
   activityList.innerHTML = terms.map((term, termIndex) => {
     const open = activityOpenTerms[termIndex];
+    const availableCount = activityTopics[termIndex].filter(({ topic }) => !isTopicLocked(topic)).length;
+    const allAvailable = activityTopics[termIndex].length > 0 && availableCount === activityTopics[termIndex].length;
     const rows = activityTopics[termIndex].map(({ topic, topicIndex }) => {
     const state = topicAvailability(topic);
     const draft = activityDrafts.get(activityKey(termIndex, topicIndex));
@@ -155,9 +157,9 @@ function renderActivitySchedule() {
       </button>
       <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}
         <div class="term-foot">
-          <span>${activityTopics[termIndex].filter(({ topic }) => !isTopicLocked(topic)).length}/${activityTopics[termIndex].length} activities available</span>
-          <button class="lock-all" type="button" data-activity-unlockall="${termIndex}" aria-label="Make all activities available in ${escapeHtml(term.name)}" ${!selectedSection || isSaving || activityTopics[termIndex].every(({ topic }) => !isTopicLocked(topic)) ? "disabled" : ""}>
-            ${lockIcon(false)} Make all available
+          <span>${availableCount}/${activityTopics[termIndex].length} activities available</span>
+          <button class="lock-all" type="button" data-activity-unlockall="${termIndex}" aria-label="${allAvailable ? `All activities in ${escapeHtml(term.name)} are available` : `Make all activities available in ${escapeHtml(term.name)}`}" ${!selectedSection || isSaving || allAvailable ? "disabled" : ""}>
+            ${allAvailable ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> All available' : `${lockIcon(false)} Make all available`}
           </button>
         </div>
       </div>
