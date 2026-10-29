@@ -12,7 +12,6 @@
   <!-- SheetJS for parsing .xlsx, .xls, and .csv files -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="css/app.css" />
-  <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
 </head>
@@ -43,7 +42,7 @@
     </header>
 
     <main class="content">
-      <section class="hero" data-loading-path="users classes" data-loading-label="Loading sections and student counts…">
+      <section class="hero">
         <div>
           <h1>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>
@@ -52,7 +51,7 @@
           <span>Upload to section:</span>
           <span class="select-wrap">
             <select id="sectionSelect" aria-label="Upload to section">
-              <option value="">Loading sections...</option>
+              <option value="">Select a section</option>
             </select>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </span>
@@ -66,7 +65,7 @@
             <circle cx="12" cy="12" r="8" />
             <path d="M12 8v4l2.5 1.5" />
           </svg>
-          <span>Uploading students to: <b id="sectionName">Loading...</b></span>
+          <span>Uploading students to: <b id="sectionName">—</b></span>
         </div>
         <small id="existingCount">(0 existing students)</small>
       </div>

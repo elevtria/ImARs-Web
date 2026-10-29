@@ -80,6 +80,7 @@ let scheduleOwner = null;
 const syncStatus = document.getElementById("syncStatus");
 const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
+const makeAllActivitiesAvailable = document.getElementById("makeAllActivitiesAvailable");
 let activityMessage = "";
 const activityOpenTerms = [false, false, false];
 const activityDrafts = new Map();
@@ -108,12 +109,17 @@ const lockIcon = (locked) => locked
 
 const calIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>`;
 
-function renderActivitySchedule() {
+function scheduledActivityTopics() {
   // Longitudinal Waves uses the Term 3 entry in the activity list.
-  const activityTopics = terms.map((term, termIndex) => term.topics
+  return terms.map((term, termIndex) => term.topics
     .map((topic, topicIndex) => ({ topic, topicIndex }))
     .filter(({ topic }) => TERM_IDS[termIndex] !== "term_02" || topic.docId !== "lesson_04"));
+}
+
+function renderActivitySchedule() {
+  const activityTopics = scheduledActivityTopics();
   const activityCount = activityTopics.reduce((total, topics) => total + topics.length, 0);
+  makeAllActivitiesAvailable.disabled = !isReady || !selectedSection || isSaving || activityTopics.every(topics => topics.every(({ topic }) => !isTopicLocked(topic)));
   activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
   if (!isReady) {
     activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
@@ -285,8 +291,12 @@ function sectionUpdate(fields) {
 }
 
 async function saveAccess(termIndex, topicIndexes, update) {
+  return saveAccessTargets(topicIndexes.map(topicIndex => ({ termIndex, topicIndex })), update);
+}
+
+async function saveAccessTargets(targets, update, { preserveDeadlineDrafts = false } = {}) {
   const generation = scheduleGeneration, sectionId = selectedSection;
-  const changes = topicIndexes.map(topicIndex => ({ topicIndex, ref: lessonRef(termIndex, topicIndex), data: sectionUpdate(update) }));
+  const changes = targets.map(({ termIndex, topicIndex }) => ({ termIndex, topicIndex, ref: lessonRef(termIndex, topicIndex), data: sectionUpdate(update) }));
   if (changes.length === 1) await updateDoc(changes[0].ref, changes[0].data);
   else {
     const batch = writeBatch(db);
@@ -296,18 +306,24 @@ async function saveAccess(termIndex, topicIndexes, update) {
   if (generation !== scheduleGeneration) return false;
   // A successful write can finish before its subscription refresh. Keep the
   // acknowledged values in the displayed snapshots, including section switches.
-  const snapshot = latestSchedules[termIndex];
-  if (!snapshot) return false;
-  const docs = snapshot.docs.map(lesson => {
-    if (!changes.some(change => change.ref.id === lesson.id)) return lesson;
-    const data = lesson.data();
-    const existing = data.sectionSchedules?.[sectionId];
-    return { ...lesson, data: () => ({ ...data, sectionSchedules: { ...data.sectionSchedules,
-      [sectionId]: { ...existing, activityDeadlineUtc: existing?.activityDeadlineUtc ?? "", ...update } } }) };
+  changes.forEach(({ termIndex, topicIndex }) => {
+    const key = activityKey(termIndex, topicIndex, sectionId), draft = activityDrafts.get(key);
+    if (preserveDeadlineDrafts && draft && draft.deadline !== activityDeadlineInput(terms[termIndex].topics[topicIndex].activityDeadlineUtc))
+      activityDrafts.set(key, { ...draft, mode: "now", date: "" });
+    else activityDrafts.delete(key);
   });
-  latestSchedules[termIndex] = { ...snapshot, docs, forEach: callback => docs.forEach(callback) };
-  changes.forEach(change => activityDrafts.delete(activityKey(termIndex, change.topicIndex, sectionId)));
-  receiveSectionSchedule(termIndex, latestSchedules[termIndex]);
+  for (const termIndex of new Set(changes.map(change => change.termIndex))) {
+    const snapshot = latestSchedules[termIndex];
+    if (!snapshot) return false;
+    const docs = snapshot.docs.map(lesson => {
+      if (!changes.some(change => change.termIndex === termIndex && change.ref.id === lesson.id)) return lesson;
+      const data = lesson.data(), existing = data.sectionSchedules?.[sectionId];
+      return { ...lesson, data: () => ({ ...data, sectionSchedules: { ...data.sectionSchedules,
+        [sectionId]: { ...existing, activityDeadlineUtc: existing?.activityDeadlineUtc ?? "", ...update } } }) };
+    });
+    latestSchedules[termIndex] = { ...snapshot, docs, forEach: callback => docs.forEach(callback) };
+    receiveSectionSchedule(termIndex, latestSchedules[termIndex]);
+  }
   if (scheduleOwner && latestSchedules.every(Boolean))
     prepareTeacherCache(app, scheduleOwner).put(scheduleOwner.uid, "schedule:sections", encodeView(latestSchedules));
   return true;
@@ -423,6 +439,27 @@ function rememberActivityDraft(event) {
 }
 activityList.addEventListener("change", rememberActivityDraft);
 activityList.addEventListener("input", rememberActivityDraft);
+
+makeAllActivitiesAvailable.addEventListener("click", async () => {
+  if (!isReady || isSaving || !assignedSections.some(section => section.id === selectedSection)) return;
+  const targets = scheduledActivityTopics().flatMap((topics, termIndex) => topics.map(({ topicIndex }) => ({ termIndex, topicIndex })));
+  if (!targets.length) return;
+  isSaving = true;
+  activityMessage = "Saving activity access…";
+  render();
+  try {
+    if (!await saveAccessTargets(targets, manualAccessUpdate(false), { preserveDeadlineDrafts: true })) return;
+    activityMessage = `All ${targets.length} activities are available in the selected section.`;
+    setSyncStatus("Saved", "success");
+  } catch (error) {
+    console.error("Unable to make all activities available:", error);
+    activityMessage = `Could not update activity access: ${error.message}`;
+    setSyncStatus(activityMessage, "error");
+  } finally {
+    isSaving = false;
+    render();
+  }
+});
 
 activityList.addEventListener("click", async event => {
   const termToggle = event.target.closest("[data-activity-term]");

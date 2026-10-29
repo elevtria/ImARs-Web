@@ -14,6 +14,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   ]));
   let authChanged;
   let rejectWrite = false;
+  const batchSizes = [];
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
       innerHTML: "", textContent: "", value: "", dataset: {}, events: {},
@@ -65,6 +66,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
         update: (ref, fields) => changes.push([ref, fields]),
         commit: async () => {
           if (rejectWrite) throw new Error("permission-denied");
+          batchSizes.push(changes.length);
           changes.forEach(([ref, fields]) => update(ref, fields));
           if (emitAfterWrite) [...new Set(changes.map(([ref]) => ref[1]))].forEach(emit);
         }
@@ -81,7 +83,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     element("scheduleSection").events.change();
   }
   return {
-    element, records, emit, listeners, authChanged, savedViews,
+    element, records, emit, listeners, authChanged, savedViews, batchSizes,
     denyWrites: () => { rejectWrite = true; },
     activityClick: (value, mode, date = "", deadline = "") => {
       const card = {
@@ -142,6 +144,58 @@ test("activity schedule uses the same lesson records and updates the topic tiles
   assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").scheduledDate, "");
   assert.equal(availability.sectionSchedule(app.records.get("term_01")[0], "A").isLocked, false);
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
+});
+
+test("make all available commits the 11 activities together and preserves other sections and deadlines", async () => {
+  const app = await scheduler({ emitAfterWrite: false });
+  const deadline = "2099-10-19T23:30:12.345Z";
+  for (const [term, records] of app.records) {
+    for (const record of records) record.sectionSchedules = {
+      A: { isLocked: true, scheduledDate: "2099-10-20", activityDeadlineUtc: "2099-10-20T23:30:12.345Z" },
+      C: { isLocked: true, scheduledDate: "2099-12-20", activityDeadlineUtc: "2099-12-20T23:30:00.000Z" }
+    };
+    app.emit(term);
+  }
+  app.records.get("term_01")[0].sectionSchedules.A = { isLocked: true, scheduledDate: "", activityDeadlineUtc: deadline };
+  app.emit("term_01");
+  const before = structuredClone([...app.records]);
+  const first = app.element("makeAllActivitiesAvailable").events.click();
+  await app.element("makeAllActivitiesAvailable").events.click();
+  await first;
+  assert.deepEqual(app.batchSizes, [11]);
+  for (const [term, records] of app.records) for (const [i, record] of records.entries()) {
+    const original = before.find(([id]) => id === term)[1][i];
+    assert.deepEqual(record.sectionSchedules.C, original.sectionSchedules.C);
+    assert.equal(record.isLocked, true, "shared defaults remain unchanged");
+    assert.equal(record.sectionSchedules.A.activityDeadlineUtc, original.sectionSchedules.A.activityDeadlineUtc);
+    if (term === "term_02" && record.id === "lesson_04") assert.deepEqual(record.sectionSchedules.A, original.sectionSchedules.A);
+    else { assert.equal(record.sectionSchedules.A.isLocked, false); assert.equal(record.sectionSchedules.A.scheduledDate, ""); }
+  }
+  assert.match(app.element("activityScheduleStatus").textContent, /All 11 activities are available/);
+  assert.equal(app.element("makeAllActivitiesAvailable").disabled, true);
+  assert.doesNotMatch(app.element("activityScheduleList").innerHTML, /value="(?:locked|scheduled)" selected/);
+  const cache = decodeView(app.savedViews.get("schedule:sections"));
+  assert.equal(cache[2].docs[0].data().sectionSchedules.A.isLocked, false);
+  for (const term of app.records.keys()) app.emit(term);
+  assert.doesNotMatch(app.element("activityScheduleList").innerHTML, /value="(?:locked|scheduled)" selected/);
+});
+
+test("make all available keeps deadline drafts and fails without partial local changes", async () => {
+  const app = await scheduler();
+  app.activityChange("0-0", "locked", "", "2099-10-20T07:30");
+  await app.element("makeAllActivitiesAvailable").events.click();
+  assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="2099-10-20T07:30"/);
+  assert.equal(app.records.get("term_01")[0].sectionSchedules.A.activityDeadlineUtc, "", "unsaved deadline edits are not silently persisted");
+  const failed = await scheduler(); failed.denyWrites();
+  await failed.element("makeAllActivitiesAvailable").events.click();
+  assert.deepEqual(failed.batchSizes, []);
+  assert.ok([...failed.records.values()].flat().every(topic => availability.sectionSchedule(topic, "A").isLocked));
+  assert.match(failed.element("activityScheduleStatus").textContent, /Could not update/);
+  assert.equal(failed.element("makeAllActivitiesAvailable").disabled, false);
+  const unselected = await scheduler({ chooseSection: false });
+  assert.equal(unselected.element("makeAllActivitiesAvailable").disabled, true);
+  await unselected.element("makeAllActivitiesAvailable").events.click();
+  assert.deepEqual(unselected.batchSizes, []);
 });
 
 test("a confirmed activity lock stays selected before the delayed listener refresh arrives", async () => {

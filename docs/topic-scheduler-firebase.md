@@ -45,6 +45,12 @@ titles, ordering and test content. Concurrent changes return a conflict for retr
 Global edits and client-supplied section maps are rejected. Teachers without
 assigned sections cannot edit. No new collection or composite index is needed.
 
+Activity Schedule's **Make all available** button saves the 11 displayed
+activities across all three terms in one atomic request for the selected section.
+It clears their release dates and unlocks them, preserving saved deadlines,
+other sections and shared defaults. The repeated Term 2 `lesson_04` is excluded,
+just as it is from the activity list. Unsaved deadline edits stay in the form.
+
 ## Optional activity deadline
 
 Activity Schedule provides a deadline field for the selected section. Teachers
