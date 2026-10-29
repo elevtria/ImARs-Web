@@ -59,7 +59,7 @@
 
         <section class="quiz-step-pane" id="setupStep">
           <div class="quiz-panel-heading">
-            <div><span class="quiz-section-tag">STEP 1</span><h2>Set up your quiz</h2><p>Choose one section and tell AI what kind of questions to create.</p></div>
+            <div><span class="quiz-section-tag">STEP 1</span><h2>Set up your quiz</h2><p>Upload your learning material and choose what kind of questions to create.</p></div>
           </div>
 
           <div class="quiz-setup-grid">
@@ -87,11 +87,6 @@
               <div class="quiz-field">
                 <label class="quiz-field-label" for="quizTitle">Quiz title</label>
                 <input class="quiz-input" id="quizTitle" type="text" maxlength="90" placeholder="e.g. Matter and its properties" />
-              </div>
-              <div class="quiz-field">
-                <label class="quiz-field-label" for="quizSection">Section</label>
-                <select class="quiz-input" id="quizSection" required></select>
-                <small class="quiz-field-hint">The quiz will appear in this section. No lesson link is needed.</small>
               </div>
               <div class="quiz-settings-row">
                 <div class="quiz-field">
@@ -148,13 +143,13 @@
           </div>
           <div class="quiz-editor-toolbar">
             <div class="quiz-field quiz-editor-title-field"><label class="quiz-field-label" for="editorTitle">Quiz title</label><input class="quiz-input" id="editorTitle" type="text" maxlength="90" /></div>
-            <div class="quiz-editor-section"><span class="quiz-field-label">Section</span><b id="editorSectionName"></b></div>
+            <div class="quiz-editor-section"><span class="quiz-field-label">Assignment</span><b id="editorSectionName"></b></div>
           </div>
           <div class="quiz-demo-note" id="editorDemoNotice"><b>Review carefully:</b> Check every question and correct answer before saving.</div>
           <div class="quiz-question-editor-list" id="questionEditorList"></div>
           <button class="quiz-add-question" id="addQuestion" type="button"><span>＋</span> Add question <small id="questionLimitText">0 / 50</small></button>
 
-          <section class="quiz-availability-card">
+          <section class="quiz-availability-card" id="quizAvailability">
             <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose how this quiz becomes available in its section.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
             <div class="quiz-release-options">
               <label class="quiz-release-option selected"><input type="radio" name="availability" value="draft" checked /><span class="quiz-release-radio"></span><span><b>Save as draft</b><small>Only you can see it. It stays locked for learners.</small></span></label>

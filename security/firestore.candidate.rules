@@ -100,6 +100,9 @@ service cloud.firestore {
       allow update: if hasAccount() && unchangedIdentity(id) && userUpdate(id);
       allow delete: if isAdmin() && resource.data.role in ['student', 'teacher'];
 
+      // Generated quiz attempts contain private grading data. All operations
+      // go through the authenticated API, including reads and teacher review.
+      match /generated_quiz_attempts/{attempt} { allow read, write: if false; }
       match /test_results/{term} {
         allow read: if ownsProfile(id) || (isStaff() && student(profile(id)));
         allow write: if false;

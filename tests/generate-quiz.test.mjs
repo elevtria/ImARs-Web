@@ -93,6 +93,16 @@ test("authorized teachers receive the frontend's question format without stored 
   assert.match(response.headers.get("Server-Timing"), /^verify;dur=\d+, upload;dur=\d+, ai;dur=\d+, total;dur=\d+$/);
 });
 
+test("teachers can generate before choosing a section, while malformed optional sections remain invalid", async t => {
+  const calls = upstream(t);
+  const { sectionId, ...unassigned } = material;
+  assert.equal((await onRequestPost({ request: request(unassigned), env })).status, 200);
+  assert.equal(calls.length, 2);
+  for (const value of ["", "*", null, "../other"]) {
+    assert.equal((await onRequestPost({ request: request({ ...unassigned, sectionId: value }), env })).status, 400);
+  }
+});
+
 test("a busy Flash-Lite model falls back to Flash with low thinking and the same deadline", async (t) => {
   const signals = [];
   const calls = upstream(t, { generate: (count, options) => {

@@ -1,0 +1,42 @@
+{
+  "indexes": [{
+    "collectionGroup": "generatedQuizzes", "queryScope": "COLLECTION",
+    "fields": [
+      { "fieldPath": "sectionId", "order": "ASCENDING" },
+      { "fieldPath": "teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "availability", "order": "ASCENDING" },
+      { "fieldPath": "createdAt", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ]
+  }, {
+    "collectionGroup": "generatedQuizzes", "queryScope": "COLLECTION",
+    "fields": [
+      { "fieldPath": "teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ]
+  }, {
+    "collectionGroup": "generated_quiz_attempts", "queryScope": "COLLECTION_GROUP",
+    "fields": [
+      { "fieldPath": "context.teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "context.teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "context.sectionId", "order": "ASCENDING" },
+      { "fieldPath": "quizId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "submittedAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ]
+  }, {
+    "collectionGroup": "generated_quiz_attempts", "queryScope": "COLLECTION_GROUP",
+    "fields": [
+      { "fieldPath": "context.teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "context.teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "quizId", "order": "ASCENDING" },
+      { "fieldPath": "status", "order": "ASCENDING" },
+      { "fieldPath": "submittedAt", "order": "ASCENDING" },
+      { "fieldPath": "__name__", "order": "ASCENDING" }
+    ]
+  }],
+  "fieldOverrides": []
+}

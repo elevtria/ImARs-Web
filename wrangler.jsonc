@@ -8,7 +8,7 @@
   // protection or change Firebase rules.
   "env": {
     "production": {
-      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true" },
+      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true", "STUDENT_QUIZZES_ENABLED": "true" },
       "durable_objects": {
         "bindings": [{
           "name": "WEB_LOGIN_STATE",

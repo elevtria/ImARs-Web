@@ -1,0 +1,43 @@
+// Transitional rules: preserve existing mobile access while private quiz data
+// moves through authenticated server APIs. The broader migration candidate
+// requires updated clients and verified account bindings before deployment.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function legacyCollection(name) {
+      return !(name in ['generatedQuizzes', 'generatedQuizRevisions', '_accountAccess', 'users', 'classes']);
+    }
+    // Identity and section membership are server-managed. Otherwise a direct
+    // client could change its section and bypass the student API's scope check.
+    match /classes/{id} {
+      allow read: if request.time < timestamp.date(2027, 8, 4);
+    }
+    match /users/{id} {
+      function self() {
+        return request.auth != null && resource.data.uid == request.auth.uid;
+      }
+      allow read: if request.time < timestamp.date(2027, 8, 4);
+      allow update: if self() && request.time < timestamp.date(2027, 8, 4)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'uid', 'role', 'schoolId', 'classCode', 'teacherId', 'section', 'sections',
+        'adviserId', 'active', 'status', 'email', 'providedEmail', 'authEmail',
+        'isRegistered', 'isClaimed', 'webInvitationNonce'
+      ]);
+      match /{subcollection}/{document=**} {
+        allow read, write: if subcollection != 'generated_quiz_attempts'
+          && request.auth != null
+          && request.time < timestamp.date(2027, 8, 4)
+          && get(/databases/$(database)/documents/users/$(id)).data.uid == request.auth.uid;
+      }
+    }
+    match /{collection}/{id} {
+      allow read, write: if legacyCollection(collection)
+        && request.time < timestamp.date(2027, 8, 4);
+      match /{subcollection}/{document=**} {
+        allow read, write: if legacyCollection(collection)
+          && subcollection != 'generated_quiz_attempts'
+          && request.time < timestamp.date(2027, 8, 4);
+      }
+    }
+  }
+}

@@ -27,12 +27,12 @@ export async function onRequestPost(context, { store = new FirestoreAdmin(contex
     const validationError = validateRequest(body, binaryPdf, gateway);
     if (validationError) return jsonResponse({ error: validationError }, 400);
 
-    if (gateway) {
+    if (gateway && body.sectionId) {
       const section = await store.get("classes/" + body.sectionId);
       if (section?.data.teacherId !== staff.id) return jsonResponse({ error: "You can only generate quizzes for your own sections." }, 403);
-    } else {
+    } else if (!gateway) {
       const { teacherProfileId } = await requireTeacher(idToken, body.firebaseApiKey);
-      await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
+      if (body.sectionId) await requireTeacherOwnsSection(idToken, body.firebaseApiKey, teacherProfileId, body.sectionId);
     }
     const authorized = Date.now();
 
@@ -165,7 +165,7 @@ export async function onRequestPost(context, { store = new FirestoreAdmin(contex
 function validateRequest(body, binaryPdf, gateway = false) {
   if (!body || typeof body !== "object") return "The quiz request is incomplete.";
   if (!gateway && (typeof body.firebaseApiKey !== "string" || body.firebaseApiKey.length < 20)) return "The Firebase sign-in settings are missing.";
-  if (typeof body.sectionId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.sectionId)) return "Choose one of your sections.";
+  if (body.sectionId !== undefined && (typeof body.sectionId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.sectionId))) return "Choose one of your sections.";
   if (typeof body.fileName !== "string" || body.fileName.length > 240) return "Choose a supported learning file.";
   if (!Number.isInteger(body.questionCount) || body.questionCount < 1 || body.questionCount > 50) return "Choose between 1 and 50 questions.";
   if (!["Easy", "Medium", "Hard"].includes(body.difficulty)) return "Choose Easy, Medium, or Hard difficulty.";

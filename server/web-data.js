@@ -1,6 +1,6 @@
 import { FirestoreAdmin } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
-import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion } from "../js/quiz-limits.js";
+import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
@@ -61,7 +61,9 @@ class Scope {
     const row = await this.get("generatedQuizzes/" + id);
     if (!row && missing) return null;
     if (!row || this.actor.role !== "teacher" || row.data.teacherUid !== this.actor.uid || row.data.teacherProfileId !== this.actor.id) throw fail();
-    await this.ownsClass(row.data.sectionId);
+    const assignment = quizAssignmentScope(row.data);
+    if (!assignment) throw fail();
+    if (assignment === "section") await this.ownsClass(row.data.sectionId);
     return row;
   }
   async authorizeRead(ref) {
@@ -191,19 +193,21 @@ class Scope {
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
-      await this.ownsClass(data.sectionId);
-      if (!names(["id", "title", "section", "sectionId", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode"]) ||
+      const assignment = quizAssignmentScope(data);
+      if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
+      if (assignment === "section") await this.ownsClass(data.sectionId);
+      if (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
           data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) || !text(data.sourceFile, 240) ||
           !Object.hasOwn(QUIZ_TYPES, data.type) || !["Easy", "Medium", "Hard"].includes(data.difficulty) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
           (data.schemaVersion !== undefined && data.schemaVersion !== 2) ||
           (data.gradingMode !== undefined && data.gradingMode !== (writtenQuestion(data.type) || data.type === "modified-true-false" ? "teacher-review" : "automatic")) ||
-          !Array.isArray(data.questions) || data.questions.length < 1 || data.questions.length > 50) throw fail("Invalid quiz details.", 400);
+          !Array.isArray(data.questions) || data.questions.length < 1 || data.questions.length > 50 || new Set(data.questions.map(q => q?.id)).size !== data.questions.length) throw fail("Invalid quiz details.", 400);
       const answerFields = writtenQuestion(data.type) ? ["answer", "points", data.type === "essay" ? "rubric" : "explanation"] : data.type === "modified-true-false" ? ["correction"] : [];
       if (data.questions.some(question => !object(question) || !fields(question, ["id", "text", "options", "correctIndex", ...answerFields]) || !part(question.id) ||
           (writtenQuestion(data.type) && (!Array.isArray(question.options) || question.options.length !== 0 || question.correctIndex !== -1)) || !normalizeQuizQuestion(question, data.type))) throw fail("Check the quiz questions and answer guides.", 400);
       if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
       if (data.availability === "scheduled" ? !Number.isFinite(Date.parse(data.availableAt)) || Date.parse(data.availableAt) <= Date.now() : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
-      return { ...input, data: { ...data, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
+      return { ...input, data: { ...data, questionCount: data.questions.length, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
   }
@@ -401,7 +405,12 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
           // quizzes or sections after a teacher account has been replaced.
           records = (await Promise.all(records.map(async row => {
             if (row.data.teacherProfileId !== actor.id) return null;
-            try { await scope.ownsClass(row.data.sectionId); return row; } catch (error) { if (error.status === 403) return null; throw error; }
+            try {
+              const assignment = quizAssignmentScope(row.data);
+              if (!assignment) return null;
+              if (assignment === "section") await scope.ownsClass(row.data.sectionId);
+              return row;
+            } catch (error) { if (error.status === 403) return null; throw error; }
           }))).filter(Boolean);
         }
         return { documents: records.map(row => output(ref.path + "/" + row.id, row, row.id)) };

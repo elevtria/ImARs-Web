@@ -16,7 +16,7 @@
 .quiz-stepper li.active span, .quiz-stepper li.done span { border-color: var(--steel); color: #fff; background: var(--steel); }
 .quiz-stepper > i { height: 1px; flex: 1 1 28px; min-width: 18px; background: rgba(129,162,193,.35); }
 .quiz-step-pane { padding: 23px 25px 20px; border: 1px solid rgba(255,255,255,.8); border-radius: 22px; background: rgba(255,255,255,.72); box-shadow: var(--shadow); backdrop-filter: blur(18px); }
-.quiz-step-pane[hidden], .quiz-view[hidden], #backToReview[hidden] { display: none !important; }
+.quiz-step-pane[hidden], .quiz-view[hidden], .quiz-availability-card[hidden], #backToReview[hidden] { display: none !important; }
 .quiz-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .quiz-panel-heading h2, .quiz-library-heading h2 { margin-top: 4px; color: #314760; font-size: 21px; font-weight: 800; letter-spacing: -.035em; }
 .quiz-panel-heading p, .quiz-library-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
@@ -226,3 +226,15 @@
 @media (prefers-reduced-motion: reduce) {
   .quiz-generation-logo, .quiz-generation-dots i { animation: none; }
 }
+.quiz-review-dialog { box-sizing: border-box; width: min(760px, calc(100vw - 32px)); max-width: calc(100vw - 32px); max-height: 85vh; margin: auto; padding: 24px; border: 1px solid #d5e3e6; border-radius: 20px; background: #fff; color: #163f47; overflow-y: auto; box-shadow: 0 24px 70px #12394040; }
+.quiz-review-dialog::backdrop { background: #12394080; }
+.quiz-review-header { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.quiz-review-header h2 { margin: 0; font-size: 1.3rem; }
+.quiz-review-submission { display: block; width: 100%; text-align: left; margin: 10px 0; padding: 14px; border: 1px solid #d5e3e6; border-radius: 12px; background: #f3fafb; color: inherit; cursor: pointer; }
+.quiz-review-form fieldset { margin: 18px 0; padding: 16px; border: 1px solid #d5e3e6; border-radius: 12px; min-width: 0; }
+.quiz-review-form p, .quiz-review-form legend { white-space: pre-wrap; overflow-wrap: anywhere; }
+.quiz-review-form legend { font-weight: 700; }
+.quiz-review-form details { padding: 12px; background: #f3fafb; margin: 12px 0; }
+.quiz-review-form input { width: 90px; padding: 8px; border: 1px solid #a8bdc1; border-radius: 8px; }
+.quiz-review-form textarea { display: block; width: 100%; min-height: 90px; padding: 12px; border: 1px solid #a8bdc1; border-radius: 8px; box-sizing: border-box; }
+.quiz-review-form > button { margin: 16px 12px 0 0; }

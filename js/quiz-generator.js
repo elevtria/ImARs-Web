@@ -2,15 +2,15 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
-import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion } from "./quiz-limits.js";
+import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
+import { openQuizReview, closeQuizReview } from "./quiz-review.js";
 
 const firebaseApp = initializeApp();
 const auth = getAuth(firebaseApp);
 const firestore = getFirestore(firebaseApp);
 
 (() => {
-  const sectionSelect = document.getElementById("quizSection");
   const fileInput = document.getElementById("quizFile");
   const dropzone = document.getElementById("quizDropzone");
   const selectedFileRow = document.getElementById("selectedFileRow");
@@ -50,11 +50,6 @@ const firestore = getFirestore(firebaseApp);
   function loadSections() {
     teacherSections = [];
     renderSectionFilter();
-    sectionSelect.replaceChildren();
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Sign in to load your sections";
-    sectionSelect.append(placeholder);
   }
 
   function renderSectionFilter() {
@@ -81,20 +76,8 @@ const firestore = getFirestore(firebaseApp);
       const classSnapshot = await getDocs(query(collection(firestore, "classes"), where("teacherId", "==", teacherProfileId)));
       teacherSections = classSnapshot.docs.map(classDocument => ({ id: classDocument.id, name: classDocument.data().SectionName || classDocument.id }));
       renderSectionFilter();
-      sectionSelect.replaceChildren();
-      classSnapshot.docs.forEach((classDocument) => {
-        const data = classDocument.data();
-        const option = document.createElement("option");
-        option.value = classDocument.id;
-        option.textContent = data.SectionName || classDocument.id;
-        sectionSelect.append(option);
-      });
       if (!classSnapshot.size) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "No sections are assigned to your account";
-        sectionSelect.append(option);
-        showStatus(setupStatus, "Your teacher account has no assigned sections yet.", true);
+        showStatus(setupStatus, "You can save a draft now. Assign a section before releasing it.", false);
       } else {
         showStatus(setupStatus, "", false);
       }
@@ -116,8 +99,9 @@ const firestore = getFirestore(firebaseApp);
     }
   }
 
-  function selectedSectionName() {
-    return sectionSelect.selectedOptions[0]?.textContent || "";
+  function assignmentLabel(quiz) {
+    const scope = quizAssignmentScope(quiz);
+    return scope === "all" ? "All my sections" : scope === "section" ? quiz.section : "Not assigned";
   }
 
   function fileExtension(file) {
@@ -213,7 +197,6 @@ const firestore = getFirestore(firebaseApp);
     const count = Number(countInput.value);
     if (!selectedFile) return "Upload a PDF, DOCX, PPT, or PPTX file to continue.";
     if (!title) return "Add a title for this quiz.";
-    if (!sectionSelect.value) return "Choose a section for this quiz.";
     if (!Number.isInteger(count) || count < 1 || count > 50) return "Choose between 1 and 50 questions.";
     return "";
   }
@@ -255,7 +238,6 @@ const firestore = getFirestore(firebaseApp);
       const questions = await requestQuiz({
         ...material,
         fileName: selectedFile.name,
-        sectionId: sectionSelect.value,
         questionCount: Number(document.getElementById("questionCount").value),
         difficulty,
         questionType: document.querySelector("input[name='questionType']:checked").value
@@ -330,7 +312,8 @@ const firestore = getFirestore(firebaseApp);
     editorQuestions = ready.map((question) => ({ ...question, id: makeId(), options: question.options.slice() }));
     editingQuizId = null;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
-    document.getElementById("editorSectionName").textContent = selectedSectionName();
+    document.getElementById("editorSectionName").textContent = "Assign in My quizzes → Schedule";
+    document.getElementById("quizAvailability").hidden = true;
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value);
     document.getElementById("editorDemoNotice").hidden = false;
     document.getElementById("backToReview").hidden = false;
@@ -406,7 +389,7 @@ const firestore = getFirestore(firebaseApp);
     }
     const signedInUser = auth.currentUser;
     if (!signedInUser || !teacherProfileId) {
-      showStatus(editorStatus, "Sign in with a teacher account and choose one of your sections before saving.", true);
+      showStatus(editorStatus, "Sign in with a teacher account before saving.", true);
       return;
     }
     const quizzes = loadQuizzes();
@@ -414,8 +397,9 @@ const firestore = getFirestore(firebaseApp);
     const quiz = {
       id: editingQuizId || makeId(),
       title: title,
-      section: selectedSectionName(),
-      sectionId: sectionSelect.value,
+      section: oldQuiz ? oldQuiz.section : "Not assigned",
+      sectionId: oldQuiz ? oldQuiz.sectionId : "",
+      assignmentScope: oldQuiz ? quizAssignmentScope(oldQuiz) : "unassigned",
       sourceFile: selectedFile ? selectedFile.name : (oldQuiz ? oldQuiz.sourceFile : "Uploaded source"),
       type,
       schemaVersion: 2,
@@ -438,7 +422,7 @@ const firestore = getFirestore(firebaseApp);
       });
     } catch (error) {
       console.error("Could not save quiz to Firestore:", error);
-      showStatus(editorStatus, "The quiz could not be saved. Check your connection and assigned section, then try again.", true);
+      showStatus(editorStatus, "The quiz could not be saved. Check your connection and try again.", true);
       return;
     } finally {
       saveButton.disabled = false;
@@ -449,12 +433,16 @@ const firestore = getFirestore(firebaseApp);
     saveQuizzes(quizzes);
     renderLibrary();
     resetNewQuiz();
+    if (quiz.assignmentScope === "unassigned") {
+      librarySectionFilter.value = "";
+      expandedScheduleQuizId = quiz.id;
+    }
     setView("library");
     showStatus(document.getElementById("libraryStatus"), "Saved. " + availabilityText(quiz) + ".", false);
   }
 
   function availabilityText(quiz) {
-    if (quiz.availability === "now") return "Marked available for " + quiz.section;
+    if (quiz.availability === "now") return "Marked available for " + assignmentLabel(quiz);
     if (quiz.availability === "scheduled") return "It is locked until " + formatDate(quiz.availableAt);
     return "It is saved as a locked draft";
   }
@@ -481,7 +469,7 @@ const firestore = getFirestore(firebaseApp);
 
   function renderLibrary() {
     const allQuizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
-    const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quiz.sectionId === librarySectionFilter.value) : allQuizzes;
+    const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quizAssignedToSection(quiz, librarySectionFilter.value)) : allQuizzes;
     const count = String(allQuizzes.length);
     document.getElementById("libraryCount").textContent = count;
     document.getElementById("libraryTabCount").textContent = count;
@@ -496,10 +484,11 @@ const firestore = getFirestore(firebaseApp);
       const availability = status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
       const expanded = expandedScheduleQuizId === quiz.id;
       const scheduleForm = expanded ? `<form class="quiz-library-scheduler" data-schedule-form="${escapeHtml(quiz.id)}">
-        <div><strong>Quiz release</strong><p>Choose the section that receives this quiz and when its learners can open it.</p></div>
+        <div><strong>Quiz release</strong><p>Choose one section or all your sections, then set when learners can open this quiz.</p></div>
         <div class="quiz-library-scheduler-fields">
           <label>Assign to section <select name="sectionId" aria-label="Section for ${escapeHtml(quiz.title)}" required>
-            ${teacherSections.some(section => section.id === quiz.sectionId) ? "" : '<option value="" selected disabled>Choose a section</option>'}
+            ${quizAssignmentScope(quiz) === "all" || teacherSections.some(section => section.id === quiz.sectionId) ? "" : '<option value="" selected disabled>Choose a section</option>'}
+            <option value="*" ${quizAssignmentScope(quiz) === "all" ? "selected" : ""} ${teacherSections.length ? "" : "disabled"}>All my sections</option>
             ${teacherSections.map(section => `<option value="${escapeHtml(section.id)}" ${section.id === quiz.sectionId ? "selected" : ""}>${escapeHtml(section.name)}</option>`).join("")}
           </select></label>
           <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
@@ -511,7 +500,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${writtenQuestion(quiz.type) || quiz.type === "modified-true-false" ? `<button type="button" data-review-quiz="${escapeHtml(quiz.id)}">Review answers</button>` : ""}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -524,8 +513,9 @@ const firestore = getFirestore(firebaseApp);
     const dateInput = form.elements.availableAt;
     const releaseDate = availability === "scheduled" ? new Date(dateInput.value) : null;
     const libraryStatus = document.getElementById("libraryStatus");
+    const allSections = form.elements.sectionId.value === "*";
     const section = teacherSections.find(item => item.id === form.elements.sectionId.value);
-    if (!section) {
+    if ((allSections && !teacherSections.length) || (!allSections && !section)) {
       showStatus(libraryStatus, "Choose one of your assigned sections for this quiz.", true);
       return;
     }
@@ -546,8 +536,9 @@ const firestore = getFirestore(firebaseApp);
       const updated = {
         ...current.data(),
         id,
-        sectionId: section.id,
-        section: section.name,
+        assignmentScope: allSections ? "all" : "section",
+        sectionId: allSections ? "" : section.id,
+        section: allSections ? "All my sections" : section.name,
         availability,
         availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
         updatedAt: new Date().toISOString()
@@ -556,7 +547,7 @@ const firestore = getFirestore(firebaseApp);
       saveQuizzes(loadQuizzes().map(item => item.id === id ? updated : item));
       expandedScheduleQuizId = null;
       saved = true;
-      showStatus(libraryStatus, `Release saved for ${quiz.title} in ${section.name}.`, false);
+      showStatus(libraryStatus, `Release saved for ${quiz.title} · ${assignmentLabel(updated)}.`, false);
     } catch (error) {
       console.error("Could not save quiz release:", error);
       showStatus(libraryStatus, error.message || "Could not save the quiz release. Try again.", true);
@@ -583,12 +574,11 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("editorTitle").value = quiz.title || "";
-    document.getElementById("editorSectionName").textContent = quiz.section || "";
+    document.getElementById("editorSectionName").textContent = assignmentLabel(quiz);
+    document.getElementById("quizAvailability").hidden = quizAssignmentScope(quiz) === "unassigned";
     document.getElementById("editorDemoNotice").hidden = !quiz.demo;
     document.getElementById("backToReview").hidden = true;
     document.getElementById("quizTitle").value = quiz.title || "";
-    const matchingSection = Array.from(sectionSelect.options).some((option) => option.value === quiz.sectionId);
-    if (matchingSection) sectionSelect.value = quiz.sectionId;
     difficulty = quiz.difficulty || "Medium";
     document.querySelectorAll("[data-difficulty]").forEach((button) => {
       const selected = button.dataset.difficulty === difficulty;
@@ -607,7 +597,6 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
-    if (librarySectionFilter.value) sectionSelect.value = librarySectionFilter.value;
     selectedFile = null;
     generatedQuestions = [];
     editorQuestions = [];
@@ -636,6 +625,7 @@ const firestore = getFirestore(firebaseApp);
   loadSections();
   renderLibrary();
   onAuthStateChanged(auth, async (user) => {
+    closeQuizReview();
     libraryStorageKey = user ? "imars-generated-quizzes:" + user.uid : "imars-generated-quizzes:anonymous";
     librarySectionFilter.value = "";
     teacherSections = [];
@@ -767,6 +757,8 @@ const firestore = getFirestore(firebaseApp);
     renderLibrary();
   });
   libraryList.addEventListener("click", async (event) => {
+    const review = event.target.closest("[data-review-quiz]");
+    if (review && auth.currentUser) { void openQuizReview(review.dataset.reviewQuiz, auth.currentUser.uid); return; }
     const schedule = event.target.closest("[data-schedule-quiz]");
     if (schedule && !scheduleBusy) {
       expandedScheduleQuizId = expandedScheduleQuizId === schedule.dataset.scheduleQuiz ? null : schedule.dataset.scheduleQuiz;

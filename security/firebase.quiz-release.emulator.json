@@ -1,0 +1,10 @@
+{
+  "firestore": { "rules": "firestore.quiz-release.rules" },
+  "emulators": {
+    "firestore": { "host": "127.0.0.1", "port": 58088 },
+    "hub": { "host": "127.0.0.1", "port": 54408 },
+    "logging": { "host": "127.0.0.1", "port": 54508 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  }
+}

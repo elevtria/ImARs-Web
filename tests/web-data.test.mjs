@@ -151,6 +151,27 @@ test("quiz releases can change between assigned sections while preserving questi
   assert.deepEqual(app.data.get("generatedQuizzes/section-release"), saved);
 });
 
+test("unassigned quiz drafts can be saved and released to all owned sections without exposing other teachers' quizzes", async () => {
+  const app = fixture(), cookie = await app.login();
+  const quiz = { id: "assignment", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", assignmentScope: "unassigned", sectionId: "", section: "Not assigned", title: "Water", sourceFile: "water.pdf", type: "multiple-choice", difficulty: "Easy", questions: [{ id: "q1", text: "Water?", options: ["A", "B", "C", "D"], correctIndex: 0 }], availability: "draft", availableAt: "", demo: false };
+  const path = "generatedQuizzes/assignment";
+  assert.equal((await app.call(save(path, quiz, false), cookie)).status, 200);
+  assert.equal((await app.call(get(path), cookie)).status, 200);
+  assert.equal((await app.call(save(path, { ...quiz, availability: "now" }, false), cookie)).status, 400);
+  const released = { ...quiz, assignmentScope: "all", section: "All my sections", availability: "now" };
+  assert.equal((await app.call(save(path, released, false), cookie)).status, 200);
+  const page = await (await app.call(query("generatedQuizzes", [["teacherUid", "teacher-a"]]), cookie)).json();
+  assert.deepEqual(page.documents.map(row => row.id), ["assignment"]);
+  assert.deepEqual(app.data.get(path).questions, quiz.questions);
+  for (const changed of [{ sectionId: "B", assignmentScope: "section" }, { sectionId: "B", assignmentScope: "all" }, { assignmentScope: "unknown" }, { teacherProfileId: "TEACH1001" }]) {
+    assert.ok([400, 403].includes((await app.call(save(path, { ...released, ...changed }, false), cookie)).status));
+  }
+  const other = await app.login("TEACH1001", "teacher");
+  assert.equal((await app.call(get(path), other)).status, 403);
+  assert.equal((await app.call(save(path, { ...released, teacherUid: "teacher-b", teacherProfileId: "TEACH1001" }, false), other)).status, 403);
+  assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path }] }, cookie)).status, 200);
+});
+
 test("lesson dates and locks are scoped to an owned section and retain other sections, defaults and lesson content", async () => {
   const app = fixture(), cookie = await app.login();
   app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });

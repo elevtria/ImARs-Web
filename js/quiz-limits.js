@@ -12,6 +12,17 @@ export const QUIZ_TYPES = Object.freeze({
 export const questionTypeLabel = type => Object.hasOwn(QUIZ_TYPES, type) ? QUIZ_TYPES[type] : "Unknown question type";
 export const writtenQuestion = type => ["essay", "identification-explanation"].includes(type);
 
+export function quizAssignmentScope(quiz) {
+  const scope = quiz?.assignmentScope ?? "section";
+  if (scope === "section") return typeof quiz?.sectionId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(quiz.sectionId) ? scope : null;
+  return ["all", "unassigned"].includes(scope) && quiz.sectionId === "" ? scope : null;
+}
+
+export function quizAssignedToSection(quiz, sectionId) {
+  const scope = quizAssignmentScope(quiz);
+  return Boolean(sectionId) && (scope === "all" || (scope === "section" && quiz.sectionId === sectionId));
+}
+
 export function normalizeQuizQuestion(question, type) {
   if (!Object.hasOwn(QUIZ_TYPES, type) || !question || typeof question !== "object" || Array.isArray(question)) return null;
   const validText = (value, maximum, empty = false) => typeof value === "string" && value.length <= maximum && (empty || value.trim().length > 0);
