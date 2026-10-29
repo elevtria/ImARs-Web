@@ -824,8 +824,7 @@ td {
 
 .year-col .year-meta span:last-child { color: var(--ink); font-weight: 800; }
 
-.quiz-scheduler-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 16px; }
-.quiz-scheduler-heading > .primary-btn { flex: 0 0 auto; }
+.quiz-scheduler-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
 .quiz-scheduler-heading h2 { margin-bottom: 0; }
 .quiz-schedule-list { display: grid; gap: 12px; }
 .activity-term { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }

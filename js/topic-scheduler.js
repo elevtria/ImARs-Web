@@ -80,7 +80,6 @@ let scheduleOwner = null;
 const syncStatus = document.getElementById("syncStatus");
 const activityStatus = document.getElementById("activityScheduleStatus");
 const activityList = document.getElementById("activityScheduleList");
-const makeAllActivitiesAvailable = document.getElementById("makeAllActivitiesAvailable");
 let activityMessage = "";
 const activityOpenTerms = [false, false, false];
 const activityDrafts = new Map();
@@ -119,7 +118,6 @@ function scheduledActivityTopics() {
 function renderActivitySchedule() {
   const activityTopics = scheduledActivityTopics();
   const activityCount = activityTopics.reduce((total, topics) => total + topics.length, 0);
-  makeAllActivitiesAvailable.disabled = !isReady || !selectedSection || isSaving || activityTopics.every(topics => topics.every(({ topic }) => !isTopicLocked(topic)));
   activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
   if (!isReady) {
     activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
@@ -155,7 +153,14 @@ function renderActivitySchedule() {
         <span class="activity-term-name">${escapeHtml(term.name)}</span>
         <span class="activity-term-summary">${activityTopics[termIndex].length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
       </button>
-      <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}</div>
+      <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}
+        <div class="term-foot">
+          <span>${activityTopics[termIndex].filter(({ topic }) => !isTopicLocked(topic)).length}/${activityTopics[termIndex].length} activities available</span>
+          <button class="lock-all" type="button" data-activity-unlockall="${termIndex}" aria-label="Make all activities available in ${escapeHtml(term.name)}" ${!selectedSection || isSaving || activityTopics[termIndex].every(({ topic }) => !isTopicLocked(topic)) ? "disabled" : ""}>
+            ${lockIcon(false)} Make all available
+          </button>
+        </div>
+      </div>
     </section>`;
   }).join("");
 }
@@ -440,16 +445,17 @@ function rememberActivityDraft(event) {
 activityList.addEventListener("change", rememberActivityDraft);
 activityList.addEventListener("input", rememberActivityDraft);
 
-makeAllActivitiesAvailable.addEventListener("click", async () => {
+async function makeTermActivitiesAvailable(termIndex) {
   if (!isReady || isSaving || !assignedSections.some(section => section.id === selectedSection)) return;
-  const targets = scheduledActivityTopics().flatMap((topics, termIndex) => topics.map(({ topicIndex }) => ({ termIndex, topicIndex })));
-  if (!targets.length) return;
+  const topics = scheduledActivityTopics()[termIndex];
+  if (!topics?.length) return;
+  const targets = topics.map(({ topicIndex }) => ({ termIndex, topicIndex }));
   isSaving = true;
   activityMessage = "Saving activity access…";
   render();
   try {
     if (!await saveAccessTargets(targets, manualAccessUpdate(false), { preserveDeadlineDrafts: true })) return;
-    activityMessage = `All ${targets.length} activities are available in the selected section.`;
+    activityMessage = `All ${targets.length} activities in ${terms[termIndex].name} are available in the selected section.`;
     setSyncStatus("Saved", "success");
   } catch (error) {
     console.error("Unable to make all activities available:", error);
@@ -459,7 +465,7 @@ makeAllActivitiesAvailable.addEventListener("click", async () => {
     isSaving = false;
     render();
   }
-});
+}
 
 activityList.addEventListener("click", async event => {
   const termToggle = event.target.closest("[data-activity-term]");
@@ -467,6 +473,11 @@ activityList.addEventListener("click", async event => {
     const termIndex = Number(termToggle.dataset.activityTerm);
     activityOpenTerms[termIndex] = !activityOpenTerms[termIndex];
     renderActivitySchedule();
+    return;
+  }
+  const unlockAll = event.target.closest("[data-activity-unlockall]");
+  if (unlockAll) {
+    await makeTermActivitiesAvailable(Number(unlockAll.dataset.activityUnlockall));
     return;
   }
   const button = event.target.closest(".activity-schedule-save");

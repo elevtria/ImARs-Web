@@ -99,6 +99,9 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     activityTermClick: index => element("activityScheduleList").events.click({ target: {
       closest: selector => selector === "[data-activity-term]" ? { dataset: { activityTerm: String(index) } } : null
     } }),
+    activityUnlockAll: index => element("activityScheduleList").events.click({ target: {
+      closest: selector => selector === "[data-activity-unlockall]" ? { dataset: { activityUnlockall: String(index) } } : null
+    } }),
     activityChange: (value, mode, date = "", deadline = "") => {
       const dateControl = { value: date };
       const card = { dataset: { activity: value }, querySelector: selector => selector === ".activity-schedule-mode" ? { value: mode } : selector === ".activity-schedule-deadline" ? { value: deadline } : dateControl };
@@ -146,7 +149,7 @@ test("activity schedule uses the same lesson records and updates the topic tiles
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="25"/);
 });
 
-test("make all available commits the 11 activities together and preserves other sections and deadlines", async () => {
+test("each activity term releases only its own activities and preserves other sections and deadlines", async () => {
   const app = await scheduler({ emitAfterWrite: false });
   const deadline = "2099-10-19T23:30:12.345Z";
   for (const [term, records] of app.records) {
@@ -158,21 +161,25 @@ test("make all available commits the 11 activities together and preserves other 
   }
   app.records.get("term_01")[0].sectionSchedules.A = { isLocked: true, scheduledDate: "", activityDeadlineUtc: deadline };
   app.emit("term_01");
-  const before = structuredClone([...app.records]);
-  const first = app.element("makeAllActivitiesAvailable").events.click();
-  await app.element("makeAllActivitiesAvailable").events.click();
-  await first;
-  assert.deepEqual(app.batchSizes, [11]);
-  for (const [term, records] of app.records) for (const [i, record] of records.entries()) {
-    const original = before.find(([id]) => id === term)[1][i];
-    assert.deepEqual(record.sectionSchedules.C, original.sectionSchedules.C);
-    assert.equal(record.isLocked, true, "shared defaults remain unchanged");
-    assert.equal(record.sectionSchedules.A.activityDeadlineUtc, original.sectionSchedules.A.activityDeadlineUtc);
-    if (term === "term_02" && record.id === "lesson_04") assert.deepEqual(record.sectionSchedules.A, original.sectionSchedules.A);
-    else { assert.equal(record.sectionSchedules.A.isLocked, false); assert.equal(record.sectionSchedules.A.scheduledDate, ""); }
+  assert.doesNotMatch(readFileSync(new URL("../topic-scheduler.html", import.meta.url), "utf8"), /id="makeAllActivitiesAvailable"/);
+  assert.equal((app.element("activityScheduleList").innerHTML.match(/data-activity-unlockall="\d"/g) || []).length, 3);
+  for (const [termIndex, termId] of ["term_01", "term_02", "term_03"].entries()) {
+    const before = structuredClone([...app.records]);
+    const first = app.activityUnlockAll(termIndex);
+    await app.activityUnlockAll(termIndex);
+    await first;
+    assert.deepEqual(app.batchSizes, [4, 3, 4].slice(0, termIndex + 1));
+    for (const [term, records] of app.records) for (const [i, record] of records.entries()) {
+      const original = before.find(([id]) => id === term)[1][i];
+      assert.deepEqual(record.sectionSchedules.C, original.sectionSchedules.C);
+      assert.equal(record.isLocked, true, "shared defaults remain unchanged");
+      assert.equal(record.sectionSchedules.A.activityDeadlineUtc, original.sectionSchedules.A.activityDeadlineUtc);
+      if (term !== termId || (term === "term_02" && record.id === "lesson_04")) assert.deepEqual(record.sectionSchedules.A, original.sectionSchedules.A);
+      else { assert.equal(record.sectionSchedules.A.isLocked, false); assert.equal(record.sectionSchedules.A.scheduledDate, ""); }
+    }
+    assert.match(app.element("activityScheduleStatus").textContent, new RegExp(`activities in Term ${termIndex + 1} are available`));
+    assert.match(app.element("activityScheduleList").innerHTML, new RegExp(`data-activity-unlockall="${termIndex}"[^>]*disabled`));
   }
-  assert.match(app.element("activityScheduleStatus").textContent, /All 11 activities are available/);
-  assert.equal(app.element("makeAllActivitiesAvailable").disabled, true);
   assert.doesNotMatch(app.element("activityScheduleList").innerHTML, /value="(?:locked|scheduled)" selected/);
   const cache = decodeView(app.savedViews.get("schedule:sections"));
   assert.equal(cache[2].docs[0].data().sectionSchedules.A.isLocked, false);
@@ -183,18 +190,18 @@ test("make all available commits the 11 activities together and preserves other 
 test("make all available keeps deadline drafts and fails without partial local changes", async () => {
   const app = await scheduler();
   app.activityChange("0-0", "locked", "", "2099-10-20T07:30");
-  await app.element("makeAllActivitiesAvailable").events.click();
+  await app.activityUnlockAll(0);
   assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="2099-10-20T07:30"/);
   assert.equal(app.records.get("term_01")[0].sectionSchedules.A.activityDeadlineUtc, "", "unsaved deadline edits are not silently persisted");
   const failed = await scheduler(); failed.denyWrites();
-  await failed.element("makeAllActivitiesAvailable").events.click();
+  await failed.activityUnlockAll(0);
   assert.deepEqual(failed.batchSizes, []);
   assert.ok([...failed.records.values()].flat().every(topic => availability.sectionSchedule(topic, "A").isLocked));
   assert.match(failed.element("activityScheduleStatus").textContent, /Could not update/);
-  assert.equal(failed.element("makeAllActivitiesAvailable").disabled, false);
+  assert.doesNotMatch(failed.element("activityScheduleList").innerHTML, /data-activity-unlockall="0"[^>]*disabled/);
   const unselected = await scheduler({ chooseSection: false });
-  assert.equal(unselected.element("makeAllActivitiesAvailable").disabled, true);
-  await unselected.element("makeAllActivitiesAvailable").events.click();
+  assert.doesNotMatch(unselected.element("activityScheduleList").innerHTML, /data-activity-unlockall/);
+  await unselected.activityUnlockAll(0);
   assert.deepEqual(unselected.batchSizes, []);
 });
 
