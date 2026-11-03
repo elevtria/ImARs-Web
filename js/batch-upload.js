@@ -344,16 +344,18 @@ editSectionForm.addEventListener("submit", async (event) => {
   try {
     const classCode = currentSec.classCode;
 
-    // 1. Update the Class Document
-    await updateDoc(doc(db, "classes", classCode), {
-      SectionName: rawSectionOnly
-    });
+    // 1. Update the Class Document securely using setDoc + merge
+    await setDoc(doc(db, "classes", classCode), {
+      SectionName: rawSectionOnly,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
 
     // 2. Add the new label to the Teacher's profile
     if (currentTeacherId) {
-      await updateDoc(doc(db, "users", currentTeacherId), {
-          sections: arrayUnion(formattedLabel)
-      });
+      await setDoc(doc(db, "users", currentTeacherId), {
+          sections: arrayUnion(formattedLabel),
+          updatedAt: serverTimestamp()
+      }, { merge: true });
     }
 
     // 3. Mass update the "section" string for all students currently in this class
@@ -362,8 +364,16 @@ editSectionForm.addEventListener("submit", async (event) => {
     
     const updatePromises = [];
     studentsSnap.forEach(studentDoc => {
-        updatePromises.push(updateDoc(studentDoc.ref, { section: formattedLabel }));
+        // Build a fresh doc reference to ensure compatibility with your custom wrappers
+        const stuRef = doc(db, "users", studentDoc.id);
+        
+        updatePromises.push(setDoc(stuRef, { 
+            section: formattedLabel,
+            updatedAt: serverTimestamp() 
+        }, { merge: true }));
     });
+    
+    // Wait for all student documents to update securely
     await Promise.all(updatePromises);
 
     // 4. Update local UI state
