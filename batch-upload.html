@@ -47,22 +47,21 @@
           <h1>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>
         </div>
-        <div style="display: flex; align-items: stretch; gap: 12px; height: 44px; margin-top: 16px;">
-          <label class="section-pick" style="margin: 0; display: flex; align-items: center; gap: 8px; height: 100%;">
+        <!-- Restored native CSS classes for perfect curves, wrapped in a centered flexbox -->
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px;">
+          <label class="section-pick" style="margin: 0; display: flex; align-items: center; gap: 8px;">
             <span style="white-space: nowrap;">Upload to section:</span>
-            <span class="select-wrap" style="height: 100%; display: flex; align-items: center; position: relative;">
-              <!-- Added border-radius: 9999px to force the pill shape! -->
-              <select id="sectionSelect" aria-label="Upload to section" style="height: 100%; margin: 0; border-radius: 9999px; padding: 0 32px 0 16px; appearance: none; -webkit-appearance: none; -moz-appearance: none; background: white; border: 1px solid #e2e8f0; cursor: pointer;">
+            <span class="select-wrap">
+              <select id="sectionSelect" aria-label="Upload to section">
                 <option value="">Select a section</option>
               </select>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position: absolute; right: 12px; pointer-events: none;"><path d="M6 9l6 6 6-6"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
             </span>
           </label>
-          <!-- Added border-radius: 9999px and stripped custom button classes to lock the style -->
-          <button id="addSectionBtn" type="button" style="margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 20px; white-space: nowrap; border-radius: 9999px; box-sizing: border-box; background: white; border: 1px solid #e2e8f0; font-weight: 600; cursor: pointer;">
+          <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button" style="margin: 0;">
             ＋ Add Section
           </button>
-          <button id="editSectionBtn" type="button" style="margin: 0; height: 100%; display: flex; align-items: center; justify-content: center; color: #64748b; padding: 0 20px; white-space: nowrap; border-radius: 9999px; box-sizing: border-box; background: white; border: 1px solid #e2e8f0; font-weight: 600; cursor: pointer;">
+          <button class="btn-ghost add-section-btn" id="editSectionBtn" type="button" style="margin: 0; color: #64748b; border-color: #cbd5e1;">
             ✎ Edit Name
           </button>
         </div>
