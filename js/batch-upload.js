@@ -361,7 +361,7 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- SAFE FETCH: Use the existing checkStudentIds function to prevent query errors ---
+    // --- NEW, 100% SAFE FETCH LOGIC ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
