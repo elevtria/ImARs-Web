@@ -437,16 +437,16 @@ function validateAllRows() {
 
   const targetSecCode = String(sectionSelect.value).trim();
 
-  // 2. Apply errors globally
+// 2. Apply errors globally
   previewData.forEach(row => {
     let rowErrors = [];
     const nameKey = row.fullName ? row.fullName.toLowerCase().replace(/\s+/g, ' ') : '';
     
-    // Evaluate if they exist AND if they belong to this specific section
+    // Evaluate if they exist in the DB at all
     const existsInDb = existingStudentIds.has(row.studentId);
     
-    const studentDbClassCode = String(dbExistingStudentClassCodes[row.studentId] || "").trim();
-    row.isExisting = existsInDb && (studentDbClassCode === targetSecCode);
+    // FORCE THIS TO TRUE so it safely updates their record instead of erasing it
+    row.isExisting = existsInDb;
 
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
@@ -456,11 +456,6 @@ function validateAllRows() {
     else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
     else if (row.studentId.length < 9) rowErrors.push("ID too short");
     else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
-    
-    // NEW: Block cross-section imports!
-    //else if (existsInDb && !row.isExisting) {
-        //rowErrors.push("Student belongs to another section");
-    //}
     
     // Name Checks
     if (nameKey && nameCounts[nameKey] > 1) {
@@ -658,14 +653,15 @@ confirmImportBtn.addEventListener("click", async () => {
         targetSec.count++;
         newCount++;
       } else {
-        // For EXISTING students, ONLY update their name, email, and timestamp.
-        // We do NOT touch their classCode, section, or role!
+        // For EXISTING students, update their info AND securely migrate them to this new section
         const strictUpdateData = {
           firstName: stu.firstName,
           lastName: stu.lastName,
           displayName: stu.fullName,
           fullName: stu.fullName,
           email: stu.email || `${finalStudentId}@imars.edu`,
+          classCode: targetSec.classCode, // Move them to the newly selected class
+          section: targetSec.label,       // Update their section label 
           updatedAt: serverTimestamp()
         };
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
