@@ -351,7 +351,7 @@ editSectionForm.addEventListener("submit", async (event) => {
       updatedAt: serverTimestamp()
     }, { merge: true });
 
-    // 2. Update Teacher's profile by fetching, modifying, and explicitly setting (safest method)
+    // 2. Update Teacher's profile
     if (currentTeacherId) {
       const teacherQ = query(collection(db, "users"), where("uid", "==", auth.currentUser.uid));
       const teacherSnap = await getDocs(teacherQ);
