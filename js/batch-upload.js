@@ -626,16 +626,22 @@ confirmImportBtn.addEventListener("click", async () => {
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
 
+      // The safe update payload that won't erase game data or avatars
+      const strictUpdateData = {
+        firstName: stu.firstName,
+        lastName: stu.lastName,
+        displayName: stu.fullName,
+        fullName: stu.fullName,
+        email: stu.email || `${finalStudentId}@imars.edu`,
+        classCode: targetSec.classCode, // Move them to the newly selected class
+        section: targetSec.label,       // Update their section label 
+        updatedAt: serverTimestamp()
+      };
+
       if (!stu.isExisting) {
         // Build the full document for a brand NEW student
         const newStudentData = {
-          firstName: stu.firstName,
-          lastName: stu.lastName,
-          displayName: stu.fullName,
-          fullName: stu.fullName,
-          classCode: targetSec.classCode,
-          section: targetSec.label,
-          email: stu.email || `${finalStudentId}@imars.edu`,
+          ...strictUpdateData,
           schoolId: finalStudentId,
           role: "student",
           teacherId: currentTeacherId || "",
@@ -646,24 +652,27 @@ confirmImportBtn.addEventListener("click", async () => {
           gamification: {
             badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 }
           },
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          createdAt: serverTimestamp()
         };
-        await setDoc(doc(db, "users", finalStudentId), newStudentData);
-        targetSec.count++;
-        newCount++;
+        
+        try {
+          // Attempt to upload as a brand new student
+          await setDoc(doc(db, "users", finalStudentId), newStudentData);
+          targetSec.count++;
+          newCount++;
+        } catch (innerErr) {
+          // BACKEND SAFETY INTERCEPTOR: If the backend knows they exist globally but the frontend didn't,
+          // it throws the "existing record" error. We catch it and safely update instead!
+          if (innerErr.message && innerErr.message.toLowerCase().includes("existing record")) {
+            console.warn(`Backend blocked overwrite for ${finalStudentId}. Falling back to safe update.`);
+            await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
+            updateCount++;
+          } else {
+            throw innerErr; // Re-throw if it's a real network/permission error
+          }
+        }
       } else {
-        // For EXISTING students, update their info AND securely migrate them to this new section
-        const strictUpdateData = {
-          firstName: stu.firstName,
-          lastName: stu.lastName,
-          displayName: stu.fullName,
-          fullName: stu.fullName,
-          email: stu.email || `${finalStudentId}@imars.edu`,
-          classCode: targetSec.classCode, // Move them to the newly selected class
-          section: targetSec.label,       // Update their section label 
-          updatedAt: serverTimestamp()
-        };
+        // Known existing student (Validator caught it properly)
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
         updateCount++;
       }
