@@ -56,13 +56,14 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </span>
         </label>
+        <!-- The container for both buttons must be a flexbox -->
         <div style="display: flex; gap: 8px;">
           <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button">＋ Add Section</button>
           <button class="btn-ghost add-section-btn" id="editSectionBtn" type="button" style="color: #64748b; border-color: #cbd5e1;">✎ Edit Name</button>
         </div>
       </section>
 
-      <!-- ADD THIS MODAL JUST BELOW THE HERO SECTION -->
+      <!-- The Edit Modal (Paste this right below the hero section) -->
       <div class="modal" id="editSectionModal">
         <form class="modal-card section-form" id="editSectionForm" role="dialog" aria-modal="true" aria-labelledby="editSectionModalTitle">
           <h3 id="editSectionModalTitle">Edit section name</h3>
