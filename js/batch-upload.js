@@ -350,7 +350,7 @@ editSectionForm.addEventListener("submit", async (event) => {
       updatedAt: serverTimestamp()
     }, { merge: true });
 
-    // 2. Add the new label to the Teacher's profile
+    // 2. Add the new label to the Teacher's profile securely using setDoc + merge
     if (currentTeacherId) {
       await setDoc(doc(db, "users", currentTeacherId), {
           sections: arrayUnion(formattedLabel),
@@ -364,9 +364,10 @@ editSectionForm.addEventListener("submit", async (event) => {
     
     const updatePromises = [];
     studentsSnap.forEach(studentDoc => {
-        // Build a fresh doc reference to ensure compatibility with your custom wrappers
+        // Build a fresh doc reference to ensure compatibility
         const stuRef = doc(db, "users", studentDoc.id);
         
+        // Use SECURE setDoc + merge instead of updateDoc
         updatePromises.push(setDoc(stuRef, { 
             section: formattedLabel,
             updatedAt: serverTimestamp() 
