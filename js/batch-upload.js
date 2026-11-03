@@ -458,9 +458,9 @@ function validateAllRows() {
     else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
     
     // NEW: Block cross-section imports!
-    else if (existsInDb && !row.isExisting) {
-        rowErrors.push("Student belongs to another section");
-    }
+    //else if (existsInDb && !row.isExisting) {
+        //rowErrors.push("Student belongs to another section");
+    //}
     
     // Name Checks
     if (nameKey && nameCounts[nameKey] > 1) {
