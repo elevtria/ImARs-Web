@@ -343,41 +343,51 @@ editSectionForm.addEventListener("submit", async (event) => {
 
   try {
     const classCode = currentSec.classCode;
+    const oldLabel = currentSec.label;
 
-    // 1. Update the Class Document securely using setDoc + merge
+    // 1. Update the Class Document using safe merge
     await setDoc(doc(db, "classes", classCode), {
       SectionName: rawSectionOnly,
       updatedAt: serverTimestamp()
     }, { merge: true });
 
-    // 2. Add the new label to the Teacher's profile securely using setDoc + merge
+    // 2. Update Teacher's profile by fetching, modifying, and explicitly setting (safest method)
     if (currentTeacherId) {
-      await setDoc(doc(db, "users", currentTeacherId), {
-          sections: arrayUnion(formattedLabel),
-          updatedAt: serverTimestamp()
-      }, { merge: true });
+      const teacherQ = query(collection(db, "users"), where("uid", "==", auth.currentUser.uid));
+      const teacherSnap = await getDocs(teacherQ);
+      
+      if (!teacherSnap.empty) {
+        const tDoc = teacherSnap.docs[0];
+        let currentSections = tDoc.data().sections || [];
+        
+        // Remove old label, add new label
+        currentSections = currentSections.filter(sec => sec !== oldLabel);
+        if (!currentSections.includes(formattedLabel)) currentSections.push(formattedLabel);
+        
+        await setDoc(doc(db, "users", tDoc.id), { 
+            sections: currentSections,
+            updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
     }
 
-    // 3. Mass update the "section" string for all students currently in this class
+    // 3. Batch fetch students in this class
     const studentsQ = query(collection(db, "users"), where("classCode", "==", classCode));
     const studentsSnap = await getDocs(studentsQ);
     
-    const updatePromises = [];
-    studentsSnap.forEach(studentDoc => {
-        // Build a fresh doc reference to ensure compatibility
-        const stuRef = doc(db, "users", studentDoc.id);
-        
-        // Use SECURE setDoc + merge instead of updateDoc
-        updatePromises.push(setDoc(stuRef, { 
-            section: formattedLabel,
-            updatedAt: serverTimestamp() 
-        }, { merge: true }));
-    });
-    
-    // Wait for all student documents to update securely
-    await Promise.all(updatePromises);
+    // 4. Update each student synchronously to prevent overwhelming the custom gateway
+    for (const studentDoc of studentsSnap.docs) {
+        try {
+            await setDoc(doc(db, "users", studentDoc.id), { 
+                section: formattedLabel,
+                updatedAt: serverTimestamp() 
+            }, { merge: true });
+        } catch (innerErr) {
+            console.warn(`Failed to update section for student ${studentDoc.id}:`, innerErr);
+        }
+    }
 
-    // 4. Update local UI state
+    // 5. Update local UI state
     currentSec.rawName = rawSectionOnly;
     currentSec.label = formattedLabel;
     
