@@ -345,11 +345,12 @@ editSectionForm.addEventListener("submit", async (event) => {
     const classCode = currentSec.classCode;
     const oldLabel = currentSec.label;
 
-    // 1. Update the Class Document using safe merge
-    await setDoc(doc(db, "classes", classCode), {
+    // 1. Update the Class Document
+    await updateDoc(doc(db, "classes", classCode), {
       SectionName: rawSectionOnly,
+      teacherId: currentTeacherId, // Explicitly include to pass rules
       updatedAt: serverTimestamp()
-    }, { merge: true });
+    });
 
     // 2. Update Teacher's profile
     if (currentTeacherId) {
@@ -360,31 +361,30 @@ editSectionForm.addEventListener("submit", async (event) => {
         const tDoc = teacherSnap.docs[0];
         let currentSections = tDoc.data().sections || [];
         
-        // Remove old label, add new label
         currentSections = currentSections.filter(sec => sec !== oldLabel);
         if (!currentSections.includes(formattedLabel)) currentSections.push(formattedLabel);
         
-        await setDoc(doc(db, "users", tDoc.id), { 
+        await updateDoc(doc(db, "users", tDoc.id), { 
             sections: currentSections,
             updatedAt: serverTimestamp()
-        }, { merge: true });
+        });
       }
     }
 
-    // 3. Batch fetch students in this class
-    const studentsQ = query(collection(db, "users"), where("classCode", "==", classCode));
+    // 3. SECURE STUDENT QUERY: Explicitly verify teacherId to bypass the Firebase access block
+    const studentsQ = query(
+        collection(db, "users"), 
+        where("teacherId", "==", currentTeacherId), 
+        where("classCode", "==", classCode)
+    );
     const studentsSnap = await getDocs(studentsQ);
     
-    // 4. Update each student synchronously to prevent overwhelming the custom gateway
+    // 4. Update all students attached to the class
     for (const studentDoc of studentsSnap.docs) {
-        try {
-            await setDoc(doc(db, "users", studentDoc.id), { 
-                section: formattedLabel,
-                updatedAt: serverTimestamp() 
-            }, { merge: true });
-        } catch (innerErr) {
-            console.warn(`Failed to update section for student ${studentDoc.id}:`, innerErr);
-        }
+        await updateDoc(doc(db, "users", studentDoc.id), { 
+            section: formattedLabel,
+            updatedAt: serverTimestamp() 
+        });
     }
 
     // 5. Update local UI state
