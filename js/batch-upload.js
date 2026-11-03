@@ -343,28 +343,20 @@ editSectionForm.addEventListener("submit", async (event) => {
 
   try {
     const classCode = currentSec.classCode;
-    const oldLabel = currentSec.label;
 
-    // 1. Update the Class Document using safe merge
-    await setDoc(doc(db, "classes", classCode), {
-      SectionName: rawSectionOnly,
-      teacherId: currentTeacherId,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    // 1. Update ONLY the allowed field in the Class Document
+    await updateDoc(doc(db, "classes", classCode), {
+      SectionName: rawSectionOnly
+    });
 
-    // 2. Update Teacher's profile array natively to avoid custom wrapper errors
+    // 2. Update Teacher's profile strictly using arrayUnion (no manual filtering, no extra timestamps)
     if (currentTeacherId) {
       await updateDoc(doc(db, "users", currentTeacherId), {
-        sections: arrayUnion(formattedLabel),
-        updatedAt: serverTimestamp()
+        sections: arrayUnion(formattedLabel)
       });
     }
 
-    // 3. SKIPPING CLIENT-SIDE STUDENT MASS UPDATES to avoid the gateway permission blocker!
-    // The student's section string will inherently correct itself when they next log in
-    // or when the teacher resyncs data.
-
-    // 4. Update local UI state
+    // 3. Update local UI state
     currentSec.rawName = rawSectionOnly;
     currentSec.label = formattedLabel;
     
