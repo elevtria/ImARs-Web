@@ -56,8 +56,25 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </span>
         </label>
-        <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button">＋ Add Section</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button">＋ Add Section</button>
+          <button class="btn-ghost add-section-btn" id="editSectionBtn" type="button" style="color: #64748b; border-color: #cbd5e1;">✎ Edit Name</button>
+        </div>
       </section>
+
+      <!-- ADD THIS MODAL JUST BELOW THE HERO SECTION -->
+      <div class="modal" id="editSectionModal">
+        <form class="modal-card section-form" id="editSectionForm" role="dialog" aria-modal="true" aria-labelledby="editSectionModalTitle">
+          <h3 id="editSectionModalTitle">Edit section name</h3>
+          <p>This will update the section name for all students in this class.</p>
+          <label for="editSectionName">New Section Name</label>
+          <input id="editSectionName" name="editSectionName" type="text" maxlength="60" placeholder="e.g. Aluminum" required />
+          <div class="modal-actions">
+            <button class="btn-ghost" id="cancelEditSection" type="button">Cancel</button>
+            <button class="btn-green" id="saveEditSectionBtn" type="submit">Save Changes</button>
+          </div>
+        </form>
+      </div>
 
       <div class="banner">
         <div class="banner-left">

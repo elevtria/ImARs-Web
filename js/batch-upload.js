@@ -289,6 +289,104 @@ sectionForm.addEventListener("submit", async (event) => {
   }
 });
 
+// --- EDIT EXISTING SECTION MODAL ---
+const editSectionBtn = document.getElementById("editSectionBtn");
+const editSectionModal = document.getElementById("editSectionModal");
+const editSectionForm = document.getElementById("editSectionForm");
+const editSectionName = document.getElementById("editSectionName");
+const saveEditSectionBtn = document.getElementById("saveEditSectionBtn");
+
+const openEditSectionModal = () => {
+  const currentTarget = sections.find((s) => s.classCode === sectionSelect.value);
+  if (!currentTarget) return alert("No section selected to edit.");
+  
+  editSectionName.value = currentTarget.rawName; 
+  editSectionName.setCustomValidity("");
+  editSectionModal.classList.add("open");
+  editSectionName.focus();
+};
+const closeEditSectionModal = () => editSectionModal.classList.remove("open");
+
+if (editSectionBtn) editSectionBtn.addEventListener("click", openEditSectionModal);
+document.getElementById("cancelEditSection").addEventListener("click", closeEditSectionModal);
+editSectionModal.addEventListener("click", (event) => {
+  if (event.target === editSectionModal) closeEditSectionModal();
+});
+editSectionName.addEventListener("input", () => editSectionName.setCustomValidity(""));
+
+editSectionForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const rawInput = editSectionName.value.trim();
+  if (!rawInput) {
+    editSectionName.setCustomValidity("Enter a section name.");
+    editSectionName.reportValidity();
+    return;
+  }
+
+  const formattedLabel = formatSectionLabel(rawInput);
+  const rawSectionOnly = rawInput.replace(/^Grade\s+\d+\s*[–-]\s*/i, "").trim() || rawInput;
+
+  const currentSec = sections.find((s) => s.classCode === sectionSelect.value);
+  if (!currentSec) return;
+
+  const duplicate = sections.some((s) => s.label.toLowerCase() === formattedLabel.toLowerCase() && s.classCode !== currentSec.classCode);
+  if (duplicate) {
+    editSectionName.setCustomValidity("That section name already exists.");
+    editSectionName.reportValidity();
+    return;
+  }
+
+  if (saveEditSectionBtn) {
+    saveEditSectionBtn.disabled = true;
+    saveEditSectionBtn.textContent = "Saving...";
+  }
+
+  try {
+    const classCode = currentSec.classCode;
+
+    // 1. Update the Class Document
+    await updateDoc(doc(db, "classes", classCode), {
+      SectionName: rawSectionOnly
+    });
+
+    // 2. Add the new label to the Teacher's profile
+    if (currentTeacherId) {
+      await updateDoc(doc(db, "users", currentTeacherId), {
+          sections: arrayUnion(formattedLabel)
+      });
+    }
+
+    // 3. Mass update the "section" string for all students currently in this class
+    const studentsQ = query(collection(db, "users"), where("classCode", "==", classCode));
+    const studentsSnap = await getDocs(studentsQ);
+    
+    const updatePromises = [];
+    studentsSnap.forEach(studentDoc => {
+        updatePromises.push(updateDoc(studentDoc.ref, { section: formattedLabel }));
+    });
+    await Promise.all(updatePromises);
+
+    // 4. Update local UI state
+    currentSec.rawName = rawSectionOnly;
+    currentSec.label = formattedLabel;
+    
+    renderSections(classCode);
+    closeEditSectionModal();
+    
+    uploadStatus.textContent = `Successfully renamed section to ${formattedLabel}!`;
+    uploadStatus.hidden = false;
+
+  } catch (err) {
+    console.error("Error updating section:", err);
+    alert("Failed to update section: " + err.message);
+  } finally {
+    if (saveEditSectionBtn) {
+      saveEditSectionBtn.disabled = false;
+      saveEditSectionBtn.textContent = "Save Changes";
+    }
+  }
+});
+
 // --- FILE DRAG & DROP + PARSING ---
 const openPicker = () => fileInput.click();
 browseBtn.addEventListener("click", (event) => {
@@ -361,7 +459,7 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- NEW, 100% SAFE FETCH LOGIC ---
+    // --- SAFE FETCH: Use the existing checkStudentIds function to prevent query errors ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
