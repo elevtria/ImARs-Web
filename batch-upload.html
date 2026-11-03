@@ -47,21 +47,20 @@
           <h1>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>
         </div>
-        <label class="section-pick">
-          <span>Upload to section:</span>
-          <span class="select-wrap">
-            <select id="sectionSelect" aria-label="Upload to section">
-              <option value="">Select a section</option>
-            </select>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </span>
-        </label>
-        <!-- The container for both buttons must be a flexbox -->
-        <div style="display: flex; gap: 8px; align-items: stretch; height: 42px;">
-          <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button" style="margin: 0; display: flex; align-items: center; justify-content: center;">
+        <div style="display: flex; align-items: stretch; gap: 12px; height: 44px; margin-top: 16px;">
+          <label class="section-pick" style="margin: 0; display: flex; align-items: center; gap: 8px; height: 100%;">
+            <span style="white-space: nowrap;">Upload to section:</span>
+            <span class="select-wrap" style="height: 100%; display: flex; align-items: center;">
+              <select id="sectionSelect" aria-label="Upload to section" style="height: 100%; padding-top: 0; padding-bottom: 0;">
+                <option value="">Select a section</option>
+              </select>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </label>
+          <button class="btn-ghost add-section-btn" id="addSectionBtn" type="button" style="margin: 0; display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 16px; white-space: nowrap;">
             ＋ Add Section
           </button>
-          <button class="btn-ghost add-section-btn" id="editSectionBtn" type="button" style="margin: 0; display: flex; align-items: center; justify-content: center; color: #64748b; border-color: #cbd5e1;">
+          <button class="btn-ghost add-section-btn" id="editSectionBtn" type="button" style="margin: 0; display: flex; align-items: center; justify-content: center; color: #64748b; border-color: #cbd5e1; height: 100%; padding: 0 16px; white-space: nowrap;">
             ✎ Edit Name
           </button>
         </div>
