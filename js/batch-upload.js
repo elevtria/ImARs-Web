@@ -633,9 +633,9 @@ confirmImportBtn.addEventListener("click", async () => {
         displayName: stu.fullName,
         fullName: stu.fullName,
         email: stu.email || `${finalStudentId}@imars.edu`,
-        providedEmail: stu.email || `${finalStudentId}@imars.edu`, // <-- ADD THIS LINE
-        classCode: targetSec.classCode, // Move them to the newly selected class
-        section: targetSec.label,       // Update their section label 
+        providedEmail: stu.email || `${finalStudentId}@imars.edu`, // <-- ADD THIS EXACT LINE
+        classCode: targetSec.classCode, 
+        section: targetSec.label,       
         updatedAt: serverTimestamp()
       };
 
