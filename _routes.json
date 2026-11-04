@@ -1,5 +1,14 @@
 {
   "version": 1,
   "include": ["/*"],
-  "exclude": []
+  "exclude": [
+    "/admin-login",
+    "/admin-login.html",
+    "/admin-dashboard.html",
+    "/admin-profile.html",
+    "/login.html",
+    "/css/*",
+    "/js/*",
+    "/assets/*"
+  ]
 }
