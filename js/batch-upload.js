@@ -466,8 +466,11 @@ function validateAllRows() {
       const existingNameOwnerId = dbExistingNameOwners[nameKey];
       if (nameCounts[nameKey] > 1) {
         rowErrors.push("Duplicate Name in file");
-      } else if (existingNameOwnerId && existingNameOwnerId !== row.studentId) {
-        rowErrors.push("Name already exists in database");
+      } else if (existingNameOwnerId) {
+        // If this name exists anywhere in Firestore, block it unless it's the exact same student updating their own record
+        if (!row.isExisting || existingNameOwnerId !== row.studentId) {
+          rowErrors.push("Name already exists in database");
+        }
       }
     }
     
@@ -478,8 +481,10 @@ function validateAllRows() {
         rowErrors.push("Invalid email");
       } else if (emailCounts[cleanEmail] > 1) {
         rowErrors.push("Duplicate Email in file");
-      } else if (existingEmailOwnerId && existingEmailOwnerId !== row.studentId) {
-        rowErrors.push("Email already exists in database");
+      } else if (existingEmailOwnerId) {
+        if (!row.isExisting || existingEmailOwnerId !== row.studentId) {
+          rowErrors.push("Email already exists in database");
+        }
       }
     }
 
