@@ -2,7 +2,7 @@ import { escapeHtml, showTeacherView } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
 import { setLoadingState } from "./loading.js";
-import { getTeacherTopicOverview } from "./firebase-data.js";
+import { getTeacherTopicOverview, getDashboardSummary } from "./firebase-data.js";
 import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "./topic-availability.js";
 
 const app = initializeApp();
@@ -45,7 +45,7 @@ function activityTime(value) {
 }
 const minutes = value => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 const scoreLabel = (sum, count, maximum) => count ? `${Math.round(sum / count)}/${maximum}` : "N/A";
-let topicOverview, topicTimer, topicOwnerUid;
+let topicOverview, topicTimer, topicOwnerUid, summaryTimer;
 function renderCurrentTopics(data = topicOverview) {
   if (!data || topicOwnerUid !== auth.currentUser?.uid) return;
   topicOverview = data;
@@ -68,7 +68,7 @@ function renderCurrentTopics(data = topicOverview) {
   topicTimer = setTimeout(() => renderCurrentTopics(), Math.max(1000, midnight - Date.now()));
 }
 window.addEventListener("focus", () => renderCurrentTopics());
-window.addEventListener("pagehide", () => clearTimeout(topicTimer));
+window.addEventListener("pagehide", () => { clearTimeout(topicTimer); clearTimeout(summaryTimer); });
 
 function studentSummary(classDoc, student) {
   let preSum = 0, preCount = 0, postSum = 0, postCount = 0, arMinutes = 0, lastActive = 0, hasActivity = false;
@@ -90,31 +90,16 @@ function studentSummary(classDoc, student) {
     preSum, preCount, postSum, postCount, arMinutes, lastActive, hasActivity };
 }
 
-const report = createTeacherReport({ app,
-  failed: error => {
-    console.error("Dashboard update failed:", error);
-    setLoadingState(document.getElementById("dashboardReportStatus"), false);
-    document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
-  },
-  progress: ({ loaded, total, complete }) => {
-    const status = document.getElementById("dashboardReportStatus");
-    setLoadingState(status, !complete, total === null ? "Updating class averages" : `Class averages: ${loaded} of ${total} students`);
-    status.textContent = "";
-  },
-  render: ({ teacherName, sections, total }) => {
+function renderDashboard({ teacherName, sectionNames, total, sums, recent }) {
     const hour = new Date().getHours(), part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
     document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} !`;
-    document.getElementById("classInfo").textContent = sections.length > 1 ? "Grade 6 – All assigned sections" : sections.length ? "Grade 6 – " + (sections[0].classDoc.data().SectionName || sections[0].classDoc.id) : "No classes assigned yet.";
-    const students = sections.flatMap(({classDoc, students}) => students.filter(student => student.studentDoc.data().active !== false).map(student => studentSummary(classDoc, student)));
-    const sums = students.reduce((sum, row) => ({ preSum:sum.preSum+row.preSum, preCount:sum.preCount+row.preCount,
-      postSum:sum.postSum+row.postSum, postCount:sum.postCount+row.postCount, arMinutes:sum.arMinutes+row.arMinutes }), {preSum:0,preCount:0,postSum:0,postCount:0,arMinutes:0});
+    document.getElementById("classInfo").textContent = sectionNames.length > 1 ? "Grade 6 – All assigned sections" : sectionNames.length ? "Grade 6 – " + sectionNames[0] : "No classes assigned yet.";
     document.getElementById("studentCountVal").textContent = total ?? "—";
     document.getElementById("avgPreTestVal").textContent = scoreLabel(sums.preSum, sums.preCount, 5);
     document.getElementById("avgPostTestVal").textContent = scoreLabel(sums.postSum, sums.postCount, 10);
-    document.getElementById("avgArTimeVal").textContent = `${students.length ? Math.round(sums.arMinutes / students.length) : 0} min`;
+    document.getElementById("avgArTimeVal").textContent = `${total ? Math.round(sums.arMinutes / total) : 0} min`;
 
     const table = document.getElementById("studentTableBody"); table.innerHTML = "";
-    const recent = students.filter(row => row.hasActivity).sort((a,b) => b.lastActive-a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0,25);
     const rows = document.createDocumentFragment();
     for (const student of recent) {
       const initials = student.name.trim().split(/\s+/).slice(0,2).map(part => part[0] || "").join("").toUpperCase();
@@ -127,11 +112,30 @@ const report = createTeacherReport({ app,
     }
     if (!recent.length) { const row=document.createElement("tr"); row.innerHTML='<td colspan="5" class="muted-cell">No saved app activity yet.</td>'; rows.appendChild(row); }
     table.appendChild(rows);
+}
+
+const report = createTeacherReport({ app,
+  failed: error => {
+    console.error("Dashboard update failed:", error);
+    setLoadingState(document.getElementById("dashboardReportStatus"), false);
+    document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
+  },
+  progress: ({ loaded, total, complete }) => {
+    const status = document.getElementById("dashboardReportStatus");
+    setLoadingState(status, !complete, total === null ? "Updating class averages" : `Class averages: ${loaded} of ${total} students`);
+    status.textContent = "";
+  },
+  render: ({ teacherName, sections, total }) => {
+    const students = sections.flatMap(({classDoc, students}) => students.filter(student => student.studentDoc.data().active !== false).map(student => studentSummary(classDoc, student)));
+    const sums = students.reduce((sum, row) => ({ preSum:sum.preSum+row.preSum, preCount:sum.preCount+row.preCount,
+      postSum:sum.postSum+row.postSum, postCount:sum.postCount+row.postCount, arMinutes:sum.arMinutes+row.arMinutes }), {preSum:0,preCount:0,postSum:0,postCount:0,arMinutes:0});
+    renderDashboard({ teacherName, sectionNames: sections.map(({classDoc}) => classDoc.data().SectionName || classDoc.id), total, sums,
+      recent: students.filter(row => row.hasActivity).sort((a,b) => b.lastActive-a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0,25) });
 
   }
 });
 onAuthStateChanged(auth, async user => {
-  if (!user) { topicOverview = null; topicOwnerUid = null; clearTimeout(topicTimer); window.location.href = "login.html"; return; }
+  if (!user) { topicOverview = null; topicOwnerUid = null; clearTimeout(topicTimer); clearTimeout(summaryTimer); window.location.href = "login.html"; return; }
   topicOwnerUid = user.uid;
   const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", load: () => getTeacherTopicOverview(), render: renderCurrentTopics })
     .catch(error => {
@@ -139,5 +143,34 @@ onAuthStateChanged(auth, async user => {
       const modules = document.getElementById("modulesContainer");
       if (auth.currentUser?.uid === user.uid && modules) modules.textContent = "Could not update topics. Retrying automatically.";
     });
-  await Promise.all([report.open({ user, sectionId:"", allTerms:true, includeCurriculum:false }), topics]);
+  const summaryOptions = { app, user, page: "dashboard-summary-v1", load: async () => {
+    let result = await getDashboardSummary();
+    if (!result.enabled) return { legacy: true };
+    // Only the first preparation waits. Subsequent visits get the durable
+    // summary immediately; no student report pages are downloaded here.
+    for (let attempt = 0; !result.ready && attempt < 150; attempt++) {
+      if (auth.currentUser?.uid !== user.uid) throw new Error("Sign-in changed.");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (auth.currentUser?.uid !== user.uid) throw new Error("Sign-in changed.");
+      if (document.visibilityState === "hidden") continue;
+      result = await getDashboardSummary();
+    }
+    if (!result.ready) throw new Error("Results are still being prepared.");
+    return result;
+  }, render: result => {
+    if (result.legacy) { void report.open({ user, sectionId:"", allTerms:true, includeCurriculum:false }); return; }
+    const { summary, teacherName } = result;
+    renderDashboard({ teacherName, sectionNames: summary.sectionNames, total: summary.total, sums: summary, recent: summary.recent });
+    setLoadingState(document.getElementById("dashboardReportStatus"), false);
+    document.getElementById("dashboardReportStatus").textContent = "";
+    clearTimeout(summaryTimer);
+    if (result.pending) summaryTimer = setTimeout(() => {
+      if (auth.currentUser?.uid === user.uid && document.visibilityState !== "hidden") void showTeacherView({ ...summaryOptions, refreshOnly: true }).catch(() => {});
+    }, 4000);
+  } };
+  const summary = showTeacherView(summaryOptions).catch(error => {
+    console.error("Dashboard update failed:", error);
+    if (auth.currentUser?.uid === user.uid) document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
+  });
+  await Promise.all([summary, topics]);
 });

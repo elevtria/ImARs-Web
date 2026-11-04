@@ -43,7 +43,8 @@ function page(file, report) {
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
-    showTeacherView: async options => options.render(file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
+    getDashboardSummary: async () => report?.preparedSummary || { enabled: false },
+    showTeacherView: async options => options.render(options.page === "dashboard-summary-v1" ? await options.load() : file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
@@ -173,6 +174,18 @@ test("dashboard orders activity before limiting rows and keeps earned zeroes",as
   const students=Array.from({length:30},(_,index)=>({studentDoc:record("S"+index,{displayName:"Learner "+index}),results:[{termId:"term_03",lessonsSnap:snapshot([record("lesson_01",{timestamp:new Date(Date.UTC(2026,9,index+1)).toISOString(),isPreTestCompleted:true,preTestScore:0,preTestTotalQuestions:5})])}]}));
   const app=page("dashboard.js",{teacherName:"Teacher",total:30,sections:[{classDoc:record("A",{SectionName:"A"}),students}],curriculumSnap:snapshot([])});await app.render();
   const rows=app.element("studentTableBody").children;assert.equal(rows.length,25);assert.match(rows[0].innerHTML,/Learner 29/);assert.doesNotMatch(app.element("studentTableBody").html(),/>Learner 0</);assert.equal(app.element("avgPreTestVal").textContent,"0/5");
+});
+
+test("the prepared dashboard renders safe summaries without starting the full student report", async () => {
+  const app = page("dashboard.js", { sections: [], preparedSummary: { enabled: true, ready: true, teacherName: "Teacher", summary: {
+    total: 1000, sectionNames: ["A", "B"], preSum: 0, preCount: 1, postSum: 10, postCount: 1, arMinutes: 6000,
+    recent: [{ id: "S1", name: attack, section: attack, preSum: 0, preCount: 1, postSum: 10, postCount: 1, arMinutes: 6, lastActive: Date.now() }] } } });
+  await app.render();
+  assert.equal(app.requested(), undefined);
+  assert.equal(app.element("studentCountVal").textContent, 1000);
+  assert.equal(app.element("avgPreTestVal").textContent, "0/5");
+  assert.equal(app.element("avgArTimeVal").textContent, "6 min");
+  assertTextOnly(app.element("studentTableBody").html());
 });
 
 test("analytics names, sections, and topic titles cannot inject HTML into reports", async () => {

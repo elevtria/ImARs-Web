@@ -114,7 +114,7 @@ export class FirestoreAdmin {
     if (records.size !== paths.length) throw new Error("The report response was incomplete.");
     return records;
   }
-  async query(path, { filters = [], order = [], limit = 5000, after } = {}) {
+  async query(path, { filters = [], order = [], limit = 5000, after, fieldPaths } = {}) {
     const parts = path.split("/");
     this.name(path);
     const parent = parts.slice(0, -1).join("/");
@@ -124,6 +124,7 @@ export class FirestoreAdmin {
     const rows = await this.request(`documents${parent ? "/" + parent.split("/").map(encodeURIComponent).join("/") : ""}:runQuery`, {
       method: "POST", body: JSON.stringify({ ...(this.transaction ? { transaction: this.transaction } : {}), structuredQuery: {
         from: [{ collectionId: parts.at(-1) }],
+        ...(fieldPaths ? { select: { fields: fieldPaths.map(fieldPath => ({ fieldPath })) } } : {}),
         ...(conditions.length ? { where: conditions.length === 1 ? conditions[0] : { compositeFilter: { op: "AND", filters: conditions } } } : {}),
         ...(order.length ? { orderBy: order.map(({ field, direction }) => ({ field: { fieldPath: field }, direction: direction === "desc" ? "DESCENDING" : "ASCENDING" })) } : {}),
         ...(after ? { orderBy: [{ field: { fieldPath: "__name__" }, direction: "ASCENDING" }],

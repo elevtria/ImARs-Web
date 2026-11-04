@@ -1,5 +1,6 @@
 import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
 import { stateCall, resolveStaff, settings } from "./web-auth.js";
+import { authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -35,12 +36,13 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
   const url = new URL(request.url), action = url.pathname.replace(/\/$/, "").split("/").at(-1);
   const teacherSessions = env.TEACHER_MOBILE_SESSIONS_ENABLED === "true" || enabled;
   const mobileAction = ["teacher-session-login", "mobile-session"].includes(action);
+  const progressAction = action === "progress-synced" && env.DASHBOARD_SUMMARIES_ENABLED === "true";
   if (action === "config" && request.method === "GET") {
     if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}) });
     try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true }); }
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
-  if (!enabled && !(teacherSessions && mobileAction)) return json({ error: "Account access is not enabled." }, 409);
+  if (!enabled && !(teacherSessions && mobileAction) && !progressAction) return json({ error: "Account access is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
@@ -54,9 +56,27 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
     if (!body || typeof body !== "object" || Array.isArray(body)) throw fail("Invalid request.", 400);
     const ip = request.headers.get("CF-Connecting-IP");
     if (rate) await rate();
-    else if (ip && action !== "mobile-session") {
+    else if (ip && action !== "mobile-session" && !progressAction) {
       const limited = await stateCall(env, "account-access-ip:" + ip, "rate");
       if (!limited.ok) return json({ error: "Too many requests. Please wait a minute." }, limited.status === 429 ? 429 : 503);
+    }
+
+    if (progressAction) {
+      // This accepts no scores, profile IDs or teacher IDs from the device.
+      // The token and current class determine the only rollup it can invalidate.
+      if (Object.keys(body).some(key => !["termId", "lessonId"].includes(key)) || !/^term_0[1-3]$/.test(body.termId) || !/^lesson_0[1-4]$/.test(body.lessonId)) throw fail("Invalid progress notification.", 400);
+      const identity = await authenticateStudent(request, env, store, { fetcher });
+      await quizRate(env, identity.uid);
+      const { context } = await studentContext(identity, env, store);
+      const classes = await store.query("classes", { filters: [{ field: "teacherId", value: context.teacherProfileId }] });
+      const prepared = await stateCall(env, "dashboard:" + context.teacherUid, "dashboard-get", {
+        id: context.teacherProfileId, uid: context.teacherUid, warmOnly: true,
+        sections: classes.map(row => ({ id: row.id, name: String(row.data.SectionName || row.id).slice(0, 300) }))
+      });
+      if (!prepared.ok) throw new Error("Dashboard preparation unavailable");
+      const updated = await stateCall(env, "dashboard:" + context.teacherUid, "dashboard-dirty", { ids: [context.studentId], lesson: body.termId + "/lessons/" + body.lessonId });
+      if (!updated.ok) throw new Error("Dashboard update unavailable");
+      return json({ ok: true });
     }
 
     if (mobileAction) {

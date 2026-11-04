@@ -1,5 +1,7 @@
 import { decision, emptyState, passwordFailed, resetAfterApproval, verifiedSuccess } from "../server/web-lockout.js";
 import { checkSession, createSession, pruneSessions, sessionTiming, validSessionId } from "../server/web-session.js";
+import { DashboardSummary } from "../server/dashboard-summary.js";
+import { FirestoreAdmin } from "../server/firestore-admin.js";
 
 const apiKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -7,12 +9,17 @@ const json = (body, status = 200) => Response.json(body, { status, headers: { "C
 export class WebLoginState {
   constructor(state, env, { fetch: fetcher = (...args) => fetch(...args), now = () => Date.now() } = {}) {
     this.storage = state.storage;
+    this.state = state;
+    this.dashboard = new DashboardSummary(state.storage, env, { now, report: stats => console.info(JSON.stringify({ event: "dashboard-summary-ready", ...stats })) });
     this.fetcher = fetcher;
     this.now = now;
     this.pending = Promise.resolve();
   }
 
   fetch(request) {
+    if (new URL(request.url).pathname === "/dashboard-get" && request.method === "POST") {
+      return this.dashboardRead(request).catch(() => json({ error: "Dashboard is temporarily unavailable." }, 503));
+    }
     // Serialize across the password verification as well as storage writes. Parallel
     // browser requests cannot all pass a stale attempt-count check.
     const result = this.pending.then(() => this.handle(request));
@@ -20,8 +27,29 @@ export class WebLoginState {
     return result.catch(() => json({ error: "Login protection is temporarily unavailable." }, 503));
   }
 
+  async dashboardRead(request) {
+    const body = await request.json();
+    const cached = await this.dashboard.read(body);
+    const update = this.pending.then(() => this.dashboard.configure(body));
+    this.pending = update.catch(() => {});
+    // A warm read does not wait behind a background Firestore batch.
+    if (cached?.ready) { this.state.waitUntil(update); return json(cached); }
+    return json(await update);
+  }
+
+  alarm() {
+    const result = this.pending.then(() => this.dashboard.step());
+    this.pending = result.catch(() => {});
+    return result.catch(async error => { await this.dashboard.schedule(30_000); throw error; });
+  }
+
   async handle(request) {
     const action = new URL(request.url).pathname;
+    if (action === "/dashboard-dirty" && request.method === "POST") {
+      const body = await request.json();
+      await this.dashboard.invalidate(body.ids, body.lesson);
+      return json({ ok: true });
+    }
     if (["/mobile-login", "/mobile-session", "/mobile-revoke"].includes(action) && request.method === "POST") {
       // Only the private binding can reach these actions. Pages verifies the
       // teacher's password or Firebase identity before selecting this object.
@@ -135,4 +163,21 @@ export class WebLoginState {
 }
 
 // There is no public Worker API. Pages accesses objects through a private binding.
-export default { fetch: () => new Response("Not found", { status: 404 }) };
+export default {
+  fetch: () => new Response("Not found", { status: 404 }),
+  async scheduled(_event, env) {
+    // Prepare new teachers before their first website visit. Existing summaries
+    // are left intact; mobile notifications and authenticated visits refresh them.
+    const store = new FirestoreAdmin(env);
+    const teachers = await store.query("users", { filters: [{ field: "role", value: "teacher" }], limit: 5000 });
+    for (const teacher of teachers) {
+      if (!teacher.data.uid || teacher.data.active === false || ["inactive", "disabled", "deleted", "archived"].includes(String(teacher.data.status || "").toLowerCase())) continue;
+      const classes = await store.query("classes", { filters: [{ field: "teacherId", value: teacher.id }] });
+      const response = await env.WEB_LOGIN_STATE.get(env.WEB_LOGIN_STATE.idFromName("dashboard:" + teacher.data.uid)).fetch("https://private/dashboard-get", {
+        method: "POST", body: JSON.stringify({ id: teacher.id, uid: teacher.data.uid, warmOnly: true,
+          sections: classes.map(row => ({ id: row.id, name: String(row.data.SectionName || row.id).slice(0, 300) })) })
+      });
+      if (!response.ok) throw new Error("Dashboard preparation unavailable");
+    }
+  }
+};

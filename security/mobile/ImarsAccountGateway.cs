@@ -146,15 +146,23 @@ public static class ImarsAccountGateway
         // never writes a role, UID or other person's profile from this client.
     }
 
-    private static async Task<Reply> Send(string action, RequestBody body, string idToken = null, bool allowLegacy = false)
+    [Serializable] private class ProgressBody { public string termId; public string lessonId; }
+    internal static async Task NotifyProgressAsync(FirebaseUser user, string term, string lesson)
     {
-        using (UnityWebRequest request = new UnityWebRequest(BaseUrl + action, body == null ? "GET" : "POST"))
+        string token = await user.TokenAsync(false);
+        if (FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId) return;
+        await Send("progress-synced", null, token, jsonBody: JsonUtility.ToJson(new ProgressBody { termId = term, lessonId = lesson }));
+    }
+
+    private static async Task<Reply> Send(string action, RequestBody body, string idToken = null, bool allowLegacy = false, string jsonBody = null)
+    {
+        using (UnityWebRequest request = new UnityWebRequest(BaseUrl + action, body == null && jsonBody == null ? "GET" : "POST"))
         {
             request.downloadHandler = new DownloadHandlerBuffer();
             request.timeout = 15;
-            if (body != null)
+            if (body != null || jsonBody != null)
             {
-                request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(JsonUtility.ToJson(body)));
+                request.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(jsonBody ?? JsonUtility.ToJson(body)));
                 request.SetRequestHeader("Content-Type", "application/json");
             }
             if (!string.IsNullOrEmpty(idToken)) request.SetRequestHeader("Authorization", "Bearer " + idToken);
@@ -278,5 +286,59 @@ public sealed class ImarsTeacherSessionMonitor : MonoBehaviour
     {
         if (auth != null) auth.StateChanged -= AuthChanged;
         if (instance == this) instance = null;
+    }
+}
+
+// Acknowledged lesson changes notify the private dashboard cache. Notifications
+// survive app restarts and never delay saving or navigating a lesson.
+public sealed class ImarsDashboardSync : MonoBehaviour
+{
+    private static ImarsDashboardSync instance;
+    private bool sending;
+    private static string Key(string uid, string term, string lesson) => "ImarsDashboardSync:" + uid + ":" + term + ":" + lesson;
+
+    public static void Notify(string student, string term, string lesson)
+    {
+        string uid = FirebaseAuth.DefaultInstance.CurrentUser?.UserId;
+        if (string.IsNullOrEmpty(uid) || student != StudentTestProgress.StudentId ||
+            !System.Text.RegularExpressions.Regex.IsMatch(term ?? "", @"^term_0[1-3]$") ||
+            !System.Text.RegularExpressions.Regex.IsMatch(lesson ?? "", @"^lesson_0[1-4]$")) return;
+        PlayerPrefs.SetString(Key(uid, term, lesson), Guid.NewGuid().ToString("N"));
+        PlayerPrefs.Save();
+        EnsureService();
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void EnsureService()
+    {
+        if (instance != null) return;
+        instance = new GameObject("Dashboard sync").AddComponent<ImarsDashboardSync>();
+        DontDestroyOnLoad(instance.gameObject);
+        instance.InvokeRepeating(nameof(Pump), 5f, 30f);
+    }
+
+    private async void Pump()
+    {
+        if (sending || Application.internetReachability == NetworkReachability.NotReachable) return;
+        sending = true;
+        try
+        {
+            if (await FirebaseInitialization.EnsureReadyAsync() != Firebase.DependencyStatus.Available) return;
+            var user = FirebaseAuth.DefaultInstance.CurrentUser;
+            if (user == null) return;
+            for (int t = 1; t <= 3; t++) for (int l = 1; l <= 4; l++)
+            {
+                if (FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId) return;
+                string term = "term_0" + t, lesson = "lesson_0" + l;
+                string key = Key(user.UserId, term, lesson), revision = PlayerPrefs.GetString(key, "");
+                if (string.IsNullOrEmpty(revision)) continue;
+                await ImarsAccountGateway.NotifyProgressAsync(user, term, lesson);
+                if (FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId) return;
+                if (PlayerPrefs.GetString(key, "") == revision) PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.Save();
+            }
+        }
+        catch (Exception) { /* The durable marker is retried after reconnect. */ }
+        finally { sending = false; }
     }
 }

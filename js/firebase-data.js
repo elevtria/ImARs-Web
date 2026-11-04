@@ -176,6 +176,7 @@ export function writeBatch() {
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
 export const getTeacherTopicOverview = () => request({ action: "teacher-topic-overview" });
+export const getDashboardSummary = () => request({ action: "dashboard-summary" });
 async function studentPageRequest(action, options, requestOptions) {
   const uid = visitUser(), cache = teacherViewCache(), version = cache.version();
   const scope = options.sectionId || (options.firstSection ? "first" : "all");

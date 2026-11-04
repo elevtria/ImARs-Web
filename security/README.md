@@ -198,3 +198,13 @@ References: [Firebase rules and queries](https://firebase.google.com/docs/firest
 [Unity user verification](https://firebase.google.com/docs/auth/unity/manage-users),
 [Firestore atomic commits](https://cloud.google.com/firestore/docs/reference/rest/v1/projects.databases.documents/commit),
 and [administrative Authentication lookup](https://cloud.google.com/identity-platform/docs/reference/rest/v1/projects.accounts/lookup).
+
+## Prepared teacher dashboards
+
+`DASHBOARD_SUMMARIES_ENABLED=true` switches the dashboard to a private rollup in the existing `imars-web-auth` Durable Object namespace. Its Worker also needs `FIREBASE_SERVICE_ACCOUNT_JSON` as a secret. Deploy that Worker before the Pages build. The public Worker still returns 404; Pages checks the live staff profile and class assignments before requesting a rollup. No private records are fetched anonymously or stored in public CDN caches.
+
+The Worker prepares new teachers every 30 minutes. Initial preparation runs in alarm batches of 25 profiles and at most three 100-document lesson reads. Only a complete summary is published. Warm dashboard requests return totals and at most 25 recent students, with no lesson-document reads. Website student edits invalidate the affected students after a successful commit.
+
+The mobile source calls `ImarsDashboardSync.Notify` after acknowledged test and lesson/AR saves. Its persistent queue coalesces changes and sends `/api/account-access/progress-synced` notifications every 30 seconds while online. The server verifies the Firebase token and current membership, accepts only a fixed term/lesson ID, and rereads that one authoritative lesson. Build and install a new APK to use these notifications; no app data or scenes need migration.
+
+Older APKs remain compatible. While a dashboard is active, fallback reconciliation runs at most once per five minutes, with longer intervals for large rosters to cap fallback lesson reads at roughly 24,000 per teacher per day of continuous use. The one-time initial build and actual sync notifications are additional reads; this does not guarantee staying within the project's shared free quota. Large legacy deployments should rebuild the mobile app rather than rely on polling. Authenticated pages continue to show the last complete summary during updates; initial preparation and network failures never publish partial averages as complete.

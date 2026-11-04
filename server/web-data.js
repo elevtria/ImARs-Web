@@ -374,7 +374,7 @@ async function teacherTopicOverview(scope) {
   }) })) };
 }
 
-export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
+export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -396,6 +396,15 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     const actor = started ? await authenticate(request, env, store) : actorBefore;
     authenticationMs = Date.now() - requestStarted;
     const scope = new Scope(store, actor);
+    if (body.action === "dashboard-summary") {
+      if (actor.role !== "teacher") throw fail();
+      if (env.DASHBOARD_SUMMARIES_ENABLED !== "true") return respond({ enabled: false });
+      const classes = await store.query("classes", { filters: [{ field: "teacherId", value: actor.id }] });
+      const sections = classes.map(row => ({ id: row.id, name: String(row.data.SectionName || row.id).slice(0, 300) }));
+      const cached = await stateCall(env, "dashboard:" + actor.uid, "dashboard-get", { id: actor.id, uid: actor.uid, sections });
+      if (!cached.ok) throw new Error("Dashboard unavailable");
+      return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
+    }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
@@ -491,6 +500,14 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
       const writes = [];
       for (const write of body.writes) writes.push(await scope.write(write));
       await store.commit(writes); started = false;
+      if (env.DASHBOARD_SUMMARIES_ENABLED === "true" && actor.role === "teacher") {
+        const ids = [...new Set(writes.filter(write => /^users\/[A-Za-z0-9_-]+(?:\/test_results\/|$)/.test(write.path)).map(write => write.path.split("/")[1]))];
+        if (ids.length) {
+          const update = stateCall(env, "dashboard:" + actor.uid, "dashboard-dirty", { ids }).then(result => { if (!result.ok) throw new Error("Dashboard update unavailable"); });
+          if (waitUntil) waitUntil(update.catch(() => console.warn("Dashboard refresh will retry.")));
+          else await update.catch(() => {});
+        }
+      }
       for (const write of writes) if (/^users\/TEACH\d+$/.test(write.path) && actor.role === "admin") {
         const id = write.path.split("/")[1];
         if (write.operation === "delete") {
