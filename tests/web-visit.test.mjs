@@ -195,7 +195,7 @@ test("blocked browser storage cannot leave a partially signed-in account", async
 
 test("every portal includes the initial privacy guard and uses the shared authentication wrapper", () => {
   const root = new URL("../", import.meta.url);
-  for (const file of readdirSync(root).filter(file => file.endsWith(".html") && file !== "login.html")) {
+  for (const file of readdirSync(root).filter(file => file.endsWith(".html") && !["login.html", "admin-login.html"].includes(file))) {
     const html = readFileSync(new URL(file, root), "utf8");
     assert.match(html, /<body\b[^>]*\bdata-auth-pending(?:\s|>)/);
     assert.match(html, /css\/(app|admin-dashboard)\.css/);

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-function page({ protection = true, denied = false, outage = false, search = "", configuration, profileExists = true, responses } = {}) {
+function page({ protection = true, denied = false, outage = false, search = "", configuration, profileExists = true, responses, portal = "teacher" } = {}) {
   const elements = new Map(), calls = [];
   const pendingResponses = responses?.slice();
   const element = id => {
@@ -13,7 +13,7 @@ function page({ protection = true, denied = false, outage = false, search = "", 
       querySelector() { return element(`${id}:label`); }, reset() {}, showModal() {}, close() {} });
     return elements.get(id);
   };
-  const location = { href: "login.html", search, pathname: "/login" };
+  const location = { href: portal === "admin" ? "admin-login.html" : "login.html", search, pathname: portal === "admin" ? "/admin-login" : "/login" };
   const context = vm.createContext({
     console: { error() {} }, document: { getElementById: element }, window: { location }, URLSearchParams,
     AbortSignal, sessionStorage: { getItem: () => null }, fetch: async () => {
@@ -45,7 +45,7 @@ function page({ protection = true, denied = false, outage = false, search = "", 
     const transport = readFileSync(new URL("../js/web-login.js", import.meta.url), "utf8").replace(/^export /gm, "");
     vm.runInContext(transport, context);
   }
-  const source = readFileSync(new URL("../js/login.js", import.meta.url), "utf8").replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
+  const source = readFileSync(new URL(portal === "admin" ? "../js/admin-login.js" : "../js/login.js", import.meta.url), "utf8").replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
   vm.runInContext(source, context);
   element("teacherId").value = "TEACH1000"; element("password").value = "password";
   element("adminIdentifier").value = "ADMIN1000"; element("adminPassword").value = "password";
@@ -64,7 +64,7 @@ test("a locked teacher never reaches the browser Firebase sign-in step", async (
   assert.equal(app.location.href, "login.html");
 });
 test("admin login uses the same protected flow and existing dashboard destination", async () => {
-  const app = page(); await app.submit("adminLoginForm");
+  const app = page({ portal: "admin" }); await app.submit("adminLoginForm");
   assert.equal(app.calls[0][3], "admin");
   assert.equal(app.location.href, "admin-dashboard.html");
 });
@@ -86,7 +86,7 @@ for (const [role, form, button, idleLabel] of [
   test(`${role} sign-in shows button progress and ignores duplicate submissions through redirect`, async () => {
     let resolve;
     const configuration = new Promise(yes => { resolve = yes; });
-    const app = page({ configuration });
+    const app = page({ configuration, portal: role });
     const pending = app.submit(form);
     assert.equal(app.element(button).disabled, true);
     assert.equal(app.element(button).attributes["aria-busy"], "true");
@@ -100,14 +100,14 @@ for (const [role, form, button, idleLabel] of [
   });
 
   test(`${role} sign-in restores the button after failure so credentials can be retried`, async () => {
-    const app = page({ denied: true });
+    const app = page({ denied: true, portal: role });
     await app.submit(form);
     assert.equal(app.element(button).disabled, false);
     assert.equal(app.element(button).attributes["aria-busy"], "false");
     assert.equal(app.element(`${button}:label`).textContent, idleLabel);
     await app.submit(form);
     assert.equal(app.calls.length, 2);
-    assert.equal(app.location.href, "login.html");
+    assert.equal(app.location.href, role === "admin" ? "admin-login.html" : "login.html");
   });
 }
 
@@ -138,7 +138,7 @@ for (const [role, form, errorId] of [["teacher", "loginForm", "error"], ["admin"
       { status: 429, body: { error: "Too many incorrect attempts.", retryAfter: 18000 } },
       { status: 429, body: { error: "Web login is locked. Contact your administrator or website maintenance to restore access.", manual: true, retryAfter: 0 } }
     ];
-    const app = page({ responses });
+    const app = page({ responses, portal: role });
     for (const expected of [
       "Invalid ID or password. Please try again. (2/3 attempts)",
       "Too many incorrect attempts. Please try again in 5 minutes.",
@@ -147,7 +147,7 @@ for (const [role, form, errorId] of [["teacher", "loginForm", "error"], ["admin"
     ]) {
       await app.submit(form);
       assert.equal(app.element(errorId)[role === "teacher" ? "innerText" : "textContent"], expected);
-      assert.equal(app.location.href, "login.html");
+      assert.equal(app.location.href, role === "admin" ? "admin-login.html" : "login.html");
     }
   });
 }

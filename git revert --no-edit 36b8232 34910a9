@@ -1,0 +1,150 @@
+[33mb4647db[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m adsaddsa
+[33m36b8232[m adsadad
+[33m34910a9[m asdsadasd
+[33md4bc9be[m asdsadsa
+[33mcf50e04[m edit section (14)
+[33m1c1753c[m edit section (13)
+[33mdcd0226[m edit section (12)
+[33mcc09392[m edit section (11)
+[33m9fac332[m edit section (10)
+[33mc39eb00[m edit section (9)
+[33m8feacc5[m edit section (8)
+[33m686a144[m edit section (7)
+[33m9023932[m edit section (6)
+[33mffac4bb[m edit section (5)
+[33m4f1d879[m edit section (4)
+[33m1760e3e[m edit section (3)
+[33md3713e5[m edit section (2)
+[33mfaa4981[m edit section
+[33m07be37e[m Clarify when all term activities are already available
+[33mc1d969b[m Scope activity release buttons to individual terms
+[33m9add257[m Add one-save activity release and simplify batch loading text
+[33meb0b715[m Connect student quizzes and add all-section assignment
+[33m1419001[m Add optional section activity deadlines with UTC validation
+[33mba5f1eb[m Keep acknowledged schedule saves and preserve access drafts
+[33mf77d46b[m Omit repeated Term 2 activity from the activity schedule
+[33me9b8b43[m fix bugs (5)
+[33mcfb0c4a[m fix bugs (4)
+[33mfc54993[m fix bugs (3)
+[33mfde16bc[m fix bugs (2)
+[33mbc99ace[m fix bugs
+[33m6503084[m fixed duplicated data (4)
+[33maf48161[m fixed duplicated data (3)
+[33me8b77f8[m fixed duplicated data (2)
+[33m25ade12[m fixed duplicate data
+[33m3e65b01[m Combine dashboard averages and show recent synced activity
+[33md0133cf[m Restore the previous portal layout and workflows
+[33m28f1646[m Clarify portal workflows and manage section assignments safely
+[33m7daee95[m Reduce portal startup work and reuse student rosters across terms
+[33m025588b[m Add a clear chevron to the student term dropdown
+[33mb0dfedf[m Recover student result reads and distinguish empty terms
+[33mb83c8dd[m Silence sign-in guard and add repeatable concurrency checks
+[33ma60c8f1[m Refresh only visible student results in the background
+[33maa32160[m Remove report loading from login and batch selected-term reports
+[33me9d4994[m Page student records and keep data refreshes local
+[33m0a63d88[m Scope lesson schedules to sections and avoid repeated student report loads
+[33mecfb62b[m Add section filtering and assignment controls for quiz releases
+[33m259e20b[m Keep generated quiz scheduling in Quiz Generator and simplify admin login
+[33m51a06c9[m Use a generic admin ID login placeholder
+[33mf687c3d[m Merge remote-tracking branch 'origin/main'
+[33m1516d15[m Add written quiz types and review multiple-choice answer relevance
+[33mf90134e[m Bundle public browser assets with shared hashed modules
+[33m03d465a[m database fix (3)
+[33m3f2bd27[m database fix (2)
+[33m036c6f9[m database fix
+[33mbd4dbb6[m edit function
+[33ma42d615[m change
+[33me54c4a5[m chnages
+[33m44b09b7[m changes
+[33macfc007[m change
+[33m78c1b69[m chnage
+[33m07d8b76[m student record
+[33mc9d150a[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m4b22fea[m save pass
+[33mb28e197[m blue table
+[33m2e4e5d1[m new table for activity record
+[33m99213be[m student activity record
+[33m9fa8bb6[m dropdown activity scheduler
+[33m46aae4b[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m49bd3b0[m Activity Scheduler
+[33m684d31f[m change
+[33me42fa58[m change
+[33ma8b3238[m Add floating cubes across website
+[33mc3e93eb[m floating cubess
+[33m5b87f95[m fixing
+[33m06e7c66[m fixing
+[33me01b136[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m6a4ccd3[m Redesign navigation menu in dashboard and deisgn
+[33mdab859e[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m7f6fb2d[m Enhance student records display
+[33m330b521[m Redesign navigation menu in dashboard
+[33mb704c29[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m88a2fd0[m Redesign navigation menu in dashboard
+[33m3992ec2[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33me7d0068[m Student Record Design
+[33meeccca4[m Redesign navigation menu
+[33mf884dfd[m log in size
+[33ma5b884c[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33mc562bbd[m fixed error
+[33me4d7aef[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m6acd865[m Redesign the progress bar
+[33me8d8ef6[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web t commit :wq# the commit.
+[33mc0e562c[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m32fdf53[m Quiz Scheduler
+[33m50a24e3[m Resolved merge conflict in login.js
+[33mf0316bf[m Show server-counted staff login attempts
+[33m960d446[m Preserve history IDs when retrying offline scans
+[33maa34c13[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m0da403a[m Updated login files
+[33mcbdd6f0[m Add quiz scheduler and activity scores
+[33m6dd7628[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m940d5e3[m Sa session
+[33ma12cf9f[m aaa
+[33m78e8624[m :D
+[33mdc37a23[m blahbalh
+[33mb172703[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m3a73c00[m slow qr scan
+[33maecd0b0[m Merge latest offline QR fix without blocking scans
+[33m7a16c86[m Record successful Production gateway release
+[33mbffde64[m raaaaa
+[33m8e5c025[m Keep native fetch calls independent of the gateway instance
+[33mddccef3[m Refresh QR history after confirmed reconnect sync
+[33mdf53409[m Merge current QR sync fixes and activate website gateway
+[33m630a2f1[m fix recent scans
+[33mcd8cc27[m fix bugs
+[33m37788ce[m Record Preview credential setup and remaining settings
+[33mc17c3d3[m Record verified gateway credential and preview checks
+[33m4c885fc[m Verify invited teacher emails and prepare isolated gateway preview
+[33me04b49f[m offline mode for sync-offline-results
+[33m816bd87[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m1e8312d[m fixing url mismatch
+[33mb0b8d88[m Record private Worker update and pending website activation
+[33m51e4fac[m Remove optional manual test and preview tools
+[33m0c8442f[m Move website authentication and data access behind Cloudflare
+[33mecabdfb[m Minify published browser assets and reject private credentials in client builds
+[33md3f9e6c[m Bind each website visit to its browser tab
+[33m5eb606e[m Require fresh website visits to sign in before loading portal data
+[33mecac7dc[m Harden browser script policy and escape database-rendered content
+[33m3247962[m Move sign-in progress into buttons and clean project artifacts
+[33mc249f5c[m Brighten scheduler progress and remove unused layout styles
+[33m1e66a5b[m Support streamed 50 MB quiz files and show upload guidance
+[33m71c55d3[m Show quiz upload file-size limit
+[33mb9fd531[m Reduce quiz generation latency and bound stalled requests
+[33m9c0d543[m Merge latest student management changes with cached reports
+[33m61cec37[m hahaha
+[33mf4d6963[m fixed bugs for database
+[33mba50d98[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m48b53ce[m fixed issues on batch upload, added an edit button for student records
+[33m5d4f26d[m Prepare Cloudflare hosting and update marker downloads
+[33mb280a4f[m Update ImARs website features and fix offline sync
+[33m08e0829[m fixed qr scanning
+[33m6020a0c[m fixed dashboard bug
+[33m2a28833[m fixed login bug, removed notif
+[33m372ee93[m admin profile, admin 10 mins inactivity auto logout, admin side bar profile, tc student records (module time), tc batch upload, tc scan-qr
+[33mde5b6eb[m admin dashboard, admin manage teachers, admin school analytics, tc analytics (topic completion rate)
+[33m70f153a[m Merge branch 'main' of https://github.com/elevtria/ImARs-Web
+[33m3501fec[m Need pa iconfigure wrangler
+[33m32057d0[m updated tc analytics, tc dashboard, tc scan qr/ar, and tc student records.
+[33m6ad4802[m Merge pull request #1 from elevtria/MARIE
+[33m7286b03[m[33m ([m[1;31morigin/MARIE[m[33m, [m[1;32mMARIE[m[33m)[m oh wow
+[33mce38ae0[m first commi

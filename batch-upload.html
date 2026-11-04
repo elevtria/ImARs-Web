@@ -12,9 +12,9 @@
   <!-- SheetJS for parsing .xlsx, .xls, and .csv files -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
-  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -43,7 +43,7 @@
     </header>
 
     <main class="content">
-      <section class="hero">
+      <section class="hero" data-loading-path="users classes" data-loading-label="Preparing sections">
         <div>
           <h1>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>

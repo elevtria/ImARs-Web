@@ -9,7 +9,8 @@ const states = new WeakMap();
 let instance;
 export const initializeApp = () => app;
 export const getApps = () => [app];
-const loginPage = () => /^\/login(?:\.html)?\/?$/.test(window.location.pathname);
+const loginPage = () => /^\/(?:admin-)?login(?:\.html)?\/?$/.test(window.location.pathname);
+const adminLoginPage = () => /^\/admin-login(?:\.html)?\/?$/.test(window.location.pathname);
 const portalRole = () => /^\/(?:admin-dashboard|admin-profile|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
 const sharedPage = () => /^\/teacher-manual(?:\.html)?\/?$/.test(window.location.pathname);
 const hidePortal = () => { if (!loginPage()) document.body.setAttribute("data-auth-pending", ""); };
@@ -47,7 +48,7 @@ async function identity(auth, state) {
   const saved = visit();
   if (!saved) throw new Error("A fresh sign-in is required.");
   const { user } = await webRequest("/api/web-auth/identity", {});
-  if (!user?.uid || user.uid !== saved.uid || user.role !== saved.role || (!sharedPage() && user.role !== portalRole())) throw Object.assign(new Error("This account cannot access this portal."), { status: 403 });
+  if (!user?.uid || user.uid !== saved.uid || user.role !== saved.role || (!sharedPage() && !adminLoginPage() && user.role !== portalRole())) throw Object.assign(new Error("This account cannot access this portal."), { status: 403 });
   if (!state.denied) auth.currentUser = Object.freeze(user);
 }
 export function getAuth(application = app) {

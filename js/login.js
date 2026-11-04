@@ -4,19 +4,17 @@ import { getAuth, signInWithEmailAndPassword } from "./firebase-auth.js";
 const app = initializeApp();
 const auth = getAuth(app);
 
-
 async function saveBrowserPassword(optionId, identifier, password) {
   if (!document.getElementById(optionId)?.checked || typeof window.PasswordCredential !== "function") return;
   try {
     if (window.navigator?.credentials?.store) {
       const credential = new window.PasswordCredential({ id: identifier, password });
-      // Saving is optional and must never prevent a successful sign-in.
       await Promise.race([
         window.navigator.credentials.store(credential),
         new Promise(resolve => setTimeout(resolve, 1500))
       ]);
     }
-  } catch { /* The browser owns password-manager consent and availability. */ }
+  } catch {}
 }
 
 function setSigningIn(button, pending, idleLabel) {
@@ -63,6 +61,7 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   setSigningIn(teacherSubmitBtn, true, "Log in");
   let redirecting = false;
   try {
+    // Enforce teacher portal role check
     await signInWithEmailAndPassword(auth, rawId, password, "teacher");
     void saveBrowserPassword("saveTeacherPassword", rawId, password);
 
@@ -76,78 +75,6 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
   }
 });
 
-const adminModal = document.getElementById("adminLoginModal");
-const openAdminBtn = document.getElementById("openAdminModalBtn");
-const closeAdminBtn = document.getElementById("closeAdminModalBtn");
-const cancelAdminBtn = document.getElementById("cancelAdminModalBtn");
-const adminForm = document.getElementById("adminLoginForm");
-const adminError = document.getElementById("adminError");
-const adminSubmitBtn = document.getElementById("adminSubmitBtn");
-
-const showAdminError = (msg) => {
-  if (!adminError) return;
-  adminError.textContent = msg;
-  adminError.classList.remove("hidden");
-};
-
-const clearAdminModal = () => {
-  if (adminError) adminError.classList.add("hidden");
-  if (adminForm) adminForm.reset();
-  adminPasswordInput.type = "password";
-  toggleAdminPassword.setAttribute("aria-label", "Show password");
-  toggleAdminPassword.setAttribute("aria-pressed", "false");
-};
-
-if (openAdminBtn && adminModal) {
-  openAdminBtn.addEventListener("click", () => {
-    clearAdminModal();
-    adminModal.showModal();
-  });
-}
-
-if (closeAdminBtn && adminModal) {
-  closeAdminBtn.addEventListener("click", () => adminModal.close());
-}
-
-if (cancelAdminBtn && adminModal) {
-  cancelAdminBtn.addEventListener("click", () => adminModal.close());
-}
-
-if (adminModal) {
-  adminModal.addEventListener("click", (e) => {
-    if (e.target === adminModal) adminModal.close();
-  });
-}
-
-if (adminForm) {
-  adminForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (adminSubmitBtn.disabled) return;
-    if (adminError) adminError.classList.add("hidden");
-
-    const rawInput = document.getElementById("adminIdentifier").value.trim();
-    const password = document.getElementById("adminPassword").value;
-
-    if (!rawInput || !password) {
-      showAdminError("Please enter your admin email/ID and password.");
-      return;
-    }
-
-    setSigningIn(adminSubmitBtn, true, "Sign in as Admin");
-    let redirecting = false;
-    try {
-      await signInWithEmailAndPassword(auth, rawInput, password, "admin");
-      window.location.href = "admin-dashboard.html";
-      redirecting = true;
-    } catch (err) {
-      console.error("Admin Login Error:", err.message);
-      showAdminError(err.userMessage || "Invalid Admin credentials. Please try again.");
-    } finally {
-      if (!redirecting) setSigningIn(adminSubmitBtn, false, "Sign in as Admin");
-    }
-  });
-}
-
 const urlParams = new URLSearchParams(window.location.search);
 if (["access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
   const message = document.getElementById("error");
@@ -157,12 +84,3 @@ if (["access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
     : "We could not verify access. Check your connection and sign in again.";
   message.style.display = "block";
 }
-
-const adminPasswordInput = document.getElementById("adminPassword");
-const toggleAdminPassword = document.getElementById("toggleAdminPassword");
-toggleAdminPassword.addEventListener("click", () => {
-  const hidden = adminPasswordInput.type === "password";
-  adminPasswordInput.type = hidden ? "text" : "password";
-  toggleAdminPassword.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
-  toggleAdminPassword.setAttribute("aria-pressed", String(hidden));
-});

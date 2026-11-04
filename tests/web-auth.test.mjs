@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { decision, emptyState, passwordFailed, verifiedSuccess, resetAfterApproval, cooldowns } from "../server/web-lockout.js";
 import { WebLoginState, default as privateWorker } from "../workers/web-auth-worker.js";
@@ -42,6 +43,22 @@ test("security headers also cover redirects from protected routes", async () => 
   assert.equal(response.status, 302);
   assert.equal(response.headers.get("Location"), "/login?reason=web-session");
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+});
+
+test("both sign-in pages stay public with security headers while protected HTML stays in middleware routes", async () => {
+  const app = fixture();
+  const routes = JSON.parse(readFileSync(new URL("../_routes.json", import.meta.url), "utf8"));
+  for (const path of ["/admin-dashboard", "/admin-dashboard.html", "/admin-profile", "/admin-profile.html", "/index.html"]) {
+    assert.ok(!routes.exclude.some(pattern => pattern === path || (pattern.endsWith("*") && path.startsWith(pattern.slice(0, -1)))), path);
+    const denied = await protectWebsite({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => { throw new Error("A private portal requires a session"); } });
+    assert.equal(denied.status, 302);
+  }
+  for (const path of ["/login", "/login.html", "/admin-login", "/admin-login.html"]) {
+    const response = await onRequest({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
+    assert.equal(response.status, 200); assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+  }
 });
 
 function fixture() {
