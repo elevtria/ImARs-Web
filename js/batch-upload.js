@@ -14,7 +14,7 @@ import {
   checkStudentIds,
   serverTimestamp 
 } from "./firebase-data.js";
-import { showTeacherView, prepareTeacherCache } from "./teacher-view.js";
+import { showTeacherView, prepareTeacherCache, escapeHtml } from "./teacher-view.js";
 import { encodeView } from "./view-cache.js";
 import { setLoadingState } from "./loading.js";
 
@@ -50,6 +50,7 @@ let dbExistingStudentClassCodes = {};
 let dbExistingNameOwners = {};  // normalized fullName -> Set of studentIds
 let dbExistingEmailOwners = {}; // normalized email -> Set of studentIds
 let dbExistingClaimedIds = new Set(); // studentIds that already claimed their account
+let dbExistingMiddleNames = {};
 const pendingCounts = new Map();
 
 function formatSectionLabel(rawName) {
@@ -192,9 +193,9 @@ onAuthStateChanged(auth, (user) => {
 
 // --- OFFICIAL TEMPLATE DOWNLOADS ---
 const templateRows = [
-  ["First Name", "Last Name", "Student ID", "Email"],
-  ["Test", "Student", "0026271000", "name@email.com"],
-  ["John", "Doe", "0026271001", "name@email.com"]
+  ["First Name", "Middle Name", "Last Name", "Student ID", "Email"],
+  ["Test", "Santos", "Student", "0026271000", "name@email.com"],
+  ["John", "Reyes", "Doe", "0026271001", "name@email.com"]
 ];
 
 document.getElementById("dlCsv").onclick = () => {
@@ -342,6 +343,7 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
 
   const cleanId = String(docId).trim();
   existingStudentIds.add(cleanId);
+  dbExistingMiddleNames[cleanId] = String(sData.middleName || "").trim();
 
   const cCode = String(sData.classCode || fallbackClassCode || "").trim();
   if (cCode) dbExistingStudentClassCodes[cleanId] = cCode;
@@ -353,7 +355,7 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
   const possibleNames = [
     sData.fullName,
     sData.displayName,
-    `${sData.firstName || ""} ${sData.lastName || ""}`
+    [sData.firstName, sData.middleName, sData.lastName].filter(Boolean).join(" ")
   ];
   for (const rawName of possibleNames) {
     const cleanName = String(rawName || "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -380,6 +382,7 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
   dbExistingNameOwners = {};
   dbExistingEmailOwners = {};
   dbExistingClaimedIds.clear();
+  dbExistingMiddleNames = {};
 
   // 1. Check global ID existence via checkStudentIds
   if (candidateIds.length > 0) {
@@ -445,20 +448,23 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
 
 function validateTemplateHeaders(headerRow) {
   if (!Array.isArray(headerRow) || headerRow.length < 3) {
-    return "Invalid template: Missing required columns (First Name, Last Name, Student ID, Email).";
+    return "Invalid template: Expected First Name, Middle Name, Last Name, Student ID, Email.";
   }
   const h0 = String(headerRow[0] ?? "").trim().toLowerCase();
   const h1 = String(headerRow[1] ?? "").trim().toLowerCase();
-  const h2 = String(headerRow[2] ?? "").trim().toLowerCase();
-  const h3 = String(headerRow[3] ?? "").trim().toLowerCase();
+  const withMiddle = h1.includes("middle");
+  const validMiddle = !withMiddle || /^(?:full\s+)?middle\s*name$/.test(h1);
+  const last = String(headerRow[withMiddle ? 2 : 1] ?? "").trim().toLowerCase();
+  const id = String(headerRow[withMiddle ? 3 : 2] ?? "").trim().toLowerCase();
+  const mail = String(headerRow[withMiddle ? 4 : 3] ?? "").trim().toLowerCase();
 
   const validFirst = h0.includes("first") || h0 === "firstname";
-  const validLast = h1.includes("last") || h1 === "lastname";
-  const validId = h2.includes("id") || h2.includes("student");
-  const validEmail = !h3 || h3.includes("email") || h3.includes("mail");
+  const validLast = last.includes("last") || last === "lastname";
+  const validId = id.includes("id") || id.includes("student");
+  const validEmail = !mail || mail.includes("email") || mail.includes("mail");
 
-  if (!validFirst || !validLast || !validId || !validEmail) {
-    return `Unknown column header(s): [${headerRow.slice(0, 4).join(", ")}]. Expected: First Name, Last Name, Student ID, Email.`;
+  if (!validFirst || !validMiddle || !validLast || !validId || !validEmail) {
+    return "Use the template columns: First Name, Middle Name, Last Name, Student ID, Email. Middle Name must be written in full.";
   }
   return null;
 }
@@ -526,9 +532,11 @@ async function handleFileSelected(file) {
     if (/^\d{9}$/.test(raw)) return "0" + raw;
     return raw;
   };
+  const withMiddle = String(rows[0][1] || "").trim().toLowerCase().includes("middle");
+  const idColumn = withMiddle ? 3 : 2;
 
   const candidateIds = rows.slice(1)
-    .map(row => normalizeUploadedId(row[2]))
+    .map(row => normalizeUploadedId(row[idColumn]))
     .filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
   
   const uniqueCandidateIds = [...new Set(candidateIds)];
@@ -539,14 +547,16 @@ async function handleFileSelected(file) {
     if (!row || row.join("").trim() === "") continue;
 
     const firstName = String(row[0] ?? "").trim();
-    const lastName = String(row[1] ?? "").trim();
-    const studentId = normalizeUploadedId(row[2]);
-    const email = String(row[3] ?? "").trim().toLowerCase();
-    const fullName = `${firstName} ${lastName}`.trim();
+    const lastName = String(row[withMiddle ? 2 : 1] ?? "").trim();
+    const studentId = normalizeUploadedId(row[idColumn]);
+    const middleName = withMiddle ? String(row[1] ?? "").trim() : dbExistingMiddleNames[studentId] || "";
+    const email = String(row[idColumn + 1] ?? "").trim().toLowerCase();
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
     
     previewData.push({
       rowNum: i + 1,
       firstName,
+      middleName,
       lastName,
       fullName,
       studentId,
@@ -598,6 +608,8 @@ function validateAllRows() {
 
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
+    if (row.middleName && (row.middleName.length > 200 || (row.middleName.match(/\p{L}/gu) || []).length < 2 || !/^[\p{L}\p{M}'’ -]+$/u.test(row.middleName) || /(^|\s)\p{L}(?=\s|$)/u.test(row.middleName)))
+      rowErrors.push("Enter the full Middle Name, not a middle initial");
     
     // Student ID Checks
     if (!cleanId) {
@@ -669,7 +681,7 @@ function updateRowData(index, field, value) {
     item[field] = value.trim();
   }
   
-  item.fullName = `${item.firstName} ${item.lastName}`.trim();
+  item.fullName = [item.firstName, item.middleName, item.lastName].filter(Boolean).join(" ");
   validateAllRows(); 
 }
 
@@ -725,16 +737,19 @@ function renderPreviewTable() {
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.middleName || '')}" placeholder="Full middle name" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="studentId" value="${item.studentId}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="studentId" value="${escapeHtml(item.studentId)}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
+      </td>
+      <td style="padding: 10px 8px;">
+        <input type="email" data-index="${index}" data-field="email" value="${escapeHtml(item.email)}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
         <span>${statusBadge}</span>${updateToggleHtml}
@@ -790,6 +805,7 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
     .filter(item => item.isValid)
     .map(item => ({
       firstName: item.firstName,
+      middleName: item.middleName,
       lastName: item.lastName,
       fullName: item.fullName,
       studentId: item.studentId,
@@ -838,6 +854,7 @@ confirmImportBtn.addEventListener("click", async () => {
 
       const strictUpdateData = {
         firstName: stu.firstName,
+        middleName: stu.middleName,
         lastName: stu.lastName,
         displayName: stu.fullName,
         fullName: stu.fullName,

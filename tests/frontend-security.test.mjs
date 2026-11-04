@@ -66,20 +66,28 @@ function assertTextOnly(html) {
   assert.ok(!html.includes("<svg/onload"), "database text must not create an SVG/event handler");
 }
 
-function batchPage() {
-  const elements=new Map(),calls=[],writes=[],auth={currentUser:{uid:'teacher-a',id:'TEACH1000'}};let changed,finishCount;
+function batchPage({rows=[],existing=[]}={}) {
+  const elements=new Map(),calls=[],writes=[],imports=[],checkedIds=[],auth={currentUser:{uid:'teacher-a',id:'TEACH1000'}};let changed,finishCount,download;
   const element=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
   const count=new Promise(resolve=>{finishCount=resolve;});
   const cache={version:()=>0,put:(...args)=>writes.push(args),invalidate(){}};
-  const context=vm.createContext({console:{error(){}},Date,Map,Set,JSON,encodeView,setLoadingState,
+  const context=vm.createContext({console:{error(){},warn(){},log(){}},Date,Map,Set,JSON,encodeView,setLoadingState,escapeHtml,Blob,
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,callback)=>{changed=callback;},
     prepareTeacherCache:()=>cache,showTeacherView:async options=>options.render(await options.load({})),
-    getStudentPage:async options=>{calls.push(options);return options.includeTeacher?{teacherDoc:record('TEACH1000',{role:'teacher',sections:['Grade 6 – A','Grade 6 – B']}),classes:[record('A',{SectionName:'A'}),record('B',{SectionName:'B'})],counts:null}:count;},
-    getDocs:()=>assert.fail('startup must not query the teacher or roster separately'),
-    window:{location:{}},document:{getElementById:element,createElement:()=>new Element()},alert:()=>assert.fail('optional totals must not block the page')
+    getStudentPage:async options=>{calls.push(options);return options.includeTeacher?{teacherDoc:record('TEACH1000',{role:'teacher',sections:['Grade 6 – A','Grade 6 – B']}),classes:[record('A',{SectionName:'A'}),record('B',{SectionName:'B'})],counts:null}:options.status?{students:options.status==='active'?existing.map(row=>({classId:'A',studentDoc:record(row.id,row.data)})):[],cursor:null}:count;},
+    getDocs:async()=>snapshot([]),checkStudentIds:async ids=>{checkedIds.push(...ids);return existing.map(row=>row.id);},
+    doc:(_,collection,id)=>({path:collection+'/'+id}),collection:()=>({}),query:base=>base,where:()=>({}),serverTimestamp:()=>({$type:'serverTimestamp'}),
+    setDoc:async(ref,data)=>imports.push({operation:'set',path:ref.path,data}),updateDoc:async(ref,data)=>imports.push({operation:'update',path:ref.path,data}),
+    URL:{createObjectURL:blob=>{download=blob;return 'blob:template';},revokeObjectURL(){}},
+    window:{location:{},XLSX:{read:()=>({Sheets:{sheet:rows},SheetNames:['sheet']}),utils:{sheet_to_json:sheet=>sheet}}},document:{getElementById:element,createElement:()=>Object.assign(new Element(),{click(){}})},alert:()=>assert.fail('unexpected import alert')
   });
   vm.runInContext(source('batch-upload.js'),context);
-  return{element,auth,calls,writes,load:async()=>{changed(auth.currentUser);for(let i=0;i<4;i++)await new Promise(setImmediate);},
+  return{element,auth,calls,writes,imports,checkedIds,download:()=>download,
+    file:async(name='students.csv')=>{context.testFile={name,size:100,arrayBuffer:async()=>new ArrayBuffer(0)};await vm.runInContext('handleFileSelected(testFile)',context);},
+    preview:()=>JSON.parse(vm.runInContext('JSON.stringify(previewData)',context)),
+    edit:(index,field,value)=>{context.editValue=value;return vm.runInContext(`updateRowData(${index},${JSON.stringify(field)},editValue)`,context);},
+    import:async()=>{await element('confirmPreviewBtn').events.click({stopPropagation(){}});await element('confirmImport').events.click();},
+    load:async()=>{changed(auth.currentUser);for(let i=0;i<4;i++)await new Promise(setImmediate);},
     count:async()=>{finishCount({counts:[{classId:'A',active:1000,archived:20}]});for(let i=0;i<4;i++)await new Promise(setImmediate);}};
 }
 
@@ -92,6 +100,34 @@ test('Batch Upload renders section choices before totals finish and requests cou
   await app.count();assert.equal(app.element('existingCount').textContent,'(1020 existing students)');
   assert.equal(app.element('sectionSelect').children[0],first,'a count update must not replace the dropdown');
   assert.equal(app.writes.length,1);
+});
+
+test('Batch Upload templates and validation preserve full middle names through the normal confirmation and import flow',async()=>{
+  const app=batchPage({rows:[['First Name','Middle Name','Last Name','Student ID','Email'],['Ana','María José','Santos','123456789','ANA@example.test']]});await app.load();await app.file();
+  assert.deepEqual(app.checkedIds,['0123456789']);assert.equal(app.preview()[0].fullName,'Ana María José Santos');assert.equal(app.preview()[0].isValid,true);
+  assert.match(app.element('previewTableBody').html(),/data-field="middleName"/);
+  app.element('dlCsv').onclick();assert.match(await app.download().text(),/^First Name,Middle Name,Last Name,Student ID,Email/);
+  await app.import();assert.equal(app.imports.length,1);
+  assert.equal(app.imports[0].data.middleName,'María José');assert.equal(app.imports[0].data.displayName,'Ana María José Santos');assert.equal(app.imports[0].data.classCode,'A');
+});
+
+test('middle initials block import until edited, while full compound names and no-middle-name students work',async()=>{
+  const app=batchPage({rows:[['First Name','Middle Name','Last Name','Student ID','Email'],['Ana','M.','Santos','123456789','ana@example.test'],['Luis','','Reyes','123456788','luis@example.test']]});await app.load();await app.file('students.xlsx');
+  assert.equal(app.preview()[0].isValid,false);assert.match(app.preview()[0].errors.join(' '),/full Middle Name/);assert.equal(app.preview()[1].isValid,true);
+  app.edit(0,'middleName','De la Cruz');assert.equal(app.preview()[0].isValid,true);assert.equal(app.preview()[0].fullName,'Ana De la Cruz Santos');
+  await app.import();assert.equal(app.imports.length,2);assert.equal(app.imports[1].data.middleName,'');assert.equal(app.imports[1].data.fullName,'Luis Reyes');
+});
+
+test('legacy templates keep an existing full middle name and claimed-account update behavior',async()=>{
+  const app=batchPage({existing:[{id:'0123456789',data:{firstName:'Ana',middleName:'Reyes',lastName:'Santos',fullName:'Ana Reyes Santos',role:'student',classCode:'A',uid:'claimed-student',email:'original@example.test'}}],rows:[['First Name','Last Name','Student ID','Email'],['Ana','Santos','123456789','new-contact@example.test']]});await app.load();await app.file();
+  assert.equal(app.preview()[0].middleName,'Reyes');assert.equal(app.preview()[0].isValid,false);
+  app.edit(0,'allowUpdate',true);assert.equal(app.preview()[0].isValid,true);await app.import();
+  assert.equal(app.imports[0].operation,'update');assert.equal(app.imports[0].data.fullName,'Ana Reyes Santos');assert.equal(app.imports[0].data.middleName,'Reyes');assert.equal(app.imports[0].data.email,undefined);
+});
+
+test('duplicate-name checking distinguishes full middle names but still rejects identical full names',async()=>{
+  const app=batchPage({rows:[['First Name','Middle Name','Last Name','Student ID','Email'],['Ana','Reyes','Santos','123456789','ana@example.test'],['Ana','Cruz','Santos','123456788','ana2@example.test']]});await app.load();await app.file();
+  assert.ok(app.preview().every(row=>row.isValid));app.edit(1,'middleName','Reyes');assert.ok(app.preview().every(row=>row.errors.includes('Duplicate Name in file')));
 });
 
 test('a late Batch Upload count cannot update another signed-in account',async()=>{

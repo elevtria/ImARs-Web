@@ -131,6 +131,19 @@ independently of the website. Hiding configuration does not fix those rules;
 the coordinated mobile/rules rollout in [the security plan](../security/README.md)
 remains necessary. Do not publish stricter rules ahead of compatible mobile apps.
 
+## Student batch names
+
+The current CSV/Excel template uses First Name, Middle Name, Last Name, Student ID
+and Email. Middle Name is the full name, not an initial; it may be blank when a
+student has none. The editable preview and server both reject initials such as
+`M.`. Saved `middleName`, `fullName` and `displayName` retain the full name, and
+duplicate-name checks include it. Existing four-column templates remain valid;
+approved updates retain a previously stored middle name when that column is
+absent. Claimed-account email handling, student IDs, section ownership and
+Allow Update behavior remain the same. The server accepts the existing five
+zeroed badge counters as well as the older two-counter format; earned values
+are still rejected for a new student.
+
 ## Local verification
 
 ```powershell

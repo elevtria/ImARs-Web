@@ -14,7 +14,7 @@ const text = (value, maximum = 200, empty = false) => typeof value === "string" 
 const email = value => text(value, 254) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 const timestamp = value => value?.$type === "serverTimestamp" && Object.keys(value).length === 1;
 const date = value => typeof value === "string" && /^\d{4}-\d\d-\d\d$/.test(value) && Number.isFinite(Date.parse(value + "T00:00:00Z")) && new Date(value + "T00:00:00Z").toISOString().slice(0, 10) === value;
-const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "displayName", "fullName", "firstName", "lastName", "providedEmail", "email",
+const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "displayName", "fullName", "firstName", "middleName", "lastName", "providedEmail", "email",
   "subject", "sections", "section", "classCode", "teacherId", "adviserId", "teacher", "gradeSection", "sectionName", "className", "school", "roleLabel",
   "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "archiveReason", "avatarId", "isRegistered", "isClaimed", "joined"];
 
@@ -137,19 +137,24 @@ class Scope {
       }
       if (actor.role !== "teacher" || (row && previous.role !== "student")) throw fail();
       if (row) await this.student(p[1]);
-      const allowed = ["schoolId", "firstName", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt"];
+      const allowed = ["schoolId", "firstName", "middleName", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt"];
       if (!row) allowed.push("avatarId", "completedQuizzes", "gamification", "createdAt");
       if (!names(allowed) || (data.role !== undefined && data.role !== "student") || (data.schoolId !== undefined && data.schoolId !== p[1]) ||
           (data.teacherId !== undefined && data.teacherId !== actor.id) || (data.active !== undefined && typeof data.active !== "boolean")) throw fail("These student fields cannot be changed.", 403);
       if (!row && (data.role !== "student" || !data.classCode || !text(data.displayName))) throw fail("A new student needs a name and an assigned class.", 400);
       if (data.classCode !== undefined) await this.ownsClass(data.classCode);
       for (const key of ["firstName", "lastName", "displayName", "fullName", "section", "avatarId"]) if (data[key] !== undefined && !text(data[key], 200)) throw fail("Enter valid student details.", 400);
+      if (data.middleName !== undefined && (!text(data.middleName, 200, true) || (data.middleName &&
+          ((data.middleName.match(/\p{L}/gu) || []).length < 2 || !/^[\p{L}\p{M}'’ -]+$/u.test(data.middleName) || /(^|\s)\p{L}(?=\s|$)/u.test(data.middleName))))) throw fail("Enter the full middle name, not a middle initial.", 400);
       for (const key of ["providedEmail", "email"]) if (data[key] !== undefined && !email(data[key])) throw fail("Enter a valid email address.", 400);
       for (const key of ["updatedAt", "lastQrSyncAt", "createdAt"]) if (data[key] !== undefined && !timestamp(data[key])) throw fail("Invalid record timestamp.", 400);
       if (data.archiveReason !== undefined && !(data.archiveReason === null && data.active === true) && (data.active !== false || !["graduated", "dropped-out"].includes(data.archiveReason))) throw fail("Choose a valid archive reason.", 400);
       if (data.deletedAt !== undefined && !(data.deletedAt === null && data.active === true) && !(data.deletedAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.deletedAt.value)))) throw fail("Invalid archive date.", 400);
       if (!row && ((data.completedQuizzes !== undefined && JSON.stringify(data.completedQuizzes) !== "{}") ||
-          (data.gamification !== undefined && JSON.stringify(data.gamification) !== JSON.stringify({ badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 } })))) throw fail("New students must start without earned results.", 400);
+          (data.gamification !== undefined && ![
+            { badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 } },
+            { badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0, PerfectStreakBadgeCount: 0, QuizChampionBadgeCount: 0, StreakMasterBadgeCount: 0 } }
+          ].some(initial => JSON.stringify(data.gamification) === JSON.stringify(initial))))) throw fail("New students must start without earned results.", 400);
       return { ...input, data: { ...data, teacherId: actor.id }, updateTime: row?.updateTime };
     }
     if (p[0] === "classes" && p.length === 2 && actor.role === "teacher" &&

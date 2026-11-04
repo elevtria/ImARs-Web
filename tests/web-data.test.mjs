@@ -304,6 +304,20 @@ test("student imports, profile edits, QR scores, schedules, downloads and quiz s
   assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "generatedQuizzes/quiz1" }] }, cookie)).status, 200);
 });
 
+test('student imports save full middle names, keep identity and class on updates, and reject initials server-side',async()=>{
+  const app=fixture(),cookie=await app.login();
+  const data={schoolId:'0123456789',firstName:'Ana',middleName:'María José',lastName:'Santos',fullName:'Ana María José Santos',displayName:'Ana María José Santos',role:'student',classCode:'A',teacherId:'TEACH1000',providedEmail:'ana@example.test',email:'ana@example.test',active:true,avatarId:'scientist_01',completedQuizzes:{},gamification:{badgeCounts:{AccuracyBadgeCount:0,OnFireBadgeCount:0,PerfectStreakBadgeCount:0,QuizChampionBadgeCount:0,StreakMasterBadgeCount:0}},createdAt:stamp,updatedAt:stamp};
+  const created=await app.call(save('users/0123456789',data,false),cookie);assert.equal(created.status,200,JSON.stringify(await created.json()));
+  assert.equal((await app.call(save('users/0123456788',{...data,schoolId:'0123456788',gamification:{badgeCounts:{...data.gamification.badgeCounts,PerfectStreakBadgeCount:1}}},false),cookie)).status,400);
+  const profile=await(await app.call(get('users/0123456789'),cookie)).json();assert.equal(profile.document.data.middleName,'María José');
+  for(const middleName of ['M','M.','Maria J.','A\u0301',"'",'123',null,'A'.repeat(201)])assert.equal((await app.call({action:'commit',writes:[{operation:'update',path:'users/0123456789',data:{middleName}}]},cookie)).status,400);
+  app.data.get('users/0123456789').uid='claimed-student';
+  const update=await app.call({action:'commit',writes:[{operation:'update',path:'users/0123456789',data:{middleName:'De la Cruz',fullName:'Ana De la Cruz Santos',displayName:'Ana De la Cruz Santos',updatedAt:stamp}}]},cookie);
+  assert.equal(update.status,200);assert.equal(app.data.get('users/0123456789').uid,'claimed-student');assert.equal(app.data.get('users/0123456789').classCode,'A');assert.equal(app.data.get('users/0123456789').email,'ana@example.test');
+  assert.equal((await app.call({action:'commit',writes:[{operation:'update',path:'users/0123456789',data:{middleName:''}}]},cookie)).status,200);
+  assert.equal((await app.call({action:'commit',writes:[{operation:'update',path:'users/0026271001',data:{middleName:'Reyes'}}]},cookie)).status,403);
+});
+
 test("quiz releases can change between assigned sections while preserving questions and rejecting another teacher's section", async () => {
   const app = fixture(), cookie = await app.login();
   app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
