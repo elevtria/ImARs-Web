@@ -45,6 +45,8 @@ let parsedStudents = [];
 let previewData = [];
 let existingStudentIds = new Set();
 let dbExistingStudentClassCodes = {};
+let dbExistingNameOwners = {};  // normalized fullName -> studentId
+let dbExistingEmailOwners = {}; // normalized email -> studentId
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -80,6 +82,9 @@ function updateSelectedSection() {
   sectionNameEl.textContent = sec ? sec.label : "No section";
   const count = sec ? sec.count : 0;
   existingCountEl.textContent = `(${count} existing ${count === 1 ? "student" : "students"})`;
+  if (previewData.length > 0) {
+    validateAllRows();
+  }
 }
 
 sectionSelect.addEventListener("change", updateSelectedSection);
@@ -310,10 +315,12 @@ async function handleFileSelected(file) {
 
   try {
     document.getElementById("dropTitle").textContent = "Validating data...";
-    document.getElementById("dropHint").textContent = "Checking student details…";
+    document.getElementById("dropHint").textContent = "Checking student details against database…";
 
     existingStudentIds.clear();
     dbExistingStudentClassCodes = {};
+    dbExistingNameOwners = {};
+    dbExistingEmailOwners = {};
 
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
@@ -332,28 +339,56 @@ async function handleFileSelected(file) {
       return /^\d{8}$/.test(id) ? "00" + id : id;
     }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
     
-    // --- NEW, 100% SAFE FETCH LOGIC ---
     const uniqueCandidateIds = [...new Set(candidateIds)];
     
     if (uniqueCandidateIds.length > 0) {
       // 1. Verify existence globally to prevent overwriting other users
       const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
       for (const id of verifiedExisting) {
-          existingStudentIds.add(id);
+        existingStudentIds.add(id);
       }
-      
-      // 2. Fetch the teacher's roster using the existing getDocs method to safely map classCodes
-      try {
-          if (currentTeacherId) {
-              const rosterQ = query(collection(db, "users"), where("teacherId", "==", currentTeacherId));
-              const rosterSnap = await getDocs(rosterQ);
-              
-              rosterSnap.forEach(docSnap => {
-                  dbExistingStudentClassCodes[docSnap.id] = String(docSnap.data().classCode || "").trim();
-              });
-          }
-      } catch (err) {
-          console.warn("Failed to fetch teacher roster for validation.", err);
+    }
+
+    // 2. Fetch existing students from Firestore to check duplicate Names, Emails, and ClassCodes
+    try {
+      const studentsQ = query(collection(db, "users"), where("role", "==", "student"));
+      const studentsSnap = await getDocs(studentsQ);
+
+      studentsSnap.forEach(docSnap => {
+        const sData = docSnap.data();
+        const docId = docSnap.id;
+        existingStudentIds.add(docId);
+        dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
+
+        const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
+        const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
+        if (cleanName) {
+          dbExistingNameOwners[cleanName] = docId;
+        }
+
+        const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
+        if (rawEmail) {
+          dbExistingEmailOwners[rawEmail] = docId;
+        }
+      });
+    } catch (err) {
+      console.warn("Full student query fallback to teacher roster:", err);
+      if (currentTeacherId) {
+        const rosterQ = query(collection(db, "users"), where("teacherId", "==", currentTeacherId));
+        const rosterSnap = await getDocs(rosterQ);
+        rosterSnap.forEach(docSnap => {
+          const sData = docSnap.data();
+          const docId = docSnap.id;
+          existingStudentIds.add(docId);
+          dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
+
+          const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
+          const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
+          if (cleanName) dbExistingNameOwners[cleanName] = docId;
+
+          const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
+          if (rawEmail) dbExistingEmailOwners[rawEmail] = docId;
+        });
       }
     }
 
@@ -396,11 +431,11 @@ function validateAllRows() {
   const nameCounts = {};
   const emailCounts = {};
 
-  // 1. Scan the entire table to count frequencies
+  // 1. Scan the entire table to count in-file frequencies
   previewData.forEach(row => {
     if (row.studentId) idCounts[row.studentId] = (idCounts[row.studentId] || 0) + 1;
     if (row.fullName) {
-      const nameKey = row.fullName.toLowerCase().replace(/\s+/g, ' '); 
+      const nameKey = row.fullName.toLowerCase().replace(/\s+/g, " "); 
       nameCounts[nameKey] = (nameCounts[nameKey] || 0) + 1;
     }
     if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
@@ -408,16 +443,18 @@ function validateAllRows() {
 
   const targetSecCode = String(sectionSelect.value).trim();
 
-// 2. Apply errors globally
+  // 2. Apply both in-file and database duplicate errors globally
   previewData.forEach(row => {
     let rowErrors = [];
-    const nameKey = row.fullName ? row.fullName.toLowerCase().replace(/\s+/g, ' ') : '';
+    const nameKey = row.fullName ? row.fullName.toLowerCase().replace(/\s+/g, " ") : "";
+    const cleanEmail = row.email ? row.email.trim().toLowerCase() : "";
     
-    // Evaluate if they exist in the DB at all
     const existsInDb = existingStudentIds.has(row.studentId);
-    
-    // FORCE THIS TO TRUE so it safely updates their record instead of erasing it
-    row.isExisting = existsInDb;
+    const existingClassCode = dbExistingStudentClassCodes[row.studentId] || "";
+    const belongsToAnotherSection = existsInDb && existingClassCode !== "" && existingClassCode !== targetSecCode;
+
+    // Only mark as a valid in-section update if the ID exists in this exact section
+    row.isExisting = existsInDb && !belongsToAnotherSection;
 
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
@@ -427,16 +464,28 @@ function validateAllRows() {
     else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
     else if (row.studentId.length < 9) rowErrors.push("ID too short");
     else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
+    else if (belongsToAnotherSection) rowErrors.push("Student ID belongs to another section");
     
-    // Name Checks
-    if (nameKey && nameCounts[nameKey] > 1) {
-      rowErrors.push("Duplicate Name in file");
+    // Name Checks (In-file + Firestore Database)
+    if (nameKey) {
+      const existingNameOwnerId = dbExistingNameOwners[nameKey];
+      if (nameCounts[nameKey] > 1) {
+        rowErrors.push("Duplicate Name in file");
+      } else if (existingNameOwnerId && existingNameOwnerId !== row.studentId) {
+        rowErrors.push("Name already exists in database");
+      }
     }
     
-    // Email Checks
-    if (row.email) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) rowErrors.push("Invalid email");
-      else if (emailCounts[row.email] > 1) rowErrors.push("Duplicate Email in file");
+    // Email Checks (In-file + Firestore Database)
+    if (cleanEmail) {
+      const existingEmailOwnerId = dbExistingEmailOwners[cleanEmail];
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+        rowErrors.push("Invalid email");
+      } else if (emailCounts[cleanEmail] > 1) {
+        rowErrors.push("Duplicate Email in file");
+      } else if (existingEmailOwnerId && existingEmailOwnerId !== row.studentId) {
+        rowErrors.push("Email already exists in database");
+      }
     }
 
     row.errors = rowErrors;
@@ -448,7 +497,7 @@ function validateAllRows() {
 
 function updateRowData(index, field, value) {
   const item = previewData[index];
-  if (field === 'email') item.email = value.trim().toLowerCase();
+  if (field === "email") item.email = value.trim().toLowerCase();
   else item[field] = value.trim();
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
@@ -465,34 +514,34 @@ function renderPreviewTable() {
 
   previewData.forEach((item, index) => {
     if (item.isValid) {
-        validCount++;
-        if (item.isExisting) updateCount++;
+      validCount++;
+      if (item.isExisting) updateCount++;
     } else {
-        errorCount++;
+      errorCount++;
     }
 
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid #f1f5f9";
     
-    let statusBadge = '';
-    let statusColor = '';
+    let statusBadge = "";
+    let statusColor = "";
     
     if (!item.isValid) {
-        tr.style.backgroundColor = "#fef2f2"; 
-        statusBadge = '⚠️ ' + item.errors.join(", ");
-        statusColor = '#dc2626'; 
+      tr.style.backgroundColor = "#fef2f2"; 
+      statusBadge = "⚠️ " + item.errors.join(", ");
+      statusColor = "#dc2626"; 
     } else if (item.isExisting) {
-        tr.style.backgroundColor = "#f0f9ff"; 
-        statusBadge = '🔄 Update Record';
-        statusColor = '#0284c7'; 
+      tr.style.backgroundColor = "#f0f9ff"; 
+      statusBadge = "🔄 Update Record";
+      statusColor = "#0284c7"; 
     } else {
-        statusBadge = '✓ Ready (New)';
-        statusColor = '#16a34a'; 
+      statusBadge = "✓ Ready (New)";
+      statusColor = "#16a34a"; 
     }
     
-    const idHasError = item.errors.some(e => e.includes('ID') || e.includes('Duplicate') || e.includes('format') || e.includes('short') || e.includes('section'));
-    const nameHasError = item.errors.some(e => e.includes('Name'));
-    const emailHasError = item.errors.some(e => e.includes('Email') || e.includes('email'));
+    const idHasError = item.errors.some(e => e.includes("ID") || e.includes("format") || e.includes("short") || e.includes("section"));
+    const nameHasError = item.errors.some(e => e.includes("Name"));
+    const emailHasError = item.errors.some(e => e.includes("Email") || e.includes("email"));
 
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
@@ -513,9 +562,9 @@ function renderPreviewTable() {
     tbody.appendChild(tr);
   });
 
-  const inputs = tbody.querySelectorAll('input');
+  const inputs = tbody.querySelectorAll("input");
   inputs.forEach(input => {
-    input.addEventListener('change', (e) => {
+    input.addEventListener("change", (e) => {
       updateRowData(e.target.dataset.index, e.target.dataset.field, e.target.value);
     });
   });
@@ -547,6 +596,12 @@ const closeImportModal = () => importModal.classList.remove("open");
 document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
   
+  // Strictly block opening the confirmation modal if ANY row has an error
+  if (previewData.some(item => !item.isValid)) {
+    alert("Please fix all highlighted duplicate or validation errors before proceeding.");
+    return;
+  }
+
   parsedStudents = previewData
     .filter(item => item.isValid)
     .map(item => ({
@@ -555,7 +610,7 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
       fullName: item.fullName,
       studentId: item.studentId,
       email: item.email,
-      isExisting: item.isExisting // pass this through
+      isExisting: item.isExisting
     }));
 
   if (!selectedFile || parsedStudents.length === 0) return;
@@ -563,7 +618,7 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
   const targetSec = sections.find((s) => s.classCode === sectionSelect.value);
   const secLabel = targetSec ? targetSec.label : sectionSelect.value;
 
-  importSummary.textContent = `You are about to securely import/update ${parsedStudents.length} student(s) from “${selectedFile.name}” into ${secLabel}. Invalid rows will be skipped.`;
+  importSummary.textContent = `You are about to securely import/update ${parsedStudents.length} student(s) from “${selectedFile.name}” into ${secLabel}.`;
   
   if (importPreviewNote) {
     const sampleNames = parsedStudents.slice(0, 3).map((s) => `${s.fullName} (${s.studentId})`).join(", ");
@@ -592,64 +647,63 @@ confirmImportBtn.addEventListener("click", async () => {
   try {
     let newCount = 0;
     let updateCount = 0;
-    const savedList = [];
 
     for (const stu of parsedStudents) {
       let finalStudentId = stu.studentId;
+      const finalEmail = stu.email || `${finalStudentId}@imars.edu`;
 
-      // The safe update payload that won't erase game data or avatars
+      // Safe update payload that respects Firestore security rules (does not touch protected keys)
       const strictUpdateData = {
         firstName: stu.firstName,
         lastName: stu.lastName,
         displayName: stu.fullName,
         fullName: stu.fullName,
-        email: stu.email || `${finalStudentId}@imars.edu`,
-        providedEmail: stu.email || `${finalStudentId}@imars.edu`, // <-- ADD THIS EXACT LINE
-        classCode: targetSec.classCode, 
-        section: targetSec.label,       
         updatedAt: serverTimestamp()
       };
 
       if (!stu.isExisting) {
-        // Build the full document for a brand NEW student
         const newStudentData = {
           ...strictUpdateData,
           schoolId: finalStudentId,
           role: "student",
           teacherId: currentTeacherId || "",
-          providedEmail: stu.email || `${finalStudentId}@imars.edu`,
+          email: finalEmail,
+          providedEmail: finalEmail,
+          classCode: targetSec.classCode,
+          section: targetSec.label,
           avatarId: "scientist_01",
           active: true,
+          isClaimed: false,
           completedQuizzes: {},
           gamification: {
-            badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 }
+            badgeCounts: {
+              AccuracyBadgeCount: 0,
+              OnFireBadgeCount: 0,
+              PerfectStreakBadgeCount: 0,
+              QuizChampionBadgeCount: 0,
+              StreakMasterBadgeCount: 0
+            }
           },
           createdAt: serverTimestamp()
         };
         
         try {
-          // Attempt to upload as a brand new student
           await setDoc(doc(db, "users", finalStudentId), newStudentData);
           targetSec.count++;
           newCount++;
         } catch (innerErr) {
-          // BACKEND SAFETY INTERCEPTOR: If the backend knows they exist globally but the frontend didn't,
-          // it throws the "existing record" error. We catch it and safely update instead!
           if (innerErr.message && innerErr.message.toLowerCase().includes("existing record")) {
             console.warn(`Backend blocked overwrite for ${finalStudentId}. Falling back to safe update.`);
             await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
             updateCount++;
           } else {
-            throw innerErr; // Re-throw if it's a real network/permission error
+            throw innerErr;
           }
         }
       } else {
-        // Known existing student (Validator caught it properly)
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
         updateCount++;
       }
-      
-      savedList.push(`${stu.fullName} (${finalStudentId})`);
     }
 
     updateSelectedSection();
@@ -658,6 +712,7 @@ confirmImportBtn.addEventListener("click", async () => {
     uploadStatus.textContent = `Successfully added ${newCount} and updated ${updateCount} student(s) in ${targetSec.label}!`;
     uploadStatus.hidden = false;
 
+    document.getElementById("previewSection").hidden = true;
     importBtn.hidden = true;
     fileInput.value = "";
     document.getElementById("dropTitle").textContent = "Drag & drop your Excel file here";
