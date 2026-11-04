@@ -277,6 +277,32 @@ test("changing terms keeps the activity section and ignores results from the pre
   assert.equal(app.element("studentActivityBody").html(), table);
 });
 
+test("the activity term dropdown opens Terms 2 and 3 without reloading the main analytics report", async () => {
+  const main = activityReportData(["A"]), app = page("analytics.js", main, input => input.termId === "term_01" && input.sectionId === "first"
+    ? main : activityReportData([input.sectionId], { termId: input.termId }));
+  await app.render();
+  const term = app.element("activityTermFilter"), section = app.element("activitySectionFilter");
+  const performance = app.element("#studentGrid tbody").html();
+  assert.equal(term.value, "term_01"); assert.equal(term.disabled, false);
+  term.value = "term_02"; await term.events.change();
+  assert.equal(app.requests.at(-1).termId, "term_02"); assert.equal(app.requests.at(-1).sectionId, "A");
+  assert.match(app.element("studentActivityBody").html(), /Term 2/);
+  const count = app.requests.length;
+  await term.events.change(); assert.equal(app.requests.length, count, "the current term must not start a duplicate report");
+  term.value = "term_03"; await term.events.change();
+  assert.match(app.element("studentActivityBody").html(), /Term 3/);
+  const before = app.element("studentActivityBody").html();
+  app.controllers[0].render(activityReportData(["A"], { termId: "term_02" }));
+  assert.equal(app.element("studentActivityBody").html(), before, "late Term 2 results must not overwrite Term 3");
+  app.controllers[1].render(main);
+  assert.equal(term.value, "term_03", "a main-report background update must preserve the activity term");
+  section.value = "B"; await section.events.change();
+  assert.equal(app.requests.at(-1).termId, "term_03"); assert.equal(app.requests.at(-1).sectionId, "B");
+  assert.equal(app.requests.filter(request => request.index === 1).length, 1);
+  assert.equal(app.element("#studentGrid tbody").html(), performance);
+  const requests = app.requests.length; term.value = "term_04"; await term.events.change(); assert.equal(app.requests.length, requests);
+});
+
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {
   const app = page("sync-offline-results.js");
   await vm.runInContext('activeTeacherId = "T1"; loadRecentScans();', app.context);

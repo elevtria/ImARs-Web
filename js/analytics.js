@@ -18,6 +18,7 @@ const studentGrid = document.querySelector("#studentGrid tbody");
 const topicsContainer = document.getElementById("topicsContainer");
 const studentActivityBody = document.getElementById("studentActivityBody");
 const activitySectionFilter = document.getElementById("activitySectionFilter");
+const activityTermFilter = document.getElementById("activityTermFilter");
 const openActivities = new Set();
 const activityPages = new Map();
 let activitySection = "", activityRequest = "", activityData;
@@ -25,6 +26,7 @@ let activitySection = "", activityRequest = "", activityData;
 let dynamicRows = [];
 let allTopicStats = []; // Store fetched topics globally for term filtering
 let currentTermFilter = "term_01";
+let activityTerm = currentTermFilter, lastAnalyticsTerm = currentTermFilter;
 let selectedSection = "first", lastReport, tablePage = 0;
 
 // Term label map
@@ -36,7 +38,7 @@ const termLabels = {
 
 const activityReport = createTeacherReport({ app,
   render: data => {
-    if (data.termId !== currentTermFilter || !data.sections.some(section => section.classDoc.id === activitySection)) return;
+    if (data.termId !== activityTerm || !data.sections.some(section => section.classDoc.id === activitySection)) return;
     activityData = data;
     renderStudentActivities([data.curriculumSnap], data.sections.filter(section => section.classDoc.id === activitySection));
     studentActivityBody.removeAttribute("aria-busy");
@@ -66,12 +68,13 @@ function updateActivitySections(data) {
   }
   activitySectionFilter.value = activitySection;
   activitySectionFilter.disabled = !options.length;
+  if (activityTermFilter) { activityTermFilter.value = activityTerm; activityTermFilter.disabled = !options.length; }
   void openActivityReport();
 }
 
 function openActivityReport() {
   if (!auth.currentUser || !studentActivityBody) return;
-  const section = lastReport?.termId === currentTermFilter && lastReport.sections.find(section => section.classDoc.id === activitySection);
+  const section = lastReport?.termId === activityTerm && lastReport.sections.find(section => section.classDoc.id === activitySection);
   if (section && lastReport.curriculumSnap) {
     activityReport.stop(); activityRequest = "";
     activityData = lastReport;
@@ -86,24 +89,29 @@ function openActivityReport() {
     revealContent("analytics-activities");
     return;
   }
-  const key = `${auth.currentUser.uid}:${currentTermFilter}:${activitySection}`;
+  const key = `${auth.currentUser.uid}:${activityTerm}:${activitySection}`;
   if (activityRequest === key) return;
   activityRequest = key; activityData = null;
   studentActivityBody.setAttribute("aria-busy", "true");
   studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
   // The existing report loader reuses its section/term cache and cancels a
   // superseded request. Other analytics cards keep their current report.
-  return activityReport.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: activitySection });
+  return activityReport.open({ user: auth.currentUser, termId: activityTerm, sectionId: activitySection });
 }
 activitySectionFilter?.addEventListener("change", () => {
   if (!lastReport?.classes.some(section => section.id === activitySectionFilter.value)) return;
   activitySection = activitySectionFilter.value;
   return openActivityReport();
 });
+activityTermFilter?.addEventListener("change", () => {
+  if (!Object.hasOwn(termLabels, activityTermFilter.value)) return;
+  activityTerm = activityTermFilter.value;
+  return openActivityReport();
+});
 
 function renderStudentActivities(curriculum, sections) {
   if (!studentActivityBody) return;
-  const records = buildStudentActivityRecords(curriculum, sections, termLabels, [currentTermFilter]);
+  const records = buildStudentActivityRecords(curriculum, sections, termLabels, [activityTerm]);
   if (!records.length) {
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
     revealContent("analytics-activities");
@@ -412,7 +420,9 @@ const report = createTeacherReport({ app,
 });
 function openReport() {
   if (!auth.currentUser) return;
-  if (activityData?.termId !== currentTermFilter || (activityRequest && !activityRequest.startsWith(`${auth.currentUser.uid}:${currentTermFilter}:`))) {
+  if (lastAnalyticsTerm !== currentTermFilter) {
+    lastAnalyticsTerm = activityTerm = currentTermFilter;
+    if (activityTermFilter) activityTermFilter.value = activityTerm;
     activityReport.stop(); activityRequest = ""; activityData = null;
     studentActivityBody.setAttribute("aria-busy", "true");
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';

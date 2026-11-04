@@ -1099,8 +1099,10 @@ td {
 .empty-row[hidden] { display: none; }
 .empty-row td { text-align: center; color: var(--muted); padding: 28px 12px; }
 .student-activity-section { padding: 8px 4px 20px; }
+.activity-record-filters { display:flex; align-items:center; justify-content:flex-end; gap:12px 20px; flex-wrap:wrap; }
 .activity-section-filter { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:13px; font-weight:600; min-width:0; }
 .activity-section-filter .select-wrap { width:240px; max-width:100%; }
+label[for="activityTermFilter"] .select-wrap { width:120px; }
 @media(max-width:640px) { .activity-section-filter .select-wrap { width:100%; min-width:0; } .activity-section-filter { width:100%; } }
 .activity-record-table { min-width: 760px; }
 .activity-record-table > thead th { background: #e5eef8; color: #41658b; }
