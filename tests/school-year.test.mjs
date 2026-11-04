@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
+import { setLoadingState } from "../js/loading.js";
 
 const source = readFileSync(new URL("../js/school-year.js", import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
@@ -14,22 +15,29 @@ function database() {
     listen(callback) { listeners.add(callback); callback(this.snapshot()); return () => listeners.delete(callback); }
   };
 }
-async function mount(store, { role = "teacher", selector = false } = {}) {
+async function mount(store, { role = "teacher", selector = false, storage = new Map() } = {}) {
   const uid = `${role}-uid`, profile = { uid, role, active: true };
   const auth = { currentUser: { uid } };
   const labels = [{ textContent: "SY 2026–27" }, { textContent: "SY 2026–27" }];
   const select = { value: "2026", disabled: true, options: [], events: {}, replaceChildren(...options) { this.options = options; },
     addEventListener(name, callback) { this.events[name] = callback; } };
-  const status = { textContent: "", classList: { toggle() {} } };
-  let ready;
+  const status = { textContent: "", classList: { toggle() {} }, setAttribute() {}, removeAttribute() {} };
+  let ready, subscriptionOptions;
+  const events = new Map();
   const context = vm.createContext({
+    setLoadingState,
     document: { querySelectorAll: () => labels, getElementById: id => selector ? (id === "schoolYearSelect" ? select : status) : null,
       createElement: () => ({ value: "", textContent: "" }) },
-    window: { location: { pathname: selector ? "/admin-dashboard" : "/teacher-manual" } },
+    window: { location: { pathname: selector ? "/admin-dashboard" : "/teacher-manual" },
+      addEventListener: (name, callback) => events.set(name, callback),
+      localStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value) } },
     getApps: () => [{}], initializeApp: () => ({}), getAuth: () => auth, getFirestore: () => ({}),
     doc: (_, ...path) => path, collection: () => ({}), query: () => ({}), where: () => ({}), limit: () => ({}),
     onAuthStateChanged: (_, callback) => { ready = callback(auth.currentUser); },
-    onSnapshot: (_, __, callback) => store.listen(callback),
+    onSnapshot: (_, options, callback) => {
+      subscriptionOptions = options;
+      return options.initialDelayMs ? () => {} : store.listen(callback);
+    },
     getDocs: async () => ({ size: 1, docs: [{ data: () => profile }] }), serverTimestamp: () => "server-time",
     setDoc: async (path, fields) => {
       if (store.failSave) throw new Error("permission-denied");
@@ -39,7 +47,7 @@ async function mount(store, { role = "teacher", selector = false } = {}) {
   });
   vm.runInContext(source, context);
   await ready;
-  return { labels, select, status, profile, change: async year => { select.value = String(year); await select.events.change(); } };
+  return { labels, select, status, profile, storage, events, subscriptionOptions, change: async year => { select.value = String(year); await select.events.change(); } };
 }
 
 test("an admin change persists a shared school year and updates teacher labels and later page loads", async () => {
@@ -82,4 +90,29 @@ test("the control refuses non-admins and rechecks an administrator's role before
   await admin.change(2029);
   assert.equal(store.writes.length, 0);
   assert.match(admin.status.textContent, /Could not save/);
+});
+
+test("navigation reuses only a fresh public year while the admin editor still reads its current value", async () => {
+  const store = database(), storage = new Map();
+  store.publish(2028);
+  const first = await mount(store, { storage });
+  const next = await mount(store, { storage });
+  assert.ok(next.labels.every(element => element.textContent === "SY 2028–29"));
+  assert.equal(first.subscriptionOptions.initialDelayMs, 0);
+  assert.ok(next.subscriptionOptions.initialDelayMs > 290000);
+  assert.equal(next.subscriptionOptions.refreshIntervalMs, 300000);
+  assert.deepEqual(Object.keys(JSON.parse(storage.get("imars-school-year-v1"))).sort(), ["checkedAt", "startYear"]);
+  const admin = await mount(store, { role: "admin", selector: true, storage });
+  assert.equal(admin.subscriptionOptions.initialDelayMs, 0);
+  assert.equal(admin.select.disabled, false);
+  storage.set("imars-school-year-v1", JSON.stringify({ startYear: 2029, checkedAt: Date.now() }));
+  next.events.get("storage")({ key: "imars-school-year-v1" });
+  assert.ok(next.labels.every(element => element.textContent === "SY 2029–30"));
+});
+
+test("expired or corrupt school-year labels never suppress a fresh read", async () => {
+  for (const saved of ['bad json', JSON.stringify({ startYear: 2028, checkedAt: Date.now() - 300001 }), JSON.stringify({ startYear: 4000, checkedAt: Date.now() })]) {
+    const app = await mount(database(), { storage: new Map([["imars-school-year-v1", saved]]) });
+    assert.equal(app.subscriptionOptions.initialDelayMs, 0);
+  }
 });

@@ -162,7 +162,7 @@ if (profileForm) {
 
     if (saveProfileBtn) {
       saveProfileBtn.disabled = true;
-      saveProfileBtn.textContent = "Saving...";
+      saveProfileBtn.setAttribute("aria-busy", "true");
     }
 
     try {
@@ -192,6 +192,7 @@ if (profileForm) {
     } finally {
       if (saveProfileBtn) {
         saveProfileBtn.disabled = false;
+        saveProfileBtn.setAttribute("aria-busy", "false");
         saveProfileBtn.textContent = "Save Changes";
       }
     }

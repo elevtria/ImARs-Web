@@ -20,7 +20,7 @@ async function saveBrowserPassword(optionId, identifier, password) {
 function setSigningIn(button, pending, idleLabel) {
   button.disabled = pending;
   button.setAttribute("aria-busy", String(pending));
-  button.querySelector("[data-login-label]").textContent = pending ? "Signing in…" : idleLabel;
+  button.querySelector("[data-login-label]").textContent = idleLabel;
 }
 
 const passwordInput = document.getElementById("password");

@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -39,16 +40,16 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="hero">
-        <h1>Offline Sync &amp; AR Markers</h1>
+    <main class="content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
+        <h1 data-auth-shell>Offline Sync &amp; AR Markers</h1>
         <p>Download AR markers for offline classroom use</p>
       </section>
 
-      <section class="card">
+      <section class="card" data-auth-shell>
         <div class="progress-head">
           <div>
-            <h2>Sync Progress</h2>
+            <h2 data-auth-shell>Sync Progress</h2>
             <p id="progressLabel">0 of 12 topic packs downloaded</p>
           </div>
           <button class="btn-purple" id="downloadAll" type="button">
@@ -58,11 +59,11 @@
         </div>
         <div class="bar" aria-label="Sync progress"><i id="progressFill"></i></div>
         <span class="pct" id="progressPct">0% complete</span>
-        <p class="sync-cloud-status" id="cloudSyncStatus" role="status" aria-live="polite">Loading…</p>
+        <p class="sync-cloud-status" id="cloudSyncStatus" role="status" aria-live="polite" data-loading="true" aria-label="Loading download progress"></p>
       </section>
 
-      <section class="card files">
-        <h2>AR Marker Files</h2>
+      <section class="card files" data-auth-shell>
+        <h2 data-auth-shell>AR Marker Files</h2>
         <div class="table-head">
           <span>Topic</span>
           <span>Term</span>

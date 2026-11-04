@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { createLoadingTracker, startLoading } from "../js/loading.js";
+import { createLoadingTracker, startLoading, setLoadingState } from "../js/loading.js";
 import { wrapFirestoreReads } from "../js/firebase-loading.js";
 
 function deferred() {
@@ -145,6 +145,8 @@ test("slow reads mark only their data section busy and preserve the navigation a
     assert.equal(records.attributes["aria-busy"], "true");
     assert.equal(records.children[0].hidden, false);
     assert.equal(records.children[0].attributes.role, "status");
+    assert.equal(records.children[0].textContent, "");
+    assert.equal(records.children[0].attributes["aria-label"], "Loading");
     assert.equal(topics.children.length, 0);
     assert.equal(topics.attributes["aria-busy"], undefined);
     finishA();
@@ -155,4 +157,17 @@ test("slow reads mark only their data section busy and preserve the navigation a
   } finally {
     globalThis.document = previousDocument;
   }
+});
+
+test("standard status spinners have an accessible label without visible loading text and preserve completion messages", () => {
+  const status = { textContent: "Loading students…", attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } };
+  setLoadingState(status, true, "Loading students");
+  assert.equal(status.textContent, "");
+  assert.equal(status.attributes["data-loading"], "true");
+  assert.equal(status.attributes["aria-label"], "Loading students");
+  status.textContent = "Saved";
+  setLoadingState(status, false);
+  assert.equal(status.textContent, "Saved");
+  assert.equal(status.attributes["data-loading"], "false");
+  assert.equal(status.attributes["aria-label"], undefined);
 });

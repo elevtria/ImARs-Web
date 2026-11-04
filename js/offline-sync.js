@@ -1,3 +1,5 @@
+import { setLoadingState } from "./loading.js";
+
 // Update with the all-markers ZIP hash when publishing replacement images.
 const markerVersion = "76f0d2ca0d6c";
 const markerPacks = [
@@ -48,8 +50,8 @@ const formatSize = (bytes) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 const rowsRoot = document.getElementById("markerRows");
 const cloudStatus = document.getElementById("cloudSyncStatus");
 
-const setCloudStatus = (message) => {
-  if (cloudStatus) { cloudStatus.textContent = message; cloudStatus.hidden = !message; }
+const setCloudStatus = (message, pending = false) => {
+  if (cloudStatus) { setLoadingState(cloudStatus, pending, "Updating download progress"); cloudStatus.textContent = message; cloudStatus.hidden = !message && !pending; }
 };
 
 markerPacks.forEach((pack) => {
@@ -116,7 +118,7 @@ const syncProgressToCloud = (files = [...downloaded]) => {
   cloudSyncQueue = cloudSyncQueue.then(async () => {
     if (!targetRef || !navigator.onLine) return;
     const { setDoc, arrayUnion, serverTimestamp } = window.imarsFirestore;
-    setCloudStatus("Saving…");
+    setCloudStatus("", true);
     await setDoc(targetRef, {
       requestedFiles: arrayUnion(...filesToSync),
       updatedAt: serverTimestamp()
@@ -165,7 +167,7 @@ const attachCloudProgress = async (user, firestore) => {
   if (stopProgressListener) stopProgressListener();
   stopProgressListener = onSnapshot(progressRef, (snapshot) => {
     if (!snapshot.exists()) {
-      setCloudStatus("Saving…");
+      setCloudStatus("", true);
       if (downloaded.size) void syncProgressToCloud();
       else setCloudStatus("");
       return;
@@ -177,9 +179,7 @@ const attachCloudProgress = async (user, firestore) => {
     remoteProgress.forEach((file) => downloaded.add(file));
     saveProgress();
     updateProgress();
-    setCloudStatus(snapshot.metadata.hasPendingWrites
-      ? "Saving…"
-      : "Saved");
+    setCloudStatus(snapshot.metadata.hasPendingWrites ? "" : "Saved", snapshot.metadata.hasPendingWrites);
     if (localOnly.length) void syncProgressToCloud(localOnly);
   }, (error) => {
     console.error("Unable to read marker download progress:", error);
@@ -218,7 +218,7 @@ const startCloudSync = async () => {
         return;
       }
 
-      setCloudStatus("Loading…");
+      setCloudStatus("", true);
       try {
         await attachCloudProgress(user, firestore);
       } catch (error) {
@@ -274,7 +274,7 @@ window.addEventListener("online", () => {
     setCloudStatus("Sign in as a teacher to sync progress across browsers. This browser keeps a local copy.");
     return;
   }
-  setCloudStatus("Back online. Syncing saved progress…");
+  setCloudStatus("", true);
   void syncProgressToCloud();
 });
 

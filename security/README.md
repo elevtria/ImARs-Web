@@ -1,12 +1,13 @@
 # Firebase security migration — prepared locally, not activated
 
 Do not paste `firestore.candidate.rules` into the live console yet. Closing the
-current public rule requires the matching server setup, reviewed account
-bindings and updated mobile app. The private state Worker was deployed on
-2026-10-16; Pages activation, account provisioning and the mobile release remain
-pending. `deployment-status.md` is a historical 2026-10-16 snapshot, not current
-production status. The newer website-only gateway is documented in
-[its activation guide](../docs/web-data-gateway.md); its branch is not deployed.
+legacy rules requires the matching server setup, reviewed account bindings and
+updated mobile app. This guide describes the broader account-binding migration;
+it is separate from the website gateway and the student quiz release. See
+[the website gateway guide](../docs/web-data-gateway.md) and
+[the student quiz guide](../docs/student-quizzes.md) for those components.
+Use the current source/configuration and deployment checks, rather than
+historical release IDs, to determine what is active.
 
 ## What was prepared
 
@@ -187,7 +188,8 @@ host other than `127.0.0.1:58087`. They use synthetic records and mocked Auth
 responses; no real Firebase credentials are needed. If a local port is occupied,
 stop only your own test process or choose/update the dedicated fixture ports.
 
-See `validation.md` for the completed local checks and their limits.
+These local checks do not replace acceptance testing of a compatible mobile
+build against the deployed backend.
 
 References: [Firebase rules and queries](https://firebase.google.com/docs/firestore/security/rules-query),
 [Firebase rules testing](https://firebase.google.com/docs/rules/unit-tests),

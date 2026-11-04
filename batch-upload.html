@@ -42,17 +42,17 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="hero" data-loading-path="users classes" data-loading-label="Loading sections and student counts…">
+    <main class="content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
         <div>
-          <h1>Student Batch Upload</h1>
+          <h1 data-auth-shell>Student Batch Upload</h1>
           <p>Import multiple students at once using an Excel or CSV template</p>
         </div>
         <label class="section-pick">
           <span>Upload to section:</span>
           <span class="select-wrap">
             <select id="sectionSelect" aria-label="Upload to section">
-              <option value="">Loading sections...</option>
+              <option value="">Select a section</option>
             </select>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </span>
@@ -66,12 +66,12 @@
             <circle cx="12" cy="12" r="8" />
             <path d="M12 8v4l2.5 1.5" />
           </svg>
-          <span>Uploading students to: <b id="sectionName">Loading...</b></span>
+          <span>Section: <b id="sectionName">—</b></span>
         </div>
         <small id="existingCount">(0 existing students)</small>
       </div>
 
-<section class="card">
+<section class="card" data-auth-shell>
         <div class="template">
           <div class="sheet-icon" aria-hidden="true">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -80,7 +80,7 @@
             </svg>
           </div>
           <div>
-            <h2>Download Excel Template</h2>
+            <h2 data-auth-shell>Download Excel Template</h2>
             <p>Use the official template to ensure correct column format. Include: First Name, Last Name, Student ID, Email.</p>
             <div class="btn-row">
               <button class="btn-green" id="dlXlsx" type="button">
@@ -96,8 +96,8 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>Required Columns</h2>
+      <section class="card" data-auth-shell>
+        <h2 data-auth-shell>Required Columns</h2>
         <div class="cols">
           <div class="col">
             <em>Col A</em>
@@ -138,10 +138,10 @@
       </div>
 
           <!-- Add this directly below the dropZone div -->
-      <section class="card" id="previewSection" hidden style="margin-top: 1.5rem;">
+      <section class="card" id="previewSection" hidden style="margin-top: 1.5rem;" data-auth-shell>
         <div class="progress-head">
           <div>
-            <h2>Data Validation & Preview</h2>
+            <h2 data-auth-shell>Data Validation & Preview</h2>
             <p id="previewSummary">0 valid records, 0 errors found.</p>
           </div>
           <button class="btn-green" id="confirmPreviewBtn" type="button" disabled>Confirm Valid Records</button>

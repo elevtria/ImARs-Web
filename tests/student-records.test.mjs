@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
-import { createViewCache, encodeView, decodeView } from "../js/view-cache.js";
+import { createViewCache, encodeView, decodeView, reuseTeacherReport } from "../js/view-cache.js";
+import { setLoadingState } from "../js/loading.js";
 const source = readFileSync(new URL("../js/student-records.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "");
 const doc = (id, data) => ({ id, exists: () => true, data: () => data });
 const snap = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: action => docs.forEach(action) });
@@ -48,7 +49,7 @@ function harness(size=3) {
     const rows=matches.slice(0,options.limit||25);
     return {classes,students:rows.map(([id,row])=>({classId:"A",studentDoc:doc(id,{...row})})),counts:options.includeCounts===false?null:[{classId:"A",active:all.filter(([,r])=>r.active!==false).length,archived:all.filter(([,r])=>r.active===false).length}],cursor:matches.length>rows.length?{classId:"A",id:rows.at(-1)[0]}:null};
   }
-  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,console:{error(){}},
+  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState,console:{error(){}},
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,fn)=>{authChanged=fn;},
     watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},
     collection:(_, ...parts)=>({path:parts.join("/")}),doc:(_,name,id)=>({path:name+"/"+id,id}),
@@ -75,6 +76,32 @@ test("1000 students render only 25 profile cards and fetching one visible studen
   assert.equal(app.ids.activeStudentsCount.textContent,1000);assert.doesNotMatch(app.ids.recordsContainer.children[0].innerHTML,/0% overall|No activity recorded/);
   await app.performance("S0000");assert.equal(app.resultReads.length,1);assert.ok(app.resultReads.every(r=>r.path.startsWith("users/S0000/")));
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/50%/);await app.performance("S0000");assert.equal(app.resultReads.length,1);
+});
+
+test("student cards remain usable while section totals are pending and totals do not rebuild the cards",async()=>{
+  const app=harness(1), waiting=deferred();
+  const classes=[doc('A',{SectionName:'A'})],student={classId:'A',studentDoc:doc('S0000',{displayName:'Student',active:true}),results:[{termId:'term_01',lessonsSnap:snap([])}]};
+  app.setPageReader(options=>options.includeStudents===false?waiting.promise:{classes,students:[student],counts:null,cursor:null});
+  await app.load();
+  assert.equal(app.ids.recordsContainer.children.length,1);
+  const card=app.ids.recordsContainer.children[0];
+  assert.equal(app.ids.activeStudentsCount.textContent,'—');assert.equal(app.resultReads.length,0);
+  waiting.resolve({classes,students:[],counts:[{classId:'A',active:1,archived:0}],cursor:null});await flush();
+  assert.equal(app.ids.activeStudentsCount.textContent,1);assert.equal(app.ids.recordsContainer.children[0],card);
+});
+
+test("Student Records reuses a complete dashboard report for 1000 students, pagination and term switching without repeating reads",async()=>{
+  const app=harness(1000),uid=app.auth.currentUser.uid,key='teacher-report:all-terms-v1:all';app.cache.setOwner(uid);
+  const classes=[doc('A',{SectionName:'A'})],rows=[...app.profiles].map(([id,data])=>({classId:'A',studentDoc:doc(id,data),results:['term_01','term_02','term_03'].map(termId=>({termId,lessonsSnap:snap([])}))}));
+  const indices=[];
+  for(let offset=0;offset<rows.length;offset+=25){const index=indices.length;indices.push(index);app.cache.put(uid,key+':'+index,encodeView({cursor:null,students:rows.slice(offset,offset+25)}));}
+  app.cache.put(uid,key,encodeView({classes,counts:[{classId:'A',active:1000,archived:0}],pages:indices,complete:true,checkedAt:Date.now()}));
+  await app.load();assert.equal(app.pageReads.length,0);assert.equal(app.resultReads.length,0);assert.equal(app.ids.recordsContainer.children.length,25);
+  await app.ids.nextRecordsPage.emit('click');assert.equal(app.ids.recordsContainer.children[0].dataset.studentId,'S0025');assert.equal(app.pageReads.length,0);
+  app.ids.recordsTerm.value='term_02';await app.ids.recordsTerm.emit('change');await app.performance('S0025');
+  assert.equal(app.pageReads.length,0);assert.equal(app.resultReads.length,0);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML,/Term 2/);
+  app.cache.invalidate();await app.load();assert.equal(app.pageReads.length,1,'invalidated report data cannot supply a new student page');
 });
 test("next, previous and a return visit reuse page caches without reading the entire roster or any results",async()=>{
   const app=harness(1000);await app.load();await app.ids.nextRecordsPage.emit("click");assert.equal(app.pageReads.length,2);
@@ -120,7 +147,7 @@ test("returning while a previous result was pending does not restore a permanent
   const app=harness();await app.load();const pending=deferred();
   app.setResultReader(ref=>ref.path.startsWith("users/S0000/")?pending.promise:Promise.resolve(snap([])));
   await app.performance("S0000");await app.performance("S0002");await app.load();
-  assert.match(app.ids.recordsContainer.children[0].innerHTML,/Performance loads when viewed/);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML,/Load performance/);
   assert.doesNotMatch(app.ids.recordsContainer.children[0].innerHTML,/Loading performance…/);
   pending.resolve(snap([]));await flush();
 });
@@ -169,7 +196,7 @@ test('empty Term 2 results use a genuine empty state, without an error or zero s
 test('a failed card is not cached as a permanent failure on returning to the page',async()=>{
  const app=harness();await app.load();app.setResultReader(async()=>{throw Error('Offline');});await app.performance('S0000');
  assert.match(app.ids.recordsContainer.children[0].innerHTML,/Retry performance/);
- await app.load();assert.match(app.ids.recordsContainer.children[0].innerHTML,/Performance loads when viewed/);
+ await app.load();assert.match(app.ids.recordsContainer.children[0].innerHTML,/Load performance/);
  app.setResultReader(async()=>snap([]));await app.performance('S0000');
  assert.match(app.ids.recordsContainer.children[0].innerHTML,/No Term 1 results yet/);
 });

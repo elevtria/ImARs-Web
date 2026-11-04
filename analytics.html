@@ -40,11 +40,11 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="hero">
+    <main class="content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
         <div>
-          <h1>Class Analytics</h1>
-          <p>Performance overview — <span id="analyticsTermLabel">Term 1</span> · <span id="sectionSummary">Loading...</span> (<span id="studentCount">0</span> students)</p>
+          <h1 data-auth-shell>Class Analytics</h1>
+          <p>Performance overview — <span id="analyticsTermLabel">Term 1</span> · <span id="sectionSummary">—</span> (<span id="studentCount">0</span> students)</p>
         </div>
       </section>
 
@@ -53,9 +53,9 @@
             <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
             <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
-      <p class="view-data-status" id="analyticsReportStatus" role="status">Loading results…</p>
-      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…">
-        <h2>Class Average</h2>
+      <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
+      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell>
+        <h2 data-auth-shell>Class Average</h2>
         <div class="overall">
           <div class="donut" aria-label="post-test average">
             <svg viewBox="0 0 120 120">
@@ -90,9 +90,9 @@
         </div>
       </section>
 
-      <section class="section" style="padding: 8px 4px 20px;">
+      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
         <div class="section-head performance-head">
-          <h2>Individual Student Performance</h2>
+          <h2 data-auth-shell>Individual Student Performance</h2>
         </div>
         <div class="performance-controls">
           <label class="select-wrap">
@@ -123,28 +123,28 @@
         <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
       </section>
 
-      <section class="section student-activity-section" aria-labelledby="studentActivityHeading">
+      <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell>
         <div class="section-head performance-head">
           <h2 id="studentActivityHeading">Student Activity Record</h2>
         </div>
         <div class="performance-table-wrap">
           <table class="performance-table activity-record-table">
             <thead><tr><th scope="col">Activity</th><th scope="col">Section</th><th scope="col">Duration</th><th scope="col">Learners</th><th scope="col">Completed</th></tr></thead>
-            <tbody id="studentActivityBody"><tr class="empty-row"><td colspan="5">Loading student activities…</td></tr></tbody>
+            <tbody id="studentActivityBody"><tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr></tbody>
           </table>
         </div>
       </section>
 
 <div class="student-detail-navigation" aria-label="Student performance pages"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
 <!-- Topic Completion Rate Section -->
-      <section class="card section">
+      <section class="card section" data-auth-shell>
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
-          <h2 style="margin: 0;">Topic Completion Rate</h2>
+          <h2 style="margin: 0;" data-auth-shell>Topic Completion Rate</h2>
 
         </div>
         <div class="topics" id="topicsContainer" data-loading-path="terms users" data-loading-label="Loading topic analytics…" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
           <p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">
-            Loading topic analytics...
+            <span data-loading="true" role="status" aria-label="Loading topic analytics"></span>
           </p>
         </div>
       </section>

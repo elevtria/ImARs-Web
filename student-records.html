@@ -40,10 +40,10 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="hero">
+    <main class="content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
         <div>
-          <h1>Student Records</h1>
+          <h1 data-auth-shell>Student Records</h1>
           <p>Term performance · AR &amp; module engagement</p>
         </div>
         <div class="record-controls">
@@ -83,7 +83,7 @@
       <p class="empty" id="emptyState" hidden>No students match that search.</p>
       <div class="student-detail-navigation" aria-label="Student list pages">
         <button type="button" class="ghost-btn" id="previousRecordsPage" disabled>Previous page</button>
-        <p id="recordsPageStatus" class="view-data-status" role="status" aria-live="polite">Loading students…</p>
+        <p id="recordsPageStatus" class="view-data-status" role="status" aria-live="polite" data-loading="true" aria-label="Loading students"></p>
         <button type="button" class="ghost-btn" id="nextRecordsPage" disabled>Next page</button>
       </div>
     </main>

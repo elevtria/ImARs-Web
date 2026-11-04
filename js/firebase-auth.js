@@ -13,7 +13,12 @@ const loginPage = () => /^\/(?:admin-)?login(?:\.html)?\/?$/.test(window.locatio
 const adminLoginPage = () => /^\/admin-login(?:\.html)?\/?$/.test(window.location.pathname);
 const portalRole = () => /^\/(?:admin-dashboard|admin-profile|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
 const sharedPage = () => /^\/teacher-manual(?:\.html)?\/?$/.test(window.location.pathname);
-const hidePortal = () => { if (!loginPage()) document.body.setAttribute("data-auth-pending", ""); };
+const hidePortal = () => {
+  if (loginPage()) return;
+  document.body.setAttribute("data-auth-pending", "");
+  const main = document.querySelector("main");
+  if (main) main.inert = true;
+};
 function visit() {
   try {
     const saved = JSON.parse(window.sessionStorage.getItem(VISIT));
@@ -87,6 +92,8 @@ export function onAuthStateChanged(auth, next, error) {
       if (loginPage()) { callback(null); return; }
       if (!auth.currentUser || visit()?.uid !== auth.currentUser.uid) { denyAccess(auth, state); return; }
       document.body.removeAttribute("data-auth-pending");
+      const main = document.querySelector("main");
+      if (main) main.inert = false;
       callback(auth.currentUser);
     } catch (failure) {
       if (stopped || current !== generation || state.suspended) return;

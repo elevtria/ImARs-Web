@@ -1,6 +1,7 @@
 import { getDocs as quietDocs } from "./firebase-data.js";
 import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
-import { encodeView, decodeView } from "./view-cache.js";
+import { setLoadingState } from "./loading.js";
+import { encodeView, decodeView, reuseTeacherReport } from "./view-cache.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
@@ -104,8 +105,8 @@ const applyFilters = () => {
   archiveSectionButton.title = !selectedSection ? "Select a section first" : "Archive all active students in this section, including those hidden by search";
   emptyState.hidden = shown > 0 || pageBusy || pageError;
   emptyState.textContent = "No " + recordStatus + " students match your filters.";
-  document.getElementById("activeStudentsCount").textContent = recordData ? counts.reduce((sum, item) => sum + item.active, 0) : "—";
-  document.getElementById("archivedStudentsCount").textContent = recordData ? counts.reduce((sum, item) => sum + item.archived, 0) : "—";
+  document.getElementById("activeStudentsCount").textContent = Array.isArray(recordData?.counts) ? counts.reduce((sum, item) => sum + item.active, 0) : "—";
+  document.getElementById("archivedStudentsCount").textContent = Array.isArray(recordData?.counts) ? counts.reduce((sum, item) => sum + item.archived, 0) : "—";
   previousPage.disabled = pageBusy || pageIndex === 0;
   nextPage.disabled = pageBusy || !nextCursor;
   for (const card of dynamicCards) if (!card.classList.contains("hidden") && card.dataset.autoLoad === "true") observedCards?.observe(card);
@@ -127,12 +128,14 @@ termFilter.addEventListener("change", () => {
   // replace only the selected-term results, including any recently saved ones.
   pageGeneration++; pageAbort?.abort();
   const user = auth.currentUser, cache = prepareTeacherCache(app, user);
+  const shared = reuseTeacherReport(cache, user.uid, { termId: pageFilter.termId, sectionId: pageFilter.sectionId, now: Date.now() });
+  const sharedStudents = new Map((shared?.pages || []).flatMap(page => page.students).map(row => [row.studentDoc.id, row]));
   const key = "records:page:" + JSON.stringify({ filter: pageFilter, cursor: cursors[pageIndex] });
   const sections = recordData.sections.map(section => ({ ...section, students: section.students.map(student => {
     const saved = cache.get(user.uid, "records:results:" + pageFilter.termId + ":" + student.studentDoc.id, 60000);
-    let results = [];
+    let results = sharedStudents.get(student.studentDoc.id)?.results || [];
     if (saved) try { results = decodeView(saved); } catch {}
-    return { studentDoc: student.studentDoc, results, resultsLoaded: Boolean(saved && results.length), resultsLoading: false, resultsError: false };
+    return { studentDoc: student.studentDoc, results, resultsLoaded: results.length > 0, resultsAt: saved ? Date.now() : shared?.checkedAt || 0, resultsLoading: false, resultsError: false };
   }) }));
   cache.put(user.uid, "records:state", { filter: pageFilter, pageIndex, cursors });
   renderRecords({ ...recordData, sections }, key);
@@ -148,7 +151,7 @@ function resetPages() {
 }
 
 function renderRecords(data, key) {
-  if (![data.classes, data.sections, data.counts].every(Array.isArray)) throw new Error("Invalid saved student page.");
+  if (![data.classes, data.sections].every(Array.isArray) || (data.counts !== null && !Array.isArray(data.counts))) throw new Error("Invalid saved student page.");
   pageError = false; pageCacheKey = key;
   recordData = data; recordOwnerUid = auth.currentUser.uid;
   counts = data.counts || []; nextCursor = data.cursor;
@@ -171,6 +174,7 @@ function renderRecords(data, key) {
   for (const section of data.sections) for (const student of section.students) cards.appendChild(studentCard(section.classDoc, student));
   recordsContainer.replaceChildren(cards);
   dynamicCards = Array.from(recordsContainer.querySelectorAll(".record"));
+  setLoadingState(pageStatus, false);
   pageStatus.textContent = `Page ${pageIndex + 1} · ${dynamicCards.length} students shown`;
   applyFilters();
 }
@@ -189,19 +193,48 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
   cache.put(user.uid, "records:state", { filter, pageIndex, cursors });
   const version = cache.version();
   const saved = cache.get(user.uid, key);
+  const refreshCounts = async () => {
+    try {
+      const totals = await getStudentPage({ sectionId: filter.sectionId, includeStudents: false }, signal ? { signal } : {});
+      if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || cache.version() !== version || pageCacheKey !== key || !recordData) return;
+      if (JSON.stringify(recordData.classes.map(row => row.id)) !== JSON.stringify(totals.classes.map(row => row.id))) return;
+      recordData.counts = totals.counts; counts = totals.counts || [];
+      cacheCurrentPage(); applyFilters();
+    } catch (error) {
+      if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || error.name === "AbortError") return;
+      if (["permission-denied", "unauthenticated"].includes(error.code)) { recordsContainer.replaceChildren(); cache.invalidate(); }
+      else pageStatus.textContent = "Section totals could not update. They will retry automatically.";
+    }
+  };
   if (saved && !background) {
     let restored = false;
     try { renderRecords(decodeView(saved), key); restored = true; } catch {}
-    if (restored && cache.get(user.uid, key, 60000)) { if (scroll) recordsContainer.scrollIntoView?.({ block: "start" }); return; }
+    if (restored && cache.get(user.uid, key, 60000)) { if (!Array.isArray(recordData.counts)) void refreshCounts(); if (scroll) recordsContainer.scrollIntoView?.({ block: "start" }); return; }
+  }
+  if (!background && filter.status === "active" && !filter.search) {
+    const reused = reuseTeacherReport(cache, user.uid, { termId: filter.termId, sectionId: filter.sectionId, now: Date.now() });
+    if (reused) {
+      const candidates = reused.pages.flatMap(page => page.students).filter(row => !cursor || row.classId > cursor.classId ||
+        (row.classId === cursor.classId && (!cursor.id || row.studentDoc.id > cursor.id)));
+      const rows = candidates.slice(0, 25), last = rows.at(-1);
+      const data = { classes: reused.classes, counts: reused.counts.every(row => Number.isSafeInteger(row.archived)) ? reused.counts : null,
+        sections: reused.classes.map(classDoc => ({ classDoc, students: rows.filter(row => row.classId === classDoc.id).map(row => ({ ...row, resultsLoaded: true, resultsAt: reused.checkedAt })) })),
+        cursor: candidates.length > rows.length ? { classId: last.classId, id: last.studentDoc.id } : null };
+      renderRecords(data, key); cache.put(user.uid, key, encodeRecords(data), version);
+      if (!Array.isArray(data.counts)) void refreshCounts();
+      if (scroll) recordsContainer.scrollIntoView?.({ block: "start" });
+      return;
+    }
   }
   pageBusy = true;
   const finish = background ? () => {} : startRecordLoading(generation);
-  if (!background) pageStatus.textContent = filter.search ? "Searching students…" : "Loading students…";
+  if (!background) setLoadingState(pageStatus, true, filter.search ? "Searching students" : "Loading students");
   applyFilters();
   try {
     const rows = []; let result, after = cursor, totals;
     do {
-      result = await getStudentPage({ ...filter, cursor: after, limit: 25 - rows.length, includeCounts: totals === undefined }, signal ? { signal } : {});
+      result = await getStudentPage({ ...filter, cursor: after, limit: 25 - rows.length, includeCounts: "cached",
+        ...(!background ? { includeResults: { termId: filter.termId, limit: Math.min(8, Math.max(1, Math.ceil((window.innerHeight || 800) / 120))) } } : {}) }, signal ? { signal } : {});
       if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid) return;
       totals ??= result.counts;
       rows.push(...result.students); after = result.cursor;
@@ -212,16 +245,17 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
       const previous = recordData?.sections.flatMap(section => section.students).find(student => student.studentDoc.id === row.studentDoc.id);
       const remembered = cache.get(user.uid, "records:results:" + filter.termId + ":" + row.studentDoc.id, 60000);
       const sameTerm = previous?.results[0]?.termId === filter.termId;
-      const results = sameTerm && previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null;
+      const results = row.results || (sameTerm && previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null);
       return { studentDoc: row.studentDoc, results: results || [], resultsLoaded: Boolean(results),
-        resultsAt: sameTerm ? previous?.resultsAt : 0,
+        resultsAt: row.results ? Date.now() : sameTerm ? previous?.resultsAt : 0,
         resultsLoading: sameTerm && previous?.resultsLoading || false, resultsError: sameTerm && previous?.resultsError || false };
     }) }));
-    const data = { classes: result.classes, sections, counts: totals || [], cursor: after };
+    const data = { classes: result.classes, sections, counts: totals || null, cursor: after };
     const encoded = encodeRecords(data);
     if (pageCacheKey !== key || !saved || JSON.stringify(saved) !== JSON.stringify(encoded)) renderRecords(data, key);
     if (scroll) recordsContainer.scrollIntoView?.({ block: "start" });
     cache.put(user.uid, key, encoded, version);
+    if (!Array.isArray(data.counts)) void refreshCounts();
     if (background) for (const card of dynamicCards) {
       const bounds = card.getBoundingClientRect?.();
       if (bounds && bounds.bottom >= 0 && bounds.top <= window.innerHeight && !card.classList.contains("hidden")) void loadStudentPerformance(card.dataset.studentId, { background: true });
@@ -230,10 +264,12 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
     if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || error.name === "AbortError") return;
     pageError = true;
     if (["permission-denied", "unauthenticated"].includes(error.code)) { recordsContainer.replaceChildren(); cache.invalidate(); }
+    setLoadingState(pageStatus, false);
     pageStatus.textContent = "Could not update this student page. Check your connection; it will retry automatically.";
     console.error("Student page update failed:", error);
   } finally {
     finish();
+    if (generation === pageGeneration) setLoadingState(pageStatus, false);
     if (generation === pageGeneration) { pageBusy = false; applyFilters(); }
   }
 }
@@ -427,7 +463,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
       <span class="record-progress-title">Term performance</span>
       <div class="bar" role="progressbar" aria-label="Term performance" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${overallPercent}"><i style="width:${overallPercent}%"></i></div>
       <strong class="record-progress-value">${overallPercent}%</strong>
-    </div>` : `<p class="view-data-status">No ${termLabel} results yet.</p>` : `<p class="view-data-status" role="status">${resultsLoading ? "Loading performance…" : resultsError ? "Performance could not load." : "Performance loads when viewed."}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
+    </div>` : `<p class="view-data-status">No ${termLabel} results yet.</p>` : `<p class="view-data-status" role="status"${resultsLoading ? ' data-loading="true" aria-label="Loading performance"' : ""}>${resultsLoading ? "" : resultsError ? "Performance could not load." : ""}</p>${resultsLoading ? "" : `<button type="button" class="load-student-results ghost-btn" data-id="${escapeHTML(studentDoc.id)}">${resultsError ? "Retry performance" : "Load performance"}</button>`}`}
   `;
   for (const selector of [".archive-student-btn", ".unarchive-student-btn", ".remove-student-btn"]) {
   const button = card.querySelector(selector);
@@ -512,7 +548,7 @@ archiveForm.addEventListener("submit", async event => {
   event.preventDefault();
   if (archiveSave.disabled || (!archiveTarget && !archiveSectionCode) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
   archiveSave.disabled = true;
-  archiveSave.textContent = "Archiving…";
+  archiveSave.setAttribute("aria-busy", "true");
   archiveError.textContent = "";
   let savedCount = 0;
   try {
@@ -546,6 +582,7 @@ archiveForm.addEventListener("submit", async event => {
     archiveError.textContent = savedCount ? savedCount + " students archived. Retry to finish the remaining students." : "Could not archive the selected students. Please try again.";
   } finally {
     archiveSave.disabled = false;
+    archiveSave.setAttribute("aria-busy", "false");
     archiveSave.textContent = archiveSectionTargets?.length ? "Retry remaining students" : "Archive student";
   }
 });

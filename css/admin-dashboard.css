@@ -1,4 +1,6 @@
 body[data-auth-pending] :is(main, main *, .admin-side-user, .admin-side-user *, .modal, .modal *, dialog, dialog *) { visibility: hidden !important; }
+body[data-auth-pending] :is(main[data-auth-shell], main [data-auth-shell]) { visibility: visible !important; }
+body[data-auth-pending] main { pointer-events: none; }
 
 :root {
   color-scheme: light;

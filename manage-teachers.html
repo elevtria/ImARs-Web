@@ -54,10 +54,10 @@
     </div>
   </aside>
 
-  <main class="dashboard-content manage-content">
-    <section class="manage-heading">
+  <main class="dashboard-content manage-content" inert data-auth-shell>
+    <section class="manage-heading" data-auth-shell>
       <div>
-        <h1>Manage Teachers</h1>
+        <h1 data-auth-shell>Manage Teachers</h1>
         <p id="teacherSummary">3 active · 4 total</p>
       </div>
       <div class="manage-tools">
@@ -71,14 +71,14 @@
       </div>
     </section>
 
-    <section class="teacher-metrics" aria-label="Teacher and class totals">
-      <article class="teacher-metric"><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">3</strong></div></article>
-      <article class="teacher-metric"><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">1</strong></div></article>
-      <article class="teacher-metric"><span class="metric-accent sections-accent"></span><div><small>Total Sections</small><strong id="sectionCount">6</strong></div></article>
-      <article class="teacher-metric"><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">155</strong></div></article>
+    <section class="teacher-metrics" aria-label="Teacher and class totals" data-auth-shell>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">3</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">1</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent sections-accent"></span><div><small>Total Sections</small><strong id="sectionCount">6</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">155</strong></div></article>
     </section>
 
-    <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…"></section>
+    <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…" data-auth-shell></section>
     <p class="no-teachers" id="noTeachers" hidden>No teachers match your search.</p>
   </main>
 

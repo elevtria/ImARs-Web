@@ -7,6 +7,23 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 
 import { fixture, accounts } from "./fixtures/web-data.js";
 const stamp = { $type: "serverTimestamp" };
+
+test("batch-upload metadata reuses the verified teacher and reads sections without student queries or counts",async()=>{
+  const app=fixture(),cookie=await app.login(),queries=[],gets=[];
+  app.data.get('users/TEACH1000').sections=['Grade 6 – A'];
+  const queryStore=app.store.query.bind(app.store),get=app.store.get.bind(app.store);
+  app.store.query=(path,options)=>{queries.push(path);assert.notEqual(path,'users');return queryStore(path,options);};
+  app.store.get=path=>{gets.push(path);return get(path);};
+  app.store.count=()=>assert.fail('section dropdown must not wait for counts');
+  const response=await app.call({action:'student-page',includeStudents:false,includeCounts:false,includeTeacher:true},cookie);
+  assert.equal(response.status,200);const page=await response.json();
+  assert.deepEqual(queries,['classes']);assert.deepEqual(page.students,[]);assert.equal(page.counts,null);
+  assert.equal(page.teacher.id,'TEACH1000');assert.deepEqual(page.teacher.data.sections,['Grade 6 – A']);
+  assert.equal(gets.filter(path=>path==='users/TEACH1000').length,1,'the already verified profile must not be read twice');
+  assert.equal(JSON.stringify(page).includes('must-never-leave-server'),false);assert.equal(JSON.stringify(page).includes('private-marker'),false);
+  assert.equal((await app.call({action:'student-page',includeStudents:false,includeCounts:false,includeTeacher:'TEACH1001'},cookie)).status,400);
+  assert.equal((await app.call({action:'student-page',sectionId:'B',includeStudents:false,includeCounts:false,includeTeacher:true},cookie)).status,403);
+});
 const union = (...values) => ({ $type: "arrayUnion", values });
 
 const get = path => ({ action: "get", reference: { kind: "document", path } });
@@ -55,6 +72,84 @@ test("a 1000-student class returns at most 25 profiles per page and exact counts
   for (const input of [{ sectionId: "B" }, { cursor: { classId: "B", id: null } }, { limit: 1000 }, { cursor: { classId: "A", id: "../ADMIN1000" } }]) {
     assert.ok([400,403].includes((await app.call({ action: "student-page", ...input }, cookie)).status));
   }
+});
+
+test("student pages can include only the first eight selected-term results without counting or reading another teacher's students", async () => {
+  const app = fixture(), cookie = await app.login(), batches = [];
+  for (let index = 0; index < 1000; index++) app.data.set("users/S" + String(index).padStart(4, "0"), { role: "student", classCode: "A", teacherId: "TEACH1000", displayName: "Student " + index });
+  const getAll = app.store.getAll.bind(app.store);
+  app.store.getAll = paths => { batches.push(paths); return getAll(paths); };
+  app.store.count = () => assert.fail("the visible roster must not wait for section counts");
+  app.data.set("users/0026271000/test_results/term_02/lessons/lesson_01", { postTestScore: 4 });
+  const body = { action: "student-page", includeCounts: false, includeResults: { termId: "term_02", limit: 8 } };
+  const response = await app.call(body, cookie);
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.students.length, 25); assert.equal(page.counts, null);
+  assert.deepEqual(batches.map(paths => paths.length), [32]);
+  assert.ok(batches[0].every(path => path.includes("/test_results/term_02/") && !path.includes("0026271001")));
+  assert.equal(page.students[0].lessons[0].data.postTestScore, 4);
+  assert.ok(page.students.slice(0, 8).every(row => Array.isArray(row.lessons)));
+  assert.ok(page.students.slice(8).every(row => row.lessons === undefined));
+  assert.equal((await app.call({ ...body, sectionId: "B" }, cookie)).status, 403);
+  assert.equal((await app.call({ ...body, includeResults: { termId: "term_04", limit: 8 } }, cookie)).status, 400);
+  assert.equal((await app.call({ ...body, includeResults: { termId: "term_02", limit: 9 } }, cookie)).status, 400);
+  app.store.getAll = async () => { throw new Error("Temporary result read failure"); };
+  const fallback = await (await app.call(body, cookie)).json();
+  assert.equal(fallback.students.length, 25); assert.equal(fallback.performanceUnavailable, true);
+  assert.ok(fallback.students.every(row => row.lessons === undefined), "a failed result read must not invent empty results");
+});
+
+test("larger report batches stay within owned profiles, 100-document reads and four concurrent database batches", async () => {
+  const app = fixture(), cookie = await app.login(), sizes = [];
+  for (let index = 0; index < 1000; index++) app.data.set("users/S" + String(index).padStart(4, "0"), { role: "student", classCode: "A", teacherId: "TEACH1000", displayName: "Student " + index });
+  let running = 0, peak = 0;
+  const getAll = app.store.getAll.bind(app.store);
+  app.store.getAll = async paths => {
+    sizes.push(paths.length); running++; peak = Math.max(peak, running);
+    assert.ok(paths.every(path => !path.includes("0026271001")));
+    try { await new Promise(setImmediate); return await getAll(paths); } finally { running--; }
+  };
+  app.store.count = () => assert.fail("reports obtain active totals from their already-read roster");
+  const response = await app.call({ action: "teacher-report-page", termId: "term_01", allTerms: true, batchSize: 100, includeCounts: false }, cookie);
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.students.length, 100); assert.equal(page.counts, null);
+  assert.equal(sizes.length, 12); assert.ok(sizes.every(size => size === 100)); assert.equal(peak, 4);
+  assert.equal((await app.call({ action: "teacher-report-page", termId: "term_01", batchSize: 1000 }, cookie)).status, 400);
+  assert.equal((await app.call({ action: "student-page", limit: 100, includeCounts: false }, cookie)).status, 400);
+});
+
+test("the archived page queries archived profiles directly instead of scanning 1000 active students", async () => {
+  const app = fixture(), cookie = await app.login(), queries = [];
+  for (let index = 0; index < 1000; index++) app.data.set("users/S" + String(index).padStart(4, "0"), { role: "student", classCode: "A", teacherId: "TEACH1000", active: index < 990 });
+  const query = app.store.query.bind(app.store);
+  app.store.query = (path, options) => { queries.push({ path, options }); return query(path, options); };
+  const page = await (await app.call({ action: "student-page", status: "archived", includeCounts: false }, cookie)).json();
+  assert.equal(page.students.length, 10); assert.equal(page.scanned, 10); assert.equal(page.cursor, null);
+  const profiles = queries.filter(row => row.path === "users"); assert.equal(profiles.length, 1);
+  assert.ok(profiles[0].options.filters.some(filter => filter.field === "active" && filter.value === false));
+});
+
+test("empty assigned sections use at most four concurrent probes and preserve class-order pagination", async () => {
+  const app = fixture(), cookie = await app.login();
+  for (const id of ['C','D','E','F','G','H','I','J','K','L','M']) app.data.set('classes/'+id,{teacherId:'TEACH1000',SectionName:id});
+  let running=0,peak=0;
+  const query=app.store.query.bind(app.store);
+  app.store.query=async(path,options)=>{
+    if(path!=='users')return query(path,options);
+    running++;peak=Math.max(peak,running);
+    try{await new Promise(setImmediate);return await query(path,options);}finally{running--;}
+  };
+  const empty=await(await app.call({action:'student-page',status:'archived',includeCounts:false},cookie)).json();
+  assert.equal(empty.students.length,0);assert.equal(empty.cursor,null);assert.equal(peak,4);
+  for(const id of ['A','C','D'])for(let i=0;i<15;i++)app.data.set(`users/${id}${String(i).padStart(3,'0')}`,{role:'student',classCode:id,teacherId:'TEACH1000',active:false});
+  const first=await(await app.call({action:'student-page',status:'archived',includeCounts:false},cookie)).json();
+  const second=await(await app.call({action:'student-page',status:'archived',includeCounts:false,cursor:first.cursor},cookie)).json();
+  assert.equal(first.students.length,25);assert.equal(second.students.length,20);assert.equal(second.cursor,null);
+  assert.equal(new Set([...first.students,...second.students].map(row=>row.document.id)).size,45);
+  assert.ok([...first.students,...second.students].every((row,index,rows)=>!index||rows[index-1].classId<=row.classId));
+  assert.ok(peak<=4);
 });
 
 test("student page searches preserve case-insensitive name matching with bounded scans and cursors across sections", async () => {
@@ -436,6 +531,26 @@ test("middleware and data share one request's session verification while account
   const denied=app.request('/api/web-data',body,cookie);
   const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}});
   assert.equal(blocked.status,403,'a verified session cannot bypass a disabled account');
+});
+
+test("report lesson batches start while section counts are pending, but incomplete totals are never returned", async () => {
+  const app = fixture(), cookie = await app.login();
+  let releaseCounts, signalLessons, settled = false;
+  const gate = new Promise(resolve => { releaseCounts = resolve; });
+  const lessonsStarted = new Promise(resolve => { signalLessons = resolve; });
+  const count = app.store.count.bind(app.store), getAll = app.store.getAll.bind(app.store);
+  app.store.count = async (...args) => { await gate; return count(...args); };
+  app.store.getAll = async paths => { signalLessons(); return getAll(paths); };
+  const request = app.call({ action: "teacher-report-page", termId: "term_01", allTerms: true }, cookie).then(response => { settled = true; return response; });
+  try {
+    await Promise.race([lessonsStarted, new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error("Lesson reads were blocked behind counts")), 1000); timer.unref(); })]);
+    assert.equal(settled, false);
+  } finally { releaseCounts(); }
+  const response = await request;
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.counts, [{ classId: "A", active: 1, archived: 0 }]);
+  assert.equal(Object.hasOwn(body, "pendingCounts"), false);
 });
 
 test('Firestore report batchGet uses one request and preserves missing documents and unordered results',async()=>{

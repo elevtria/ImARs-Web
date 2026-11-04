@@ -104,11 +104,9 @@ const identities = new WeakMap();
 // Roles and active status are still checked from the current staff profile.
 const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
-  const row = await store.get("users/" + account.id), profile = row?.data;
-  if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
-      profile.active === false || ["inactive", "disabled"].includes(String(profile.status || "").toLowerCase())) {
-    throw Object.assign(new Error("This account no longer has website access."), { status: 403 });
-  }
+  // The approved account supplies both IDs. Its live profile and Auth status
+  // can be read independently; neither result grants access on its own.
+  const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env || store;
   let cache = identities.get(key);
@@ -119,6 +117,13 @@ export async function staffProfile(account, store, now = Date.now()) {
     identity = { user, until: now + 60_000 };
     if (cache.size >= 1000) cache.delete(cache.keys().next().value);
     cache.set(account.uid, identity);
+  }
+  const result = await pendingProfile;
+  if (result.error) throw result.error;
+  const row = result.row, profile = row?.data;
+  if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
+      profile.active === false || ["inactive", "disabled"].includes(String(profile.status || "").toLowerCase())) {
+    throw Object.assign(new Error("This account no longer has website access."), { status: 403 });
   }
   const user = identity.user;
   if (!user || user.disabled || user.email?.toLowerCase() !== account.email.toLowerCase()) {
@@ -273,7 +278,7 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
-  if (["/login", "/admin-login"].includes(path) || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/")) { return context.next(); }
+  if (path === "/login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/")) return context.next();
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/"), rotate: true });
     const account = checked?.account;

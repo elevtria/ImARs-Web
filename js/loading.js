@@ -47,6 +47,17 @@ export function createLoadingTracker(render, { delayMs = 0, schedule = setTimeou
 
 const regions = new WeakMap();
 
+export function setLoadingState(element, active, label = "Loading") {
+  if (!element) return;
+  element.setAttribute("data-loading", String(active));
+  element.setAttribute("aria-busy", String(active));
+  if (active) {
+    element.textContent = "";
+    element.setAttribute("aria-label", label);
+    element.hidden = false;
+  } else element.removeAttribute("aria-label");
+}
+
 // A read can mark its own data regions busy; it never changes the page shell.
 export function startLoading(message = {}) {
   const path = message.reference?.path;
@@ -72,7 +83,8 @@ export function startLoading(message = {}) {
         }
         // Rendering may replace children while another request is still pending.
         if (state.status.parentNode !== region) region.prepend(state.status);
-        state.status.textContent = region.dataset.loadingLabel || message.title || "Loading this section…";
+        state.status.textContent = "";
+        state.status.setAttribute("aria-label", region.dataset.loadingLabel || message.title || "Loading");
         state.status.hidden = false;
         region.setAttribute("aria-busy", "true");
       }, { delayMs: 150 });

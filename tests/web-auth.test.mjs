@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { decision, emptyState, passwordFailed, verifiedSuccess, resetAfterApproval, cooldowns } from "../server/web-lockout.js";
 import { WebLoginState, default as privateWorker } from "../workers/web-auth-worker.js";
-import { authApi, protectWebsite, signSession, webSession } from "../server/web-auth.js";
+import { authApi, protectWebsite, signSession, webSession, staffProfile } from "../server/web-auth.js";
 import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } from "../server/web-session.js";
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
@@ -12,6 +13,18 @@ const accounts = [
   { id: "TEACH1001", uid: "teacher-b", email: "other@example.test", role: "teacher" },
   { id: "ADMIN1000", uid: "admin-a", email: "admin@example.test", role: "admin" }
 ];
+
+test("live staff profile and Auth status checks overlap, and either failed check still denies access",async()=>{
+  let releaseProfile,releaseIdentity,identityStarted=false;
+  const store={get:()=>new Promise(resolve=>{releaseProfile=resolve;}),identity:()=>{identityStarted=true;return new Promise(resolve=>{releaseIdentity=resolve;});}};
+  const pending=staffProfile(accounts[0],store);
+  assert.equal(identityStarted,true,'Auth status must not wait for the profile network request');
+  releaseProfile({data:{uid:'teacher-a',role:'teacher',active:true}});
+  releaseIdentity({email:'teacher@example.test',disabled:false});
+  assert.equal((await pending).id,'TEACH1000');
+  await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:false}}),identity:async()=>({email:'teacher@example.test'})}),error=>error.status===403);
+  await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:true}}),identity:async()=>({email:'teacher@example.test',disabled:true})}),error=>error.status===401);
+});
 
 test("security headers prevent HTML caching and preserve API bodies and existing session cookies", async () => {
   for (const [path, status, type, body] of [
@@ -42,6 +55,22 @@ test("security headers also cover redirects from protected routes", async () => 
   assert.equal(response.status, 302);
   assert.equal(response.headers.get("Location"), "/login?reason=web-session");
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+});
+
+test("both sign-in pages stay public with security headers while protected HTML stays in middleware routes", async () => {
+  const app = fixture();
+  const routes = JSON.parse(readFileSync(new URL("../_routes.json", import.meta.url), "utf8"));
+  for (const path of ["/admin-dashboard", "/admin-dashboard.html", "/admin-profile", "/admin-profile.html", "/index.html"]) {
+    assert.ok(!routes.exclude.some(pattern => pattern === path || (pattern.endsWith("*") && path.startsWith(pattern.slice(0, -1)))), path);
+    const denied = await protectWebsite({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => { throw new Error("A private portal requires a session"); } });
+    assert.equal(denied.status, 302);
+  }
+  for (const path of ["/login", "/login.html", "/admin-login", "/admin-login.html"]) {
+    const response = await onRequest({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
+    assert.equal(response.status, 200); assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+  }
 });
 
 function fixture() {
