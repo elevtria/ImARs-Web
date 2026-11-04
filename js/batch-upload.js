@@ -661,6 +661,11 @@ confirmImportBtn.addEventListener("click", async () => {
         updatedAt: serverTimestamp()
       };
 
+      if (!dbExistingClaimedIds.has(finalStudentId)) {
+        strictUpdateData.email = finalEmail;
+        strictUpdateData.providedEmail = finalEmail;
+      }
+      
       if (!stu.isExisting) {
         const newStudentData = {
           ...strictUpdateData,
