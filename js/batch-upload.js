@@ -106,7 +106,6 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
 
     const loadedSections = [];
 
-    // Build the allowed list from teacherData.sections if present so deleted legacy sections stay gone
     const teacherSections = Array.isArray(teacherData.sections)
       ? teacherData.sections.map(s => formatSectionLabel(s).toLowerCase()).filter(Boolean)
       : (teacherData.section ? [formatSectionLabel(teacherData.section).toLowerCase()] : []);
@@ -117,7 +116,6 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
       const label = formatSectionLabel(rawName);
       if (!label) continue;
 
-      // Skip legacy Section A / Section B if the teacher profile has updated sections
       if (teacherSections.length > 0 && !teacherSections.includes(label.toLowerCase())) {
         continue;
       }
@@ -300,12 +298,128 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) handleFileSelected(fileInput.files[0]);
 });
 
+// Helper to index a student document into our duplicate-detection maps
+function indexStudentRecord(docId, sData, fallbackClassCode = "") {
+  if (!docId || !sData) return;
+  const cleanId = String(docId).trim();
+  existingStudentIds.add(cleanId);
+
+  const cCode = String(sData.classCode || fallbackClassCode || "").trim();
+  if (cCode) dbExistingStudentClassCodes[cleanId] = cCode;
+
+  if (sData.isClaimed === true || sData.uid) {
+    dbExistingClaimedIds.add(cleanId);
+  }
+
+  const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
+  const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
+  if (cleanName) {
+    dbExistingNameOwners[cleanName] = cleanId;
+  }
+
+  const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
+  if (rawEmail) {
+    dbExistingEmailOwners[rawEmail] = cleanId;
+  }
+}
+
+// Fetch ALL existing students across active and archived pages via getStudentPage
+async function loadAllExistingStudentsForValidation(candidateIds) {
+  existingStudentIds.clear();
+  dbExistingStudentClassCodes = {};
+  dbExistingNameOwners = {};
+  dbExistingEmailOwners = {};
+  dbExistingClaimedIds.clear();
+
+  // 1. Check global ID existence via checkStudentIds
+  if (candidateIds.length > 0) {
+    try {
+      const verifiedExisting = await checkStudentIds(candidateIds);
+      for (const id of verifiedExisting) {
+        existingStudentIds.add(String(id).trim());
+      }
+    } catch (err) {
+      console.warn("checkStudentIds warning:", err);
+    }
+  }
+
+  // 2. Paginate through getStudentPage (the exact API used by Student Records)
+  for (const status of ["active", "archived"]) {
+    let cursor = null;
+    let safetyCounter = 0;
+    do {
+      try {
+        const page = await getStudentPage({
+          sectionId: "",
+          status,
+          search: "",
+          cursor,
+          limit: 100,
+          includeCounts: false
+        });
+        if (page && Array.isArray(page.students)) {
+          for (const row of page.students) {
+            if (row?.studentDoc) {
+              indexStudentRecord(row.studentDoc.id, row.studentDoc.data(), row.classId);
+            }
+          }
+        }
+        cursor = page?.cursor || null;
+        safetyCounter++;
+      } catch (err) {
+        console.warn(`getStudentPage (${status}) stopped:`, err);
+        break;
+      }
+    } while (cursor && safetyCounter < 20);
+  }
+
+  // 3. Fallback direct Firestore query if any section wasn't covered
+  try {
+    for (const sec of sections) {
+      if (!sec.classCode) continue;
+      const classRosterQ = query(collection(db, "users"), where("classCode", "==", sec.classCode));
+      const snap = await getDocs(classRosterQ);
+      snap.forEach(docSnap => indexStudentRecord(docSnap.id, docSnap.data(), sec.classCode));
+    }
+  } catch (err) {
+    // Ignore if direct query is restricted by data wrapper; step 2 already populated the map
+  }
+}
+
+function validateTemplateHeaders(headerRow) {
+  if (!Array.isArray(headerRow) || headerRow.length < 3) {
+    return "Invalid template: Missing required columns (First Name, Last Name, Student ID, Email).";
+  }
+  const h0 = String(headerRow[0] ?? "").trim().toLowerCase();
+  const h1 = String(headerRow[1] ?? "").trim().toLowerCase();
+  const h2 = String(headerRow[2] ?? "").trim().toLowerCase();
+  const h3 = String(headerRow[3] ?? "").trim().toLowerCase();
+
+  const validFirst = h0.includes("first") || h0 === "firstname";
+  const validLast = h1.includes("last") || h1 === "lastname";
+  const validId = h2.includes("id") || h2.includes("student");
+  const validEmail = !h3 || h3.includes("email") || h3.includes("mail");
+
+  if (!validFirst || !validLast || !validId || !validEmail) {
+    return `Unknown column header(s): [${headerRow.slice(0, 4).join(", ")}]. Expected: First Name, Last Name, Student ID, Email.`;
+  }
+  return null;
+}
+
 async function handleFileSelected(file) {
   selectedFile = file;
   previewData = [];
   uploadStatus.hidden = true;
   document.getElementById("previewSection").hidden = true;
   importBtn.hidden = true;
+
+  // Check file extension (IT Expert Requirement 2.1)
+  const fileName = String(file.name || "").toLowerCase();
+  if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls") && !fileName.endsWith(".csv")) {
+    document.getElementById("dropTitle").textContent = "Unsupported file format";
+    document.getElementById("dropHint").textContent = "Please upload a valid .xlsx or .csv template file.";
+    return;
+  }
 
   const MAX_FILE_SIZE_MB = 5;
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
@@ -330,6 +444,21 @@ async function handleFileSelected(file) {
     return;
   }
 
+  if (!rows || rows.length <= 1) {
+    document.getElementById("dropTitle").textContent = "Empty template file";
+    document.getElementById("dropHint").textContent = "No student records were found in the uploaded file.";
+    return;
+  }
+
+  // Validate column headers (IT Expert Requirement 2.0 / 2.1)
+  const headerError = validateTemplateHeaders(rows[0]);
+  if (headerError) {
+    document.getElementById("dropTitle").textContent = "Invalid template columns";
+    document.getElementById("dropHint").textContent = headerError;
+    alert(headerError);
+    return;
+  }
+
   const MAX_ROWS = 100;
   if (rows.length > MAX_ROWS + 1) { 
     document.getElementById("dropTitle").textContent = "Too many records";
@@ -337,61 +466,20 @@ async function handleFileSelected(file) {
     return;
   }
 
-  existingStudentIds.clear();
-  dbExistingStudentClassCodes = {};
-  dbExistingNameOwners = {};
-  dbExistingEmailOwners = {};
-  dbExistingClaimedIds.clear();
+  // Normalize IDs: only pad 9-digit numeric IDs that start with 0 (e.g. 026271000 -> 0026271000)
+  // Do NOT pad 8-digit numbers like 02627100 so short IDs are properly rejected!
+  const normalizeUploadedId = (rawVal) => {
+    const raw = String(rawVal ?? "").trim();
+    if (/^\d{9}$/.test(raw)) return "0" + raw;
+    return raw;
+  };
 
-  const candidateIds = rows.slice(1).map(row => {
-    const id = String(row[2] ?? "").trim();
-    return /^\d{8}$/.test(id) ? "00" + id : id;
-  }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
+  const candidateIds = rows.slice(1)
+    .map(row => normalizeUploadedId(row[2]))
+    .filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
   
   const uniqueCandidateIds = [...new Set(candidateIds)];
-  
-  if (uniqueCandidateIds.length > 0) {
-    // 1. Verify existence globally to prevent overwriting other users
-    try {
-      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
-      for (const id of verifiedExisting) {
-        existingStudentIds.add(id);
-      }
-    } catch (err) {
-      console.warn("Could not check global student IDs:", err);
-    }
-  }
-
-  // 2. Fetch the teacher's roster using the allowed teacherId query to check duplicate Names, Emails, and ClassCodes
-  try {
-    const teacherIdToQuery = currentTeacherId || "TEACH1000";
-    const rosterQ = query(collection(db, "users"), where("teacherId", "==", teacherIdToQuery));
-    const rosterSnap = await getDocs(rosterQ);
-
-    rosterSnap.forEach(docSnap => {
-      const sData = docSnap.data();
-      const docId = docSnap.id;
-      existingStudentIds.add(docId);
-      dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
-
-      if (sData.isClaimed === true || sData.uid) {
-        dbExistingClaimedIds.add(docId);
-      }
-
-      const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
-      const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
-      if (cleanName) {
-        dbExistingNameOwners[cleanName] = docId;
-      }
-
-      const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
-      if (rawEmail) {
-        dbExistingEmailOwners[rawEmail] = docId;
-      }
-    });
-  } catch (err) {
-    console.warn("Failed to fetch teacher roster for duplicate validation:", err);
-  }
+  await loadAllExistingStudentsForValidation(uniqueCandidateIds);
 
   // Build the raw data structure
   for (let i = 1; i < rows.length; i++) {
@@ -400,19 +488,20 @@ async function handleFileSelected(file) {
 
     const firstName = String(row[0] ?? "").trim();
     const lastName = String(row[1] ?? "").trim();
-    let studentId = String(row[2] ?? "").trim();
+    const studentId = normalizeUploadedId(row[2]);
     const email = String(row[3] ?? "").trim().toLowerCase();
-
-    if (studentId && /^\d{8}$/.test(studentId)) studentId = "00" + studentId;
-
-    const isExisting = existingStudentIds.has(studentId);
     const fullName = `${firstName} ${lastName}`.trim();
     
     previewData.push({
       rowNum: i + 1,
-      firstName, lastName, fullName, studentId, email,
+      firstName,
+      lastName,
+      fullName,
+      studentId,
+      email,
+      allowUpdate: false, // By default, flag existing records as duplicates per IT Expert Report
       isValid: false, 
-      isExisting, 
+      isExisting: false, 
       errors: []
     });
   }
@@ -428,12 +517,16 @@ function validateAllRows() {
 
   // 1. Scan the entire table to count in-file frequencies
   previewData.forEach(row => {
-    if (row.studentId) idCounts[row.studentId] = (idCounts[row.studentId] || 0) + 1;
+    const idKey = String(row.studentId || "").trim();
+    if (idKey) idCounts[idKey] = (idCounts[idKey] || 0) + 1;
     if (row.fullName) {
       const nameKey = row.fullName.toLowerCase().replace(/\s+/g, " "); 
       nameCounts[nameKey] = (nameCounts[nameKey] || 0) + 1;
     }
-    if (row.email) emailCounts[row.email] = (emailCounts[row.email] || 0) + 1;
+    if (row.email) {
+      const mailKey = row.email.trim().toLowerCase();
+      emailCounts[mailKey] = (emailCounts[mailKey] || 0) + 1;
+    }
   });
 
   const targetSecCode = String(sectionSelect.value).trim();
@@ -441,25 +534,33 @@ function validateAllRows() {
   // 2. Apply both in-file and database duplicate errors globally
   previewData.forEach(row => {
     let rowErrors = [];
+    const cleanId = String(row.studentId || "").trim();
     const nameKey = row.fullName ? row.fullName.toLowerCase().replace(/\s+/g, " ") : "";
     const cleanEmail = row.email ? row.email.trim().toLowerCase() : "";
     
-    const existsInDb = existingStudentIds.has(row.studentId);
-    const existingClassCode = dbExistingStudentClassCodes[row.studentId] || "";
+    const existsInDb = existingStudentIds.has(cleanId);
+    const existingClassCode = dbExistingStudentClassCodes[cleanId] || "";
     const belongsToAnotherSection = existsInDb && existingClassCode !== "" && existingClassCode !== targetSecCode;
 
-    // Only mark as a valid in-section update if the ID exists in this exact section
     row.isExisting = existsInDb && !belongsToAnotherSection;
 
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
     
-    // ID Checks
-    if (!row.studentId) rowErrors.push("Missing Student ID");
-    else if (!/^\d+$/.test(row.studentId)) rowErrors.push("Invalid ID format");
-    else if (row.studentId.length < 9) rowErrors.push("ID too short");
-    else if (idCounts[row.studentId] > 1) rowErrors.push("Duplicate ID in file");
-    else if (belongsToAnotherSection) rowErrors.push("Student ID belongs to another section");
+    // Student ID Checks (IT Expert Report Page 2 & 3)
+    if (!cleanId) {
+      rowErrors.push("Missing Student ID");
+    } else if (!/^\d+$/.test(cleanId)) {
+      rowErrors.push("Invalid ID format (numbers only)");
+    } else if (cleanId.length < 9 || cleanId.length > 10) {
+      rowErrors.push("ID must be 9–10 digits");
+    } else if (idCounts[cleanId] > 1) {
+      rowErrors.push("Duplicate ID in file");
+    } else if (belongsToAnotherSection) {
+      rowErrors.push("Duplicate ID (belongs to another section)");
+    } else if (existsInDb && !row.allowUpdate) {
+      rowErrors.push("Duplicate ID (already in database)");
+    }
     
     // Name Checks (In-file + Firestore Database)
     if (nameKey) {
@@ -467,29 +568,34 @@ function validateAllRows() {
       if (nameCounts[nameKey] > 1) {
         rowErrors.push("Duplicate Name in file");
       } else if (existingNameOwnerId) {
-        // If this name exists anywhere in Firestore, block it unless it's the exact same student updating their own record
-        if (!row.isExisting || existingNameOwnerId !== row.studentId) {
-          rowErrors.push("Name already exists in database");
+        if (existingNameOwnerId !== cleanId) {
+          rowErrors.push(`Duplicate Name (belongs to ID ${existingNameOwnerId})`);
+        } else if (!row.allowUpdate) {
+          rowErrors.push("Duplicate Name (already in database)");
         }
       }
     }
     
     // Email Checks (In-file + Firestore Database)
-    if (cleanEmail) {
+    if (!cleanEmail) {
+      rowErrors.push("Missing Email");
+    } else {
       const existingEmailOwnerId = dbExistingEmailOwners[cleanEmail];
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-        rowErrors.push("Invalid email");
+        rowErrors.push("Invalid email format");
       } else if (emailCounts[cleanEmail] > 1) {
         rowErrors.push("Duplicate Email in file");
       } else if (existingEmailOwnerId) {
-        if (!row.isExisting || existingEmailOwnerId !== row.studentId) {
-          rowErrors.push("Email already exists in database");
+        if (existingEmailOwnerId !== cleanId) {
+          rowErrors.push(`Duplicate Email (belongs to ID ${existingEmailOwnerId})`);
+        } else if (!row.allowUpdate) {
+          rowErrors.push("Duplicate Email (already in database)");
         }
       }
     }
 
-    row.errors = rowErrors;
-    row.isValid = rowErrors.length === 0;
+    row.errors = [...new Set(rowErrors)];
+    row.isValid = row.errors.length === 0;
   });
 
   renderPreviewTable();
@@ -497,8 +603,17 @@ function validateAllRows() {
 
 function updateRowData(index, field, value) {
   const item = previewData[index];
-  if (field === "email") item.email = value.trim().toLowerCase();
-  else item[field] = value.trim();
+  if (!item) return;
+  if (field === "email") {
+    item.email = value.trim().toLowerCase();
+  } else if (field === "studentId") {
+    const raw = value.trim();
+    item.studentId = /^\d{9}$/.test(raw) ? "0" + raw : raw;
+  } else if (field === "allowUpdate") {
+    item.allowUpdate = Boolean(value);
+  } else {
+    item[field] = value.trim();
+  }
   
   item.fullName = `${item.firstName} ${item.lastName}`.trim();
   validateAllRows(); 
@@ -510,12 +625,16 @@ function renderPreviewTable() {
   
   let validCount = 0;
   let errorCount = 0;
+  let duplicateCount = 0;
   let updateCount = 0;
 
   previewData.forEach((item, index) => {
+    const hasDuplicateError = item.errors.some(e => e.toLowerCase().includes("duplicate"));
+    if (hasDuplicateError) duplicateCount++;
+
     if (item.isValid) {
       validCount++;
-      if (item.isExisting) updateCount++;
+      if (item.isExisting && item.allowUpdate) updateCount++;
     } else {
       errorCount++;
     }
@@ -528,35 +647,44 @@ function renderPreviewTable() {
     
     if (!item.isValid) {
       tr.style.backgroundColor = "#fef2f2"; 
-      statusBadge = "⚠️ " + item.errors.join(", ");
+      statusBadge = "⚠️ " + item.errors.join(" · ");
       statusColor = "#dc2626"; 
-    } else if (item.isExisting) {
+    } else if (item.isExisting && item.allowUpdate) {
       tr.style.backgroundColor = "#f0f9ff"; 
-      statusBadge = "🔄 Update Record";
+      statusBadge = "🔄 Approved Update";
       statusColor = "#0284c7"; 
     } else {
       statusBadge = "✓ Ready (New)";
       statusColor = "#16a34a"; 
     }
     
-    const idHasError = item.errors.some(e => e.includes("ID") || e.includes("format") || e.includes("short") || e.includes("section"));
+    const idHasError = item.errors.some(e => e.includes("ID") || e.includes("digits") || e.includes("section"));
     const nameHasError = item.errors.some(e => e.includes("Name"));
     const emailHasError = item.errors.some(e => e.includes("Email") || e.includes("email"));
+
+    // If this Student ID exists in the current section, let the teacher explicitly opt-in to updating it
+    const updateToggleHtml = item.isExisting
+      ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:0.78rem;color:#0284c7;cursor:pointer;font-weight:600;">
+           <input type="checkbox" data-index="${index}" data-field="allowUpdate" ${item.allowUpdate ? "checked" : ""}> Allow Update
+         </label>`
+      : "";
 
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
       </td>
-      <td style="padding: 10px 8px; ${idHasError ? 'color: #dc2626; font-weight: bold;' : ''}">${item.studentId || '<em style="color:red">Missing</em>'}</td>
       <td style="padding: 10px 8px;">
-        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 160px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626;' : ''}">
+        <input type="text" data-index="${index}" data-field="studentId" value="${item.studentId}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
+      </td>
+      <td style="padding: 10px 8px;">
+        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
-        ${statusBadge}
+        <span>${statusBadge}</span>${updateToggleHtml}
       </td>
     `;
     tbody.appendChild(tr);
@@ -565,29 +693,33 @@ function renderPreviewTable() {
   const inputs = tbody.querySelectorAll("input");
   inputs.forEach(input => {
     input.addEventListener("change", (e) => {
-      updateRowData(e.target.dataset.index, e.target.dataset.field, e.target.value);
+      const field = e.target.dataset.field;
+      const val = field === "allowUpdate" ? e.target.checked : e.target.value;
+      updateRowData(Number(e.target.dataset.index), field, val);
     });
   });
 
   document.getElementById("previewSection").hidden = false;
   
-  let summaryText = `Found ${validCount} valid records `;
-  if (updateCount > 0) summaryText += `(${updateCount} will be updated) `;
-  summaryText += `and ${errorCount} errors.`;
+  let summaryText = `Found ${validCount} valid record(s)`;
+  if (updateCount > 0) summaryText += ` (${updateCount} approved update(s))`;
+  summaryText += `, ${errorCount} error(s)`;
+  if (duplicateCount > 0) summaryText += ` (${duplicateCount} duplicate(s) flagged)`;
+  summaryText += ".";
   
   document.getElementById("previewSummary").textContent = summaryText;
   
   const confirmBtn = document.getElementById("confirmPreviewBtn");
   if (validCount > 0 && errorCount === 0) {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = `Import/Update ${validCount} Records`;
+    confirmBtn.textContent = `Import/Update ${validCount} Record(s)`;
   } else {
     confirmBtn.disabled = true;
-    confirmBtn.textContent = errorCount > 0 ? "Fix errors to proceed" : "No valid records to import";
+    confirmBtn.textContent = errorCount > 0 ? `Fix ${errorCount} Error(s) to Proceed` : "No valid records to import";
   }
   
   document.getElementById("dropTitle").textContent = selectedFile.name;
-  document.getElementById("dropHint").textContent = "Review the table below. You can edit names and emails directly to fix mistakes or update existing students.";
+  document.getElementById("dropHint").textContent = "Review the table below. Edit any red highlighted cells or check 'Allow Update' for intentional updates.";
 }
 
 // --- IMPORT CONFIRMATION & FIRESTORE BATCH UPLOAD ---
@@ -596,7 +728,6 @@ const closeImportModal = () => importModal.classList.remove("open");
 document.getElementById("confirmPreviewBtn").addEventListener("click", (event) => {
   event.stopPropagation();
   
-  // Strictly block opening the confirmation modal if ANY row has an error
   if (previewData.some(item => !item.isValid)) {
     alert("Please fix all highlighted duplicate or validation errors before proceeding.");
     return;
@@ -652,7 +783,6 @@ confirmImportBtn.addEventListener("click", async () => {
       let finalStudentId = stu.studentId;
       const finalEmail = stu.email || `${finalStudentId}@imars.edu`;
 
-      // Safe update payload that respects Firestore security rules (does not touch protected keys)
       const strictUpdateData = {
         firstName: stu.firstName,
         lastName: stu.lastName,
@@ -692,19 +822,9 @@ confirmImportBtn.addEventListener("click", async () => {
           createdAt: serverTimestamp()
         };
         
-        try {
-          await setDoc(doc(db, "users", finalStudentId), newStudentData);
-          targetSec.count++;
-          newCount++;
-        } catch (innerErr) {
-          if (innerErr.message && innerErr.message.toLowerCase().includes("existing record")) {
-            console.warn(`Backend blocked overwrite for ${finalStudentId}. Falling back to safe update.`);
-            await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
-            updateCount++;
-          } else {
-            throw innerErr;
-          }
-        }
+        await setDoc(doc(db, "users", finalStudentId), newStudentData);
+        targetSec.count++;
+        newCount++;
       } else {
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
         updateCount++;
@@ -714,7 +834,7 @@ confirmImportBtn.addEventListener("click", async () => {
     updateSelectedSection();
     closeImportModal();
 
-    uploadStatus.textContent = `Successfully added ${newCount} and updated ${updateCount} student(s) in ${targetSec.label}!`;
+    uploadStatus.textContent = `Successfully imported ${newCount} new and updated ${updateCount} existing student(s) in ${targetSec.label}!`;
     uploadStatus.hidden = false;
 
     document.getElementById("previewSection").hidden = true;
