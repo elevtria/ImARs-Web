@@ -41,13 +41,13 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="intro">
-        <h1>Sync Offline Results</h1>
+    <main class="content" inert data-auth-shell>
+      <section class="intro" data-auth-shell>
+        <h1 data-auth-shell>Sync Offline Results</h1>
         <p>Scan a student's Grade QR code or upload its image to sync offline learning results. Keep this device online to save the results. AR marker scanning takes place in the student app.</p>
       </section>
 
-      <section class="scan-card">
+      <section class="scan-card" data-auth-shell>
         <div class="viewfinder-wrap">
           <div class="viewfinder" id="viewfinder" style="overflow: hidden; position: relative;">
             <span class="corner tl" style="z-index: 10;"></span>
@@ -82,8 +82,8 @@
         <p class="status" id="camStatus"></p>
       </section>
 
-      <section class="recent-card">
-        <h2>Recent Scans</h2>
+      <section class="recent-card" data-auth-shell>
+        <h2 data-auth-shell>Recent Scans</h2>
         <div id="recentScansList">
           <p class="muted center" style="margin-top: 20px;"><span data-loading="true" role="status" aria-label="Loading recent scans"></span></p>
         </div>

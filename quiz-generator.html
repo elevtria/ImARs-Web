@@ -34,11 +34,11 @@
       </div>
     </header>
 
-    <main class="content quiz-content">
-      <section class="hero quiz-hero">
+    <main class="content quiz-content" inert data-auth-shell>
+      <section class="hero quiz-hero" data-auth-shell>
         <div>
           <p class="quiz-eyebrow">TEACHER TOOLS</p>
-          <h1>Quiz Generator</h1>
+          <h1 data-auth-shell>Quiz Generator</h1>
           <p>Create a quiz from your learning material, review every AI suggestion, and edit it before learners can access it.</p>
         </div>
         <button class="ghost-btn" id="openLibrary" type="button">My quizzes <span class="quiz-library-count" id="libraryCount">0</span></button>
@@ -49,7 +49,7 @@
         <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
       </div>
 
-      <section id="createView" class="quiz-view">
+      <section id="createView" class="quiz-view" data-auth-shell>
         <ol class="quiz-stepper" aria-label="Quiz creation progress">
           <li class="active" data-step-indicator="setup"><span>1</span><b>Set up</b></li>
           <i aria-hidden="true"></i>
@@ -58,9 +58,9 @@
           <li data-step-indicator="editor"><span>3</span><b>Edit and publish</b></li>
         </ol>
 
-        <section class="quiz-step-pane" id="setupStep">
+        <section class="quiz-step-pane" id="setupStep" data-auth-shell>
           <div class="quiz-panel-heading">
-            <div><span class="quiz-section-tag">STEP 1</span><h2>Set up your quiz</h2><p>Upload your learning material and choose what kind of questions to create.</p></div>
+            <div><span class="quiz-section-tag">STEP 1</span><h2 data-auth-shell>Set up your quiz</h2><p>Upload your learning material and choose what kind of questions to create.</p></div>
           </div>
 
           <div class="quiz-setup-grid">
@@ -124,9 +124,9 @@
           <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false"><span class="section-data-loading" role="status" aria-label="Generating quiz"></span></div>
         </section>
 
-        <section class="quiz-step-pane" id="reviewStep" hidden>
+        <section class="quiz-step-pane" id="reviewStep" hidden data-auth-shell>
           <div class="quiz-panel-heading quiz-review-heading">
-            <div><span class="quiz-section-tag">STEP 2</span><h2>Review AI suggestions</h2><p>Accept the questions you want. You can edit them on the next screen.</p></div>
+            <div><span class="quiz-section-tag">STEP 2</span><h2 data-auth-shell>Review AI suggestions</h2><p>Accept the questions you want. You can edit them on the next screen.</p></div>
             <span class="quiz-demo-badge"><i></i> AI generated · review before saving</span>
           </div>
           <div class="quiz-review-summary" id="reviewSummary"></div>
@@ -138,9 +138,9 @@
           </div>
         </section>
 
-        <section class="quiz-step-pane" id="editorStep" hidden>
+        <section class="quiz-step-pane" id="editorStep" hidden data-auth-shell>
           <div class="quiz-panel-heading quiz-editor-heading">
-            <div><span class="quiz-section-tag">STEP 3</span><h2>Edit your quiz</h2><p>Review wording and answers before you save or release the quiz.</p></div>
+            <div><span class="quiz-section-tag">STEP 3</span><h2 data-auth-shell>Edit your quiz</h2><p>Review wording and answers before you save or release the quiz.</p></div>
             <span class="quiz-editor-meta" id="editorMeta"></span>
           </div>
           <div class="quiz-editor-toolbar">
@@ -151,7 +151,7 @@
           <div class="quiz-question-editor-list" id="questionEditorList"></div>
           <button class="quiz-add-question" id="addQuestion" type="button"><span>＋</span> Add question <small id="questionLimitText">0 / 50</small></button>
 
-          <section class="quiz-availability-card" id="quizAvailability">
+          <section class="quiz-availability-card" id="quizAvailability" data-auth-shell>
             <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose how this quiz becomes available in its section.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
             <div class="quiz-release-options">
               <label class="quiz-release-option selected"><input type="radio" name="availability" value="draft" checked /><span class="quiz-release-radio"></span><span><b>Save as draft</b><small>Only you can see it. It stays locked for learners.</small></span></label>
@@ -169,8 +169,8 @@
         </section>
       </section>
 
-      <section id="libraryView" class="quiz-view" hidden>
-        <div class="quiz-library-heading"><div><span class="quiz-section-tag">YOUR QUIZZES</span><h2>Quiz library</h2><p>Schedule each quiz here or change when learners can access it.</p></div><button class="primary-btn quiz-primary" id="newQuizFromLibrary" type="button">＋ Create quiz</button></div>
+      <section id="libraryView" class="quiz-view" hidden data-auth-shell>
+        <div class="quiz-library-heading"><div><span class="quiz-section-tag">YOUR QUIZZES</span><h2 data-auth-shell>Quiz library</h2><p>Schedule each quiz here or change when learners can access it.</p></div><button class="primary-btn quiz-primary" id="newQuizFromLibrary" type="button">＋ Create quiz</button></div>
         <div class="quiz-library-filters"><label class="quiz-field"><span class="quiz-field-label">Filter by section</span><select class="quiz-input" id="librarySectionFilter" disabled><option value="">All sections</option></select></label><p class="quiz-status" id="libraryFilterCount" role="status" aria-live="polite"></p></div>
         <p class="quiz-status" id="libraryStatus" role="status" aria-live="polite"></p>
         <p class="quiz-status" id="libraryFilterEmpty" hidden>No quizzes for the selected section yet.</p>

@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
 import { buildStudentActivityRecords } from "../js/student-activity-record.js";
 import { setLoadingState } from "../js/loading.js";
+import { encodeView } from "../js/view-cache.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
@@ -21,10 +22,12 @@ class Element {
   get innerHTML() { return this._html; }
   get options() { return this.children; }
   get childNodes() { return this.children; }
-  addEventListener() {}
+  events = {};
+  addEventListener(name, callback) { this.events[name] = callback; }
   setAttribute() {}
   removeAttribute() {}
   appendChild(child) { if (child.fragment) this.children.push(...child.children); else this.children.push(child); }
+  replaceChildren(...children) { this.children=children; }
   insertAdjacentHTML(_, value) { this._html += value; }
   querySelectorAll(selector) { return this.children.filter(child => selector === ".student-row" && child.className === "student-row"); }
   html() { return this._html + this.children.map(child => child.html()).join(""); }
@@ -58,6 +61,39 @@ function assertTextOnly(html) {
   assert.ok(!html.includes("<img src=x"), "database text must not create an image/event handler");
   assert.ok(!html.includes("<svg/onload"), "database text must not create an SVG/event handler");
 }
+
+function batchPage() {
+  const elements=new Map(),calls=[],writes=[],auth={currentUser:{uid:'teacher-a',id:'TEACH1000'}};let changed,finishCount;
+  const element=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
+  const count=new Promise(resolve=>{finishCount=resolve;});
+  const cache={version:()=>0,put:(...args)=>writes.push(args),invalidate(){}};
+  const context=vm.createContext({console:{error(){}},Date,Map,Set,JSON,encodeView,setLoadingState,
+    initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,callback)=>{changed=callback;},
+    prepareTeacherCache:()=>cache,showTeacherView:async options=>options.render(await options.load({})),
+    getStudentPage:async options=>{calls.push(options);return options.includeTeacher?{teacherDoc:record('TEACH1000',{role:'teacher',sections:['Grade 6 – A','Grade 6 – B']}),classes:[record('A',{SectionName:'A'}),record('B',{SectionName:'B'})],counts:null}:count;},
+    getDocs:()=>assert.fail('startup must not query the teacher or roster separately'),
+    window:{location:{}},document:{getElementById:element,createElement:()=>new Element()},alert:()=>assert.fail('optional totals must not block the page')
+  });
+  vm.runInContext(source('batch-upload.js'),context);
+  return{element,auth,calls,writes,load:async()=>{changed(auth.currentUser);for(let i=0;i<4;i++)await new Promise(setImmediate);},
+    count:async()=>{finishCount({counts:[{classId:'A',active:1000,archived:20}]});for(let i=0;i<4;i++)await new Promise(setImmediate);}};
+}
+
+test('Batch Upload renders section choices before totals finish and requests counts only for the selected section',async()=>{
+  const app=batchPage();await app.load();
+  assert.equal(app.calls.length,2);assert.equal(app.calls[0].includeTeacher,true);assert.equal(app.calls[0].includeCounts,'cached');
+  assert.equal(app.calls[1].sectionId,'A');assert.equal(app.calls[1].includeStudents,false);
+  assert.equal(app.element('sectionSelect').children.length,2);assert.equal(app.element('sectionName').textContent,'Grade 6 – A');
+  assert.equal(app.element('existingCount').textContent,'');const first=app.element('sectionSelect').children[0];
+  await app.count();assert.equal(app.element('existingCount').textContent,'(1020 existing students)');
+  assert.equal(app.element('sectionSelect').children[0],first,'a count update must not replace the dropdown');
+  assert.equal(app.writes.length,1);
+});
+
+test('a late Batch Upload count cannot update another signed-in account',async()=>{
+  const app=batchPage();await app.load();app.auth.currentUser={uid:'teacher-b'};await app.count();
+  assert.equal(app.element('existingCount').textContent,'');assert.equal(app.writes.length,0);
+});
 
 test("dashboard names, sections, and lesson titles render as text rather than executable markup", async () => {
   const student = record("S1", { displayName: attack });

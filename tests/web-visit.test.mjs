@@ -20,7 +20,7 @@ function page({ path = "/index", type = "navigate", referrer = "", user = { uid:
   const events = {}, calls = [], deliveries = [];
   const application = {};
   const body = { pending: path !== "/login", setAttribute() { this.pending = true; }, removeAttribute() { this.pending = false; } };
-  const main = { cleared: false, replaceChildren() { this.cleared = true; } };
+  const main = { cleared: false, inert: path !== "/login", replaceChildren() { this.cleared = true; } };
   const location = { pathname: path, origin: "https://imars.example.test", replace(url) { this.redirect = url; } };
   const approved = async () => {
     const result = read ? await read() : null;
@@ -116,6 +116,7 @@ test("all page observers wait for one shared live role check before displaying c
   app.observe(); app.observe(); await flush();
   assert.equal(app.calls.filter(call => call[0] === "profile").length, 1);
   assert.deepEqual(app.deliveries, []); assert.equal(app.body.pending, true);
+  assert.equal(app.main.inert,true,'static frames can paint while their controls remain unavailable');
   resolve({ size: 1, docs: [{ data: () => ({ uid: "teacher-a", role: "teacher", active: true }) }] });
   await flush();
   assert.deepEqual(app.deliveries, ["teacher-a", "teacher-a"]); assert.equal(app.body.pending, false);
@@ -198,6 +199,9 @@ test("every portal includes the initial privacy guard and uses the shared authen
   for (const file of readdirSync(root).filter(file => file.endsWith(".html") && !["login.html", "admin-login.html"].includes(file))) {
     const html = readFileSync(new URL(file, root), "utf8");
     assert.match(html, /<body\b[^>]*\bdata-auth-pending(?:\s|>)/);
+    assert.match(html, /<main\b[^>]*\binert\b[^>]*\bdata-auth-shell\b/);
+    assert.doesNotMatch(html, /<(?:strong|span|input|select)\b[^>]*\bdata-auth-shell\b/);
+    assert.doesNotMatch(html, /<h[12]\b[^>]*\bid=[^>]*\bdata-auth-shell\b/);
     assert.match(html, /css\/(app|admin-dashboard)\.css/);
     assert.match(html, /js\/(school-year|teacher-nav)\.js/);
   }

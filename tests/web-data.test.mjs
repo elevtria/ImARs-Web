@@ -7,6 +7,23 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 
 import { fixture, accounts } from "./fixtures/web-data.js";
 const stamp = { $type: "serverTimestamp" };
+
+test("batch-upload metadata reuses the verified teacher and reads sections without student queries or counts",async()=>{
+  const app=fixture(),cookie=await app.login(),queries=[],gets=[];
+  app.data.get('users/TEACH1000').sections=['Grade 6 – A'];
+  const queryStore=app.store.query.bind(app.store),get=app.store.get.bind(app.store);
+  app.store.query=(path,options)=>{queries.push(path);assert.notEqual(path,'users');return queryStore(path,options);};
+  app.store.get=path=>{gets.push(path);return get(path);};
+  app.store.count=()=>assert.fail('section dropdown must not wait for counts');
+  const response=await app.call({action:'student-page',includeStudents:false,includeCounts:false,includeTeacher:true},cookie);
+  assert.equal(response.status,200);const page=await response.json();
+  assert.deepEqual(queries,['classes']);assert.deepEqual(page.students,[]);assert.equal(page.counts,null);
+  assert.equal(page.teacher.id,'TEACH1000');assert.deepEqual(page.teacher.data.sections,['Grade 6 – A']);
+  assert.equal(gets.filter(path=>path==='users/TEACH1000').length,1,'the already verified profile must not be read twice');
+  assert.equal(JSON.stringify(page).includes('must-never-leave-server'),false);assert.equal(JSON.stringify(page).includes('private-marker'),false);
+  assert.equal((await app.call({action:'student-page',includeStudents:false,includeCounts:false,includeTeacher:'TEACH1001'},cookie)).status,400);
+  assert.equal((await app.call({action:'student-page',sectionId:'B',includeStudents:false,includeCounts:false,includeTeacher:true},cookie)).status,403);
+});
 const union = (...values) => ({ $type: "arrayUnion", values });
 
 const get = path => ({ action: "get", reference: { kind: "document", path } });

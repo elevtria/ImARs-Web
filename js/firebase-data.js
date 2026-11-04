@@ -204,6 +204,7 @@ async function studentPageRequest(action, options, requestOptions) {
 export async function getStudentPage(options = {}, requestOptions = {}) {
   const result = await studentPageRequest("student-page", options, requestOptions);
   return { ...result, classes: result.classes.map(snapshot),
+    ...(result.teacher ? { teacherDoc: snapshot(result.teacher) } : {}),
     students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document),
       ...(Array.isArray(row.lessons) ? { results: [{ termId: row.termId, lessonsSnap: querySnapshot(row.lessons) }] } : {}) })) };
 }

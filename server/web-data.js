@@ -235,6 +235,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
       !term(body.includeResults.termId) || !Number.isInteger(body.includeResults.limit) || body.includeResults.limit < 1 || body.includeResults.limit > 8)) {
     throw fail("Invalid student performance page.", 400);
   }
+  if (body.includeTeacher !== undefined && typeof body.includeTeacher !== "boolean") throw fail("Invalid teacher details request.", 400);
   const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -289,6 +290,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   }
   const page = { classes: classes.map(row => output("classes/" + row.id, row)), students, scanned,
     cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
+  if (body.includeTeacher === true) page.teacher = output("users/" + scope.actor.id, await scope.get("users/" + scope.actor.id));
   // Reports can start their lesson batches as soon as roster ownership is
   // verified, while independent section totals are still being calculated.
   if (deferCounts) return { ...page, pendingCounts: countPromise };

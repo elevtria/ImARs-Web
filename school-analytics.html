@@ -54,10 +54,10 @@
     </div>
   </aside>
 
-  <main class="dashboard-content analytics-content">
-    <section class="analytics-heading">
+  <main class="dashboard-content analytics-content" inert data-auth-shell>
+    <section class="analytics-heading" data-auth-shell>
       <div>
-        <h1>School Analytics</h1>
+        <h1 data-auth-shell>School Analytics</h1>
         <p>Overall performance across all teachers and sections</p>
       </div>
       <div class="view-switch" role="group" aria-label="Analytics view">
@@ -66,8 +66,8 @@
       </div>
     </section>
 
-    <section class="analytics-grid" id="teacherAnalytics" aria-label="Teacher performance" data-loading-path="users" data-loading-label="Loading teacher analytics…"></section>
-    <section class="section-analytics" id="sectionAnalytics" aria-label="Section performance" hidden></section>
+    <section class="analytics-grid" id="teacherAnalytics" aria-label="Teacher performance" data-loading-path="users" data-loading-label="Loading teacher analytics…" data-auth-shell></section>
+    <section class="section-analytics" id="sectionAnalytics" aria-label="Section performance" hidden data-auth-shell></section>
   </main>
 
   <button class="help-button" type="button" aria-label="Help">?</button>

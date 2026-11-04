@@ -40,10 +40,10 @@
       </div>
     </header>
 
-    <main class="content">
-      <section class="hero">
+    <main class="content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
         <div>
-          <h1>Topic Scheduler</h1>
+          <h1 data-auth-shell>Topic Scheduler</h1>
           <div class="quiz-schedule-controls">
             <label class="quiz-schedule-access" for="scheduleSection">Schedule for section
               <select id="scheduleSection" disabled><option value="">Select a section</option></select>
@@ -53,9 +53,9 @@
         </div>
       </section>
 
-      <section class="terms" id="terms"></section>
+      <section class="terms" id="terms" data-auth-shell></section>
 
-      <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading">
+      <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading" data-auth-shell>
         <div class="quiz-scheduler-heading">
           <div><h2 id="activitySchedulerHeading">Activity Schedule</h2><p class="scheduler-progress-copy">Choose when each lesson topic becomes available to learners.</p></div>
         </div>
@@ -63,8 +63,8 @@
         <div id="activityScheduleList" class="quiz-schedule-list"></div>
       </section>
 
-      <section class="progress-card">
-        <h2>Year Progress</h2>
+      <section class="progress-card" data-auth-shell>
+        <h2 data-auth-shell>Year Progress</h2>
         <p class="scheduler-progress-copy">Based on topics currently unlocked for learners.</p>
         <div class="year-grid" id="yearProgress"></div>
       </section>

@@ -5,8 +5,7 @@ import {
   collection, 
   query, 
   where, 
-  getDocsWithLoading as getDocs,
-  getDocs as quietDocs,
+  getDocs,
   getStudentPage,
   doc, 
   setDoc, 
@@ -15,7 +14,8 @@ import {
   checkStudentIds,
   serverTimestamp 
 } from "./firebase-data.js";
-import { showTeacherView } from "./teacher-view.js";
+import { showTeacherView, prepareTeacherCache } from "./teacher-view.js";
+import { encodeView } from "./view-cache.js";
 import { setLoadingState } from "./loading.js";
 
 const app = initializeApp();
@@ -50,6 +50,7 @@ let dbExistingStudentClassCodes = {};
 let dbExistingNameOwners = {};  // normalized fullName -> Set of studentIds
 let dbExistingEmailOwners = {}; // normalized email -> Set of studentIds
 let dbExistingClaimedIds = new Set(); // studentIds that already claimed their account
+const pendingCounts = new Map();
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -83,28 +84,57 @@ function renderSections(selectedCode = sectionSelect.value) {
 function updateSelectedSection() {
   const sec = sections.find((item) => item.classCode === sectionSelect.value);
   sectionNameEl.textContent = sec ? sec.label : "No section";
-  const count = sec ? sec.count : 0;
-  existingCountEl.textContent = `(${count} existing ${count === 1 ? "student" : "students"})`;
+  renderSelectedCount();
   if (previewData.length > 0) {
     validateAllRows();
   }
+  if (auth.currentUser) void refreshSelectedCount(auth.currentUser);
 }
 
 sectionSelect.addEventListener("change", updateSelectedSection);
 
+function renderSelectedCount() {
+  const count = sections.find(item => item.classCode === sectionSelect.value)?.count;
+  existingCountEl.textContent = Number.isSafeInteger(count) ? `(${count} existing ${count === 1 ? "student" : "students"})` : "";
+}
+
+async function refreshSelectedCount(user) {
+  const selected = sections.find(item => item.classCode === sectionSelect.value);
+  if (!selected || (selected.countCheckedAt && Date.now() - selected.countCheckedAt < 60000)) return;
+  const cache = prepareTeacherCache(app, user), version = cache.version();
+  const key = user.uid + ":" + version + ":" + selected.classCode;
+  if (pendingCounts.has(key)) return pendingCounts.get(key);
+  const pending = (async () => {
+    try {
+      const result = await getStudentPage({ sectionId: selected.classCode, includeStudents: false });
+      if (auth.currentUser?.uid !== user.uid || cache.version() !== version) return;
+      const section = sections.find(item => item.classCode === selected.classCode);
+      const count = result.counts?.find(item => item.classId === selected.classCode);
+      if (!section || !count) return;
+      section.count = count.active + count.archived;
+      section.countCheckedAt = Date.now();
+      cache.put(user.uid, "batch-upload", encodeView({ teacherId: currentTeacherId, sections }), version);
+      if (sectionSelect.value === section.classCode) renderSelectedCount();
+    } catch (error) {
+      if (auth.currentUser?.uid !== user.uid || cache.version() !== version) return;
+      if ([401, 403].includes(error.status) || ["permission-denied", "unauthenticated"].includes(error.code)) {
+        cache.invalidate(); sections = []; renderSections();
+      }
+      console.error("Could not update section total:", error);
+    } finally { pendingCounts.delete(key); }
+  })();
+  pendingCounts.set(key, pending);
+  return pending;
+}
+
 // --- LOAD TEACHER SECTIONS & STUDENT COUNTS FROM FIRESTORE ---
 async function loadSectionsFromDB(user, { background = false } = {}) {
   try {
-    const userQ = query(collection(db, "users"), where("uid", "==", user.uid));
-    const userSnap = await getDocs(userQ);
-
-    const teacher = userSnap.docs.find(entry => String(entry.data().role || "").toLowerCase() === "teacher");
+    const page = await getStudentPage({ includeStudents: false, includeCounts: "cached", includeTeacher: true });
+    const teacher = page.teacherDoc;
     if (!teacher) throw Object.assign(new Error("No teacher profile was found for your account."), { code: "permission-denied" });
     const teacherId = teacher.id;
     const teacherData = teacher.data();
-
-    const classQ = query(collection(db, "classes"), where("teacherId", "==", teacherId));
-    const classSnap = await getDocs(classQ);
 
     const loadedSections = [];
 
@@ -112,7 +142,7 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
       ? teacherData.sections.map(s => formatSectionLabel(s).toLowerCase()).filter(Boolean)
       : (teacherData.section ? [formatSectionLabel(teacherData.section).toLowerCase()] : []);
 
-    for (const classDoc of classSnap.docs) {
+    for (const classDoc of page.classes) {
       const cData = classDoc.data();
       const rawName = cData.SectionName || cData.sectionName || cData.name || classDoc.id;
       const label = formatSectionLabel(rawName);
@@ -121,20 +151,18 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
       if (teacherSections.length > 0 && !teacherSections.includes(label.toLowerCase())) {
         continue;
       }
+      const count = page.counts?.find(item => item.classId === classDoc.id);
+      const previous = currentTeacherId === teacherId ? sections.find(item => item.classCode === classDoc.id) : null;
 
       loadedSections.push({
         classCode: classDoc.id,
         rawName: rawName,
         label: label,
-        count: 0
+        count: count ? count.active + count.archived : previous?.count ?? null,
+        countCheckedAt: count ? Date.now() : previous?.countCheckedAt || 0
       });
     }
 
-    const totals = await getStudentPage({ includeStudents: false });
-    for (const section of loadedSections) {
-      const count = totals.counts.find(item => item.classId === section.classCode);
-      section.count = count ? count.active + count.archived : 0;
-    }
     return { teacherId, sections: loadedSections };
   } catch (err) {
     console.error("Error loading sections from DB:", err);
@@ -148,7 +176,12 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
   showTeacherView({ app, user, page: "batch-upload", load: options => loadSectionsFromDB(user, options),
-    render: data => { currentTeacherId = data.teacherId; sections = data.sections; renderSections(); }
+    render: data => {
+      const sameOptions = JSON.stringify(sections.map(row => [row.classCode, row.label])) === JSON.stringify(data.sections.map(row => [row.classCode, row.label]));
+      currentTeacherId = data.teacherId; sections = data.sections;
+      if (sameOptions) { renderSelectedCount(); void refreshSelectedCount(user); }
+      else renderSections();
+    }
   }).catch(error => { 
     sectionNameEl.textContent = "Error loading data!";
     sectionSelect.innerHTML = `<option>Failed to load</option>`;
@@ -251,7 +284,8 @@ sectionForm.addEventListener("submit", async (event) => {
       classCode,
       rawName: rawSectionOnly,
       label: formattedLabel,
-      count: 0
+      count: 0,
+      countCheckedAt: Date.now()
     });
     renderSections(classCode);
     closeSectionModal();
@@ -842,7 +876,7 @@ confirmImportBtn.addEventListener("click", async () => {
         };
         
         await setDoc(doc(db, "users", finalStudentId), newStudentData);
-        targetSec.count++;
+        if (Number.isSafeInteger(targetSec.count)) targetSec.count++;
         newCount++;
       } else {
         await updateDoc(doc(db, "users", finalStudentId), strictUpdateData);
@@ -850,6 +884,7 @@ confirmImportBtn.addEventListener("click", async () => {
       }
     }
 
+    targetSec.countCheckedAt = 0;
     updateSelectedSection();
     closeImportModal();
 

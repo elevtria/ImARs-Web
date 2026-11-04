@@ -60,16 +60,16 @@
     </div>
   </aside>
 
-  <main class="dashboard-content profile-content">
-    <section class="profile-heading">
-      <div><h1>Admin Profile</h1><p>Your account information and settings</p></div>
+  <main class="dashboard-content profile-content" inert data-auth-shell>
+    <section class="profile-heading" data-auth-shell>
+      <div><h1 data-auth-shell>Admin Profile</h1><p>Your account information and settings</p></div>
       <button class="edit-profile-button" id="editProfileButton" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
         Edit Profile
       </button>
     </section>
 
-    <section class="profile-card" aria-label="Administrator profile summary">
+    <section class="profile-card" aria-label="Administrator profile summary" data-auth-shell>
       <div class="profile-banner"></div>
       <div class="profile-summary">
         <div class="profile-avatar" id="profileInitials">DS</div>
@@ -79,7 +79,7 @@
       </div>
     </section>
 
-    <section class="profile-info-card" aria-labelledby="accountInfoTitle" data-loading-path="users">
+    <section class="profile-info-card" aria-labelledby="accountInfoTitle" data-loading-path="users" data-auth-shell>
       <h2 id="accountInfoTitle">Account Information</h2>
       <dl class="profile-info-grid">
         <div><dt>Full Name</dt><dd id="infoName">—</dd></div>
@@ -91,7 +91,7 @@
       </dl>
     </section>
 
-    <section class="profile-session-card" aria-labelledby="sessionTitle">
+    <section class="profile-session-card" aria-labelledby="sessionTitle" data-auth-shell>
       <h2 id="sessionTitle">Session</h2>
       <a class="profile-logout-button" id="logoutButton" href="login.html">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>

@@ -101,6 +101,29 @@ new background services, or requests for private data before login were added.
 Firebase billing remains disabled. Automatic stored summaries maintained by
 Firebase write triggers were deferred; they are not part of this patch.
 
+Batch Upload now requests its verified teacher profile and assigned sections in
+one metadata request, reusing the profile already checked by authorization. It
+does not fetch student profiles or wait for all-section totals to enable the
+section picker. Only the selected section's missing count refreshes afterward;
+the resulting count is saved with the existing view cache. Quiet updates retain
+the dropdown and previous values. The heading no longer has a fetch spinner.
+
+While access is being checked, static page frames and generic headings remain
+visible. Sensitive values, profile names and controls remain hidden and the main
+content is inert until verification succeeds. The same guard covers logout and
+back-button restoration. Pages still use normal HTML navigation; this change
+does not turn the website into a single-page application or guarantee a fresh
+database response within a few milliseconds.
+
+Account verification overlaps the independent live profile and Firebase Auth
+status reads. Both still must pass. A section-metadata diagnostic before this
+change measured 1,654 ms overall, with 1,332 ms in verification and 321 ms in the
+section query. This sample explains why removing a spinner alone cannot make
+fresh reads immediate; it excludes the browser and Cloudflare session requests.
+A later sample with overlapping verification measured 1,138 ms overall: 328 ms
+in verification and 809 ms in the section query. Network variation prevents
+treating these two samples as a guaranteed percentage improvement.
+
 ## Verification and measured limits
 
 Regression coverage checks repeated focus events, delayed polling, expired/corrupt

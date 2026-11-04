@@ -53,38 +53,38 @@
     </div>
   </aside>
 
-  <main class="dashboard-content">
-    <section class="page-intro">
+  <main class="dashboard-content" inert data-auth-shell>
+    <section class="page-intro" data-auth-shell>
       <div>
-        <h1>Admin Overview</h1>
+        <h1 data-auth-shell>Admin Overview</h1>
         <p>School-wide performance · AR Learning Platform · <span data-school-year>SY 2026–27</span></p>
       </div>
     </section>
 
-<section class="metric-grid" aria-label="School summary" data-loading-path="users" data-loading-label="Loading school summary…">
-      <article class="metric-card">
+<section class="metric-grid" aria-label="School summary" data-loading-path="users" data-loading-label="Loading school summary…" data-auth-shell>
+      <article class="metric-card" data-auth-shell>
         <span class="metric-label purple">Total Teachers</span>
         <strong class="metric-value" id="totalTeachersVal">0</strong>
         <span class="metric-note" id="totalTeachersNote">0 registered</span>
       </article>
-      <article class="metric-card">
+      <article class="metric-card" data-auth-shell>
         <span class="metric-label cyan">Total Students</span>
         <strong class="metric-value" id="totalStudentsVal">0</strong>
         <span class="metric-note" id="totalStudentsNote">Across all sections</span>
       </article>
-      <article class="metric-card">
+      <article class="metric-card" data-auth-shell>
         <span class="metric-label green">School Avg Post-Test</span>
         <strong class="metric-value" id="schoolAvgPostVal">0%</strong>
         <span class="metric-note" id="schoolAvgPreNote">Up from 0% pre-test</span>
       </article>
-      <article class="metric-card">
+      <article class="metric-card" data-auth-shell>
         <span class="metric-label pink">Total AR Hours</span>
         <strong class="metric-value" id="totalArHoursVal">0h</strong>
         <span class="metric-note">All teachers combined</span>
       </article>
     </section>
 
-    <section class="panel learning-panel" aria-labelledby="learningTitle">
+    <section class="panel learning-panel" aria-labelledby="learningTitle" data-auth-shell>
       <h2 id="learningTitle">School-Wide Learning Gain</h2>
       <div class="learning-content">
         <div class="learning-ring" id="learningRing" role="img" aria-label="School average post-test score">
@@ -107,7 +107,7 @@
       </div>
     </section>
 
-    <section class="panel teacher-panel" aria-labelledby="teacherTitle">
+    <section class="panel teacher-panel" aria-labelledby="teacherTitle" data-auth-shell>
       <div class="panel-heading">
         <h2 id="teacherTitle">Teacher Performance Snapshot</h2>
         <span class="teacher-count" id="tableTeacherCount">0 teachers</span>

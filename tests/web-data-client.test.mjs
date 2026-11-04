@@ -34,6 +34,17 @@ function fixture(transport, { now = Date.now } = {}) {
 }
 const document = (path, data) => ({ id: path.split("/").at(-1), path, data });
 
+test("batch-upload receives its own verified teacher and assigned sections in one count-free metadata request",async()=>{
+  const backend=dataFixture(),cookie=await backend.login();
+  backend.data.get('users/TEACH1000').sections=['Grade 6 – A'];
+  backend.store.count=()=>assert.fail('metadata must not request totals');
+  const app=fixture(async body=>{const response=await backend.call(body,cookie);assert.equal(response.status,200);return response.json();});
+  const page=await app.api.getStudentPage({includeStudents:false,includeCounts:'cached',includeTeacher:true});
+  assert.equal(app.calls.length,1);assert.equal(page.teacherDoc.id,'TEACH1000');
+  assert.deepEqual(Array.from(page.teacherDoc.data().sections),['Grade 6 – A']);
+  assert.deepEqual(page.classes.map(row=>row.id),['A']);assert.equal(page.counts,null);
+});
+
 test("concurrent report reads use one authenticated group and preserve document, query, missing-record and timestamp behavior", async () => {
   const app = fixture(body => ({ results: body.reads.map(item => item.action === "get"
     ? { document: document(item.reference.path, item.reference.path.endsWith("missing") ? null : { timestamp: { $type: "timestamp", value: "2026-10-21T00:00:00Z" } }) }

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { decision, emptyState, passwordFailed, verifiedSuccess, resetAfterApproval, cooldowns } from "../server/web-lockout.js";
 import { WebLoginState, default as privateWorker } from "../workers/web-auth-worker.js";
-import { authApi, protectWebsite, signSession, webSession } from "../server/web-auth.js";
+import { authApi, protectWebsite, signSession, webSession, staffProfile } from "../server/web-auth.js";
 import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } from "../server/web-session.js";
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
@@ -13,6 +13,18 @@ const accounts = [
   { id: "TEACH1001", uid: "teacher-b", email: "other@example.test", role: "teacher" },
   { id: "ADMIN1000", uid: "admin-a", email: "admin@example.test", role: "admin" }
 ];
+
+test("live staff profile and Auth status checks overlap, and either failed check still denies access",async()=>{
+  let releaseProfile,releaseIdentity,identityStarted=false;
+  const store={get:()=>new Promise(resolve=>{releaseProfile=resolve;}),identity:()=>{identityStarted=true;return new Promise(resolve=>{releaseIdentity=resolve;});}};
+  const pending=staffProfile(accounts[0],store);
+  assert.equal(identityStarted,true,'Auth status must not wait for the profile network request');
+  releaseProfile({data:{uid:'teacher-a',role:'teacher',active:true}});
+  releaseIdentity({email:'teacher@example.test',disabled:false});
+  assert.equal((await pending).id,'TEACH1000');
+  await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:false}}),identity:async()=>({email:'teacher@example.test'})}),error=>error.status===403);
+  await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:true}}),identity:async()=>({email:'teacher@example.test',disabled:true})}),error=>error.status===401);
+});
 
 test("security headers prevent HTML caching and preserve API bodies and existing session cookies", async () => {
   for (const [path, status, type, body] of [
