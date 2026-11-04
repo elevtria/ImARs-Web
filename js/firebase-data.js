@@ -1,8 +1,8 @@
 import { startLoading, withLoading } from "./loading.js";
 import { wrapFirestoreReads } from "./firebase-loading.js";
 import { createReadPool } from "./data-read-pool.js";
-import { invalidateTeacherViews } from "./view-cache.js";
-import { webRequest } from "./web-login.js";
+import { invalidateTeacherViews, teacherViewCache } from "./view-cache.js";
+import { webRequest, visitUser } from "./web-login.js";
 
 const database = Object.freeze({ name: "website" });
 const listeners = new Map();
@@ -66,15 +66,18 @@ function request(body) {
   return pending;
 }
 async function readDocument(reference) {
-  if (reference.path === "webSettings/schoolYear" && /^\/login(?:\.html)?\/?$/.test(window.location.pathname)) {
-    const response = await fetch("/api/web-data/school-year", { cache: "no-store", credentials: "same-origin" });
+  if (reference.path === "webSettings/schoolYear") {
+    const response = await fetch("/api/web-data/school-year", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(10_000) });
     if (!response.ok) throw new Error("The school year could not be loaded.");
     return snapshot({ id: "schoolYear", path: reference.path, data: await response.json() });
   }
   return snapshot((await request({ action: "get", reference })).document);
 }
 async function readCollection(reference) {
-  const docs = (await request({ action: "query", reference })).documents.map(snapshot);
+  return querySnapshot((await request({ action: "query", reference })).documents);
+}
+function querySnapshot(records) {
+  const docs = records.map(snapshot);
   return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback), metadata: { fromCache: false, hasPendingWrites: false } };
 }
 const key = reference => JSON.stringify(reference);
@@ -83,17 +86,28 @@ export const getDoc = reference => pool.read("document", reference, () => readDo
 export const getDocs = reference => pool.read("query", reference, () => readCollection(reference));
 export const getReadMetrics = pool.metrics;
 export function onSnapshot(reference, ...args) {
-  if (typeof args[0] === "object" && !("next" in args[0])) args.shift();
+  const options = typeof args[0] === "object" && !("next" in args[0]) ? args.shift() : {};
+  const refreshIntervalMs = Math.max(15000, Number(options.refreshIntervalMs) || 15000);
+  const initialDelayMs = Math.min(refreshIntervalMs, Math.max(0, Number(options.initialDelayMs) || 0));
   const [next, error] = args;
   const callback = typeof next === "function" ? next : result => next.next(result);
   const failure = error || next?.error;
   const id = key(reference);
   let group = listeners.get(id);
   if (!group) {
-    group = { reference, subscribers: new Set(), timer: null, running: false, dirty: false, last: null, revision: 0 };
+    group = { reference, subscribers: new Set(), timer: null, running: false, dirty: false, last: null, revision: 0, checkedAt: Date.now() - refreshIntervalMs + initialDelayMs };
     listeners.set(id, group);
-    group.refresh = async () => {
-      if (group.running) { group.dirty = true; return; }
+    group.schedule = delay => {
+      clearTimeout(group.timer);
+      group.timer = setTimeout(() => {
+        if (document.visibilityState !== "hidden") void group.refresh();
+        else group.schedule(refreshIntervalMs);
+      }, delay);
+    };
+    group.refresh = async (afterWrite = false) => {
+      if (listeners.get(id) !== group) return;
+      if (group.running) { if (afterWrite) group.dirty = true; return; }
+      clearTimeout(group.timer);
       group.running = true;
       const revision = group.revision;
       try {
@@ -103,22 +117,25 @@ export function onSnapshot(reference, ...args) {
         for (const subscriber of group.subscribers) subscriber.callback(result);
       } catch (err) { if (listeners.get(id) === group) for (const subscriber of group.subscribers) subscriber.failure?.(err); }
       finally {
+        group.checkedAt = Date.now();
         group.running = false;
         if (listeners.get(id) === group) {
-          clearTimeout(group.timer);
-          group.timer = setTimeout(() => { if (document.visibilityState !== "hidden") void group.refresh(); }, group.dirty ? 0 : 15000);
+          group.schedule(group.dirty ? 0 : refreshIntervalMs);
           group.dirty = false;
         }
       }
     };
-    group.focus = () => { if (document.visibilityState !== "hidden") void group.refresh(); };
+    group.focus = () => { if (document.visibilityState !== "hidden" && Date.now() - group.checkedAt >= refreshIntervalMs) void group.refresh(); };
     window.addEventListener("focus", group.focus);
     document.addEventListener("visibilitychange", group.focus);
   }
   const subscriber = { callback, failure };
   group.subscribers.add(subscriber);
   if (group.last) queueMicrotask(() => { if (group.subscribers.has(subscriber)) callback(group.last); });
-  else if (!group.running) void group.refresh();
+  else if (!group.running && !group.timer) {
+    if (initialDelayMs) group.schedule(initialDelayMs);
+    else void group.refresh();
+  }
   return () => {
     group.subscribers.delete(subscriber);
     if (!group.subscribers.size) {
@@ -139,7 +156,7 @@ async function commit(writes) {
   for (const group of listeners.values()) {
     if (!writes.some(write => group.reference.kind === "document" ? write.path === group.reference.path : write.path.slice(0, write.path.lastIndexOf("/")) === group.reference.path)) continue;
     group.revision++;
-    void group.refresh();
+    void group.refresh(true);
   }
 }
 export const setDoc = (reference, data, options = {}) => commit([{ operation: "set", path: reference.path, data, merge: options.merge === true }]);
@@ -158,14 +175,41 @@ export function writeBatch() {
   return batch;
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
+async function studentPageRequest(action, options, requestOptions) {
+  const uid = visitUser(), cache = teacherViewCache(), version = cache.version();
+  const scope = options.sectionId || (options.firstSection ? "first" : "all");
+  const cacheKey = "student-counts:" + scope;
+  let saved = options.includeCounts === false ? null : cache.get(uid, cacheKey, 60000) || cache.get(uid, "student-counts:all", 60000);
+  if (!Array.isArray(saved?.classes) || !Array.isArray(saved?.counts) || saved.counts.some(row => !row || typeof row.classId !== "string" ||
+      !Number.isSafeInteger(row.active) || row.active < 0 || !Number.isSafeInteger(row.archived) || row.archived < 0)) saved = null;
+  const cachedOnly = options.includeCounts === "cached";
+  const body = { ...options, action, ...(saved || cachedOnly ? { includeCounts: false } : {}) };
+  let result = await webRequest("/api/web-data", encode(body), requestOptions);
+  let classes = result.classes.map(row => row.id), reused = Boolean(saved);
+  // Authorization and class membership are still read live by the gateway.
+  // Cached totals are usable only while that exact assigned class list agrees.
+  if (saved && JSON.stringify(saved.classes) !== JSON.stringify(classes)) {
+    if (!cachedOnly) {
+      result = await webRequest("/api/web-data", encode({ ...options, action }), requestOptions);
+      classes = result.classes.map(row => row.id);
+    }
+    reused = false;
+  } else if (saved) {
+    const section = options.sectionId || (options.firstSection ? classes[0] : "");
+    result.counts = saved.counts.filter(row => !section || row.classId === section);
+  }
+  if (result.counts && !reused) cache.put(uid, cacheKey, { classes, counts: result.counts }, version);
+  return result;
+}
 export async function getStudentPage(options = {}, requestOptions = {}) {
-  const result = await webRequest("/api/web-data", encode({ ...options, action: "student-page" }), requestOptions);
+  const result = await studentPageRequest("student-page", options, requestOptions);
   return { ...result, classes: result.classes.map(snapshot),
-    students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document) })) };
+    students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document),
+      ...(Array.isArray(row.lessons) ? { results: [{ termId: row.termId, lessonsSnap: querySnapshot(row.lessons) }] } : {}) })) };
 }
 export async function getTeacherReportPage(options = {}, requestOptions = {}) {
-  const result = await webRequest("/api/web-data", encode({ ...options, action: "teacher-report-page" }), requestOptions);
-  const list = rows => { const docs = rows.map(snapshot); return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback) }; };
+  const result = await studentPageRequest("teacher-report-page", options, requestOptions);
+  const list = querySnapshot;
   return { ...result, classes: result.classes.map(snapshot),
     students: result.students.map(row => ({ classId: row.classId, studentDoc: snapshot(row.document),
       results: (row.termResults || [{ termId: result.termId, lessons: row.lessons }]).map(term => ({ termId: term.termId, lessonsSnap: list(term.lessons) })) })),

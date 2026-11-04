@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -84,7 +85,7 @@
       <section class="recent-card">
         <h2>Recent Scans</h2>
         <div id="recentScansList">
-          <p class="muted center" style="margin-top: 20px;">Loading recent scans...</p>
+          <p class="muted center" style="margin-top: 20px;"><span data-loading="true" role="status" aria-label="Loading recent scans"></span></p>
         </div>
       </section>
     </main>

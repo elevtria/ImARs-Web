@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/quiz-generator.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -120,6 +121,7 @@
             <button class="primary-btn quiz-primary" id="generateQuiz" type="button"><span>Generate quiz</span></button>
           </div>
           <p class="quiz-status" id="setupStatus" role="status" aria-live="polite"></p>
+          <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false"><span class="section-data-loading" role="status" aria-label="Generating quiz"></span></div>
         </section>
 
         <section class="quiz-step-pane" id="reviewStep" hidden>
@@ -176,15 +178,6 @@
         <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
       </section>
     </main>
-  </div>
-
-  <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false">
-    <div class="quiz-generation-card" role="status" aria-live="polite" aria-atomic="true">
-      <img class="quiz-generation-logo" src="assets/imars-loader-transparent.png" alt="" aria-hidden="true" />
-      <p class="quiz-generation-title" id="quizGenerationTitle">Generating your quiz</p>
-      <p class="quiz-generation-detail" id="quizGenerationDetail">Please wait while we prepare your questions.</p>
-      <span class="quiz-generation-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    </div>
   </div>
 
   <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>

@@ -2,6 +2,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
+import { setLoadingState } from "./loading.js";
 import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
 import { openQuizReview, closeQuizReview } from "./quiz-review.js";
@@ -68,10 +69,13 @@ const firestore = getFirestore(firebaseApp);
     }
 
     try {
-      const userSnapshot = await getDocs(query(collection(firestore, "users"), where("uid", "==", user.uid)));
-      const teacherDocument = userSnapshot.docs.find((entry) => String(entry.data().role || "").toLowerCase() === "teacher");
-      if (!teacherDocument) throw new Error("This account does not have a teacher profile.");
-      teacherProfileId = teacherDocument.id;
+      teacherProfileId = user.role === "teacher" ? user.id : null;
+      if (!teacherProfileId) {
+        const userSnapshot = await getDocs(query(collection(firestore, "users"), where("uid", "==", user.uid)));
+        const teacherDocument = userSnapshot.docs.find((entry) => String(entry.data().role || "").toLowerCase() === "teacher");
+        if (!teacherDocument) throw new Error("This account does not have a teacher profile.");
+        teacherProfileId = teacherDocument.id;
+      }
 
       const classSnapshot = await getDocs(query(collection(firestore, "classes"), where("teacherId", "==", teacherProfileId)));
       teacherSections = classSnapshot.docs.map(classDocument => ({ id: classDocument.id, name: classDocument.data().SectionName || classDocument.id }));
@@ -212,28 +216,16 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     const button = document.getElementById("generateQuiz");
-    const buttonText = button.querySelector("span");
     const loadingOverlay = document.getElementById("quizGenerationOverlay");
-    const loadingTitle = document.getElementById("quizGenerationTitle");
-    const loadingDetail = document.getElementById("quizGenerationDetail");
-    const originalText = buttonText.textContent;
     button.disabled = true;
-    buttonText.textContent = "Reading file…";
-    loadingTitle.textContent = "Preparing your file";
-    loadingDetail.textContent = "Please wait while we read your learning material.";
+    button.setAttribute("aria-busy", "true");
     loadingOverlay.hidden = false;
     loadingOverlay.setAttribute("aria-busy", "true");
-    showStatus(setupStatus, "Preparing your learning material…", false);
+    showStatus(setupStatus, "", false);
     try {
       const material = await prepareMaterial(selectedFile);
       const user = auth.currentUser;
       if (!user) throw new Error("Your sign-in expired. Please sign in again.");
-      buttonText.textContent = "Generating questions…";
-      loadingTitle.textContent = "Generating your quiz";
-      loadingDetail.textContent = material.pdfFile
-        ? "Uploading and reading your PDF, then creating questions. Larger files can take longer."
-        : "Please wait while we prepare your questions.";
-      showStatus(setupStatus, "AI is reading the material and creating your questions…", false);
 
       const questions = await requestQuiz({
         ...material,
@@ -259,7 +251,7 @@ const firestore = getFirestore(firebaseApp);
       loadingOverlay.hidden = true;
       loadingOverlay.setAttribute("aria-busy", "false");
       button.disabled = false;
-      buttonText.textContent = originalText;
+      button.setAttribute("aria-busy", "false");
     }
   }
 
@@ -414,6 +406,7 @@ const firestore = getFirestore(firebaseApp);
     };
     const saveButton = document.getElementById("saveQuiz");
     saveButton.disabled = true;
+    saveButton.setAttribute("aria-busy", "true");
     try {
       await setDoc(doc(firestore, "generatedQuizzes", quiz.id), {
         ...quiz,
@@ -426,6 +419,7 @@ const firestore = getFirestore(firebaseApp);
       return;
     } finally {
       saveButton.disabled = false;
+      saveButton.setAttribute("aria-busy", "false");
     }
     const existingIndex = quizzes.findIndex((item) => item.id === quiz.id);
     if (existingIndex >= 0) quizzes[existingIndex] = quiz;
@@ -527,7 +521,8 @@ const firestore = getFirestore(firebaseApp);
     scheduleBusy = true;
     librarySectionFilter.disabled = true;
     form.querySelector("button[type='submit']").disabled = true;
-    showStatus(libraryStatus, `Saving release for ${quiz.title}…`, false);
+    showStatus(libraryStatus, "", false);
+    setLoadingState(libraryStatus, true, "Saving quiz release");
     let saved = false;
     try {
       const reference = doc(firestore, "generatedQuizzes", id);
@@ -553,6 +548,7 @@ const firestore = getFirestore(firebaseApp);
       showStatus(libraryStatus, error.message || "Could not save the quiz release. Try again.", true);
     } finally {
       scheduleBusy = false;
+      setLoadingState(libraryStatus, false);
       librarySectionFilter.disabled = teacherSections.length === 0;
       if (saved) renderLibrary();
       else if (form.isConnected) form.querySelector("button[type='submit']").disabled = false;

@@ -1,6 +1,7 @@
 import { escapeHtml } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
+import { setLoadingState } from "./loading.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -66,10 +67,13 @@ function studentSummary(classDoc, student) {
 const report = createTeacherReport({ app,
   failed: error => {
     console.error("Dashboard update failed:", error);
+    setLoadingState(document.getElementById("dashboardReportStatus"), false);
     document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
   },
   progress: ({ loaded, total, complete }) => {
-    document.getElementById("dashboardReportStatus").textContent = complete ? "" : `Class averages so far · ${loaded} of ${total} students`;
+    const status = document.getElementById("dashboardReportStatus");
+    setLoadingState(status, !complete, total === null ? "Updating class averages" : `Class averages: ${loaded} of ${total} students`);
+    status.textContent = "";
   },
   render: ({ teacherName, sections, termSnap, curriculumSnap, total }) => {
     const hour = new Date().getHours(), part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
@@ -78,7 +82,7 @@ const report = createTeacherReport({ app,
     const students = sections.flatMap(({classDoc, students}) => students.filter(student => student.studentDoc.data().active !== false).map(student => studentSummary(classDoc, student)));
     const sums = students.reduce((sum, row) => ({ preSum:sum.preSum+row.preSum, preCount:sum.preCount+row.preCount,
       postSum:sum.postSum+row.postSum, postCount:sum.postCount+row.postCount, arMinutes:sum.arMinutes+row.arMinutes }), {preSum:0,preCount:0,postSum:0,postCount:0,arMinutes:0});
-    document.getElementById("studentCountVal").textContent = total;
+    document.getElementById("studentCountVal").textContent = total ?? "—";
     document.getElementById("avgPreTestVal").textContent = scoreLabel(sums.preSum, sums.preCount, 5);
     document.getElementById("avgPostTestVal").textContent = scoreLabel(sums.postSum, sums.postCount, 10);
     document.getElementById("avgArTimeVal").textContent = `${students.length ? Math.round(sums.arMinutes / students.length) : 0} min`;

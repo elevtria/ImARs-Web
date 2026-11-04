@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { collection, doc, getDocs, getFirestore, limit, onSnapshot, query, serverTimestamp, setDoc, where } from "./firebase-data.js";
+import { setLoadingState } from "./loading.js";
 
 const app = getApps().find(candidate => candidate.name === "[DEFAULT]") || initializeApp();
 const auth = getAuth(app);
@@ -9,6 +10,8 @@ const reference = doc(db, "webSettings", "schoolYear");
 const labels = document.querySelectorAll("[data-school-year]");
 const select = document.getElementById("schoolYearSelect");
 const status = document.getElementById("schoolYearStatus");
+const CACHE_KEY = "imars-school-year-v1";
+const REFRESH_MS = 5 * 60_000;
 let confirmedYear = 2026;
 let loaded = false;
 let canEdit = false;
@@ -18,8 +21,20 @@ let stopListening;
 
 const validYear = year => Number.isInteger(year) && year >= 2000 && year <= 2100;
 const label = year => `SY ${year}–${String(year + 1).slice(-2)}`;
+function savedYear() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(CACHE_KEY));
+    if (validYear(saved?.startYear) && Number.isFinite(saved.checkedAt) && saved.checkedAt <= Date.now() && Date.now() - saved.checkedAt < REFRESH_MS) return saved;
+  } catch {}
+  return null;
+}
+function rememberYear(year) {
+  // This public label is independent of staff/student caches and contains no account data.
+  try { window.localStorage.setItem(CACHE_KEY, JSON.stringify({ startYear: year, checkedAt: Date.now() })); } catch {}
+}
 function showStatus(message = "", error = false) {
   if (!status) return;
+  setLoadingState(status, saving && !message, "Saving school year");
   status.textContent = message;
   status.classList.toggle("error", error);
 }
@@ -49,7 +64,12 @@ async function isAdministrator(user) {
     !["inactive", "disabled"].includes(profile.status);
 }
 
-displayYear(confirmedYear);
+displayYear(savedYear()?.startYear ?? confirmedYear);
+window.addEventListener("storage", event => {
+  if (event.key !== CACHE_KEY) return;
+  const saved = savedYear();
+  if (saved && !saving) displayYear(saved.startYear);
+});
 onAuthStateChanged(auth, async user => {
   const currentGeneration = ++generation;
   stopListening?.();
@@ -59,11 +79,15 @@ onAuthStateChanged(auth, async user => {
   if (!user && select) { showStatus("Sign in as an administrator to change the school year."); return; }
   if (!user && !/\/login(?:\.html)?\/?$/.test(window.location.pathname)) return;
 
-  stopListening = onSnapshot(reference, { includeMetadataChanges: true }, snapshot => {
+  const saved = savedYear();
+  if (saved) displayYear(saved.startYear);
+  stopListening = onSnapshot(reference, { includeMetadataChanges: true, refreshIntervalMs: REFRESH_MS,
+    initialDelayMs: !select && saved ? REFRESH_MS - (Date.now() - saved.checkedAt) : 0 }, snapshot => {
     if (currentGeneration !== generation || snapshot.metadata.hasPendingWrites) return;
     const year = snapshot.exists() ? snapshot.data().startYear : 2026;
     if (!validYear(year)) { loaded = true; refreshControl(); showStatus("Choose a school year to replace the invalid saved setting.", true); return; }
     loaded = true;
+    rememberYear(year);
     displayYear(year);
     refreshControl();
   }, () => {
@@ -92,7 +116,7 @@ select?.addEventListener("change", async () => {
   const user = auth.currentUser;
   saving = true;
   refreshControl();
-  showStatus("Saving…");
+  showStatus();
   try {
     if (!user || !await isAdministrator(user) || auth.currentUser?.uid !== user.uid || currentGeneration !== generation) {
       throw new Error("Administrator access required");
@@ -100,6 +124,7 @@ select?.addEventListener("change", async () => {
     await setDoc(reference, { startYear: year, endYear: year + 1, updatedBy: user.uid, updatedAt: serverTimestamp() }, { merge: true });
     if (currentGeneration !== generation) return;
     displayYear(year);
+    rememberYear(year);
     showStatus("Saved for all teachers");
   } catch {
     if (currentGeneration !== generation) return;

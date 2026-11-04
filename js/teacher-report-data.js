@@ -1,6 +1,6 @@
 import { getTeacherReportPage } from "./firebase-data.js";
 import { getAuth } from "./firebase-auth.js";
-import { encodeView, decodeView } from "./view-cache.js";
+import { encodeView, decodeView, reuseTeacherReport } from "./view-cache.js";
 import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
 
 // Reports arrive in bounded pages. Leaving cancels further work; an automatic
@@ -10,16 +10,27 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
   const stop = () => { generation++; abort?.abort(); clearTimeout(timer); stopUpdates?.(); running = false; };
   if (typeof window !== "undefined") window.addEventListener("pagehide", stop);
   const current = token => token === generation && getAuth(app).currentUser?.uid === user?.uid;
+  const visibleClasses = () => {
+    const selected = options.sectionId === "first" ? state.classes[0]?.id : options.sectionId;
+    return state.classes.filter(row => !selected || row.id === selected);
+  };
   const paint = () => {
     const merged = new Map();
     for (const page of state.pages) for (const row of page.students) merged.set(row.studentDoc.id, row);
     const students = [...merged.values()];
-    const sections = state.classes.filter(classDoc => state.counts.some(row => row.classId === classDoc.id)).map(classDoc => ({ classDoc, students: students.filter(row => row.classId === classDoc.id) }));
-    const total = state.counts.reduce((sum, row) => sum + row.active, 0);
+    const sections = visibleClasses().map(classDoc => ({ classDoc, students: students.filter(row => row.classId === classDoc.id) }));
+    const total = state.complete ? students.length : state.countsKnown ? state.counts.reduce((sum, row) => sum + row.active, 0) : null;
     render({ ...state, sections, loaded: students.length, total, termId: options.termId, teacherName: user.displayName || "Teacher" });
     progress({ loaded: students.length, total, complete: state.complete, termId: options.termId });
   };
   const remember = changedIndex => {
+    if (state.complete) {
+      const students = new Map(state.pages.flatMap(page => page.students).map(row => [row.studentDoc.id, row]));
+      state.counts = visibleClasses().map(row => ({ classId: row.id,
+        active: [...students.values()].filter(student => student.classId === row.id).length,
+        archived: state.counts.find(count => count.classId === row.id)?.archived ?? null }));
+      state.countsKnown = true;
+    }
     state.pages.forEach((page, index) => { if (changedIndex === undefined || index === changedIndex) cache.put(user.uid, options.key + ":" + index, encodeView(page), version); });
     cache.put(user.uid, options.key, encodeView({ ...state, pages: state.pages.map((_, index) => index) }), version);
   };
@@ -27,11 +38,15 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     if (!current(token) || running || document.visibilityState === "hidden") return;
     running = true;
     const cursor = state.complete ? state.refreshCursor : state.cursor;
+    const existing = state.pages.find(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
+    const batchSize = state.complete ? existing?.batchSize || 25 : state.pages.length ? 100 : 25;
+    const curriculumOnly = state.pages.length > 0 && !state.curriculumSnap;
     try {
       abort = new AbortController();
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
         ...(options.allTerms ? { allTerms: true } : {}),
-        firstSection: options.sectionId === "first", cursor, includeCounts: !cursor, includeCurriculum: !state.curriculumSnap }, { signal: abort.signal });
+        firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor ? "cached" : false, includeCurriculum: !state.curriculumSnap,
+        ...(curriculumOnly ? { includeStudents: false, includeCounts: false } : {}) }, { signal: abort.signal });
       if (!current(token)) return;
       if (cache.version() !== version) {
         version = cache.version();
@@ -39,12 +54,23 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
         timer = setTimeout(() => { void update(token); }, 0);
         return;
       }
+      if (result.curriculum) {
+        Object.assign(state, result.curriculum);
+        cache.put(user.uid, "report:curriculum:" + options.termId, encodeView(result.curriculum), version);
+      }
+      if (curriculumOnly) {
+        if (JSON.stringify(state.classes.map(row => row.id)) !== JSON.stringify(result.classes.map(row => row.id))) {
+          state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
+          timer = setTimeout(() => { void update(token); }, 0);
+          return;
+        }
+        remember(); paint(); return;
+      }
       const slot = state.pages.findIndex(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
-      const page = { cursor, students: result.students };
+      const page = { cursor, batchSize, students: result.students };
       const changed = slot < 0 || JSON.stringify(encodeView(state.pages[slot])) !== JSON.stringify(encodeView(page)) || (result.counts && JSON.stringify(state.counts) !== JSON.stringify(result.counts));
       if (slot < 0) state.pages.push(page); else state.pages[slot] = page;
-      state.classes = result.classes; if (result.counts) state.counts = result.counts;
-      if (result.curriculum) Object.assign(state, result.curriculum);
+      state.classes = result.classes; if (result.counts) { state.counts = result.counts; state.countsKnown = true; }
       let reindexed = false;
       if (state.complete) {
         if (!cursor) state.refreshSeen = [];
@@ -57,8 +83,8 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       remember(reindexed ? undefined : slot < 0 ? state.pages.length - 1 : slot);
       if (changed || !state.complete) paint();
       // The first class report fills in gradually while this page is visible.
-      // Later automatic checks update one 25-student page per tick.
-      if (!state.complete) timer = setTimeout(() => { void update(token); }, 1000);
+      // Later automatic checks update one existing page per tick.
+      if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
     } catch (error) {
       if (current(token) && error.name !== "AbortError") {
         if (["permission-denied", "unauthenticated"].includes(error.code)) { cache.invalidate(); document.querySelector("main")?.replaceChildren(); stop(); }
@@ -77,8 +103,15 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       const pages = restored.pages.map(index => { const page = cache.get(user.uid, options.key + ":" + index); if (!page) throw new Error("Incomplete cached report"); return decodeView(page); });
       state = { ...restored, pages }; paint();
     } catch { cache.remove(options.key); }
+    if (!state.pages.length) {
+      const reused = reuseTeacherReport(cache, user.uid, { ...options, now: Date.now() });
+      if (reused) {
+        state = reused;
+        if (state.curriculumSnap) paint();
+      }
+    }
     stopUpdates = watchVisibleData(app, user, () => update(token));
-    if (!state.pages.length || Date.now() - state.checkedAt >= 60000) await update(token);
-    else if (!state.complete) timer = setTimeout(() => { void update(token); }, 1000);
+    if (!state.pages.length || !state.curriculumSnap || Date.now() - state.checkedAt >= 60000) await update(token);
+    else if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
   } };
 }

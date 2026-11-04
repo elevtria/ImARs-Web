@@ -104,3 +104,51 @@ export function decodeView(value) {
   if (Array.isArray(value)) return value.map(decodeView);
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decodeView(item)]));
 }
+
+// Reuse a complete report after the same account has authenticated. A narrower
+// view may use an existing all-section/all-term report, never the reverse.
+export function reuseTeacherReport(cache, uid, { termId = "term_01", sectionId = "", allTerms = false, now = Date.now() } = {}) {
+  const keys = [...new Set([
+    ...(!allTerms ? [`teacher-report:${termId}:${sectionId || "all"}`, `teacher-report:${termId}:all`] : []),
+    `teacher-report:all-terms-v1:${sectionId || "all"}`, "teacher-report:all-terms-v1:all"
+  ])];
+  for (const key of keys) try {
+    const stored = cache.get(uid, key, 60000);
+    if (!stored) continue;
+    const saved = decodeView(stored);
+    if (!saved.complete || !Array.isArray(saved.pages) || !Array.isArray(saved.classes) || !Array.isArray(saved.counts) ||
+        !Number.isFinite(saved.checkedAt) || saved.checkedAt > now || now - saved.checkedAt >= 60000) continue;
+    const selected = sectionId === "first" ? saved.classes[0]?.id : sectionId;
+    const counts = saved.counts.filter(row => !selected || row.classId === selected);
+    if (selected && !counts.length) continue;
+    if (!selected && !key.endsWith(":all")) continue;
+    const records = new Map();
+    for (const index of saved.pages) {
+      const page = cache.get(uid, key + ":" + index);
+      if (!page) throw new Error("Incomplete report cache");
+      for (const row of decodeView(page).students) {
+        if (selected && row.classId !== selected) continue;
+        const results = row.results.filter(result => allTerms || result.termId === termId);
+        if (!allTerms && !results.length) throw new Error("Missing cached term");
+        if (allTerms && ["term_01", "term_02", "term_03"].some(term => !results.some(result => result.termId === term))) throw new Error("Incomplete cached terms");
+        records.set(row.studentDoc.id, { ...row, results });
+      }
+    }
+    const students = [...records.values()].sort((a, b) => a.classId < b.classId ? -1 : a.classId > b.classId ? 1 : a.studentDoc.id < b.studentDoc.id ? -1 : a.studentDoc.id > b.studentDoc.id ? 1 : 0);
+    const curriculum = saved.termSnap?.id === termId && saved.curriculumSnap ? saved : (() => {
+      const value = cache.get(uid, "report:curriculum:" + termId);
+      return value ? decodeView(value) : {};
+    })();
+    const pages = [];
+    for (let offset = 0; offset < students.length;) {
+      const batchSize = offset ? 100 : 25;
+      pages.push({ cursor: offset ? { classId: students[offset - 1].classId, id: students[offset - 1].studentDoc.id } : null,
+        batchSize, students: students.slice(offset, offset + batchSize) });
+      offset += batchSize;
+    }
+    if (!pages.length) pages.push({ cursor: null, batchSize: 25, students: [] });
+    return { ...saved, counts, pages, cursor: null, refreshCursor: null, refreshSeen: [],
+      termSnap: curriculum.termSnap, curriculumSnap: curriculum.curriculumSnap };
+  } catch { /* Missing, stale or malformed cache entries use the normal gateway. */ }
+  return null;
+}

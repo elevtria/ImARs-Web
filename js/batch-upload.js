@@ -15,6 +15,7 @@ import {
   serverTimestamp 
 } from "./firebase-data.js";
 import { showTeacherView } from "./teacher-view.js";
+import { setLoadingState } from "./loading.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -244,7 +245,7 @@ sectionForm.addEventListener("submit", async (event) => {
 
   if (saveSectionBtn) {
     saveSectionBtn.disabled = true;
-    saveSectionBtn.textContent = "Adding...";
+    saveSectionBtn.setAttribute("aria-busy", "true");
   }
 
   try {
@@ -284,6 +285,7 @@ sectionForm.addEventListener("submit", async (event) => {
   } finally {
     if (saveSectionBtn) {
       saveSectionBtn.disabled = false;
+      saveSectionBtn.setAttribute("aria-busy", "false");
       saveSectionBtn.textContent = "Add Section";
     }
   }
@@ -338,8 +340,8 @@ async function handleFileSelected(file) {
   }
 
   try {
-    document.getElementById("dropTitle").textContent = "Validating data...";
-    document.getElementById("dropHint").textContent = "Checking student details…";
+    document.getElementById("dropTitle").textContent = file.name;
+    setLoadingState(document.getElementById("dropHint"), true, "Validating students");
 
     existingStudentIds.clear();
     dbExistingStudentClassCodes = {};
@@ -416,7 +418,7 @@ async function handleFileSelected(file) {
     console.error("Failed to parse file:", err);
     document.getElementById("dropTitle").textContent = "Error reading file";
     document.getElementById("dropHint").textContent = "Please upload a valid .xlsx or .csv file.";
-  }
+  } finally { setLoadingState(document.getElementById("dropHint"), false); }
 }
 
 // --- GLOBAL TABLE VALIDATION ENGINE ---
@@ -621,7 +623,7 @@ confirmImportBtn.addEventListener("click", async () => {
   }
 
   confirmImportBtn.disabled = true;
-  confirmImportBtn.textContent = "Processing...";
+  confirmImportBtn.setAttribute("aria-busy", "true");
 
   try {
     let newCount = 0;
@@ -690,6 +692,7 @@ confirmImportBtn.addEventListener("click", async () => {
     alert("Error processing students: " + err.message);
   } finally {
     confirmImportBtn.disabled = false;
+    confirmImportBtn.setAttribute("aria-busy", "false");
     confirmImportBtn.textContent = "Confirm Import";
   }
 });

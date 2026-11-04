@@ -1,5 +1,6 @@
 import { escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
+import { setLoadingState } from "./loading.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
 import { activityPercent } from "./activity-score.js";
@@ -84,7 +85,7 @@ const filterStudents = () => {
   tablePage = Math.min(tablePage, maximum);
   studentGrid.innerHTML = matches.slice(tablePage * 25, (tablePage + 1) * 25).map(row => row.html).join("");
   if (!matches.length) { empty.hidden = false; studentGrid.appendChild(empty); }
-  if (studentCount) studentCount.textContent = lastReport?.total ?? matches.length;
+  if (studentCount) studentCount.textContent = lastReport ? lastReport.total ?? "—" : matches.length;
   document.getElementById("analyticsPageStatus").textContent = `Page ${tablePage + 1} · ${matches.length} results loaded`;
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
   document.getElementById("analyticsNext").disabled = tablePage >= maximum;
@@ -154,10 +155,12 @@ termButtons.forEach((btn) => {
 
 const report = createTeacherReport({ app,
   progress: ({ loaded, total, complete, termId }) => {
-    document.getElementById("analyticsReportStatus").textContent = complete ? "" : `Results so far · ${loaded} of ${total} students`;
+    const status = document.getElementById("analyticsReportStatus");
+    setLoadingState(status, !complete, total === null ? "Updating results" : `Results: ${loaded} of ${total} students`);
+    status.textContent = "";
     document.getElementById("analyticsTermLabel").textContent = termLabels[termId];
   },
-  failed: error => { console.error("Analytics update failed:", error); document.getElementById("analyticsReportStatus").textContent = "Could not update results. Retrying automatically."; },
+  failed: error => { console.error("Analytics update failed:", error); setLoadingState(document.getElementById("analyticsReportStatus"), false); document.getElementById("analyticsReportStatus").textContent = "Could not update results. Retrying automatically."; },
   render: data => {
     lastReport = data;
     const { sections, classes, curriculumSnap } = data;
@@ -199,7 +202,7 @@ const report = createTeacherReport({ app,
           option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
           sectionFilter.appendChild(option);
         }
-        sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || "all" : selectedSection || "all";
+        sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || data.classes[0]?.id || "all" : selectedSection || "all";
         if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
       }
       // Process only the selected term and sections.
@@ -336,7 +339,7 @@ const report = createTeacherReport({ app,
 });
 function openReport() {
   if (!auth.currentUser) return;
-  document.getElementById("analyticsReportStatus").textContent = "Loading selected results…";
+  setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");
   return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection });
 }
 onAuthStateChanged(auth, user => {

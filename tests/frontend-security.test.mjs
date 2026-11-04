@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
 import { buildStudentActivityRecords } from "../js/student-activity-record.js";
+import { setLoadingState } from "../js/loading.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
@@ -22,6 +23,7 @@ class Element {
   get childNodes() { return this.children; }
   addEventListener() {}
   setAttribute() {}
+  removeAttribute() {}
   appendChild(child) { if (child.fragment) this.children.push(...child.children); else this.children.push(child); }
   insertAdjacentHTML(_, value) { this._html += value; }
   querySelectorAll(selector) { return this.children.filter(child => selector === ".student-row" && child.className === "student-row"); }
@@ -33,7 +35,7 @@ function page(file, report) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   let authChanged, requested;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords,
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, setLoadingState,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,

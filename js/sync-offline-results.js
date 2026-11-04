@@ -1,4 +1,5 @@
 import { initializeApp } from "./firebase-auth.js";
+import { setLoadingState } from "./loading.js";
 import { escapeHtml } from "./teacher-view.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
@@ -167,7 +168,7 @@ function getInitials(name) {
 
 // --- SYNC SCANNED STUDENT GRADES TO FIRESTORE & SHOW MODAL ---
 async function processScannedQR(decodedText, queuedScan = null) {
-  status.textContent = `QR Detected! Processing...`;
+  status.textContent = "QR detected.";
 
   const parsed = parseStudentGradeQR(decodedText);
 
@@ -222,7 +223,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
   if (modalPreScore) modalPreScore.textContent = `${avgPre}%`;
   if (modalPostScore) modalPostScore.textContent = `${avgPost}%`;
   if (modalGainScore) modalGainScore.textContent = gainStr;
-  if (modalSyncText) modalSyncText.textContent = "Syncing all terms & lessons...";
+  setLoadingState(modalSyncText, true, "Syncing results");
   if (modalLessonsNote) modalLessonsNote.textContent = `Master Report · ${lessonsCount} Lessons Synced`;
   
   const detailedListContainer = document.getElementById("modalDetailedScoresList");
@@ -296,7 +297,7 @@ async function processScannedQR(decodedText, queuedScan = null) {
     if (modalSyncText) modalSyncText.textContent = message;
     status.textContent = message;
     return false;
-  }
+  } finally { setLoadingState(modalSyncText, false); }
 }
 
 // --- QR CAMERA LOGIC ---

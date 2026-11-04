@@ -4,22 +4,33 @@ import vm from "node:vm";
 import test from "node:test";
 import { createReadPool } from "../js/data-read-pool.js";
 import { wrapFirestoreReads } from "../js/firebase-loading.js";
+import { createViewCache } from "../js/view-cache.js";
 import { fixture as dataFixture } from "./fixtures/web-data.js";
 
 const source = readFileSync(new URL("../js/firebase-data.js", import.meta.url), "utf8").replace(/^import[^\n]+\n/gm, "").replace(/^export /gm, "");
 const flush = async () => { for (let index = 0; index < 3; index++) await new Promise(resolve => setImmediate(resolve)); };
-function fixture(transport) {
-  const calls = [], timers = new Map(), events = new Map();
+function fixture(transport, { now = Date.now } = {}) {
+  const calls = [], timers = new Map(), delays = new Map(), events = new Map();
+  const memory = new Map();
+  const storage = { get length() { return memory.size; }, key: i => [...memory.keys()][i], getItem: key => memory.get(key) || null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
+  const cache = createViewCache({ storage, versions: storage, now });
+  let uid = "teacher-a";
+  cache.setOwner(uid);
   let invalidated = 0, nextTimer = 0;
-  const context = vm.createContext({ Date, crypto, performance, queueMicrotask, createReadPool, wrapFirestoreReads,
-    startLoading: () => () => {}, withLoading: operation => operation(), invalidateTeacherViews: () => { invalidated++; },
-    setTimeout(callback) { timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout(id) { timers.delete(id); },
+  const context = vm.createContext({ Date: now === Date.now ? Date : class extends Date { static now() { return now(); } }, crypto, performance, queueMicrotask, createReadPool, wrapFirestoreReads, AbortSignal,
+    startLoading: () => () => {}, withLoading: operation => operation(), invalidateTeacherViews: () => { invalidated++; cache.invalidate(); }, teacherViewCache: () => cache, visitUser: () => uid,
+    setTimeout(callback, delay) { timers.set(++nextTimer, callback); delays.set(nextTimer, delay); return nextTimer; }, clearTimeout(id) { timers.delete(id); delays.delete(id); },
     window: { location: { pathname: "/index" }, addEventListener(name, callback) { events.set(name, callback); }, removeEventListener(name) { events.delete(name); } },
     document: { visibilityState: "visible", addEventListener(name, callback) { events.set(name, callback); }, removeEventListener(name) { events.delete(name); } },
-    webRequest: async (path, body) => { calls.push({ path, body }); return transport(body); }
+    webRequest: async (path, body) => { calls.push({ path, body }); return transport(body); },
+    fetch: async (path, options) => {
+      calls.push({ path, options });
+      const result = await transport({ action: "reads", reads: [{ action: "get", reference: { path: "webSettings/schoolYear" } }] });
+      return { ok: true, json: async () => result.results[0].document.data };
+    }
   });
-  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion,getTeacherReportPage});", context);
-  return { api, calls, timers, context, events, invalidated: () => invalidated };
+  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion,getStudentPage,getTeacherReportPage});", context);
+  return { api, calls, timers, delays, context, events, cache, setUser: value => { uid = value; cache.setOwner(uid); }, invalidated: () => invalidated };
 }
 const document = (path, data) => ({ id: path.split("/").at(-1), path, data });
 
@@ -77,6 +88,51 @@ test("a pre-save response cannot repaint an older snapshot after the write succe
   await flush(); assert.deepEqual(values, [2027]); stop();
 });
 
+test("cached school-year subscriptions wait for expiry; repeated focus events do not trigger extra reads", async () => {
+  let now = 1000000;
+  const app = fixture(body => ({ results: body.reads.map(item => ({ document: document(item.reference.path, { startYear: 2027 }) })) }), { now: () => now });
+  const values = [];
+  const stop = app.api.onSnapshot(app.api.doc({}, "webSettings", "schoolYear"), { refreshIntervalMs: 300000, initialDelayMs: 240000 }, snapshot => values.push(snapshot.data().startYear));
+  for (let i = 0; i < 100; i++) app.events.get("focus")();
+  await flush();
+  assert.equal(app.calls.length, 0);
+  assert.deepEqual([...app.delays.values()], [240000]);
+  now += 240000;
+  app.events.get("focus")(); await flush();
+  assert.deepEqual(values, [2027]);
+  assert.equal(app.calls.length, 1);
+  assert.equal(app.calls[0].path, "/api/web-data/school-year");
+  for (let i = 0; i < 100; i++) app.events.get("focus")();
+  await flush(); assert.equal(app.calls.length, 1);
+  assert.deepEqual([...app.delays.values()], [300000]);
+  stop(); assert.equal(app.timers.size, 0);
+});
+
+test("a save bypasses the school-year cache delay and reads the acknowledged setting immediately", async () => {
+  let year = 2027;
+  const app = fixture(body => body.action === "commit" ? (year = 2028, { ok: true }) : ({ results: [{ document: document("webSettings/schoolYear", { startYear: year }) }] }));
+  const ref = app.api.doc({}, "webSettings", "schoolYear"), values = [];
+  const stop = app.api.onSnapshot(ref, { refreshIntervalMs: 300000, initialDelayMs: 240000 }, snapshot => values.push(snapshot.data().startYear));
+  await app.api.setDoc(ref, { startYear: 2028 }); await flush();
+  assert.deepEqual(values, [2028]); assert.equal(app.calls.length, 2);
+  stop();
+});
+
+test("hidden subscriptions keep a timer and resume only when their data is due", async () => {
+  let now = 1000000;
+  const app = fixture(body => ({ results: body.reads.map(item => ({ document: document(item.reference.path, {}) })) }), { now: () => now });
+  const stop = app.api.onSnapshot(app.api.doc({}, "terms", "term_01"), { refreshIntervalMs: 60000 }, () => {});
+  await flush();
+  app.context.document.visibilityState = "hidden";
+  now += 60000;
+  [...app.timers.values()][0](); await flush();
+  assert.equal(app.calls.length, 1); assert.equal(app.timers.size, 1);
+  app.context.document.visibilityState = "visible";
+  app.events.get("visibilitychange")(); await flush();
+  assert.equal(app.calls.length, 2);
+  stop();
+});
+
 test('empty Term 2 collections survive the real data handler and batched client transport',async()=>{
  const backend=dataFixture(),cookie=await backend.login();
  for(let i=0;i<15;i++)backend.data.set('users/EMPTY'+i,{role:'student',classCode:'A',teacherId:'TEACH1000'});
@@ -108,4 +164,67 @@ test("combined dashboard transport decodes all three terms without changing sing
   assert.equal(single.students[0].results.length, 1);
   assert.equal(single.students[0].results[0].termId, "term_02");
   assert.equal(single.students[0].results[0].lessonsSnap.docs[0].data().preTestScore, 2);
+});
+
+test("section totals are shared across records, reports and navigation for one minute, then expire", async () => {
+  let now = 1000000, counts = 0;
+  const backend = dataFixture(), cookie = await backend.login(), count = backend.store.count.bind(backend.store);
+  backend.store.count = (...args) => { counts++; return count(...args); };
+  const app = fixture(async body => (await backend.call(body, cookie)).json(), { now: () => now });
+  const first = await app.api.getStudentPage();
+  assert.equal(counts, 2);
+  const report = await app.api.getTeacherReportPage({ termId: "term_01", sectionId: "A", includeCurriculum: false });
+  assert.equal(counts, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(report.counts)), JSON.parse(JSON.stringify(first.counts)));
+  assert.equal(app.calls.at(-1).body.includeCounts, false);
+  now += 60001;
+  await app.api.getStudentPage();
+  assert.equal(counts, 4);
+});
+
+test("acknowledged writes invalidate cached counts; account changes cannot reuse another teacher's totals", async () => {
+  const backend = dataFixture(), cookie = await backend.login();
+  const app = fixture(async body => { const response = await backend.call(body, cookie); assert.equal(response.status, 200); return response.json(); });
+  await app.api.getStudentPage();
+  await app.api.setDoc(app.api.doc({}, "users", "0026271000"), { active: false }, { merge: true });
+  const archived = await app.api.getStudentPage();
+  assert.equal(app.calls.at(-1).body.includeCounts, undefined);
+  assert.equal(archived.counts[0].active, 0); assert.equal(archived.counts[0].archived, 1);
+  app.setUser("teacher-b");
+  assert.equal(app.cache.get("teacher-b", "student-counts:all"), null);
+});
+
+test("changed class membership rejects cached totals and refreshes them without caching the old class list", async () => {
+  const backend = dataFixture(), cookie = await backend.login();
+  const app = fixture(async body => { const response = await backend.call(body, cookie); assert.equal(response.status, 200); return response.json(); });
+  await app.api.getStudentPage();
+  backend.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  const page = await app.api.getStudentPage();
+  assert.equal(page.counts.length, 2);
+  assert.equal(app.calls.length, 3);
+  await app.api.getStudentPage();
+  assert.equal(app.calls.length, 4);
+  assert.equal(app.calls.at(-1).body.includeCounts, false);
+});
+
+test("malformed cached totals fall back to a live count instead of breaking the student page", async () => {
+  const backend = dataFixture(), cookie = await backend.login();
+  const app = fixture(async body => (await backend.call(body, cookie)).json());
+  app.cache.put("teacher-a", "student-counts:all", { classes: ["A"], counts: null });
+  const result = await app.api.getStudentPage();
+  assert.equal(result.counts[0].active, 1);
+  assert.equal(app.calls[0].body.includeCounts, undefined);
+});
+
+test("cached-only counts never block an initial roster, and prefetched selected-term results retain empty and timestamp behavior",async()=>{
+  const backend=dataFixture(),cookie=await backend.login();let counts=0;
+  const count=backend.store.count.bind(backend.store);backend.store.count=(...args)=>{counts++;return count(...args);};
+  backend.data.set('users/0026271000/test_results/term_02/lessons/lesson_01',{postTestScore:0,timestamp:{$type:'timestamp',value:'2026-11-04T00:00:00Z'}});
+  const app=fixture(async body=>{const response=await backend.call(body,cookie);assert.equal(response.status,200);return response.json();});
+  const page=await app.api.getStudentPage({includeCounts:'cached',includeResults:{termId:'term_02',limit:8}});
+  assert.equal(counts,0);assert.equal(page.counts,null);assert.equal(app.calls[0].body.includeCounts,false);
+  assert.equal(page.students[0].results[0].lessonsSnap.docs[0].data().postTestScore,0);
+  assert.equal(page.students[0].results[0].lessonsSnap.docs[0].data().timestamp.toDate().toISOString(),'2026-11-04T00:00:00.000Z');
+  await app.api.getStudentPage({includeStudents:false});assert.equal(counts,2);
+  const next=await app.api.getStudentPage({includeCounts:'cached'});assert.equal(counts,2);assert.equal(next.counts[0].active,1);
 });

@@ -4,8 +4,9 @@ import test from "node:test";
 import vm from "node:vm";
 import * as availability from "../js/topic-availability.js";
 import { encodeView, decodeView } from "../js/view-cache.js";
+import { setLoadingState } from "../js/loading.js";
 
-async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null, emitAfterWrite = true } = {}) {
+async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null, emitAfterWrite = true, identity = { uid: "test-teacher" } } = {}) {
   const elements = new Map();
   const listeners = new Map();
   const savedViews = new Map();
@@ -15,10 +16,12 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   let authChanged;
   let rejectWrite = false;
   const batchSizes = [];
+  const reads = [], subscriptionOptions = [];
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
       innerHTML: "", textContent: "", value: "", dataset: {}, events: {},
       classList: { add() {}, remove() {} },
+      setAttribute() {}, removeAttribute() {},
       contains() { return false; },
       addEventListener(name, callback) { this.events[name] = callback; },
       checkValidity() { return true; }, reportValidity() {}
@@ -39,6 +42,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     record.sectionSchedules = { ...record.sectionSchedules, [sectionId]: { activityDeadlineUtc: "", ...record.sectionSchedules?.[sectionId], ...schedule } };
   }
   const context = vm.createContext({
+    setLoadingState,
     ...availability, console: { error() {} }, Date,
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },
@@ -47,11 +51,12 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     encodeView, decodeView,
     collection: (_, ...path) => path, doc: (_, ...path) => Object.assign(path, { id: path.at(-1) }),
     query: ref => ref, where: () => ({}),
-    getDocsWithLoading: async ref => ref[0] === "users"
+    getDocsWithLoading: async ref => (reads.push(ref[0]), ref[0] === "users"
       ? { size: 1, docs: [{ id: "TEACH1000", data: () => ({ role: "teacher" }) }] }
-      : { docs: sections.map(id => ({ id, data: () => ({ SectionName: `Section ${id}` }) })) },
+      : { docs: sections.map(id => ({ id, data: () => ({ SectionName: `Section ${id}` }) })) }),
     onAuthStateChanged: (_, callback) => { authChanged = callback; },
-    onSnapshot: (ref, _, callback) => {
+    onSnapshot: (ref, options, callback) => {
+      subscriptionOptions.push(options);
       listeners.set(ref[1], callback);
       return () => listeners.delete(ref[1]);
     },
@@ -76,14 +81,14 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   const source = readFileSync(new URL("../js/topic-scheduler.js", import.meta.url), "utf8")
     .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
   vm.runInContext(source, context);
-  await authChanged({ uid: "test-teacher" });
+  await authChanged(identity);
   for (const term of records.keys()) emit(term);
   if (chooseSection && sections.length) {
     element("scheduleSection").value = sections[0];
     element("scheduleSection").events.change();
   }
   return {
-    element, records, emit, listeners, authChanged, savedViews, batchSizes,
+    element, records, emit, listeners, authChanged, savedViews, batchSizes, reads, subscriptionOptions,
     denyWrites: () => { rejectWrite = true; },
     activityClick: (value, mode, date = "", deadline = "") => {
       const card = {
@@ -112,6 +117,14 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     })
   };
 }
+
+test("verified teacher identities load sections without a redundant profile request and use minute background checks", async () => {
+  const app = await scheduler({ identity: { uid: "test-teacher", role: "teacher", id: "TEACH1000" } });
+  assert.deepEqual(app.reads, ["classes"]);
+  assert.equal(app.listeners.size, 3);
+  assert.ok(app.subscriptionOptions.every(options => options.refreshIntervalMs === 60000));
+  assert.match(app.element("terms").innerHTML, /0\/4 unlocked/);
+});
 
 test("live snapshots update badges, unlocked counts, and progress together", async () => {
   const app = await scheduler();
@@ -370,7 +383,7 @@ test("signing out unsubscribes live listeners and removes progress claims", asyn
   const app = await scheduler();
   await app.authChanged(null);
   assert.equal(app.listeners.size, 0);
-  assert.match(app.element("terms").innerHTML, /Waiting for data/);
+  assert.match(app.element("terms").innerHTML, /st-upcoming/);
   assert.match(app.element("yearProgress").innerHTML, /Waiting for data/);
 });
 
@@ -398,7 +411,7 @@ test("editing requires an explicit section and teachers without sections cannot 
   for (const app of [await scheduler({ chooseSection: false }), await scheduler({ sections: [] })]) {
     await app.click("lock", "0-0");
     assert.equal(app.records.get("term_01")[0].sectionSchedules, undefined);
-    assert.match(app.element("terms").innerHTML, /Waiting for data/);
+    assert.match(app.element("terms").innerHTML, /st-upcoming/);
   }
 });
 

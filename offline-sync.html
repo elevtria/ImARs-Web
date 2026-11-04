@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/loading.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -58,7 +59,7 @@
         </div>
         <div class="bar" aria-label="Sync progress"><i id="progressFill"></i></div>
         <span class="pct" id="progressPct">0% complete</span>
-        <p class="sync-cloud-status" id="cloudSyncStatus" role="status" aria-live="polite">Loading…</p>
+        <p class="sync-cloud-status" id="cloudSyncStatus" role="status" aria-live="polite" data-loading="true" aria-label="Loading download progress"></p>
       </section>
 
       <section class="card files">

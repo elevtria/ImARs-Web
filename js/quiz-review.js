@@ -1,3 +1,5 @@
+import { setLoadingState } from "./loading.js";
+
 let dialog, controller, generation = 0;
 export function closeQuizReview() {
   generation++; controller?.abort(); controller = null;
@@ -12,7 +14,7 @@ export async function openQuizReview(quizId, uid) {
   const heading = element("h2", "Review student answers"); heading.id = "quizReviewTitle";
   const close = element("button", "Close", "btn-ghost"); close.type = "button"; close.addEventListener("click", closeQuizReview);
   const header = element("div", undefined, "quiz-review-header"); header.append(heading, close);
-  const status = element("p", "Loading submissions…", "quiz-status"); status.setAttribute("role", "status");
+  const status = element("p", "", "quiz-status"); status.setAttribute("role", "status");
   const content = element("div"), next = element("button", "Load more", "btn-ghost"); next.type = "button"; next.hidden = true;
   dialog.append(header, status, content, next); dialog.addEventListener("cancel", event => { event.preventDefault(); closeQuizReview(); }); document.body.append(dialog); dialog.showModal();
   let busy = false, cursor = "";
@@ -30,6 +32,7 @@ export async function openQuizReview(quizId, uid) {
   }
   async function load() {
     if (busy) return; busy = true; next.disabled = true;
+    setLoadingState(status, true, "Loading submissions");
     try {
       const page = await api({ action: "list", cursor }); cursor = page.nextCursor;
       for (const row of page.items) {
@@ -38,10 +41,11 @@ export async function openQuizReview(quizId, uid) {
       }
       status.textContent = content.children.length ? "Select a submission to review." : "No answers are waiting for review."; next.hidden = !cursor;
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
-    finally { busy = false; next.disabled = false; }
+    finally { busy = false; next.disabled = false; setLoadingState(status, false); }
   }
   async function show(row, button) {
-    if (busy) return; busy = true; button.disabled = true; status.textContent = "Loading student answers…";
+    if (busy) return; busy = true; button.disabled = true;
+    setLoadingState(status, true, "Loading student answers");
     try {
       const attempt = await api({ action: "open", studentId: row.studentId, attemptId: row.attemptId });
       const form = element("form", undefined, "quiz-review-form"), scores = [];
@@ -62,18 +66,19 @@ export async function openQuizReview(quizId, uid) {
       const save = element("button", "Save review", "primary-btn"), cancel = element("button", "Back to submissions", "btn-ghost"); save.type = "submit"; cancel.type = "button";
       cancel.addEventListener("click", () => { form.remove(); content.hidden = false; next.hidden = !cursor; status.textContent = "Select a submission to review."; }); form.append(save, cancel);
       form.addEventListener("submit", async event => {
-        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = true; status.textContent = "Saving review…";
+        event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = true;
+        save.setAttribute("aria-busy", "true"); status.textContent = "";
         try {
           const result = await api({ action: "grade", studentId: row.studentId, attemptId: row.attemptId, revision: attempt.revision,
             scores: scores.map(item => ({ questionId: item.questionId, score: Number(item.input.value) })), feedback: feedback.value });
           if (!result.persisted) throw new Error("Review was not confirmed. Please retry.");
           form.remove(); button.remove(); content.hidden = false; next.hidden = !cursor; status.textContent = "Review saved: " + result.score + "/" + result.maximum + ".";
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
-        finally { save.disabled = cancel.disabled = false; }
+        finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
       });
       content.hidden = true; next.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
-    finally { busy = false; button.disabled = false; }
+    finally { busy = false; button.disabled = false; setLoadingState(status, false); }
   }
   next.addEventListener("click", load); await load();
 }

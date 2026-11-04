@@ -220,16 +220,20 @@ function output(path, row, id = path.split("/").at(-1)) {
   return { id, path, data };
 }
 
-async function studentPage(scope, body) {
+async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25 } = {}) {
   if (scope.actor.role !== "teacher") throw fail();
   let sectionId = body.sectionId || "";
   const search = String(body.search || "").trim().toLowerCase();
   const status = body.status || "active", maximum = body.limit ?? 25, cursor = body.cursor;
   if ((sectionId && !part(sectionId)) || (body.search !== undefined && typeof body.search !== "string") ||
       !["active", "archived"].includes(status) || search.length > 100 ||
-      !Number.isInteger(maximum) || maximum < 1 || maximum > 25 ||
+      !Number.isInteger(maximum) || maximum < 1 || maximum > maximumLimit ||
       (cursor != null && (!object(cursor) || !fields(cursor, ["classId", "id"]) || !part(cursor.classId) || (cursor.id !== null && !part(cursor.id))))) {
     throw fail("Invalid student page.", 400);
+  }
+  if (body.includeResults !== undefined && (!object(body.includeResults) || !fields(body.includeResults, ["termId", "limit"]) ||
+      !term(body.includeResults.termId) || !Number.isInteger(body.includeResults.limit) || body.includeResults.limit < 1 || body.includeResults.limit > 8)) {
+    throw fail("Invalid student performance page.", 400);
   }
   const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
@@ -242,6 +246,12 @@ async function studentPage(scope, body) {
   let after = cursor?.id, scanned = 0;
   const students = [];
   const filters = classId => [{ field: "role", op: "==", value: "student" }, { field: "classCode", op: "==", value: classId }];
+  const queued = new Map();
+  const queueClass = (position, size) => {
+    const queryFilters = [...filters(selected[position].id), ...(status === "archived" ? [{ field: "active", op: "==", value: false }] : [])];
+    queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined })
+      .then(rows => ({ rows }), error => ({ error })) });
+  };
   const countPromise = body.includeCounts === false ? null : (async () => {
     const counts = [];
     for (let offset = 0; offset < selected.length; offset += 4) counts.push(...await Promise.all(selected.slice(offset, offset + 4).map(async row => {
@@ -255,7 +265,15 @@ async function studentPage(scope, body) {
   })().catch(error => ({ error }));
   while (body.includeStudents !== false && index < selected.length && students.length < maximum && scanned < 100) {
     const classId = selected[index].id, size = Math.min(maximum - students.length + 1, 100 - scanned);
-    const rows = await scope.store.query("users", { filters: filters(classId), limit: size, after });
+    // Empty sections must not add one network round trip each. Probe at most
+    // three following sections with eight rows; the visible page stays bounded.
+    for (let position = index; position < Math.min(index + 4, selected.length); position++) {
+      if (!queued.has(position)) queueClass(position, position === index ? size : Math.min(8, size));
+    }
+    const queuedClass = queued.get(index), result = await queuedClass.pending;
+    queued.delete(index);
+    if (result.error) throw result.error;
+    const rows = result.rows;
     let consumed = 0;
     for (const row of rows) {
       if (students.length === maximum) break;
@@ -266,33 +284,56 @@ async function studentPage(scope, body) {
         .filter(Boolean).join(" ").toLowerCase().includes(search);
       if (archived === (status === "archived") && matches) students.push({ classId, document: output("users/" + row.id, row) });
     }
-    if (consumed === rows.length && rows.length < size) { index++; after = null; }
+    if (consumed === rows.length && rows.length < queuedClass.size) { index++; after = null; }
     else if (students.length === maximum || scanned >= 100) break;
+  }
+  const page = { classes: classes.map(row => output("classes/" + row.id, row)), students, scanned,
+    cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
+  // Reports can start their lesson batches as soon as roster ownership is
+  // verified, while independent section totals are still being calculated.
+  if (deferCounts) return { ...page, pendingCounts: countPromise };
+  if (body.includeResults && students.length) {
+    const visible = students.slice(0, body.includeResults.limit), termId = body.includeResults.termId;
+    const paths = visible.flatMap(row => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`));
+    try {
+      const results = await scope.store.getAll(paths);
+      for (const row of visible) {
+        row.termId = termId;
+        row.lessons = paths.filter(path => path.startsWith(`users/${row.document.id}/`)).flatMap(path => results.get(path) ? [output(path, results.get(path))] : []);
+      }
+    } catch {
+      // Optional performance reads must not hide a successfully authorized roster.
+      // Omitted results retain each card's existing lazy-load/retry behavior.
+      page.performanceUnavailable = true;
+    }
   }
   const counts = countPromise ? await countPromise : null;
   if (counts?.error) throw counts.error;
-  return { classes: classes.map(row => output("classes/" + row.id, row)), students,
-    counts, scanned,
-    cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
+  return { ...page, counts };
 }
 
 async function teacherReportPage(scope, body) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
   if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
+  const batchSize = body.batchSize ?? 25;
+  if (![25, 100].includes(batchSize)) throw fail("Invalid report batch size.", 400);
   const termIds = body.allTerms === true ? ["term_01", "term_02", "term_03"] : [body.termId];
-  const page = await studentPage(scope, { ...body, status: "active", search: "", limit: 25 });
   const curriculumPromise = body.includeCurriculum === false ? null : (async () => {
     const path = "terms/" + body.termId;
     const [row, lessons] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 })]);
     return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
   })().then(value => ({ value }), error => ({ error }));
+  const { pendingCounts, ...page } = await studentPage(scope, { ...body, status: "active", search: "", limit: batchSize }, { deferCounts: true, maximumLimit: 100 });
   // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
   // their documents in batches of at most 100, only for verified roster rows.
   const paths = page.students.flatMap(row => termIds.flatMap(termId => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`)));
-  const batches = [];
-  for (let offset = 0; offset < paths.length; offset += 100) batches.push(scope.store.getAll(paths.slice(offset, offset + 100)));
-  const records = new Map((await Promise.all(batches)).flatMap(rows => [...rows]));
+  const records = new Map();
+  for (let offset = 0; offset < paths.length; offset += 400) {
+    const batches = [];
+    for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100)));
+    for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
+  }
   const students = page.students.map(row => {
     const results = termIds.map(termId => ({ termId, lessons: [1, 2, 3, 4].flatMap(index => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`, record = records.get(path);
@@ -303,7 +344,9 @@ async function teacherReportPage(scope, body) {
   const curriculumResult = await curriculumPromise;
   if (curriculumResult?.error) throw curriculumResult.error;
   const curriculum = curriculumResult?.value;
-  return { ...page, students, cursor: page.counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
+  const counts = pendingCounts ? await pendingCounts : null;
+  if (counts?.error) throw counts.error;
+  return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
 }
 
 export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {

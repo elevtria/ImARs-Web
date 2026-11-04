@@ -15,6 +15,7 @@ import {
 import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
+import { setLoadingState } from "./loading.js";
 
 const THEMES = ["yellow", "green", "blue"];
 const FILLS = ["fill-yellow", "fill-green", "fill-blue"];
@@ -85,9 +86,10 @@ const activityOpenTerms = [false, false, false];
 const activityDrafts = new Map();
 const activityKey = (termIndex, topicIndex, sectionId = selectedSection) => `${sectionId}:${termIndex}-${topicIndex}`;
 const setSyncStatus = (message, state = "") => {
+  setLoadingState(syncStatus, state === "pending", "Saving schedule");
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
-  syncStatus.hidden = !message;
+  syncStatus.hidden = !message && state !== "pending";
 };
 const saveUiState = () => {
   localStorage.setItem(key, JSON.stringify(terms.map(({ open }) => ({ open }))));
@@ -118,9 +120,10 @@ function scheduledActivityTopics() {
 function renderActivitySchedule() {
   const activityTopics = scheduledActivityTopics();
   const activityCount = activityTopics.reduce((total, topics) => total + topics.length, 0);
-  activityStatus.textContent = activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "Waiting for lesson availability…");
+  setLoadingState(activityStatus, isSaving, "Saving activity access");
+  activityStatus.textContent = isSaving ? "" : activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "");
   if (!isReady) {
-    activityList.innerHTML = '<p class="quiz-schedule-empty">Lesson activities will appear when the topic schedule loads.</p>';
+    activityList.innerHTML = selectedSection ? "" : '<p class="quiz-schedule-empty">Select a section to manage its activities.</p>';
     return;
   }
   if (!isSaving && activityList.contains(document.activeElement) && document.activeElement.matches("select, input")) return;
@@ -173,7 +176,7 @@ function render() {
   root.innerHTML = terms.map((term, ti) => {
     const availability = termAvailability(term);
     const { unlocked, locked, total } = availability;
-    const status = isReady ? availability : { label: "Waiting for data", cls: "st-upcoming" };
+    const status = isReady ? availability : { label: "—", cls: "st-upcoming" };
     const theme = THEMES[ti];
     const allLocked = locked === term.topics.length;
     return `
@@ -193,7 +196,7 @@ function render() {
         </button>
         <div class="term-body">
           ${term.topics.map((topic, ki) => {
-            const state = isReady ? topicAvailability(topic) : { label: "Waiting", cls: "pill-pending" };
+            const state = isReady ? topicAvailability(topic) : { label: "—", cls: "pill-pending" };
             return `
             <div class="topic-row">
               <div class="topic-left">
@@ -215,7 +218,7 @@ function render() {
             </div>
           `; }).join("")}
           <div class="term-foot">
-            <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "Waiting for lesson availability"}</span>
+            <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "—"}</span>
             <button class="lock-all" type="button" data-lockall="${ti}" ${!isReady || isSaving ? "disabled" : ""}>
               ${lockIcon(!allLocked)}
               ${allLocked ? "Unlock All" : "Lock All"}
@@ -288,7 +291,7 @@ sectionSelect.addEventListener("change", () => {
   document.getElementById("dateModal").classList.remove("open");
   activityMessage = "";
   latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
-  setSyncStatus(isReady ? "" : "Loading…");
+  setSyncStatus("");
   render();
 });
 
@@ -342,7 +345,7 @@ function watchScheduleFromFirestore(generation, user) {
   let saved = null;
   try { if (stored) saved = decodeView(stored); } catch {}
   if (!Array.isArray(saved) || saved.length !== TERM_IDS.length || saved.some(snapshot => snapshot.docs?.length !== 4)) saved = null;
-  setSyncStatus("Loading…");
+  setSyncStatus("");
   const snapshots = Array(TERM_IDS.length).fill(null);
   latestSchedules = snapshots;
   const showLoadError = (error, termIndex) => {
@@ -366,8 +369,7 @@ function watchScheduleFromFirestore(generation, user) {
         isReady = Boolean(selectedSection) && snapshots.every(Boolean);
         render();
         if (snapshots.every(Boolean) && !isSaving) {
-          const cached = snapshots.some((item) => item.metadata.fromCache);
-          setSyncStatus(selectedSection && cached ? "Updating…" : "");
+          setSyncStatus("");
           if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule:sections", encodeView(snapshots));
         }
       } catch (error) {
@@ -375,7 +377,7 @@ function watchScheduleFromFirestore(generation, user) {
       }
     };
     if (saved) receive(saved[termIndex]);
-    return (saved ? quietSnapshot : onSnapshot)(lessonsRef, { includeMetadataChanges: true }, receive, (error) => {
+    return (saved ? quietSnapshot : onSnapshot)(lessonsRef, { includeMetadataChanges: true, refreshIntervalMs: 60000 }, receive, (error) => {
       if (error.code === "permission-denied" || error.code === "unauthenticated") cache.invalidate();
       showLoadError(error, termIndex);
     });
@@ -409,10 +411,16 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   try {
-    const profiles = await getDocsWithLoading(query(collection(db, "users"), where("uid", "==", user.uid)));
-    if (generation !== scheduleGeneration) return;
-    if (profiles.size !== 1 || profiles.docs[0].data().role !== "teacher") throw new Error("Teacher access is required.");
-    const sections = await getDocsWithLoading(query(collection(db, "classes"), where("teacherId", "==", profiles.docs[0].id)));
+    // The verified website identity already includes the current profile ID.
+    // The data gateway still verifies the staff account and section ownership.
+    let teacherId = user.role === "teacher" ? user.id : null;
+    if (!teacherId) {
+      const profiles = await getDocsWithLoading(query(collection(db, "users"), where("uid", "==", user.uid)));
+      if (generation !== scheduleGeneration) return;
+      if (profiles.size !== 1 || profiles.docs[0].data().role !== "teacher") throw new Error("Teacher access is required.");
+      teacherId = profiles.docs[0].id;
+    }
+    const sections = await getDocsWithLoading(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
     if (generation !== scheduleGeneration) return;
     assignedSections = sections.docs.map(section => ({ id: section.id, name: section.data().SectionName || section.id }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -453,7 +461,7 @@ async function makeTermActivitiesAvailable(termIndex) {
   if (!topics?.length) return;
   const targets = topics.map(({ topicIndex }) => ({ termIndex, topicIndex }));
   isSaving = true;
-  activityMessage = "Saving activity access…";
+  activityMessage = "";
   render();
   try {
     if (!await saveAccessTargets(targets, manualAccessUpdate(false), { preserveDeadlineDrafts: true })) return;
@@ -513,7 +521,7 @@ activityList.addEventListener("click", async event => {
     return;
   }
   isSaving = true;
-  activityMessage = `Saving access for ${topic.title}…`;
+  activityMessage = "";
   render();
   try {
     if (!await saveAccess(termIndex, [topicIndex], update)) return;
@@ -548,7 +556,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     const nextLocked = !isTopicLocked(topic);
     isSaving = true;
     render();
-    setSyncStatus("Saving…");
+    setSyncStatus("", "pending");
     try {
       if (!await saveAccess(termIndex, [topicIndex], manualAccessUpdate(nextLocked))) return;
       setSyncStatus("Saved", "success");
@@ -569,7 +577,7 @@ document.getElementById("terms").addEventListener("click", async (event) => {
     const nextLocked = !term.topics.every(isTopicLocked);
     isSaving = true;
     render();
-    setSyncStatus("Saving…");
+    setSyncStatus("", "pending");
     try {
       if (!await saveAccess(termIndex, term.topics.map((_, topicIndex) => topicIndex), manualAccessUpdate(nextLocked))) return;
       setSyncStatus("Saved", "success");
@@ -614,7 +622,7 @@ document.getElementById("dateSave").onclick = async () => {
   const scheduledDate = dateInput.value;
   isSaving = true;
   render();
-  setSyncStatus("Saving…");
+  setSyncStatus("", "pending");
   try {
     const dateUpdate = scheduledAccessUpdate(scheduledDate, topic);
     if (!await saveAccess(termIndex, [topicIndex], dateUpdate)) return;

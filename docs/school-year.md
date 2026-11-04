@@ -23,3 +23,12 @@ The dropdown stays disabled until the setting and an administrator profile linke
 to the current UID have loaded. Each save checks that profile again. A failed
 save restores the confirmed selection and displays an error. Background label
 updates do not open a page-wide loading overlay.
+
+Labels use the existing public `/api/web-data/school-year` endpoint, which returns
+only `startYear`. The browser caches that public value for five minutes across
+page navigation; it never caches an account or student record with it. Background
+checks use the same interval, and focus events do not force a check of fresh data.
+Administrator editors still read the current setting when opened, verify the
+administrator profile before saving, and refresh immediately after a successful
+save. Other tabs in the same browser update through the storage event; other
+browsers receive changes on their next background check.

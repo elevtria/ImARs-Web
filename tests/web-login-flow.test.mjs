@@ -90,7 +90,7 @@ for (const [role, form, button, idleLabel] of [
     const pending = app.submit(form);
     assert.equal(app.element(button).disabled, true);
     assert.equal(app.element(button).attributes["aria-busy"], "true");
-    assert.equal(app.element(`${button}:label`).textContent, "Signing in…");
+    assert.equal(app.element(`${button}:label`).textContent, idleLabel);
     await app.submit(form);
     resolve();
     await pending;

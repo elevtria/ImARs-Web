@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
-import { createViewCache, encodeView, decodeView } from "../js/view-cache.js";
+import { createViewCache, encodeView, decodeView, reuseTeacherReport } from "../js/view-cache.js";
 
 function storage() {
   const data = new Map();
@@ -141,7 +141,7 @@ test("automatic data checks pause in hidden tabs, coalesce overlapping updates, 
   assert.equal(events.size, 0); assert.equal(timers.size, 0);
 });
 
-function pagedReportHarness() {
+function pagedReportHarness(size = 50) {
   let now=0, refresh, reader;
   const timers=new Map(), events=new Map(),calls=[],paints=[],errors=[];
   const auth={currentUser:{uid:'a',displayName:'Teacher A'}}, cache=createViewCache({storage:storage(),versions:storage()});
@@ -149,13 +149,14 @@ function pagedReportHarness() {
   const record=(id,data)=>({id,exists:()=>true,data:()=>data});
   const snap=docs=>({docs,size:docs.length,forEach:fn=>docs.forEach(fn)});
   const makePage=options=>{
-    const start=options.cursor?25:0;
-    return {classes:[record('A',{SectionName:'A'})],counts:options.includeCounts===false?null:[{classId:'A',active:50,archived:0}],
-      students:Array.from({length:25},(_,i)=>({classId:'A',studentDoc:record('S'+(start+i),{displayName:'Student '+(start+i)}),results:[{termId:options.termId,lessonsSnap:snap([])}]})),
+    const start=options.cursor?Number(options.cursor.id.slice(1))+1:0;
+    const count=options.includeStudents===false?0:Math.min(options.batchSize||25,size-start);
+    return {classes:[record('A',{SectionName:'A'})],counts:options.includeCounts===false||options.includeCounts==='cached'?null:[{classId:'A',active:size,archived:0}],
+      students:Array.from({length:count},(_,i)=>({classId:'A',studentDoc:record('S'+String(start+i).padStart(4,'0'),{displayName:'Student '+(start+i)}),results:(options.allTerms?['term_01','term_02','term_03']:[options.termId]).map(termId=>({termId,lessonsSnap:snap([])}))})),
       curriculum:options.includeCurriculum?{termSnap:record(options.termId,{title:options.termId}),curriculumSnap:snap([])}:null,
-      cursor:start?null:{classId:'A',id:'S24'}};
+      cursor:count&&start+count<size?{classId:'A',id:'S'+String(start+count-1).padStart(4,'0')}:null};
   };
-  const context=vm.createContext({Date:class extends Date {static now(){return now;}},Map,Promise,AbortController,encodeView,decodeView,document,
+  const context=vm.createContext({Date:class extends Date {static now(){return now;}},Map,Promise,AbortController,encodeView,decodeView,reuseTeacherReport,document,
     window:{addEventListener:(name,fn)=>events.set(name,fn)},setTimeout:fn=>{const id={};timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),
     getAuth:()=>auth,prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},
     getTeacherReportPage:async options=>{calls.push(options);return reader?reader(options):makePage(options);}
@@ -190,9 +191,35 @@ test('changing terms cancels old work; a late old term or account response canno
   app.document.visibilityState='visible';app.auth.currentUser={uid:'b'};await app.refresh();assert.equal(app.calls.length,2);
 });
 
-test('combined dashboard reports retain bounded background loading and a separate cache from single-term analytics',async()=>{
+test('combined dashboard reports retain bounded loading and supply a fresh selected-term view without another download',async()=>{
   const app=pagedReportHarness();await app.open({allTerms:true,sectionId:""});assert.equal(app.calls[0].allTerms,true);assert.equal(app.calls[0].firstSection,false);
   await app.tick();assert.equal(app.calls.length,2);assert.equal(app.calls[1].includeCounts,false);
   await app.open({allTerms:true,sectionId:""});assert.equal(app.calls.length,2);
-  await app.open({termId:"term_01"});assert.equal(app.calls.length,3);assert.equal(app.calls[2].allTerms,undefined);assert.equal(app.calls[2].firstSection,true);
+  await app.open({termId:"term_01"});assert.equal(app.calls.length,2);assert.equal(app.paints.at(-1).total,50);assert.equal(app.paints.at(-1).termId,"term_01");
+});
+
+test('1000-student reports paint 25 first, finish in eleven bounded requests without counts, then reuse the selected-term dataset',async()=>{
+  const app=pagedReportHarness(1000);await app.open({allTerms:true,sectionId:''});
+  assert.equal(app.paints.at(-1).loaded,25);assert.equal(app.paints.at(-1).total,null);
+  for(let index=0;index<15&&!app.paints.at(-1).complete;index++)await app.tick();
+  assert.equal(app.calls.length,11);assert.equal(app.paints.at(-1).total,1000);
+  assert.equal(app.calls[0].batchSize,25);assert.ok(app.calls.slice(1).every(call=>call.batchSize===100));
+  assert.ok(app.calls.every(call=>call.includeCounts==='cached'||call.includeCounts===false));
+  await app.open({termId:'term_01',sectionId:'A'});
+  assert.equal(app.calls.length,11,'Analytics must not download results already held by the authenticated dashboard');
+  assert.equal(app.paints.at(-1).loaded,1000);assert.ok(app.paints.at(-1).sections[0].students.every(row=>row.results.length===1&&row.results[0].termId==='term_01'));
+  await app.open({termId:'term_02',sectionId:'A'});
+  assert.equal(app.calls.length,12);assert.equal(app.calls.at(-1).includeStudents,false,'only the missing curriculum is requested');
+  assert.equal(app.paints.at(-1).total,1000);
+});
+
+test('a failed curriculum lookup retries without downloading the reused student results again',async()=>{
+  const app=pagedReportHarness();await app.open({allTerms:true,sectionId:''});await app.tick();
+  let unavailable=true;
+  app.read(options=>{if(unavailable)throw new Error('offline');return app.makePage(options);});
+  await app.open({termId:'term_02',sectionId:'A'});
+  assert.equal(app.errors.length,1);assert.equal(app.calls.at(-1).includeStudents,false);
+  unavailable=false;await app.refresh();
+  assert.equal(app.calls.length,4);assert.equal(app.calls.at(-1).includeStudents,false);
+  assert.equal(app.paints.at(-1).termId,'term_02');assert.equal(app.paints.at(-1).total,50);
 });
