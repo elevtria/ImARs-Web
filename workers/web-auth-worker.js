@@ -1,5 +1,5 @@
 import { decision, emptyState, passwordFailed, resetAfterApproval, verifiedSuccess } from "../server/web-lockout.js";
-import { checkSession, createSession, pruneSessions, sessionTiming } from "../server/web-session.js";
+import { checkSession, createSession, pruneSessions, sessionTiming, validSessionId } from "../server/web-session.js";
 
 const apiKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -22,6 +22,23 @@ export class WebLoginState {
 
   async handle(request) {
     const action = new URL(request.url).pathname;
+    if (["/mobile-login", "/mobile-session", "/mobile-revoke"].includes(action) && request.method === "POST") {
+      // Only the private binding can reach these actions. Pages verifies the
+      // teacher's password or Firebase identity before selecting this object.
+      if (action === "/mobile-revoke") {
+        await this.storage.put("mobileSessions", []);
+        return json({ ok: true });
+      }
+      const sessions = (await this.storage.get("mobileSessions")) || [];
+      if (action === "/mobile-login") {
+        const mobileSession = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("");
+        await this.storage.put("mobileSessions", [...sessions, mobileSession].slice(-20));
+        return json({ mobileSession });
+      }
+      const body = await request.json();
+      return validSessionId(body.mobileSession) && sessions.includes(body.mobileSession)
+        ? json({ ok: true }) : json({ error: "Please sign in again." }, 401);
+    }
     if (["/allocate-teacher", "/roster-get", "/roster-disable"].includes(action) && request.method === "POST") {
       const body = await request.json();
       if (action === "/allocate-teacher") {

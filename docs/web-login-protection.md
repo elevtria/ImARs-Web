@@ -217,6 +217,36 @@ The script targets the existing `imars-web.pages.dev` site and never prints the
 key. Removing a staff member from the approved roster immediately invalidates
 their web cookie; do not delete the Durable Object namespace to unlock one user.
 
+## Teacher sign-in across website and mobile
+
+A successful, fully verified teacher website login clears that teacher's mobile
+session receipts in the existing private `WEB_LOGIN_STATE` object. Wrong
+passwords, failed account checks, administrator logins and other teachers do not
+invalidate that receipt. Mobile sign-in does not end a website session.
+
+The account-access login endpoint issues a random receipt after password proof;
+`POST /api/account-access/mobile-session` checks it together with a verified
+Firebase ID token, current teacher profile and private account binding. A saved
+Firebase login alone cannot recreate a receipt after the website invalidates it.
+Receipts stay in private Durable Object storage, with at most 20 per account;
+no Firestore rule, schema, billing or new-secret changes are required.
+
+The Unity changes reuse `ImarsAccountGateway.cs` and `LogIn.cs`. One persistent
+teacher-only monitor checks every 30 seconds while focused and online, and again
+on resume/reconnect. A confirmed 401/403 signs out, clears current-account display
+caches and opens `Student_Login`; temporary network failures retry without
+claiming a logout. Students retain their existing flow. An offline/backgrounded
+device cannot detect invalidation until it reconnects/resumes. This is application
+sign-out behavior; it does not replace Firebase data authorization rules.
+
+Deploy the private Worker before Pages. Rebuild and install the updated mobile
+APK: existing installed builds do not perform the new check. A teacher upgrading
+without a receipt must enter their password once, including before offline
+teacher routing. The review source in `security/mobile/ImarsAccountGateway.cs`
+retains the older registration helper; the current mobile project keeps its
+existing invitation verification method. Do not replace that project wholesale
+with the historical `compatible-login.patch`.
+
 ## Validation
 
 Run `npm test` and `npm run build`. Tests cover cooldown boundaries, indefinite

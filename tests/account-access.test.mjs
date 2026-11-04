@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { accountAccess } from "../server/account-access.js";
 import { decodeFields, encodeFields, FirestoreAdmin, serviceToken } from "../server/firestore-admin.js";
+import { WebLoginState } from "../workers/web-auth-worker.js";
 
 function fixture() {
   const records = new Map([
@@ -14,6 +15,14 @@ function fixture() {
   ]);
   let verified = true, uid = "new-teacher", userEmail = "invited@example.test", disabled = false, outage = false, wrongPassword = false, commits = 0;
   const env = { ACCOUNT_ACCESS_ENABLED: "true" };
+  const actors = new Map();
+  env.WEB_LOGIN_STATE = { idFromName: name => name, get(name) {
+    if (!actors.has(name)) {
+      const values = new Map();
+      actors.set(name, new WebLoginState({ storage: { get: async key => structuredClone(values.get(key)), put: async (key,value) => values.set(key,structuredClone(value)) } }, {}));
+    }
+    return { fetch: (url,options) => actors.get(name).fetch(new Request(url,options)) };
+  } };
   const store = {
     get: async path => records.has(path) ? { data: structuredClone(records.get(path)), updateTime: "fixture-version" } : null,
     findUser: async value => {
@@ -54,7 +63,7 @@ test("school ID lookup reveals only the login email after password verification,
   const app = fixture();
   const response = await app.call("login", { identifier: "TEACH1000", password: "correct" });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { email: "teacher@example.test" });
+  const body=await response.json();assert.equal(body.email,"teacher@example.test");assert.equal(body.uid,"teacher-a");assert.match(body.mobileSession,/^[a-f0-9]{64}$/);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   app.set({ wrongPassword: true });
   const denied = await app.call("login", { identifier: "TEACH1000", password: "wrong" });
@@ -63,7 +72,7 @@ test("school ID lookup reveals only the login email after password verification,
 });
 test("display-email edits do not change the registered Firebase login address", async () => {
   const app = fixture(); app.records.get("users/TEACH1000").providedEmail = "contact-only@example.test";
-  assert.deepEqual(await (await app.call("login", { identifier: "teach1000", password: "correct" })).json(), { email: "teacher@example.test" });
+  assert.equal((await (await app.call("login", { identifier: "teach1000", password: "correct" })).json()).email,"teacher@example.test");
 });
 test("invitation checks expose no profile and reject mismatched roles, emails and claimed IDs", async () => {
   const app = fixture();
@@ -81,7 +90,7 @@ test("only a verified assigned email can atomically activate an unused teacher i
   app.set({ email: "invited@example.test" });
   const response = await app.call("claim", { identifier: "TEACH1001", role: "admin", uid: "forged" });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, profileId: "TEACH1001" });
+  assert.deepEqual(await response.json(), { ok: true, profileId: "TEACH1001", role: "teacher" });
   assert.equal(app.records.get("_accountAccess/new-teacher").role, "teacher");
   assert.equal(app.records.get("users/TEACH1001").uid, "new-teacher");
   assert.equal(app.commits(), 1);

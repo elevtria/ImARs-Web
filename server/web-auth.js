@@ -226,6 +226,10 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       }
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
       const approved = dataEnabled(env) ? await staffProfile(account, store || new FirestoreAdmin(env), now) : null;
+      if (approved?.role === "teacher") {
+        const revoked = await stateCall(env, `account:${approved.uid}`, "mobile-revoke", {});
+        if (!revoked.ok) throw new Error("Mobile session update failed");
+      }
       const token = await signSession(env, account, attempt.result.session, new URL(request.url).host);
       return json(approved ? { user: publicUser(approved) } : { email: account.email }, 200, { "Set-Cookie": cookie(token) });
     }

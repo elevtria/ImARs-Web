@@ -12,6 +12,9 @@ public static class ImarsAccountGateway
     private const string BaseUrl = "https://imars-web.pages.dev/api/account-access/";
     private static Task<bool> configuration;
     public const string NoticeKey = "ImarsAccountNotice";
+    internal const string SessionKey = "ImarsTeacherMobileSession";
+    internal const string SessionOwnerKey = "ImarsTeacherMobileSessionOwner";
+    private static string pendingSession, pendingOwner;
 
     [Serializable] private class RequestBody
     {
@@ -19,6 +22,7 @@ public static class ImarsAccountGateway
         public string password;
         public string email;
         public string role;
+        public string mobileSession;
     }
     [Serializable] private class Reply
     {
@@ -27,6 +31,9 @@ public static class ImarsAccountGateway
         public bool ok;
         public string email;
         public string profileId;
+        public string role;
+        public string uid;
+        public string mobileSession;
         public string error;
     }
     public sealed class GatewayException : Exception
@@ -54,6 +61,8 @@ public static class ImarsAccountGateway
     {
         Reply reply = await Send("login", new RequestBody { identifier = schoolId, password = password });
         if (string.IsNullOrEmpty(reply.email)) throw new GatewayException("Sign-in could not be verified. Please retry.", 503);
+        pendingSession = reply.mobileSession;
+        pendingOwner = reply.uid;
         return reply.email;
     }
 
@@ -63,7 +72,47 @@ public static class ImarsAccountGateway
         string token = await user.TokenAsync(true);
         Reply reply = await Send("claim", new RequestBody { identifier = schoolId }, token);
         if (!reply.ok || string.IsNullOrEmpty(reply.profileId)) throw new GatewayException("Your school account could not be linked. Please contact your teacher or administrator.", 503);
+        if (reply.role == "teacher")
+        {
+            string session = pendingOwner == user.UserId ? pendingSession : SavedSession(user.UserId);
+            if (string.IsNullOrEmpty(session)) throw new GatewayException("Please enter your ID and password to sign in again.", 401);
+            await CheckTeacherSessionAsync(user, session);
+            if (FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId) throw new GatewayException("Please sign in again.", 401);
+            PlayerPrefs.SetString(SessionOwnerKey, user.UserId);
+            PlayerPrefs.SetString(SessionKey, session);
+            PlayerPrefs.Save();
+            ImarsTeacherSessionMonitor.Watch();
+        }
+        pendingSession = pendingOwner = null;
         return reply.profileId;
+    }
+
+    internal static string SavedSession(string uid) => PlayerPrefs.GetString(SessionOwnerKey, "") == uid ? PlayerPrefs.GetString(SessionKey, "") : "";
+
+    internal static void ClearTeacherSession()
+    {
+        pendingSession = pendingOwner = null;
+        PlayerPrefs.DeleteKey(SessionKey);
+        PlayerPrefs.DeleteKey(SessionOwnerKey);
+        PlayerPrefs.Save();
+    }
+
+    internal static async Task CheckTeacherSessionAsync(FirebaseUser user, string session)
+    {
+        string token = await user.TokenAsync(false);
+        if (FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId) return;
+        await Send("mobile-session", new RequestBody { mobileSession = session }, token);
+    }
+
+    // --- PURE INVITATION VERIFICATION (Prevents background thread crashes) ---
+    public static async Task VerifyInvitationAsync(string schoolId, string assignedEmail, string role)
+    {
+        Reply invitation = await Send("invitation", new RequestBody { identifier = schoolId, email = assignedEmail, role = role });
+        if (!invitation.approved)
+        {
+            Debug.LogError($"Gateway Invitation Denied for ID '{schoolId}' and Email '{assignedEmail}'. Server Error: {invitation.error}");
+            throw new GatewayException("Please check your assigned school ID and email.", 403);
+        }
     }
 
     public static async Task RegisterAsync(FirebaseAuth auth, string schoolId, string assignedEmail, string fullName, string password, string role)
@@ -115,5 +164,107 @@ public static class ImarsAccountGateway
                 throw new GatewayException(string.IsNullOrEmpty(reply.error) ? "Account access could not be verified. Please retry." : reply.error, status);
             return reply;
         }
+    }
+}
+
+// One account check across scenes; no per-screen listeners or student polling.
+public sealed class ImarsTeacherSessionMonitor : MonoBehaviour
+{
+    private static ImarsTeacherSessionMonitor instance;
+    private FirebaseAuth auth;
+    private bool checking, initializing, ending, wasOffline;
+    private float nextCheck;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics() { instance = null; }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void Restore()
+    {
+        if (PlayerPrefs.HasKey(ImarsAccountGateway.SessionKey)) Watch();
+    }
+
+    public static void Watch()
+    {
+        if (instance == null)
+        {
+            instance = new GameObject("Teacher session").AddComponent<ImarsTeacherSessionMonitor>();
+            DontDestroyOnLoad(instance.gameObject);
+        }
+        instance.nextCheck = 0;
+        instance.ending = false;
+        instance.Initialize();
+    }
+
+    private async void Initialize()
+    {
+        if (initializing || auth != null) return;
+        initializing = true;
+        try
+        {
+            if (await FirebaseInitialization.EnsureReadyAsync() != Firebase.DependencyStatus.Available || this == null) return;
+            auth = FirebaseAuth.DefaultInstance;
+            auth.StateChanged += AuthChanged;
+        }
+        catch (Exception) { nextCheck = Time.realtimeSinceStartup + 10f; }
+        finally { initializing = false; }
+    }
+
+    private void AuthChanged(object sender, EventArgs args)
+    {
+        if (this == null || ending) return;
+        string owner = PlayerPrefs.GetString(ImarsAccountGateway.SessionOwnerKey, "");
+        if (auth.CurrentUser == null || (owner.Length > 0 && owner != auth.CurrentUser.UserId)) ImarsAccountGateway.ClearTeacherSession();
+        nextCheck = 0;
+    }
+
+    private void OnApplicationFocus(bool focused) { if (focused) nextCheck = 0; }
+    private void OnApplicationPause(bool paused) { if (!paused) nextCheck = 0; }
+
+    private void Update()
+    {
+        bool offline = Application.internetReachability == NetworkReachability.NotReachable;
+        if (wasOffline && !offline) nextCheck = 0;
+        wasOffline = offline;
+        if (ending || checking || !Application.isFocused || offline || Time.realtimeSinceStartup < nextCheck) return;
+        if (auth == null) { Initialize(); return; }
+        var user = auth.CurrentUser;
+        string session = user == null ? "" : ImarsAccountGateway.SavedSession(user.UserId);
+        if (!string.IsNullOrEmpty(session)) Check(user, session);
+    }
+
+    private async void Check(FirebaseUser user, string session)
+    {
+        checking = true;
+        nextCheck = Time.realtimeSinceStartup + 30f;
+        try { await ImarsAccountGateway.CheckTeacherSessionAsync(user, session); }
+        catch (ImarsAccountGateway.GatewayException error)
+        {
+            if (this == null || auth.CurrentUser?.UserId != user.UserId || ImarsAccountGateway.SavedSession(user.UserId) != session) return;
+            if (error.Status == 401 || error.Status == 403) EndSession();
+            else nextCheck = Time.realtimeSinceStartup + 10f;
+        }
+        catch (Exception) { nextCheck = Time.realtimeSinceStartup + 10f; }
+        finally { checking = false; }
+    }
+
+    private void EndSession()
+    {
+        if (ending) return;
+        ending = true;
+        ImarsAccountGateway.ClearTeacherSession();
+        auth.SignOut();
+        foreach (string key in new[] { "CurrentStudentID", "LoggedInStudentId", "CachedStudentName", "CachedAvatarId", "CachedClassCode", "CachedAvgPre", "CachedAvgPost", "CachedCompletedCount" }) PlayerPrefs.DeleteKey(key);
+        PlayerPrefs.SetString(ImarsAccountGateway.NoticeKey, "Please sign in again.");
+        PlayerPrefs.Save();
+        GlobalQuizData.CurrentStudentId = "";
+        Time.timeScale = 1f;
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Student_Login");
+    }
+
+    private void OnDestroy()
+    {
+        if (auth != null) auth.StateChanged -= AuthChanged;
+        if (instance == this) instance = null;
     }
 }

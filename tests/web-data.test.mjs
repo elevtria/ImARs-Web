@@ -6,7 +6,46 @@ import { requireStaff, protectWebsite, staffProfile } from "../server/web-auth.j
 import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js";
 
 import { fixture, accounts } from "./fixtures/web-data.js";
+import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
+
+test("successful teacher web sign-in invalidates only that teacher's password-issued mobile sessions",async()=>{
+  const app=fixture();app.env.ACCOUNT_ACCESS_ENABLED='true';
+  for(const account of accounts)app.data.set('_accountAccess/'+account.uid,{profileId:account.id,role:account.role,authEmail:account.email,active:true});
+  let mobileUid='teacher-a',passwordValid=true;
+  const fetcher=async(url,options)=>{
+    const body=JSON.parse(options.body);
+    if(url.includes('signInWithPassword')){
+      if(!passwordValid)return Response.json({error:{message:'INVALID_LOGIN_CREDENTIALS'}},{status:400});
+      const account=accounts.find(row=>row.email===body.email);return Response.json({localId:account.uid,email:account.email,idToken:'private-firebase-token'});
+    }
+    const account=accounts.find(row=>row.uid===mobileUid);
+    return Response.json({users:[{localId:account.uid,email:account.email,emailVerified:true}]});
+  };
+  const mobile=(action,body={},authenticated=true)=>accountAccess({env:app.env,request:app.request('/api/account-access/'+action,body,null,authenticated?{Authorization:'Bearer synthetic-mobile-token'}:{})},{store:app.store,fetcher});
+  const opened=await mobile('login',{identifier:'TEACH1000',password:'correct'});assert.equal(opened.status,200);
+  const {mobileSession}=await opened.json();assert.match(mobileSession,/^[a-f0-9]{64}$/);
+  assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
+  assert.equal((await mobile('mobile-session',{mobileSession},false)).status,401);
+  assert.equal((await mobile('mobile-session',{mobileSession:'0'.repeat(64)})).status,401);
+  const other=await(await mobile('login',{identifier:'TEACH1001',password:'correct'})).json();
+  mobileUid='teacher-b';assert.equal((await mobile('mobile-session',{mobileSession})).status,401);
+  assert.equal((await mobile('mobile-session',{mobileSession:other.mobileSession})).status,200);
+  mobileUid='teacher-a';
+  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'wrong',portal:'teacher'})).status,401);
+  assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed web login cannot sign out mobile');
+  app.data.get('users/TEACH1000').active=false;
+  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'correct',portal:'teacher'})).status,403);
+  app.data.get('users/TEACH1000').active=true;
+  assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed live profile check must not revoke mobile');
+  await app.login('ADMIN1000','admin');assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
+  await app.login();assert.equal((await mobile('mobile-session',{mobileSession})).status,401,'old Firebase authentication cannot recreate a revoked mobile session');
+  mobileUid='teacher-b';assert.equal((await mobile('mobile-session',{mobileSession:other.mobileSession})).status,200);
+  mobileUid='teacher-a';passwordValid=false;assert.equal((await mobile('login',{identifier:'TEACH1000',password:'wrong'})).status,401);
+  passwordValid=true;const fresh=await(await mobile('login',{identifier:'TEACH1000',password:'correct'})).json();
+  assert.notEqual(fresh.mobileSession,mobileSession);assert.equal((await mobile('mobile-session',{mobileSession:fresh.mobileSession})).status,200);
+  assert.equal((await mobile('mobile-session',{mobileSession})).status,401);
+});
 
 test("batch-upload metadata reuses the verified teacher and reads sections without student queries or counts",async()=>{
   const app=fixture(),cookie=await app.login(),queries=[],gets=[];

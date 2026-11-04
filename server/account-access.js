@@ -52,7 +52,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
     if (!body || typeof body !== "object" || Array.isArray(body)) throw fail("Invalid request.", 400);
     const ip = request.headers.get("CF-Connecting-IP");
     if (rate) await rate();
-    else if (ip) {
+    else if (ip && action !== "mobile-session") {
       const limited = await stateCall(env, "account-access-ip:" + ip, "rate");
       if (!limited.ok) return json({ error: "Too many requests. Please wait a minute." }, limited.status === 429 ? 429 : 503);
     }
@@ -74,6 +74,11 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       }
       // Password proof is required before revealing the login address. Firebase
       // SDK sign-in and verification continue in the mobile client as before.
+      if (roleOf(candidate) === "teacher" && candidate.uid) {
+        const opened = await stateCall(env, `account:${candidate.uid}`, "mobile-login", {});
+        if (!opened.ok) throw new Error("Mobile sign-in unavailable");
+        return json({ email: loginEmail, uid: candidate.uid, mobileSession: opened.result.mobileSession });
+      }
       return json({ email: loginEmail });
     }
     if (action === "invitation") {
@@ -87,7 +92,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       // No profile, assigned email, class, UID or results are returned publicly.
       return json({ approved: true });
     }
-    if (action === "claim") {
+    if (action === "claim" || action === "mobile-session") {
       const idToken = request.headers.get("Authorization")?.match(/^Bearer (\S{1,8192})$/)?.[1];
       if (!idToken) throw fail("Please sign in first.", 401);
       const result = await identity("accounts:lookup", { idToken }, fetcher);
@@ -107,8 +112,16 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       const role = roleOf(data);
       if (existing) {
         if (existing.data.active !== true || existing.data.profileId !== id || existing.data.role !== role || data.uid !== uid) throw fail("Account access needs administrator review.", 403);
-        return json({ ok: true, profileId: id });
+        if (action === "mobile-session") {
+          if (role !== "teacher" || typeof body.mobileSession !== "string" || !/^[a-f0-9]{64}$/.test(body.mobileSession)) throw fail("Please sign in again.", 401);
+          const limited = await stateCall(env, `mobile-session-rate:${uid}`, "rate");
+          if (!limited.ok) throw fail("Please wait before checking your session again.", limited.status === 429 ? 429 : 503);
+          const checked = await stateCall(env, `account:${uid}`, "mobile-session", { mobileSession: body.mobileSession });
+          if (!checked.ok) throw fail("Please sign in again.", checked.status === 401 ? 401 : 503);
+        }
+        return json({ ok: true, profileId: id, role });
       }
+      if (action === "mobile-session") throw fail("Please sign in again.", 401);
       // Existing accounts, especially staff, must be independently approved in
       // the migration manifest. Registration may claim only an unused invitation.
       if (claimed(data) || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);
@@ -121,7 +134,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
         gamification: data.gamification || { badgeCounts: {} } });
       if (role === "teacher") updates.status = "active";
       await store.activate(id, profile, uid, updates, role, email(user.email));
-      return json({ ok: true, profileId: id });
+      return json({ ok: true, profileId: id, role });
     }
     return json({ error: "Not found." }, 404);
   } catch (error) {

@@ -26,6 +26,17 @@ test("live staff profile and Auth status checks overlap, and either failed check
   await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:true}}),identity:async()=>({email:'teacher@example.test',disabled:true})}),error=>error.status===401);
 });
 
+test("mobile session invalidation persists across Worker restarts and never creates public access",async()=>{
+  const values=new Map(),state={storage:{get:async key=>structuredClone(values.get(key)),put:async(key,value)=>values.set(key,structuredClone(value))}};
+  let worker=new WebLoginState(state,{});
+  const call=(action,body={})=>worker.fetch(new Request('https://internal/'+action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
+  const first=await(await call('mobile-login')).json();assert.equal((await call('mobile-session',first)).status,200);
+  await call('mobile-revoke');worker=new WebLoginState(state,{});
+  assert.equal((await call('mobile-session',first)).status,401);
+  for(let i=0;i<25;i++)await call('mobile-login');assert.equal(values.get('mobileSessions').length,20);
+  assert.equal((await privateWorker.fetch(new Request('https://worker/mobile-login'))).status,404);
+});
+
 test("security headers prevent HTML caching and preserve API bodies and existing session cookies", async () => {
   for (const [path, status, type, body] of [
     ["/login", 200, "text/html", "<h1>Login</h1>"],

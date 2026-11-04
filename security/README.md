@@ -26,8 +26,10 @@ historical release IDs, to determine what is active.
 
 School ID/password login is retained. In protected mode, the server checks the
 password before returning the Firebase login email. The mobile Firebase SDK then
-signs in normally; no new session token is stored in PlayerPrefs. Online session
-restore verifies the account binding. Existing offline/weak-connection cache
+signs in normally. The teacher cross-device feature also stores an opaque mobile
+session receipt locally, bound to the verified Firebase UID; students do not get
+one. See [teacher session behavior](../docs/web-login-protection.md#teacher-sign-in-across-website-and-mobile).
+Online session restore verifies the account binding. Existing offline/weak-connection cache
 paths remain available; the server controls later online reads and writes.
 
 New registrations use the ID, assigned email, name and password. The mobile app
