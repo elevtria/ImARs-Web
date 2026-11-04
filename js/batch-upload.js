@@ -299,7 +299,6 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files[0]) handleFileSelected(fileInput.files[0]);
 });
 
-// Helper to index a student document into our duplicate-detection maps
 function indexStudentRecord(docId, sData, fallbackClassCode = "") {
   if (!docId || !sData) return;
   const role = String(sData.role || "student").toLowerCase();
@@ -315,7 +314,6 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
     dbExistingClaimedIds.add(cleanId);
   }
 
-  // Index all name variations (fullName, displayName, firstName + lastName)
   const possibleNames = [
     sData.fullName,
     sData.displayName,
@@ -329,7 +327,6 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
     }
   }
 
-  // Index BOTH email and providedEmail so neither can be duplicated
   const possibleEmails = [sData.email, sData.providedEmail, sData.authEmail];
   for (const rawMail of possibleEmails) {
     const cleanEmail = String(rawMail || "").trim().toLowerCase();
@@ -340,7 +337,7 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
   }
 }
 
-// Fetch ALL existing students across active and archived pages + Firestore
+// Fetch ALL existing students across active and archived pages via getStudentPage
 async function loadAllExistingStudentsForValidation(candidateIds) {
   existingStudentIds.clear();
   dbExistingStudentClassCodes = {};
@@ -360,20 +357,23 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
     }
   }
 
-  // 2. Paginate through getStudentPage using limit: 25 (matches student-records.js!)
+  // 2. Paginate through getStudentPage with termId: "term_01" (required by /api/web-data!)
   for (const status of ["active", "archived"]) {
     let cursor = null;
     let safetyCounter = 0;
+    let includeCounts = true;
     do {
       try {
         const page = await getStudentPage({
           sectionId: "",
           status,
           search: "",
+          termId: "term_01",
           cursor,
           limit: 25,
-          includeCounts: false
+          includeCounts
         });
+        includeCounts = false;
         if (page && Array.isArray(page.students)) {
           for (const row of page.students) {
             if (row?.studentDoc) {
@@ -390,21 +390,14 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
     } while (cursor && safetyCounter < 40);
   }
 
-  // 3. Also query Firestore users collection directly (allowed by firestore.rules!)
-  const queriesToTry = [
-    () => quietDocs(collection(db, "users")),
-    () => getDocs(query(collection(db, "users"), where("teacherId", "==", currentTeacherId || "TEACH1000")))
-  ];
-
-  for (const runQuery of queriesToTry) {
-    try {
-      const snap = await runQuery();
-      if (snap && typeof snap.forEach === "function") {
-        snap.forEach(docSnap => indexStudentRecord(docSnap.id, docSnap.data()));
-      }
-    } catch (err) {
-      // Continue if one query shape is restricted
-    }
+  // 3. Also run the teacherId roster query as backup
+  try {
+    const teacherIdToQuery = currentTeacherId || "TEACH1000";
+    const rosterQ = query(collection(db, "users"), where("teacherId", "==", teacherIdToQuery));
+    const rosterSnap = await getDocs(rosterQ);
+    rosterSnap.forEach(docSnap => indexStudentRecord(docSnap.id, docSnap.data()));
+  } catch (err) {
+    console.warn("Teacher roster backup query warning:", err);
   }
 
   console.log(
