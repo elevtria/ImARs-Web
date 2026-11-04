@@ -70,6 +70,22 @@ export function versionHtmlAssets(html, urls) {
   });
 }
 
+export function addNavigationHints(html, destinations) {
+  const present = new Set(Array.from(html.matchAll(/<(?:script|link)\b[^>]*>/gi), tag => tag[0].match(/\b(?:src|href)\s*=\s*(["'])(.*?)\1/i)?.[2]));
+  return html.replace(/<a\b[^>]*>/gi, tag => {
+    if (/\b(?:download|data-nav-assets)\b/i.test(tag)) return tag;
+    const href = tag.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2];
+    if (!href || /^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(href)) return tag;
+    const url = new URL(href, "https://imars.invalid/");
+    if (url.search || url.hash) return tag;
+    const page = url.pathname === "/" ? "index.html" : url.pathname.slice(1).replace(/(?:\.html)?$/, ".html");
+    const assets = destinations.get(page)?.filter(asset => !present.has(asset.href));
+    if (!assets?.length) return tag;
+    const encoded = JSON.stringify(assets).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+    return tag.slice(0, -1) + ` data-nav-assets="${encoded}">`;
+  });
+}
+
 export async function cacheStaticAssets(output, pages) {
   output = resolve(output);
   const inputs = new Map(), names = new Map();
@@ -167,10 +183,20 @@ export async function cacheStaticAssets(output, pages) {
     await mkdir(dirname(destination), { recursive: true });
     await writeFile(destination, content);
   }
-  for (const page of pages) {
-    const path = join(output, page);
-    await writeFile(path, versionHtmlAssets(await readFile(path, "utf8"), urls));
+  const versionedPages = new Map(await Promise.all(pages.map(async page => [page, versionHtmlAssets(await readFile(join(output, page), "utf8"), urls)])));
+  const destinations = new Map();
+  for (const [page, html] of versionedPages) {
+    if (!/<body\b[^>]*\bdata-auth-pending\b/i.test(html)) continue;
+    const assets = [];
+    for (const tag of html.matchAll(/<(?:script|link)\b[^>]*>/gi)) {
+      const script = /^<script\b/i.test(tag[0]);
+      if (!script && !/\brel\s*=\s*["']stylesheet["']/i.test(tag[0])) continue;
+      const href = tag[0].match(/\b(?:src|href)\s*=\s*(["'])(.*?)\1/i)?.[2];
+      if (href?.startsWith(plan.prefix + "/")) assets.push({ href, as: script ? "script" : "style" });
+    }
+    destinations.set(page, assets);
   }
+  for (const [page, html] of versionedPages) await writeFile(join(output, page), addNavigationHints(html, destinations));
   await writeFile(join(output, "_headers"), plan.headers);
   return { prefix: plan.prefix, count: files.size, urls };
 }

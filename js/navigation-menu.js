@@ -7,7 +7,7 @@ if (navigationDrawer) {
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
     const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
-    let pointerInside = false;
+    let pointerInside = panel.matches(":hover");
     let collapseTimer;
     const updateCompact = () => {
       const focused = panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
@@ -62,4 +62,48 @@ if (navigationDrawer) {
       if (link.classList.contains("active")) link.setAttribute("aria-current", "page");
     });
   }
+}
+
+// Warm only a hovered destination's public code and styles. Loading a module
+// with rel=prefetch does not run it or request that page's private data.
+const warmedAssets = new Set(Array.from(document.querySelectorAll("script[src], link[rel='stylesheet']"), node => node.src || node.href));
+let warmTimer;
+function warmNavigation(link) {
+  const connection = navigator.connection;
+  if (connection?.saveData || ["slow-2g", "2g"].includes(connection?.effectiveType)) return;
+  let assets;
+  try { assets = JSON.parse(link.dataset.navAssets); } catch { return; }
+  if (!Array.isArray(assets)) return;
+  for (const asset of assets.slice(0, 12)) {
+    if (warmedAssets.size >= 40 || !asset || typeof asset.href !== "string" || !["script", "style"].includes(asset.as)) continue;
+    let url;
+    try { url = new URL(asset.href, window.location.href); } catch { continue; }
+    if (url.origin !== window.location.origin || !/^\/assets\/site-[a-f0-9]{20}\/(?:app|chunk|style)-[\w-]+\.(?:js|css)$/.test(url.pathname) || url.search || url.hash || warmedAssets.has(url.href)) continue;
+    warmedAssets.add(url.href);
+    const hint = document.createElement("link");
+    hint.rel = "prefetch"; hint.as = asset.as; hint.href = url.href;
+    hint.setAttribute("fetchpriority", "low");
+    document.head.append(hint);
+  }
+}
+document.addEventListener("pointerover", event => {
+  const link = event.target.closest("a[data-nav-assets]");
+  if (!link || link.contains(event.relatedTarget)) return;
+  clearTimeout(warmTimer);
+  warmTimer = setTimeout(() => warmNavigation(link), 120);
+});
+document.addEventListener("pointerout", event => {
+  const link = event.target.closest("a[data-nav-assets]");
+  if (link && !link.contains(event.relatedTarget)) clearTimeout(warmTimer);
+});
+document.addEventListener("focusin", event => {
+  const link = event.target.closest("a[data-nav-assets]");
+  if (link) warmNavigation(link);
+});
+window.addEventListener("pagehide", () => clearTimeout(warmTimer));
+
+if (navigator.serviceWorker) {
+  const register = () => navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
+  if (document.readyState === "complete") void register();
+  else window.addEventListener("load", register, { once: true });
 }

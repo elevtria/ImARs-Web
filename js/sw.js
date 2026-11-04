@@ -1,4 +1,4 @@
-const CACHE_NAME = "imars-public-assets-v2";
+const CACHE_NAME = "imars-public-assets-v3";
 self.addEventListener("install", () => { self.skipWaiting(); });
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
@@ -14,19 +14,21 @@ self.addEventListener("fetch", event => {
       !url.pathname.startsWith("/assets/site-") ||
       !["script", "style", "image", "font"].includes(request.destination)) return;
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
+    let cache;
     try {
-      const response = await fetch(request);
-      if (response.ok && !/no-store|private/i.test(response.headers.get("Cache-Control") || "")) {
+      cache = await caches.open(CACHE_NAME);
+      const saved = await cache.match(request);
+      if (saved) return saved;
+    } catch {}
+    const response = await fetch(request);
+    const policy = response.headers.get("Cache-Control") || "";
+    if (cache && response.ok && /\bpublic\b/i.test(policy) && /\bimmutable\b/i.test(policy) && !/no-store|private/i.test(policy)) {
+      try {
         await cache.put(request, response.clone());
         const keys = await cache.keys();
         if (keys.length > 200) await cache.delete(keys[0]);
-      }
-      return response;
-    } catch (error) {
-      const saved = await cache.match(request);
-      if (saved) return saved;
-      throw error;
+      } catch {}
     }
+    return response;
   })());
 });

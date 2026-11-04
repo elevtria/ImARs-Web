@@ -1,4 +1,14 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
+@media screen and (prefers-reduced-motion:no-preference) {
+  @view-transition { navigation:auto; }
+  :root { view-transition-name:none; }
+  .login-cubes { view-transition-name:portal-background; }
+  #drawer .side-nav { view-transition-name:portal-navigation; }
+  body:has(#drawer) .topbar { view-transition-name:portal-header; }
+  ::view-transition-group(portal-background),::view-transition-group(portal-navigation),::view-transition-group(portal-header) { animation:none; }
+  ::view-transition-old(portal-background),::view-transition-old(portal-navigation),::view-transition-old(portal-header) { display:none; }
+  ::view-transition-new(portal-background),::view-transition-new(portal-navigation),::view-transition-new(portal-header) { animation:none; }
+}
 @media screen {
 :root { --portal-ink:#2c3a4f; --portal-muted:#596b7e; --portal-line:#a4b8d94d; --portal-blue:#81a2c1; --portal-gold:#feb705; }
 #drawer .drawer-panel, #drawer .side-nav, .admin-drawer-panel, .admin-side-nav { scrollbar-width:none; -ms-overflow-style:none; }

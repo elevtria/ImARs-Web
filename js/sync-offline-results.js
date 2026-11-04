@@ -99,9 +99,6 @@ async function flushPendingScans() {
   }
 }
 window.addEventListener?.("online", () => { void flushPendingScans(); });
-if (globalThis.navigator?.serviceWorker) {
-  window.addEventListener?.("load", () => { navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {}); });
-}
 
 // --- MODAL CONTROLS ---
 const closeResultModal = () => {

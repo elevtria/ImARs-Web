@@ -5,7 +5,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 import test from "node:test";
-import { assertPublicClientContent, cacheStaticAssets, minifyPublicAssets, staticAssetPlan, versionHtmlAssets } from "../scripts/cache-static-assets.mjs";
+import { addNavigationHints, assertPublicClientContent, cacheStaticAssets, minifyPublicAssets, staticAssetPlan, versionHtmlAssets } from "../scripts/cache-static-assets.mjs";
 
 test("offline service worker caches public assets while leaving portal HTML and API data on the network", async () => {
   const handlers = new Map(), deleted = [];
@@ -24,6 +24,39 @@ test("offline service worker caches public assets while leaving portal HTML and 
   let saved;
   handlers.get("fetch")({ request: { method: "GET", url: "https://example.test/assets/site-123/js/app.js", destination: "script" }, respondWith: promise => { saved = promise; } });
   assert.equal(await (await saved).text(), "cached script");
+});
+
+test("repeat public design requests use the offline cache without contacting the network", async () => {
+  const handlers = new Map(), saved = new Map(); let requests = 0;
+  const context = { URL, self: { location: { origin: "https://example.test" }, addEventListener: (name, callback) => handlers.set(name, callback) },
+    caches: { open: async () => ({ match: async request => saved.get(request.url)?.clone(),
+      put: async (request, response) => saved.set(request.url, response), keys: async () => [...saved.keys()] }) },
+    fetch: async request => { requests++; return new Response("public design", { headers: { "Cache-Control": request.url.includes("private") ? "private, no-store" : "public, max-age=31536000, immutable" } }); } };
+  vm.runInNewContext(await readFile(new URL("../js/sw.js", import.meta.url), "utf8"), context);
+  const load = async (path, destination = "style") => { let result; handlers.get("fetch")({ request: { method: "GET", url: "https://example.test" + path, destination }, respondWith: promise => result = promise }); return result; };
+  const path = "/assets/site-123/style-theme.css";
+  assert.equal(await (await load(path)).text(), "public design");
+  assert.equal(await (await load(path)).text(), "public design"); assert.equal(requests, 1);
+  await load("/assets/site-123/private.css"); await load("/assets/site-123/private.css");
+  assert.equal(requests, 3, "private responses must never be cached");
+  assert.equal(await load("/api/web-data"), undefined);
+  assert.equal(await load("/student-records", "document"), undefined);
+  assert.equal(requests, 3);
+  context.caches.open = async () => { throw new Error("Storage blocked"); };
+  assert.equal(await (await load(path)).text(), "public design");
+  assert.equal(requests, 4, "blocked cache storage must not stop a successful network response");
+});
+
+test("navigation hints contain only missing public assets and never prefetch page HTML or API requests", () => {
+  const common = { href: "/assets/site-01234567890123456789/style-common.css", as: "style" };
+  const entry = { href: "/assets/site-01234567890123456789/app-records.js", as: "script" };
+  const destinations = new Map([["student-records.html", [common, entry]]]);
+  const html = `<link rel="stylesheet" href="${common.href}"><a href="student-records.html">Records</a><a href="/student-records">Records</a><a href="login.html">Logout</a><a href="/api/web-data">Data</a><a href="https://other.test/student-records.html">External</a><a href="student-records.html" download>Download</a><a href="#records">Jump</a>`;
+  const result = addNavigationHints(html, destinations);
+  assert.equal(result.match(/data-nav-assets=/g).length, 2);
+  assert.ok(result.includes(entry.href));
+  assert.equal(result.split(common.href).length, 2, "shared CSS already loaded on the current page must not be repeated in hints");
+  for (const tag of result.match(/<a\b[^>]*>/g).slice(2)) assert.ok(!tag.includes("data-nav-assets"));
 });
 
 test("identical assets keep their cache URLs; changing bytes, adding files, or renaming a file changes the version", () => {
