@@ -6,6 +6,7 @@ import {
   query, 
   where, 
   getDocsWithLoading as getDocs,
+  getDocs as quietDocs,
   getStudentPage,
   doc, 
   setDoc, 
@@ -45,8 +46,8 @@ let parsedStudents = [];
 let previewData = [];
 let existingStudentIds = new Set();
 let dbExistingStudentClassCodes = {};
-let dbExistingNameOwners = {};  // normalized fullName -> studentId
-let dbExistingEmailOwners = {}; // normalized email -> studentId
+let dbExistingNameOwners = {};  // normalized fullName -> Set of studentIds
+let dbExistingEmailOwners = {}; // normalized email -> Set of studentIds
 let dbExistingClaimedIds = new Set(); // studentIds that already claimed their account
 
 function formatSectionLabel(rawName) {
@@ -301,6 +302,9 @@ fileInput.addEventListener("change", () => {
 // Helper to index a student document into our duplicate-detection maps
 function indexStudentRecord(docId, sData, fallbackClassCode = "") {
   if (!docId || !sData) return;
+  const role = String(sData.role || "student").toLowerCase();
+  if (role === "teacher" || role === "admin") return;
+
   const cleanId = String(docId).trim();
   existingStudentIds.add(cleanId);
 
@@ -311,19 +315,32 @@ function indexStudentRecord(docId, sData, fallbackClassCode = "") {
     dbExistingClaimedIds.add(cleanId);
   }
 
-  const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
-  const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
-  if (cleanName) {
-    dbExistingNameOwners[cleanName] = cleanId;
+  // Index all name variations (fullName, displayName, firstName + lastName)
+  const possibleNames = [
+    sData.fullName,
+    sData.displayName,
+    `${sData.firstName || ""} ${sData.lastName || ""}`
+  ];
+  for (const rawName of possibleNames) {
+    const cleanName = String(rawName || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (cleanName) {
+      if (!dbExistingNameOwners[cleanName]) dbExistingNameOwners[cleanName] = new Set();
+      dbExistingNameOwners[cleanName].add(cleanId);
+    }
   }
 
-  const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
-  if (rawEmail) {
-    dbExistingEmailOwners[rawEmail] = cleanId;
+  // Index BOTH email and providedEmail so neither can be duplicated
+  const possibleEmails = [sData.email, sData.providedEmail, sData.authEmail];
+  for (const rawMail of possibleEmails) {
+    const cleanEmail = String(rawMail || "").trim().toLowerCase();
+    if (cleanEmail) {
+      if (!dbExistingEmailOwners[cleanEmail]) dbExistingEmailOwners[cleanEmail] = new Set();
+      dbExistingEmailOwners[cleanEmail].add(cleanId);
+    }
   }
 }
 
-// Fetch ALL existing students across active and archived pages via getStudentPage
+// Fetch ALL existing students across active and archived pages + Firestore
 async function loadAllExistingStudentsForValidation(candidateIds) {
   existingStudentIds.clear();
   dbExistingStudentClassCodes = {};
@@ -343,7 +360,7 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
     }
   }
 
-  // 2. Paginate through getStudentPage (the exact API used by Student Records)
+  // 2. Paginate through getStudentPage using limit: 25 (matches student-records.js!)
   for (const status of ["active", "archived"]) {
     let cursor = null;
     let safetyCounter = 0;
@@ -354,7 +371,7 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
           status,
           search: "",
           cursor,
-          limit: 100,
+          limit: 25,
           includeCounts: false
         });
         if (page && Array.isArray(page.students)) {
@@ -367,23 +384,34 @@ async function loadAllExistingStudentsForValidation(candidateIds) {
         cursor = page?.cursor || null;
         safetyCounter++;
       } catch (err) {
-        console.warn(`getStudentPage (${status}) stopped:`, err);
+        console.warn(`getStudentPage (${status}) warning:`, err);
         break;
       }
-    } while (cursor && safetyCounter < 20);
+    } while (cursor && safetyCounter < 40);
   }
 
-  // 3. Fallback direct Firestore query if any section wasn't covered
-  try {
-    for (const sec of sections) {
-      if (!sec.classCode) continue;
-      const classRosterQ = query(collection(db, "users"), where("classCode", "==", sec.classCode));
-      const snap = await getDocs(classRosterQ);
-      snap.forEach(docSnap => indexStudentRecord(docSnap.id, docSnap.data(), sec.classCode));
+  // 3. Also query Firestore users collection directly (allowed by firestore.rules!)
+  const queriesToTry = [
+    () => quietDocs(collection(db, "users")),
+    () => getDocs(query(collection(db, "users"), where("teacherId", "==", currentTeacherId || "TEACH1000")))
+  ];
+
+  for (const runQuery of queriesToTry) {
+    try {
+      const snap = await runQuery();
+      if (snap && typeof snap.forEach === "function") {
+        snap.forEach(docSnap => indexStudentRecord(docSnap.id, docSnap.data()));
+      }
+    } catch (err) {
+      // Continue if one query shape is restricted
     }
-  } catch (err) {
-    // Ignore if direct query is restricted by data wrapper; step 2 already populated the map
   }
+
+  console.log(
+    `[Batch Upload Validator] Indexed ${existingStudentIds.size} IDs, ` +
+    `${Object.keys(dbExistingNameOwners).length} unique names, ` +
+    `${Object.keys(dbExistingEmailOwners).length} unique emails.`
+  );
 }
 
 function validateTemplateHeaders(headerRow) {
@@ -413,7 +441,6 @@ async function handleFileSelected(file) {
   document.getElementById("previewSection").hidden = true;
   importBtn.hidden = true;
 
-  // Check file extension (IT Expert Requirement 2.1)
   const fileName = String(file.name || "").toLowerCase();
   if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls") && !fileName.endsWith(".csv")) {
     document.getElementById("dropTitle").textContent = "Unsupported file format";
@@ -450,7 +477,6 @@ async function handleFileSelected(file) {
     return;
   }
 
-  // Validate column headers (IT Expert Requirement 2.0 / 2.1)
   const headerError = validateTemplateHeaders(rows[0]);
   if (headerError) {
     document.getElementById("dropTitle").textContent = "Invalid template columns";
@@ -466,8 +492,6 @@ async function handleFileSelected(file) {
     return;
   }
 
-  // Normalize IDs: only pad 9-digit numeric IDs that start with 0 (e.g. 026271000 -> 0026271000)
-  // Do NOT pad 8-digit numbers like 02627100 so short IDs are properly rejected!
   const normalizeUploadedId = (rawVal) => {
     const raw = String(rawVal ?? "").trim();
     if (/^\d{9}$/.test(raw)) return "0" + raw;
@@ -481,7 +505,6 @@ async function handleFileSelected(file) {
   const uniqueCandidateIds = [...new Set(candidateIds)];
   await loadAllExistingStudentsForValidation(uniqueCandidateIds);
 
-  // Build the raw data structure
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.join("").trim() === "") continue;
@@ -499,7 +522,7 @@ async function handleFileSelected(file) {
       fullName,
       studentId,
       email,
-      allowUpdate: false, // By default, flag existing records as duplicates per IT Expert Report
+      allowUpdate: false,
       isValid: false, 
       isExisting: false, 
       errors: []
@@ -547,7 +570,7 @@ function validateAllRows() {
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
     
-    // Student ID Checks (IT Expert Report Page 2 & 3)
+    // Student ID Checks
     if (!cleanId) {
       rowErrors.push("Missing Student ID");
     } else if (!/^\d+$/.test(cleanId)) {
@@ -564,12 +587,13 @@ function validateAllRows() {
     
     // Name Checks (In-file + Firestore Database)
     if (nameKey) {
-      const existingNameOwnerId = dbExistingNameOwners[nameKey];
+      const ownerSet = dbExistingNameOwners[nameKey];
       if (nameCounts[nameKey] > 1) {
         rowErrors.push("Duplicate Name in file");
-      } else if (existingNameOwnerId) {
-        if (existingNameOwnerId !== cleanId) {
-          rowErrors.push(`Duplicate Name (belongs to ID ${existingNameOwnerId})`);
+      } else if (ownerSet && ownerSet.size > 0) {
+        const otherOwner = [...ownerSet].find(id => id !== cleanId);
+        if (otherOwner) {
+          rowErrors.push(`Duplicate Name (belongs to ID ${otherOwner})`);
         } else if (!row.allowUpdate) {
           rowErrors.push("Duplicate Name (already in database)");
         }
@@ -580,14 +604,15 @@ function validateAllRows() {
     if (!cleanEmail) {
       rowErrors.push("Missing Email");
     } else {
-      const existingEmailOwnerId = dbExistingEmailOwners[cleanEmail];
+      const ownerSet = dbExistingEmailOwners[cleanEmail];
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
         rowErrors.push("Invalid email format");
       } else if (emailCounts[cleanEmail] > 1) {
         rowErrors.push("Duplicate Email in file");
-      } else if (existingEmailOwnerId) {
-        if (existingEmailOwnerId !== cleanId) {
-          rowErrors.push(`Duplicate Email (belongs to ID ${existingEmailOwnerId})`);
+      } else if (ownerSet && ownerSet.size > 0) {
+        const otherOwner = [...ownerSet].find(id => id !== cleanId);
+        if (otherOwner) {
+          rowErrors.push(`Duplicate Email (belongs to ID ${otherOwner})`);
         } else if (!row.allowUpdate) {
           rowErrors.push("Duplicate Email (already in database)");
         }
@@ -662,7 +687,6 @@ function renderPreviewTable() {
     const nameHasError = item.errors.some(e => e.includes("Name"));
     const emailHasError = item.errors.some(e => e.includes("Email") || e.includes("email"));
 
-    // If this Student ID exists in the current section, let the teacher explicitly opt-in to updating it
     const updateToggleHtml = item.isExisting
       ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:0.78rem;color:#0284c7;cursor:pointer;font-weight:600;">
            <input type="checkbox" data-index="${index}" data-field="allowUpdate" ${item.allowUpdate ? "checked" : ""}> Allow Update
@@ -672,16 +696,16 @@ function renderPreviewTable() {
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${item.firstName}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${item.lastName}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
         <input type="text" data-index="${index}" data-field="studentId" value="${item.studentId}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="email" data-index="${index}" data-field="email" value="${item.email}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
         <span>${statusBadge}</span>${updateToggleHtml}
