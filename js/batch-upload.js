@@ -48,7 +48,7 @@ let dbExistingStudentClassCodes = {};
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
-  if (!clean) return "Grade 6 – Section A";
+  if (!clean) return "";
   if (/^grade\s+\d+/i.test(clean)) return clean;
   return `Grade 6 – ${clean}`;
 }
@@ -100,10 +100,21 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
 
     const loadedSections = [];
 
+    // Build the allowed list from teacherData.sections if present so deleted legacy sections stay gone
+    const teacherSections = Array.isArray(teacherData.sections)
+      ? teacherData.sections.map(s => formatSectionLabel(s).toLowerCase()).filter(Boolean)
+      : (teacherData.section ? [formatSectionLabel(teacherData.section).toLowerCase()] : []);
+
     for (const classDoc of classSnap.docs) {
       const cData = classDoc.data();
       const rawName = cData.SectionName || cData.sectionName || cData.name || classDoc.id;
       const label = formatSectionLabel(rawName);
+      if (!label) continue;
+
+      // Skip legacy Section A / Section B if the teacher profile has updated sections
+      if (teacherSections.length > 0 && !teacherSections.includes(label.toLowerCase())) {
+        continue;
+      }
 
       loadedSections.push({
         classCode: classDoc.id,
@@ -112,46 +123,6 @@ async function loadSectionsFromDB(user, { background = false } = {}) {
         count: 0
       });
     }
-
-    const teacherSections = Array.isArray(teacherData.sections)
-      ? teacherData.sections
-      : (teacherData.section ? [teacherData.section] : []);
-
-  for (const secStr of teacherSections) {
-    const label = formatSectionLabel(secStr);
-    const rawSection = secStr.replace(/^Grade\s+\d+\s*[-–—]\s*/i, "").trim() || secStr;
-
-    const alreadyExists = loadedSections.some(
-      (s) =>
-        s.label.toLowerCase() === label.toLowerCase() ||
-        s.rawName.toLowerCase() === rawSection.toLowerCase()
-    );
-
-    if (!alreadyExists) {
-      let maxNum = 0;
-      loadedSections.forEach(s => {
-        if (s.classCode) {
-            const match = s.classCode.match(/^SCIG6A(\d+)$/);
-            if (match) maxNum = Math.max(maxNum, parseInt(match[1], 10));
-        }
-      });
-      const newClassCode = `SCIG6A${(maxNum + 1).toString().padStart(2, '0')}`;
-
-      await setDoc(doc(db, "classes", newClassCode), {
-        SectionName: rawSection,
-        teacherId,
-        gradeLevel: "Grade 6",
-        createdAt: serverTimestamp()
-      }, { merge: true });
-
-      loadedSections.push({
-        classCode: newClassCode,
-        rawName: rawSection,
-        label: label,
-        count: 0
-      });
-    }
-  }
 
     const totals = await getStudentPage({ includeStudents: false });
     for (const section of loadedSections) {
