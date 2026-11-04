@@ -469,6 +469,37 @@ function validateTemplateHeaders(headerRow) {
   return null;
 }
 
+function normalizeMiddleName(raw) {
+  const clean = String(raw ?? "").trim();
+  // Treat "-", "--", "N/A", or "none" as no middle name
+  if (!clean || /^[-–—]+$/.test(clean) || /^(?:n\/?a|none)$/i.test(clean)) {
+    return "";
+  }
+  return clean;
+}
+
+function getMiddleInitial(middleName) {
+  const clean = normalizeMiddleName(middleName);
+  if (!clean) return "";
+  const match = clean.match(/\p{L}/u);
+  return match ? `${match[0].toUpperCase()}.` : "";
+}
+
+function buildStudentNames(firstName, rawMiddle, lastName) {
+  const first = String(firstName ?? "").trim();
+  const middleName = normalizeMiddleName(rawMiddle);
+  const middleInitial = getMiddleInitial(middleName);
+  const last = String(lastName ?? "").trim();
+  return {
+    middleName,
+    middleInitial,
+    // Complete full name for thesis / teacher records: "Lans Raven Malabanan Aniciete"
+    fullName: [first, middleName, last].filter(Boolean).join(" "),
+    // Student-side name with middle initial: "Lans Raven M. Aniciete"
+    displayName: [first, middleInitial, last].filter(Boolean).join(" ")
+  };
+}
+
 async function handleFileSelected(file) {
   selectedFile = file;
   previewData = [];
@@ -543,30 +574,33 @@ async function handleFileSelected(file) {
   await loadAllExistingStudentsForValidation(uniqueCandidateIds);
 
   for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.join("").trim() === "") continue;
+  const row = rows[i];
+  if (!row || row.join("").trim() === "") continue;
 
-    const firstName = String(row[0] ?? "").trim();
-    const lastName = String(row[withMiddle ? 2 : 1] ?? "").trim();
-    const studentId = normalizeUploadedId(row[idColumn]);
-    const middleName = withMiddle ? String(row[1] ?? "").trim() : dbExistingMiddleNames[studentId] || "";
-    const email = String(row[idColumn + 1] ?? "").trim().toLowerCase();
-    const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
-    
-    previewData.push({
-      rowNum: i + 1,
-      firstName,
-      middleName,
-      lastName,
-      fullName,
-      studentId,
-      email,
-      allowUpdate: false,
-      isValid: false, 
-      isExisting: false, 
-      errors: []
-    });
-  }
+  const firstName = String(row[0] ?? "").trim();
+  const lastName = String(row[withMiddle ? 2 : 1] ?? "").trim();
+  const studentId = normalizeUploadedId(row[idColumn]);
+  const rawMiddleInput = withMiddle ? String(row[1] ?? "").trim() : (dbExistingMiddleNames[studentId] || "");
+  const { middleName, middleInitial, fullName, displayName } = buildStudentNames(firstName, rawMiddleInput, lastName);
+  const email = String(row[idColumn + 1] ?? "").trim().toLowerCase();
+
+  previewData.push({
+    rowNum: i + 1,
+    firstName,
+    rawMiddle: rawMiddleInput || "-",
+    middleName,
+    middleInitial,
+    lastName,
+    fullName,
+    displayName,
+    studentId,
+    email,
+    allowUpdate: false,
+    isValid: false, 
+    isExisting: false, 
+    errors: []
+  });
+}
 
   validateAllRows();
 }
@@ -609,7 +643,7 @@ function validateAllRows() {
     if (!row.firstName) rowErrors.push("Missing First Name");
     if (!row.lastName) rowErrors.push("Missing Last Name");
     if (row.middleName && (row.middleName.length > 200 || (row.middleName.match(/\p{L}/gu) || []).length < 2 || !/^[\p{L}\p{M}'’ -]+$/u.test(row.middleName) || /(^|\s)\p{L}(?=\s|$)/u.test(row.middleName)))
-      rowErrors.push("Enter the full Middle Name, not a middle initial");
+    rowErrors.push("Enter the full Middle Name, not a middle initial (or '-' if none)");
     
     // Student ID Checks
     if (!cleanId) {
@@ -677,11 +711,17 @@ function updateRowData(index, field, value) {
     item.studentId = /^\d{9}$/.test(raw) ? "0" + raw : raw;
   } else if (field === "allowUpdate") {
     item.allowUpdate = Boolean(value);
+  } else if (field === "middleName") {
+    item.rawMiddle = value.trim();
   } else {
     item[field] = value.trim();
   }
-  
-  item.fullName = [item.firstName, item.middleName, item.lastName].filter(Boolean).join(" ");
+
+  const names = buildStudentNames(item.firstName, item.rawMiddle, item.lastName);
+  item.middleName = names.middleName;
+  item.middleInitial = names.middleInitial;
+  item.fullName = names.fullName;
+  item.displayName = names.displayName;
   validateAllRows(); 
 }
 
@@ -740,7 +780,7 @@ function renderPreviewTable() {
         <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.middleName || '')}" placeholder="Full middle name" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.rawMiddle ?? item.middleName ?? '-')}" placeholder="Full middle name or -" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
         <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
@@ -802,16 +842,18 @@ document.getElementById("confirmPreviewBtn").addEventListener("click", (event) =
   }
 
   parsedStudents = previewData
-    .filter(item => item.isValid)
-    .map(item => ({
-      firstName: item.firstName,
-      middleName: item.middleName,
-      lastName: item.lastName,
-      fullName: item.fullName,
-      studentId: item.studentId,
-      email: item.email,
-      isExisting: item.isExisting
-    }));
+  .filter(item => item.isValid)
+  .map(item => ({
+    firstName: item.firstName,
+    middleName: item.middleName,
+    middleInitial: item.middleInitial,
+    lastName: item.lastName,
+    fullName: item.fullName,
+    displayName: item.displayName,
+    studentId: item.studentId,
+    email: item.email,
+    isExisting: item.isExisting
+  }));
 
   if (!selectedFile || parsedStudents.length === 0) return;
 
@@ -853,13 +895,14 @@ confirmImportBtn.addEventListener("click", async () => {
       const finalEmail = stu.email || `${finalStudentId}@imars.edu`;
 
       const strictUpdateData = {
-        firstName: stu.firstName,
-        middleName: stu.middleName,
-        lastName: stu.lastName,
-        displayName: stu.fullName,
-        fullName: stu.fullName,
-        updatedAt: serverTimestamp()
-      };
+      firstName: stu.firstName,
+      middleName: stu.middleName,       // "" if "-" was entered, or "Malabanan"
+      middleInitial: stu.middleInitial, // "" if "-" was entered, or "M."
+      lastName: stu.lastName,
+      displayName: stu.displayName,     // Student side: "Lans Raven M. Aniciete"
+      fullName: stu.fullName,           // Thesis/Records: "Lans Raven Malabanan Aniciete"
+      updatedAt: serverTimestamp()
+    };
 
       if (!dbExistingClaimedIds.has(finalStudentId)) {
         strictUpdateData.email = finalEmail;
