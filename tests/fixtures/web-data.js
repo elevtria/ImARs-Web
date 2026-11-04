@@ -25,6 +25,11 @@ export function fixture() {
     async get(path) { return data.has(path) ? { data: structuredClone(data.get(path)), updateTime: String(revision) } : null; },
     async getAll(paths) { return new Map(paths.map(path => [path, data.has(path) ? { data: structuredClone(data.get(path)), updateTime: String(revision) } : null])); },
     async identity(uid) { const row = [...data.values()].find(row => row.uid === uid); return row ? { localId: uid, email: row.email, disabled: row.authDisabled, emailVerified: row.authEmailVerified } : null; },
+    async findUser(uid) {
+      const rows = [...data].filter(([path, row]) => path.startsWith("users/") && path.split("/").length === 2 && row.uid === uid);
+      if (rows.length > 1) throw new Error("Duplicate Firebase UID");
+      return rows.length ? { id: rows[0][0].slice(6), data: structuredClone(rows[0][1]), updateTime: String(revision) } : null;
+    },
     async count(path, filters) {
       return [...data].filter(([name, row]) => name.startsWith(path + "/") && name.split("/").length === path.split("/").length + 1 && filters.every(filter => row[filter.field] === filter.value)).length;
     },

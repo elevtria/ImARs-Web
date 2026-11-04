@@ -224,12 +224,16 @@ session receipts in the existing private `WEB_LOGIN_STATE` object. Wrong
 passwords, failed account checks, administrator logins and other teachers do not
 invalidate that receipt. Mobile sign-in does not end a website session.
 
-The account-access login endpoint issues a random receipt after password proof;
+The teacher-session-login endpoint issues a random receipt after Firebase identity
+and password proof, checking the existing approved website staff list;
 `POST /api/account-access/mobile-session` checks it together with a verified
-Firebase ID token, current teacher profile and private account binding. A saved
+Firebase ID token and current approved teacher profile. A saved
 Firebase login alone cannot recreate a receipt after the website invalidates it.
 Receipts stay in private Durable Object storage, with at most 20 per account;
 no Firestore rule, schema, billing or new-secret changes are required.
+`TEACHER_MOBILE_SESSIONS_ENABLED=true` enables these two teacher-only endpoints
+independently of `ACCOUNT_ACCESS_ENABLED`. The latter remains disabled in the
+current production setup; no student bindings or student login flow are migrated.
 
 The Unity changes reuse `ImarsAccountGateway.cs` and `LogIn.cs`. One persistent
 teacher-only monitor checks every 30 seconds while focused and online, and again

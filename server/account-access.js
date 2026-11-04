@@ -1,5 +1,5 @@
 import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
-import { stateCall } from "./web-auth.js";
+import { stateCall, resolveStaff, settings } from "./web-auth.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -33,12 +33,14 @@ async function identity(path, body, fetcher) {
 export async function accountAccess({ request, env }, { store, fetcher = fetch, rate } = {}) {
   const enabled = env.ACCOUNT_ACCESS_ENABLED === "true";
   const url = new URL(request.url), action = url.pathname.replace(/\/$/, "").split("/").at(-1);
+  const teacherSessions = env.TEACHER_MOBILE_SESSIONS_ENABLED === "true" || enabled;
+  const mobileAction = ["teacher-session-login", "mobile-session"].includes(action);
   if (action === "config" && request.method === "GET") {
-    if (!enabled) return json({ enabled: false });
+    if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}) });
     try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true }); }
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
-  if (!enabled) return json({ error: "Account access is not enabled." }, 409);
+  if (!enabled && !(teacherSessions && mobileAction)) return json({ error: "Account access is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
@@ -55,6 +57,32 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
     else if (ip && action !== "mobile-session") {
       const limited = await stateCall(env, "account-access-ip:" + ip, "rate");
       if (!limited.ok) return json({ error: "Too many requests. Please wait a minute." }, limited.status === 429 ? 429 : 503);
+    }
+
+    if (mobileAction) {
+      const idToken = request.headers.get("Authorization")?.match(/^Bearer (\S{1,8192})$/)?.[1];
+      if (!idToken) throw fail("Please sign in first.", 401);
+      const proof = await identity("accounts:lookup", { idToken }, fetcher), user = proof.users?.[0];
+      if (!user?.localId || user.disabled || !user.emailVerified || !email(user.email)) throw fail("Please sign in again.", 403);
+      const linked = await store.findUser(user.localId);
+      const account = linked ? await resolveStaff(env, linked.id, settings(env), store) : null;
+      const data = linked?.data || (linked ? (await store.get("users/" + linked.id))?.data : null);
+      if (!account || account.role !== "teacher" || account.uid !== user.localId || email(account.email) !== email(user.email) ||
+          !available(data) || data.status === "disabled" || data.uid !== user.localId || data.role !== "teacher") throw fail("This teacher account could not be verified.", 403);
+      if (action === "teacher-session-login") {
+        if (typeof body.password !== "string" || !body.password || body.password.length > 4096) throw fail("Enter your password.", 400);
+        const signedIn = await identity("accounts:signInWithPassword", { email: account.email, password: body.password, returnSecureToken: true }, fetcher);
+        if (signedIn.localId !== account.uid || !signedIn.idToken || signedIn.mfaPendingCredential) throw fail("Please sign in again.", 401);
+        const opened = await stateCall(env, `account:${account.uid}`, "mobile-login", {});
+        if (!opened.ok) throw new Error("Mobile sign-in unavailable");
+        return json({ ok: true, profileId: account.id, role: "teacher", uid: account.uid, mobileSession: opened.result.mobileSession });
+      }
+      if (typeof body.mobileSession !== "string" || !/^[a-f0-9]{64}$/.test(body.mobileSession)) throw fail("Please sign in again.", 401);
+      const limited = await stateCall(env, `mobile-session-rate:${account.uid}`, "rate");
+      if (!limited.ok) throw fail("Please wait before checking your session again.", limited.status === 429 ? 429 : 503);
+      const checked = await stateCall(env, `account:${account.uid}`, "mobile-session", { mobileSession: body.mobileSession });
+      if (!checked.ok) throw fail("Please sign in again.", checked.status === 401 ? 401 : 503);
+      return json({ ok: true, profileId: account.id, role: "teacher" });
     }
 
     if (action === "login") {
@@ -92,7 +120,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       // No profile, assigned email, class, UID or results are returned publicly.
       return json({ approved: true });
     }
-    if (action === "claim" || action === "mobile-session") {
+    if (action === "claim") {
       const idToken = request.headers.get("Authorization")?.match(/^Bearer (\S{1,8192})$/)?.[1];
       if (!idToken) throw fail("Please sign in first.", 401);
       const result = await identity("accounts:lookup", { idToken }, fetcher);
@@ -112,16 +140,8 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       const role = roleOf(data);
       if (existing) {
         if (existing.data.active !== true || existing.data.profileId !== id || existing.data.role !== role || data.uid !== uid) throw fail("Account access needs administrator review.", 403);
-        if (action === "mobile-session") {
-          if (role !== "teacher" || typeof body.mobileSession !== "string" || !/^[a-f0-9]{64}$/.test(body.mobileSession)) throw fail("Please sign in again.", 401);
-          const limited = await stateCall(env, `mobile-session-rate:${uid}`, "rate");
-          if (!limited.ok) throw fail("Please wait before checking your session again.", limited.status === 429 ? 429 : 503);
-          const checked = await stateCall(env, `account:${uid}`, "mobile-session", { mobileSession: body.mobileSession });
-          if (!checked.ok) throw fail("Please sign in again.", checked.status === 401 ? 401 : 503);
-        }
         return json({ ok: true, profileId: id, role });
       }
-      if (action === "mobile-session") throw fail("Please sign in again.", 401);
       // Existing accounts, especially staff, must be independently approved in
       // the migration manifest. Registration may claim only an unused invitation.
       if (claimed(data) || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);

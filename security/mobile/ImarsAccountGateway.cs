@@ -89,6 +89,18 @@ public static class ImarsAccountGateway
 
     internal static string SavedSession(string uid) => PlayerPrefs.GetString(SessionOwnerKey, "") == uid ? PlayerPrefs.GetString(SessionKey, "") : "";
 
+    public static async Task StartTeacherSessionAsync(FirebaseUser user, string password)
+    {
+        string token = await user.TokenAsync(false);
+        Reply reply = await Send("teacher-session-login", new RequestBody { password = password }, token);
+        if (!reply.ok || reply.uid != user.UserId || string.IsNullOrEmpty(reply.mobileSession) || FirebaseAuth.DefaultInstance.CurrentUser?.UserId != user.UserId)
+            throw new GatewayException("Please sign in again.", 401);
+        PlayerPrefs.SetString(SessionOwnerKey, user.UserId);
+        PlayerPrefs.SetString(SessionKey, reply.mobileSession);
+        PlayerPrefs.Save();
+        ImarsTeacherSessionMonitor.Watch();
+    }
+
     internal static void ClearTeacherSession()
     {
         pendingSession = pendingOwner = null;

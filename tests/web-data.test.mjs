@@ -47,6 +47,24 @@ test("successful teacher web sign-in invalidates only that teacher's password-is
   assert.equal((await mobile('mobile-session',{mobileSession})).status,401);
 });
 
+test("teacher mobile sessions work with legacy account login disabled and without migrating student bindings",async()=>{
+  const app=fixture();app.env.TEACHER_MOBILE_SESSIONS_ENABLED='true';
+  let uid='teacher-a',validPassword=true;
+  const fetcher=async(url,options)=>{
+    const account=accounts.find(row=>row.uid===uid);
+    if(url.includes('signInWithPassword'))return validPassword?Response.json({localId:account.uid,email:account.email,idToken:'private-token'}):Response.json({error:{message:'INVALID_PASSWORD'}},{status:400});
+    return Response.json({users:[{localId:uid,email:account.email,emailVerified:true}]});
+  };
+  const mobile=(action,body={})=>accountAccess({env:app.env,request:app.request('/api/account-access/'+action,body,null,{Authorization:'Bearer synthetic-token'})},{store:app.store,fetcher});
+  assert.equal((await mobile('login',{identifier:'TEACH1000',password:'correct'})).status,409,'do not enable the broader account migration');
+  const opened=await mobile('teacher-session-login',{password:'correct'});assert.equal(opened.status,200);
+  const {mobileSession}=await opened.json();assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
+  assert.equal([...app.data.keys()].some(key=>key.startsWith('_accountAccess/')),false);
+  await app.login();assert.equal((await mobile('mobile-session',{mobileSession})).status,401);
+  validPassword=false;assert.equal((await mobile('teacher-session-login',{password:'wrong'})).status,401);
+  uid='admin-a';assert.equal((await mobile('teacher-session-login',{password:'correct'})).status,403);
+});
+
 test("batch-upload metadata reuses the verified teacher and reads sections without student queries or counts",async()=>{
   const app=fixture(),cookie=await app.login(),queries=[],gets=[];
   app.data.get('users/TEACH1000').sections=['Grade 6 – A'];
