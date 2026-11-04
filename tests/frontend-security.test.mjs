@@ -34,10 +34,11 @@ class Element {
   html() { return this._html + this.children.map(child => child.html()).join(""); }
 }
 
-function page(file, report) {
+function page(file, report, resolveReport) {
   const elements = new Map();
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
-  let authChanged, requested;
+  let authChanged, requested, controllerIndex = 0;
+  const requests = [], controllers = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
   const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, setLoadingState,
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
@@ -48,7 +49,10 @@ function page(file, report) {
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
-    createTeacherReport: options => ({ open: async input => { requested=input; options.render(report); } }),
+    createTeacherReport: options => {
+      const index = controllerIndex++; controllers.push(options);
+      return { stop() {}, open: async input => { requested=input; requests.push({ index, ...input }); options.render(resolveReport ? await resolveReport(input, index) : report); } };
+    },
     showAdminView: async options => { options.verified(); options.render(report); },
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
@@ -57,7 +61,7 @@ function page(file, report) {
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, context, requested:()=>requested, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, context, requested:()=>requested, requests, controllers, render: () => authChanged({ uid: "teacher-a" }) };
 }
 
 function assertTextOnly(html) {
@@ -109,7 +113,8 @@ test('Batch Upload templates and validation preserve full middle names through t
   assert.match(app.element('previewTableBody').html(),/data-field="middleName"/);
   app.element('dlCsv').onclick();assert.match(await app.download().text(),/^First Name,Middle Name,Last Name,Student ID,Email/);
   await app.import();assert.equal(app.imports.length,1);
-  assert.equal(app.imports[0].data.middleName,'María José');assert.equal(app.imports[0].data.displayName,'Ana María José Santos');assert.equal(app.imports[0].data.classCode,'A');
+  assert.equal(app.imports[0].data.middleName,'María José');assert.equal(app.imports[0].data.fullName,'Ana María José Santos');
+  assert.equal(app.imports[0].data.middleInitial,'M.');assert.equal(app.imports[0].data.displayName,'Ana M. Santos');assert.equal(app.imports[0].data.classCode,'A');
 });
 
 test('middle initials block import until edited, while full compound names and no-middle-name students work',async()=>{
@@ -201,6 +206,73 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   assert.ok(app.element("#studentGrid tbody").html().includes("75%"));
   assertTextOnly(app.element("topicsContainer").html());
   assertTextOnly(app.element("studentActivityBody").html());
+});
+
+function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
+  const lesson = record("lesson_01", { title: "Shared topic" });
+  return { termId, total: count * sectionIds.length, complete: true, curriculumSnap: snapshot([lesson]),
+    classes: classes.map(id => record(id, { SectionName: "Section " + id })), counts: sectionIds.map(classId => ({ classId, active: count })),
+    sections: sectionIds.map(id => ({ classDoc: record(id, { SectionName: "Section " + id }), students: Array.from({ length: count }, (_, index) => ({
+      studentDoc: record(id + index, { displayName: "Learner " + id + " " + index }),
+      results: [{ termId, lessonsSnap: snapshot([record("lesson_01", { isLessonCompleted: true, activityScore: 0, activityTotalQuestions: 10, lessonTimeMinutes: 2,
+        isPreTestCompleted: true, preTestScore: 0, preTestTotalQuestions: 5, isPostTestCompleted: true, postTestScore: 8, postTestTotalQuestions: 10 })]) }]
+    })) })) };
+}
+
+test("activity section dropdown shows each topic once and reuses loaded sections without extra requests", async () => {
+  const data = activityReportData(), app = page("analytics.js", data);
+  await app.render();
+  const dropdown = app.element("activitySectionFilter"), table = app.element("studentActivityBody");
+  assert.equal(dropdown.value, "A"); assert.equal(dropdown.disabled, false); assert.equal(dropdown.children.length, 2);
+  assert.equal((table.html().match(/class="activity-record-row"/g) || []).length, 1);
+  assert.ok(table.html().includes("Section A")); assert.ok(!table.html().includes("Section B"));
+  const options = dropdown.children, cards = app.element("avgPostVal").textContent;
+  dropdown.value = "B"; await dropdown.events.change();
+  assert.ok(table.html().includes("Section B")); assert.ok(!table.html().includes("Section A"));
+  assert.equal(app.requests.length, 1, "switching an already-loaded section must not reopen a report");
+  assert.equal(app.element("avgPostVal").textContent, cards);
+  app.controllers[1].render(data);
+  assert.equal(dropdown.children, options, "a background report update must not rebuild an unchanged dropdown");
+  assert.equal(dropdown.value, "B");
+});
+
+test("an activity-only section request keeps other analytics unchanged and student details paginated", async () => {
+  const main = activityReportData(["A"]), app = page("analytics.js", main, (input, index) => index === 0 ? activityReportData([input.sectionId], { termId: input.termId, count: 30 }) : main);
+  await app.render();
+  const before = app.element("#studentGrid tbody").html(), dropdown = app.element("activitySectionFilter");
+  vm.runInContext('openActivities.add("term_01|lesson_01|B")', app.context);
+  dropdown.value = "B"; await dropdown.events.change();
+  assert.equal(app.requests.length, 2); assert.equal(app.requests[1].index, 0); assert.equal(app.requests[1].sectionId, "B");
+  assert.equal(app.requests[1].termId, "term_01");
+  const table = app.element("studentActivityBody").html();
+  assert.ok(table.includes("Learner B 24")); assert.ok(!table.includes("Learner B 25")); assert.ok(table.includes("Next page")); assert.ok(table.includes("0/10 · 0%"));
+  assert.equal(app.element("#studentGrid tbody").html(), before);
+  dropdown.value = "A"; await dropdown.events.change();
+  app.controllers[0].render(activityReportData(["B"]));
+  assert.ok(!app.element("studentActivityBody").html().includes("Section B"), "late results must not replace the selected section");
+  dropdown.value = "foreign"; await dropdown.events.change(); assert.equal(app.requests.length, 2);
+});
+
+test("activity dropdown handles empty and removed assignments without retaining another section's results", async () => {
+  const data = activityReportData(), app = page("analytics.js", data); await app.render();
+  const dropdown = app.element("activitySectionFilter"); dropdown.value = "B"; await dropdown.events.change();
+  app.controllers[1].render(activityReportData(["A"], { classes: ["A"] }));
+  assert.equal(dropdown.value, "A"); assert.ok(!app.element("studentActivityBody").html().includes("Section B"));
+  app.controllers[1].render(activityReportData([], { classes: [] }));
+  assert.equal(dropdown.disabled, true); assert.match(app.element("studentActivityBody").html(), /No sections assigned yet/);
+});
+
+test("changing terms keeps the activity section and ignores results from the previous term", async () => {
+  const app = page("analytics.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
+  await app.render();
+  const dropdown = app.element("activitySectionFilter"); dropdown.value = "B"; await dropdown.events.change();
+  await vm.runInContext('currentTermFilter = "term_03"; openReport()', app.context);
+  await Promise.resolve();
+  assert.equal(dropdown.value, "B");
+  assert.ok(app.requests.some(request => request.index === 0 && request.sectionId === "B" && request.termId === "term_03"));
+  const table = app.element("studentActivityBody").html(); assert.ok(table.includes("Term 3")); assert.ok(!table.includes("Term 1"));
+  app.controllers[0].render(activityReportData(["B"], { termId: "term_01" }));
+  assert.equal(app.element("studentActivityBody").html(), table);
 });
 
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {

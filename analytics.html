@@ -126,6 +126,13 @@
       <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell>
         <div class="section-head performance-head">
           <h2 id="studentActivityHeading">Student Activity Record</h2>
+          <label class="activity-section-filter" for="activitySectionFilter">
+            <span>Section</span>
+            <span class="select-wrap">
+              <select id="activitySectionFilter" aria-controls="studentActivityBody" disabled><option value="">Select a section</option></select>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+          </label>
         </div>
         <div class="performance-table-wrap">
           <table class="performance-table activity-record-table">

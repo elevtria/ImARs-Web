@@ -17,8 +17,10 @@ const studentCount = document.getElementById("studentCount");
 const studentGrid = document.querySelector("#studentGrid tbody");
 const topicsContainer = document.getElementById("topicsContainer");
 const studentActivityBody = document.getElementById("studentActivityBody");
+const activitySectionFilter = document.getElementById("activitySectionFilter");
 const openActivities = new Set();
 const activityPages = new Map();
+let activitySection = "", activityRequest = "", activityData;
 
 let dynamicRows = [];
 let allTopicStats = []; // Store fetched topics globally for term filtering
@@ -31,6 +33,69 @@ const termLabels = {
   term_02: "Term 2",
   term_03: "Term 3"
 };
+
+const activityReport = createTeacherReport({ app,
+  render: data => {
+    if (data.termId !== currentTermFilter || !data.sections.some(section => section.classDoc.id === activitySection)) return;
+    activityData = data;
+    renderStudentActivities([data.curriculumSnap], data.sections.filter(section => section.classDoc.id === activitySection));
+    studentActivityBody.removeAttribute("aria-busy");
+  },
+  failed: error => {
+    console.error("Activity records update failed:", error);
+    studentActivityBody.removeAttribute("aria-busy");
+    if (!activityData) studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">Could not update activity records. Retrying automatically.</td></tr>';
+  }
+});
+
+function updateActivitySections(data) {
+  if (!activitySectionFilter) return;
+  if (!data.classes.some(section => section.id === activitySection)) activitySection = data.sections[0]?.classDoc.id || data.classes[0]?.id || "";
+  const options = data.classes.map(section => ({ id: section.id, name: section.data().SectionName || section.data().sectionName || section.data().name || section.id }));
+  // Reuse the same options during report batches so an open native dropdown is
+  // not reset by background updates.
+  const key = JSON.stringify(options);
+  if (activitySectionFilter.dataset.sections !== key) {
+    activitySectionFilter.replaceChildren(...options.map(section => {
+      const option = document.createElement("option"); option.value = section.id; option.textContent = section.name; return option;
+    }));
+    activitySectionFilter.dataset.sections = key;
+  }
+  activitySectionFilter.value = activitySection;
+  activitySectionFilter.disabled = !options.length;
+  void openActivityReport();
+}
+
+function openActivityReport() {
+  if (!auth.currentUser || !studentActivityBody) return;
+  const section = lastReport?.termId === currentTermFilter && lastReport.sections.find(section => section.classDoc.id === activitySection);
+  if (section && lastReport.curriculumSnap) {
+    activityReport.stop(); activityRequest = "";
+    activityData = lastReport;
+    studentActivityBody.removeAttribute("aria-busy");
+    renderStudentActivities([lastReport.curriculumSnap], [section]);
+    return;
+  }
+  if (!activitySection) {
+    activityReport.stop(); activityRequest = ""; activityData = null;
+    studentActivityBody.removeAttribute("aria-busy");
+    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No sections assigned yet.</td></tr>';
+    return;
+  }
+  const key = `${auth.currentUser.uid}:${currentTermFilter}:${activitySection}`;
+  if (activityRequest === key) return;
+  activityRequest = key; activityData = null;
+  studentActivityBody.setAttribute("aria-busy", "true");
+  studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
+  // The existing report loader reuses its section/term cache and cancels a
+  // superseded request. Other analytics cards keep their current report.
+  return activityReport.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: activitySection });
+}
+activitySectionFilter?.addEventListener("change", () => {
+  if (!lastReport?.classes.some(section => section.id === activitySectionFilter.value)) return;
+  activitySection = activitySectionFilter.value;
+  return openActivityReport();
+});
 
 function renderStudentActivities(curriculum, sections) {
   if (!studentActivityBody) return;
@@ -334,15 +399,20 @@ const report = createTeacherReport({ app,
       allTopicStats = Array.from(topicStatsMap.values());
       window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
       renderTopics(window.totalStudentsBase);
-      renderStudentActivities(curriculum, sections);
+      updateActivitySections(data);
   }
 });
 function openReport() {
   if (!auth.currentUser) return;
+  if (activityData?.termId !== currentTermFilter || (activityRequest && !activityRequest.startsWith(`${auth.currentUser.uid}:${currentTermFilter}:`))) {
+    activityReport.stop(); activityRequest = ""; activityData = null;
+    studentActivityBody.setAttribute("aria-busy", "true");
+    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
+  }
   setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");
   return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection });
 }
 onAuthStateChanged(auth, user => {
-  if (!user) { window.location.href = "login.html"; return; }
+  if (!user) { activityReport.stop(); activityData = null; window.location.href = "login.html"; return; }
   void openReport();
 });
