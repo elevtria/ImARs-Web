@@ -65,7 +65,7 @@ function adminHarness() {
   const auth = { currentUser: { uid: "admin-a" } }, main = { dataset: {}, prepend() {}, replaceChildren() { this.cleared = true; } };
   let reader = async () => snapshot([doc("ADMIN1", { uid: "admin-a", role: "admin", displayName: "Admin", password: "never-cache" })]);
   let foreground = 0, signouts = 0;
-  const context = vm.createContext({ ...refs, JSON, WeakSet, console: { warn() {} }, encodeView, decodeView,
+  const context = vm.createContext({ revealContent: () => {}, ...refs, JSON, WeakSet, console: { warn() {} }, encodeView, decodeView,
     getAuth: () => auth, onAuthStateChanged: (_, cb) => cb(auth.currentUser), teacherViewCache: () => cache,
     getFirestore: () => ({}), getDocs: ref => reader(ref), getDocsWithLoading: ref => { foreground++; return reader(ref); },
     signOut: async () => { signouts++; auth.currentUser = null; }, window: { location: {} },

@@ -1,7 +1,7 @@
 import { escapeHtml, showTeacherView } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { getTeacherTopicOverview, getDashboardSummary } from "./firebase-data.js";
 import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "./topic-availability.js";
 
@@ -54,6 +54,7 @@ function renderCurrentTopics(data = topicOverview) {
   document.getElementById("currentTermHeader").textContent = `Current Term — Term ${Number(termId.slice(-2))}`;
   const modules = document.getElementById("modulesContainer");
   if (!modules) return;
+  revealContent("dashboard-topics");
   clearTimeout(topicTimer);
   modules.innerHTML = "";
   if (!data.sectionIds.length) { modules.textContent = "No sections assigned yet."; return; }
@@ -112,6 +113,7 @@ function renderDashboard({ teacherName, sectionNames, total, sums, recent }) {
     }
     if (!recent.length) { const row=document.createElement("tr"); row.innerHTML='<td colspan="5" class="muted-cell">No saved app activity yet.</td>'; rows.appendChild(row); }
     table.appendChild(rows);
+    revealContent("dashboard-summary");
 }
 
 const report = createTeacherReport({ app,
@@ -141,7 +143,10 @@ onAuthStateChanged(auth, async user => {
     .catch(error => {
       console.error("Topic overview update failed:", error);
       const modules = document.getElementById("modulesContainer");
-      if (auth.currentUser?.uid === user.uid && modules) modules.textContent = "Could not update topics. Retrying automatically.";
+      if (auth.currentUser?.uid === user.uid && modules) {
+        modules.textContent = "Could not update topics. Retrying automatically.";
+        revealContent("dashboard-topics");
+      }
     });
   const summaryOptions = { app, user, page: "dashboard-summary-v1", load: async () => {
     let result = await getDashboardSummary();

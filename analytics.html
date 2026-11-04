@@ -54,7 +54,7 @@
             <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
       <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
-      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell>
+      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell data-await-content="analytics-summary">
         <h2 data-auth-shell>Class Average</h2>
         <div class="overall">
           <div class="donut" aria-label="post-test average">
@@ -90,7 +90,7 @@
         </div>
       </section>
 
-      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
+      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell data-await-content="analytics-students">
         <div class="section-head performance-head">
           <h2 data-auth-shell>Individual Student Performance</h2>
         </div>
@@ -123,7 +123,7 @@
         <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
       </section>
 
-      <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell>
+      <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell data-await-content="analytics-activities">
         <div class="section-head performance-head">
           <h2 id="studentActivityHeading">Student Activity Record</h2>
           <label class="activity-section-filter" for="activitySectionFilter">
@@ -142,9 +142,9 @@
         </div>
       </section>
 
-<div class="student-detail-navigation" aria-label="Student performance pages"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
+<div class="student-detail-navigation" aria-label="Student performance pages" data-await-content="analytics-students"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
 <!-- Topic Completion Rate Section -->
-      <section class="card section" data-auth-shell>
+      <section class="card section" data-auth-shell data-await-content="analytics-topics">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
           <h2 style="margin: 0;" data-auth-shell>Topic Completion Rate</h2>
 

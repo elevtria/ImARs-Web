@@ -15,7 +15,7 @@ import {
 import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 
 const THEMES = ["yellow", "green", "blue"];
 const FILLS = ["fill-yellow", "fill-green", "fill-blue"];
@@ -243,6 +243,7 @@ function render() {
     `;
   }).join("");
   renderActivitySchedule();
+  if (isReady) revealContent("schedule");
 }
 
 const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
@@ -432,7 +433,7 @@ onAuthStateChanged(auth, async (user) => {
     }
     render();
     setSyncStatus(assignedSections.length ? "" : "No sections are assigned to your account.");
-    if (!assignedSections.length) return;
+    if (!assignedSections.length) { revealContent("schedule"); return; }
     watchScheduleFromFirestore(generation, user);
   } catch (error) {
     if (generation !== scheduleGeneration) return;

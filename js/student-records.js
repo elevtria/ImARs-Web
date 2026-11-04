@@ -1,6 +1,6 @@
 import { getDocs as quietDocs } from "./firebase-data.js";
 import { prepareTeacherCache, watchVisibleData } from "./teacher-view.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { encodeView, decodeView, reuseTeacherReport } from "./view-cache.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
@@ -177,6 +177,7 @@ function renderRecords(data, key) {
   setLoadingState(pageStatus, false);
   pageStatus.textContent = `Page ${pageIndex + 1} · ${dynamicCards.length} students shown`;
   applyFilters();
+  revealContent("student-records");
 }
 
 async function loadRecordsPage({ background = false, scroll = false } = {}) {

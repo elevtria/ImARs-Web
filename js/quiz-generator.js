@@ -2,7 +2,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
 import { openQuizReview, closeQuizReview } from "./quiz-review.js";
@@ -97,9 +97,11 @@ const firestore = getFirestore(firebaseApp);
       const quizzes = snapshot.docs.map((quizDocument) => ({ ...quizDocument.data(), id: quizDocument.id }));
       saveQuizzes(quizzes);
       renderLibrary();
+      revealContent("quiz-library");
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
+      revealContent("quiz-library");
     }
   }
 
@@ -630,6 +632,10 @@ const firestore = getFirestore(firebaseApp);
     renderLibrary();
     await loadTeacherSections(user);
     if (user && teacherProfileId) await loadTeacherQuizzes(user);
+    else if (user) {
+      showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
+      revealContent("quiz-library");
+    }
   });
 
   fileInput.addEventListener("change", () => handleFile(fileInput.files[0]));

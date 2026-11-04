@@ -2,6 +2,7 @@ import { getAuth, signOut } from "./firebase-auth.js";
 import { collection, getFirestore, getDocs, getDocsWithLoading, limit, query, where } from "./firebase-data.js";
 import { showTeacherView as showCachedView } from "./teacher-view.js";
 import { decodeView, teacherViewCache } from "./view-cache.js";
+import { revealContent } from "./loading.js";
 
 export async function readAdminProfile(db, user, read = getDocs) {
   const profiles = await read(query(collection(db, "users"), where("uid", "==", user.uid), limit(2)));
@@ -44,7 +45,7 @@ export async function showAdminView({ app, user, page, load = async () => null, 
         const data = recent ? previous.data : await load({ read, background });
         return { profile: profile.display, data, reportsAt: recent ? previous.reportsAt : Date.now() };
       },
-      render: payload => { renderSidebar(payload.profile); render(payload.data, payload.profile); }
+      render: payload => { renderSidebar(payload.profile); render(payload.data, payload.profile); revealContent("admin-report"); }
     });
   } catch (error) {
     if (auth.currentUser?.uid !== user.uid) return;

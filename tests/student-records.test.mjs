@@ -49,7 +49,7 @@ function harness(size=3) {
     const rows=matches.slice(0,options.limit||25);
     return {classes,students:rows.map(([id,row])=>({classId:"A",studentDoc:doc(id,{...row})})),counts:options.includeCounts===false?null:[{classId:"A",active:all.filter(([,r])=>r.active!==false).length,archived:all.filter(([,r])=>r.active===false).length}],cursor:matches.length>rows.length?{classId:"A",id:rows.at(-1)[0]}:null};
   }
-  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState,console:{error(){}},
+  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState, revealContent: () => {},console:{error(){}},
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,fn)=>{authChanged=fn;},
     watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},
     collection:(_, ...parts)=>({path:parts.join("/")}),doc:(_,name,id)=>({path:name+"/"+id,id}),

@@ -69,14 +69,14 @@
         </div>
       </section>
 
-      <div class="student-status-switch" role="group" aria-label="Student status">
+      <div class="student-status-switch" role="group" aria-label="Student status" data-await-content="student-records">
         <button type="button" id="activeStudentsTab" aria-pressed="true">Active <span id="activeStudentsCount">0</span></button>
         <button type="button" id="archivedStudentsTab" aria-pressed="false">Archived <span id="archivedStudentsCount">0</span></button>
       </div>
       <button type="button" id="archiveSectionBtn" class="ghost-btn archive-section-btn" disabled>Archive section</button>
       <p class="archive-section-hint">Select a section to archive its active students together.</p>
       <!-- Dynamic Student Records Container -->
-      <div id="recordsContainer" class="student-record-list" aria-label="Student list" data-loading-path="classes users" data-loading-label="Loading student records…">
+      <div id="recordsContainer" class="student-record-list" aria-label="Student list" data-loading-path="classes users" data-loading-label="Loading student records…" data-await-content="student-records">
         <!-- Records will be injected here by JS -->
       </div>
 

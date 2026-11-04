@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { createLoadingTracker, startLoading, setLoadingState } from "../js/loading.js";
+import { createLoadingTracker, startLoading, setLoadingState, revealContent } from "../js/loading.js";
+import { readFileSync } from "node:fs";
 import { wrapFirestoreReads } from "../js/firebase-loading.js";
 
 function deferred() {
@@ -9,6 +10,36 @@ function deferred() {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 }
+
+test("cards reveal only for their completed data group and remain visible during background requests", () => {
+  const card = group => {
+    const attributes = new Map([["data-await-content", group], ["hidden", ""]]);
+    return { getAttribute: name => attributes.get(name), setAttribute: (name, value) => attributes.set(name, value), has: name => attributes.has(name) };
+  };
+  const summary = card("dashboard-summary"), topics = card("dashboard-topics"), recent = card("dashboard-summary");
+  const root = { querySelectorAll: () => [summary, topics, recent] };
+  assert.equal(summary.has("data-content-ready"), false); assert.equal(topics.has("data-content-ready"), false);
+  revealContent("dashboard-summary", root);
+  assert.equal(summary.has("data-content-ready"), true); assert.equal(recent.has("data-content-ready"), true);
+  assert.equal(topics.has("data-content-ready"), false, "a summary must not reveal an unpopulated topic card");
+  revealContent("dashboard-topics", root); assert.equal(topics.has("data-content-ready"), true);
+  assert.equal(topics.has("hidden"), true, "revealing data must not open a deliberately hidden tab or modal");
+  const finish = startLoading({ reference: { path: "users" } }); finish();
+  assert.equal(summary.has("data-content-ready"), true, "background updates must not hide populated cards");
+});
+
+test("pending cards are hidden while the sidebar/header and auth privacy guard remain independent", () => {
+  const css = readFileSync(new URL("../css/loading.css", import.meta.url), "utf8");
+  assert.match(css, /\[data-await-content\]:not\(\[data-content-ready\]\)/);
+  assert.match(css, /body\[data-auth-pending\] \[data-await-content\]/);
+  assert.ok(!css.includes(".topbar") && !css.includes("#drawer"));
+  for (const file of ["index.html", "analytics.html", "topic-scheduler.html", "student-records.html", "admin-dashboard.html", "admin-profile.html", "manage-teachers.html", "school-analytics.html"]) {
+    const html = readFileSync(new URL("../" + file, import.meta.url), "utf8");
+    assert.match(html, /data-await-content=/, file);
+    assert.ok(!/<(?:header|aside)\b[^>]*data-await-content/.test(html), file + " navigation must stay visible");
+    assert.ok(!/<[^>]*data-await-content[^>]*data-content-ready/.test(html), file + " cards must not reveal before their data callback");
+  }
+});
 
 test("quick cached or empty reads finish without showing a loader", async () => {
   const states = [];

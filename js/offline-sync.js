@@ -1,4 +1,4 @@
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 
 // Update with the all-markers ZIP hash when publishing replacement images.
 const markerVersion = "76f0d2ca0d6c";
@@ -52,6 +52,7 @@ const cloudStatus = document.getElementById("cloudSyncStatus");
 
 const setCloudStatus = (message, pending = false) => {
   if (cloudStatus) { setLoadingState(cloudStatus, pending, "Updating download progress"); cloudStatus.textContent = message; cloudStatus.hidden = !message && !pending; }
+  if (!pending) revealContent("offline-progress");
 };
 
 markerPacks.forEach((pack) => {

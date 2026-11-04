@@ -38,9 +38,9 @@ function page(file, report, resolveReport) {
   const elements = new Map();
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   let authChanged, requested, controllerIndex = 0;
-  const requests = [], controllers = [];
+  const requests = [], controllers = [], revealed = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, setLoadingState,
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -61,7 +61,7 @@ function page(file, report, resolveReport) {
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, context, requested:()=>requested, requests, controllers, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, context, requested:()=>requested, requests, controllers, revealed, render: () => authChanged({ uid: "teacher-a" }) };
 }
 
 function assertTextOnly(html) {
@@ -76,7 +76,7 @@ function batchPage({rows=[],existing=[]}={}) {
   const element=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};
   const count=new Promise(resolve=>{finishCount=resolve;});
   const cache={version:()=>0,put:(...args)=>writes.push(args),invalidate(){}};
-  const context=vm.createContext({console:{error(){},warn(){},log(){}},Date,Map,Set,JSON,encodeView,setLoadingState,escapeHtml,Blob,
+  const context=vm.createContext({console:{error(){},warn(){},log(){}},Date,Map,Set,JSON,encodeView,setLoadingState, revealContent: () => {},escapeHtml,Blob,
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,callback)=>{changed=callback;},
     prepareTeacherCache:()=>cache,showTeacherView:async options=>options.render(await options.load({})),
     getStudentPage:async options=>{calls.push(options);return options.includeTeacher?{teacherDoc:record('TEACH1000',{role:'teacher',sections:['Grade 6 – A','Grade 6 – B']}),classes:[record('A',{SectionName:'A'}),record('B',{SectionName:'B'})],counts:null}:options.status?{students:options.status==='active'?existing.map(row=>({classId:'A',studentDoc:record(row.id,row.data)})):[],cursor:null}:count;},
@@ -221,7 +221,9 @@ function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", class
 
 test("activity section dropdown shows each topic once and reuses loaded sections without extra requests", async () => {
   const data = activityReportData(), app = page("analytics.js", data);
+  assert.equal(app.revealed.length, 0, "data cards must wait for the report");
   await app.render();
+  assert.ok(["analytics-activities", "analytics-summary", "analytics-students", "analytics-topics"].every(group => app.revealed.includes(group)));
   const dropdown = app.element("activitySectionFilter"), table = app.element("studentActivityBody");
   assert.equal(dropdown.value, "A"); assert.equal(dropdown.disabled, false); assert.equal(dropdown.children.length, 2);
   assert.equal((table.html().match(/class="activity-record-row"/g) || []).length, 1);

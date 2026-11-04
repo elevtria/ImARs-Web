@@ -42,7 +42,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     record.sectionSchedules = { ...record.sectionSchedules, [sectionId]: { activityDeadlineUtc: "", ...record.sectionSchedules?.[sectionId], ...schedule } };
   }
   const context = vm.createContext({
-    setLoadingState,
+    setLoadingState, revealContent: () => {},
     ...availability, console: { error() {} }, Date,
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },

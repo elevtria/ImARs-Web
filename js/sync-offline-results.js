@@ -1,5 +1,5 @@
 import { initializeApp } from "./firebase-auth.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { escapeHtml } from "./teacher-view.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { 
@@ -467,7 +467,7 @@ async function loadRecentScans() {
   } catch (error) {
     console.error("Error fetching recent scans:", error);
     recentScansList.innerHTML = '<p class="muted center" style="margin-top: 20px;">Could not load recent scans.</p>';
-  }
+  } finally { revealContent("recent-scans"); }
 }
 
 export async function saveScanToDatabase(moduleName, type = "qr", scanId = null) {

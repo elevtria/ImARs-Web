@@ -16,7 +16,7 @@ import {
 } from "./firebase-data.js";
 import { showTeacherView, prepareTeacherCache, escapeHtml } from "./teacher-view.js";
 import { encodeView } from "./view-cache.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -182,10 +182,12 @@ onAuthStateChanged(auth, (user) => {
       currentTeacherId = data.teacherId; sections = data.sections;
       if (sameOptions) { renderSelectedCount(); void refreshSelectedCount(user); }
       else renderSections();
+      revealContent("batch-upload");
     }
   }).catch(error => { 
     sectionNameEl.textContent = "Error loading data!";
     sectionSelect.innerHTML = `<option>Failed to load</option>`;
+    revealContent("batch-upload");
     alert("Script Error: " + error.message + "\n\nPlease clear your browser cache and refresh.");
     console.error(error); 
   });

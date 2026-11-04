@@ -1,6 +1,6 @@
 import { escapeHtml } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
-import { setLoadingState } from "./loading.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
 import { activityPercent } from "./activity-score.js";
@@ -44,7 +44,10 @@ const activityReport = createTeacherReport({ app,
   failed: error => {
     console.error("Activity records update failed:", error);
     studentActivityBody.removeAttribute("aria-busy");
-    if (!activityData) studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">Could not update activity records. Retrying automatically.</td></tr>';
+    if (!activityData) {
+      studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">Could not update activity records. Retrying automatically.</td></tr>';
+      revealContent("analytics-activities");
+    }
   }
 });
 
@@ -80,6 +83,7 @@ function openActivityReport() {
     activityReport.stop(); activityRequest = ""; activityData = null;
     studentActivityBody.removeAttribute("aria-busy");
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No sections assigned yet.</td></tr>';
+    revealContent("analytics-activities");
     return;
   }
   const key = `${auth.currentUser.uid}:${currentTermFilter}:${activitySection}`;
@@ -102,6 +106,7 @@ function renderStudentActivities(curriculum, sections) {
   const records = buildStudentActivityRecords(curriculum, sections, termLabels, [currentTermFilter]);
   if (!records.length) {
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
+    revealContent("analytics-activities");
     return;
   }
   studentActivityBody.innerHTML = records.map((record, index) => {
@@ -124,6 +129,7 @@ function renderStudentActivities(curriculum, sections) {
       ${open && record.learners.length > 25 ? `<div class="student-detail-navigation"><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page - 1}" ${page === 0 ? "disabled" : ""}>Previous page</button><span>Page ${page + 1}</span><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page + 1}" ${(page + 1) * 25 >= record.learners.length ? "disabled" : ""}>Next page</button></div>` : ""}
     </td></tr>`;
   }).join("");
+  revealContent("analytics-activities");
   studentActivityBody.querySelectorAll(".activity-record-toggle").forEach(button => {
     button.addEventListener("click", () => {
       const record = records[Number(button.dataset.activityIndex)];
@@ -400,6 +406,8 @@ const report = createTeacherReport({ app,
       window.totalStudentsBase = Math.max(1, totalEnrolledStudents);
       renderTopics(window.totalStudentsBase);
       updateActivitySections(data);
+      revealContent("analytics-students analytics-topics");
+      if (data.complete) revealContent("analytics-summary");
   }
 });
 function openReport() {

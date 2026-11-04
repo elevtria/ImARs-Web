@@ -47,6 +47,13 @@ export function createLoadingTracker(render, { delayMs = 0, schedule = setTimeou
 
 const regions = new WeakMap();
 
+export function revealContent(groups, root = typeof document === "undefined" ? null : document) {
+  const ready = new Set(groups.split(/\s+/));
+  for (const element of root?.querySelectorAll?.("[data-await-content]") || []) {
+    if (ready.has(element.getAttribute("data-await-content"))) element.setAttribute("data-content-ready", "");
+  }
+}
+
 export function setLoadingState(element, active, label = "Loading") {
   if (!element) return;
   element.setAttribute("data-loading", String(active));

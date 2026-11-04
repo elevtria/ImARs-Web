@@ -41,7 +41,7 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-      <section class="hero" data-auth-shell>
+      <section class="hero" data-auth-shell data-await-content="dashboard-summary">
         <div>
           <h1 id="greeting">Good morning, . !</h1>
           <p id="classInfo">—</p>
@@ -58,7 +58,7 @@
       </section>
 
       <p id="dashboardReportStatus" class="view-data-status" role="status" data-loading="true" aria-label="Loading class summary"></p>
-      <section class="stats" data-loading-path="users classes" data-loading-label="Loading class summary…" data-auth-shell>
+      <section class="stats" data-loading-path="users classes" data-loading-label="Loading class summary…" data-auth-shell data-await-content="dashboard-summary">
         <a class="card stat stat-link" href="student-records.html" aria-label="View student records" data-auth-shell><span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
           <div class="label c-purple">Students</div>
           <div class="value" id="studentCountVal">0</div>
@@ -81,7 +81,7 @@
         <span class="stat-link-arrow" aria-hidden="true">↗</span></a>
       </section>
       
-      <section class="card section" data-loading-path="terms" data-loading-label="Loading lesson topics…" data-auth-shell>
+      <section class="card section" data-loading-path="terms" data-loading-label="Loading lesson topics…" data-auth-shell data-await-content="dashboard-topics">
         <div class="section-head">
           <h2 id="currentTermHeader">Current Term</h2>
           <a class="ghost-btn" href="topic-scheduler.html">View Schedule</a>
@@ -144,7 +144,7 @@
         </div>
       </section>
 
-      <section class="card section" data-auth-shell>
+      <section class="card section" data-auth-shell data-await-content="dashboard-summary">
         <div class="section-head">
           <h2 data-auth-shell>Recent Student Activity</h2>
           <a class="ghost-btn" href="student-records.html">See All</a>
