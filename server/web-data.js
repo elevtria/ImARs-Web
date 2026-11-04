@@ -351,6 +351,24 @@ async function teacherReportPage(scope, body) {
   return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
 }
 
+async function teacherTopicOverview(scope) {
+  if (scope.actor.role !== "teacher") throw fail();
+  const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
+  const sectionIds = classes.map(row => row.id);
+  const termIds = ["term_01", "term_02", "term_03"];
+  const paths = termIds.flatMap(termId => [1, 2, 3, 4].map(index => `terms/${termId}/lessons/lesson_0${index}`));
+  const records = classes.length ? await scope.store.getAll(paths, { fieldPaths: ["title", "name", "isLocked", "scheduledDate", "sectionSchedules"] }) : new Map();
+  return { sectionIds, terms: termIds.map(id => ({ id, lessons: paths.filter(path => path.startsWith(`terms/${id}/`)).flatMap(path => {
+    const data = records.get(path)?.data;
+    if (!data) return [];
+    const schedules = object(data.sectionSchedules) ? data.sectionSchedules : {};
+    return [{ id: path.split("/").at(-1), title: data.title || data.name || "Lesson " + Number(path.slice(-2)),
+      isLocked: data.isLocked, scheduledDate: data.scheduledDate || "",
+      sectionSchedules: Object.fromEntries(sectionIds.filter(sectionId => Object.hasOwn(schedules, sectionId)).map(sectionId => [sectionId,
+        { isLocked: schedules[sectionId]?.isLocked, scheduledDate: schedules[sectionId]?.scheduledDate || "" }])) }];
+  }) })) };
+}
+
 export async function webData({ request, env }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
@@ -375,6 +393,7 @@ export async function webData({ request, env }, { store = new FirestoreAdmin(env
     const scope = new Scope(store, actor);
     if (body.action === "student-page") return respond(await studentPage(scope, body));
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body));
+    if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();

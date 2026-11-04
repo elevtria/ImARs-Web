@@ -1,7 +1,9 @@
-import { escapeHtml } from "./teacher-view.js";
+import { escapeHtml, showTeacherView } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
 import { setLoadingState } from "./loading.js";
+import { getTeacherTopicOverview } from "./firebase-data.js";
+import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "./topic-availability.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -43,6 +45,30 @@ function activityTime(value) {
 }
 const minutes = value => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 const scoreLabel = (sum, count, maximum) => count ? `${Math.round(sum / count)}/${maximum}` : "N/A";
+let topicOverview, topicTimer, topicOwnerUid;
+function renderCurrentTopics(data = topicOverview) {
+  if (!data || topicOwnerUid !== auth.currentUser?.uid) return;
+  topicOverview = data;
+  const today = schoolTodayISO(), termId = currentScheduledTerm(data.terms, data.sectionIds, today);
+  const term = data.terms.find(row => row.id === termId);
+  document.getElementById("currentTermHeader").textContent = `Current Term — Term ${Number(termId.slice(-2))}`;
+  const modules = document.getElementById("modulesContainer");
+  if (!modules) return;
+  clearTimeout(topicTimer);
+  modules.innerHTML = "";
+  if (!data.sectionIds.length) { modules.textContent = "No sections assigned yet."; return; }
+  for (const [index, lesson] of (term?.lessons || []).entries()) {
+    const available = data.sectionIds.some(sectionId => {
+      const schedule = sectionSchedule(lesson, sectionId);
+      return !topicAvailability({ locked: schedule.isLocked, date: schedule.scheduledDate }, today).locked;
+    });
+    modules.insertAdjacentHTML("beforeend", `<article class="module"><div class="badge ${available ? "done" : "next"}">${index + 1}</div><div><h3>${escapeHtml(lesson.title)}</h3><span>${available ? "Available" : "Upcoming"}</span></div></article>`);
+  }
+  const midnight = Date.parse(today + "T00:00:00+08:00") + 86400000;
+  topicTimer = setTimeout(() => renderCurrentTopics(), Math.max(1000, midnight - Date.now()));
+}
+window.addEventListener("focus", () => renderCurrentTopics());
+window.addEventListener("pagehide", () => clearTimeout(topicTimer));
 
 function studentSummary(classDoc, student) {
   let preSum = 0, preCount = 0, postSum = 0, postCount = 0, arMinutes = 0, lastActive = 0, hasActivity = false;
@@ -75,7 +101,7 @@ const report = createTeacherReport({ app,
     setLoadingState(status, !complete, total === null ? "Updating class averages" : `Class averages: ${loaded} of ${total} students`);
     status.textContent = "";
   },
-  render: ({ teacherName, sections, termSnap, curriculumSnap, total }) => {
+  render: ({ teacherName, sections, total }) => {
     const hour = new Date().getHours(), part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
     document.getElementById("greeting").textContent = `Good ${part}, ${teacherName} !`;
     document.getElementById("classInfo").textContent = sections.length > 1 ? "Grade 6 – All assigned sections" : sections.length ? "Grade 6 – " + (sections[0].classDoc.data().SectionName || sections[0].classDoc.id) : "No classes assigned yet.";
@@ -102,18 +128,16 @@ const report = createTeacherReport({ app,
     if (!recent.length) { const row=document.createElement("tr"); row.innerHTML='<td colspan="5" class="muted-cell">No saved app activity yet.</td>'; rows.appendChild(row); }
     table.appendChild(rows);
 
-    const termTitle = termSnap?.exists() ? termSnap.data().title || "Term 1" : "Term 1";
-    document.getElementById("currentTermHeader").textContent = `Current Term — ${termTitle}`;
-    const modules = document.getElementById("modulesContainer"); modules.innerHTML = "";
-    if (!sections.length) return;
-    const activeLessons = new Set(sections.flatMap(section => section.students.flatMap(student => student.results.filter(result => result.termId === "term_01" || !result.termId).flatMap(result => result.lessonsSnap.docs.filter(lesson => lesson.data().isPreTestCompleted || lesson.data().isPostTestCompleted).map(lesson => lesson.id)))));
-    [...(curriculumSnap?.docs || [])].sort((a,b)=>a.id.localeCompare(b.id)).forEach((lesson,index)=>{
-      const active = activeLessons.has(lesson.id);
-      modules.insertAdjacentHTML("beforeend",`<article class="module"><div class="badge ${active ? "done" : "next"}">${index+1}</div><div><h3>${escapeHtml(lesson.data().title || "Lesson "+(index+1))}</h3><span>${active ? "Active/Completed" : "Upcoming"}</span></div></article>`);
-    });
   }
 });
 onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "login.html"; return; }
-  await report.open({ user, sectionId:"", allTerms:true });
+  if (!user) { topicOverview = null; topicOwnerUid = null; clearTimeout(topicTimer); window.location.href = "login.html"; return; }
+  topicOwnerUid = user.uid;
+  const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", load: () => getTeacherTopicOverview(), render: renderCurrentTopics })
+    .catch(error => {
+      console.error("Topic overview update failed:", error);
+      const modules = document.getElementById("modulesContainer");
+      if (auth.currentUser?.uid === user.uid && modules) modules.textContent = "Could not update topics. Retrying automatically.";
+    });
+  await Promise.all([report.open({ user, sectionId:"", allTerms:true, includeCurriculum:false }), topics]);
 });

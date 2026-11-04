@@ -9,6 +9,23 @@ import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
 
+test('dashboard topic metadata stays bounded, strips answers and foreign schedules, and reads no students or results',async()=>{
+  const app=fixture(),cookie=await app.login(),batches=[],queries=[];
+  const getAll=app.store.getAll.bind(app.store),query=app.store.query.bind(app.store);
+  app.store.getAll=(paths,options)=>{batches.push({paths,options});return getAll(paths);};
+  app.store.query=(path,options)=>{queries.push(path);return query(path,options);};
+  app.store.count=()=>assert.fail('the topic card needs no counts');
+  app.data.set('terms/term_03/lessons/lesson_01',{title:'Term 3 topic',isLocked:false,questions:[{correctAnswer:'private-answer'}],sectionSchedules:{A:{isLocked:false,scheduledDate:'',activityDeadlineUtc:'private-deadline'},B:{isLocked:false,scheduledDate:''}}});
+  const response=await app.call({action:'teacher-topic-overview',sectionId:'B'},cookie);
+  assert.equal(response.status,200);const data=await response.json();
+  assert.deepEqual(data.sectionIds,['A']);assert.deepEqual(queries,['classes']);assert.equal(batches.length,1);
+  assert.equal(batches[0].paths.length,12);assert.ok(batches[0].paths.every(path=>path.startsWith('terms/')));
+  assert.ok(!batches[0].options.fieldPaths.includes('questions'));
+  assert.deepEqual(data.terms[2].lessons[0].sectionSchedules,{A:{isLocked:false,scheduledDate:''}});
+  assert.ok(!JSON.stringify(data).includes('private-'));
+  const admin=await app.login('ADMIN1000','admin');assert.equal((await app.call({action:'teacher-topic-overview'},admin)).status,403);
+});
+
 test("successful teacher web sign-in invalidates only that teacher's password-issued mobile sessions",async()=>{
   const app=fixture();app.env.ACCOUNT_ACCESS_ENABLED='true';
   for(const account of accounts)app.data.set('_accountAccess/'+account.uid,{profileId:account.id,role:account.role,authEmail:account.email,active:true});
@@ -617,6 +634,8 @@ test('Firestore report batchGet uses one request and preserves missing documents
  const records=await store.getAll(paths);
  assert.equal(calls.length,1);assert.equal(calls[0].path,'documents:batchGet');assert.deepEqual(calls[0].body.documents,paths.map(path=>store.name(path)));
  assert.equal(records.get(paths[0]).data.postTestScore,4);assert.equal(records.get(paths[1]),null);
+ await store.getAll(paths,{fieldPaths:['title','isLocked','sectionSchedules']});
+ assert.deepEqual(calls[1].body.mask,{fieldPaths:['title','isLocked','sectionSchedules']});
  store.request=async()=>[];await assert.rejects(store.getAll(paths),/incomplete/);
  await assert.rejects(store.getAll(Array.from({length:101},(_,i)=>'users/S'+i)),/100/);
 });

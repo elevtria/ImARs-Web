@@ -10,6 +10,22 @@ function validDate(value) {
 
 const SCHOOL_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+export function schoolTodayISO(now = new Date()) {
+  return new Date(now.getTime() + SCHOOL_UTC_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function currentScheduledTerm(terms, sectionIds, today = schoolTodayISO()) {
+  for (const term of [...terms].sort((a, b) => b.id.localeCompare(a.id))) {
+    if (term.lessons.some(lesson => sectionIds.some(sectionId => {
+      // Shared unlocked defaults do not prove that this teacher opened a term.
+      if (!lesson.sectionSchedules || !Object.hasOwn(lesson.sectionSchedules, sectionId)) return false;
+      const schedule = sectionSchedule(lesson, sectionId);
+      return !topicAvailability({ locked: schedule.isLocked, date: schedule.scheduledDate }, today).locked;
+    }))) return term.id;
+  }
+  return "term_01";
+}
+
 export function validateActivityDeadlineUtc(value, releaseDate = "") {
   if (value === "") return value;
   if (typeof value !== "string" || !/^(?!0000)\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) ||

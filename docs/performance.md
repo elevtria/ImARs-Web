@@ -142,6 +142,17 @@ speed guarantee, production p95, or capacity for 1,000 simultaneous users. Exact
 cold averages still require relevant student results, and browser storage limits
 can prevent cache reuse. Authentication remains a required part of each visit.
 
+## Dashboard metadata and sign-in
+
+The dashboard topic card now uses a separate, small schedule overview. A live
+read-only local-gateway sample returned 2,659 bytes for 12 topic metadata entries
+and 12 assigned sections in 1,812 ms, excluding browser and Cloudflare-session
+round trips. The report request skips its old Term 1 curriculum read; changing
+the topic card's term never restarts the student report. Login also prefetches
+the existing public portal styles. Private student/report requests still begin
+only after successful teacher authentication; cached views are released only
+after the current account's live access check.
+
 ## Next work, in order
 
 1. Store authoritative per-section counts and report summaries, maintained by

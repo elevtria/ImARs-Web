@@ -40,12 +40,12 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     const cursor = state.complete ? state.refreshCursor : state.cursor;
     const existing = state.pages.find(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
     const batchSize = state.complete ? existing?.batchSize || 25 : state.pages.length ? 100 : 25;
-    const curriculumOnly = state.pages.length > 0 && !state.curriculumSnap;
+    const curriculumOnly = options.includeCurriculum && state.pages.length > 0 && !state.curriculumSnap;
     try {
       abort = new AbortController();
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
         ...(options.allTerms ? { allTerms: true } : {}),
-        firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor ? "cached" : false, includeCurriculum: !state.curriculumSnap,
+        firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor ? "cached" : false, includeCurriculum: options.includeCurriculum && !state.curriculumSnap,
         ...(curriculumOnly ? { includeStudents: false, includeCounts: false } : {}) }, { signal: abort.signal });
       if (!current(token)) return;
       if (cache.version() !== version) {
@@ -92,10 +92,10 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false }) {
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true }) {
     stop(); user = account; const token = generation;
     cache = prepareTeacherCache(app, user); version = cache.version();
-    options = { termId, sectionId, allTerms, key: "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all") };
+    options = { termId, sectionId, allTerms, includeCurriculum, key: "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all") };
     state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
     const saved = cache.get(user.uid, options.key);
     if (saved) try {
@@ -107,11 +107,11 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       const reused = reuseTeacherReport(cache, user.uid, { ...options, now: Date.now() });
       if (reused) {
         state = reused;
-        if (state.curriculumSnap) paint();
+        if (state.curriculumSnap || !includeCurriculum) paint();
       }
     }
     stopUpdates = watchVisibleData(app, user, () => update(token));
-    if (!state.pages.length || !state.curriculumSnap || Date.now() - state.checkedAt >= 60000) await update(token);
+    if (!state.pages.length || (includeCurriculum && !state.curriculumSnap) || Date.now() - state.checkedAt >= 60000) await update(token);
     else if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
   } };
 }

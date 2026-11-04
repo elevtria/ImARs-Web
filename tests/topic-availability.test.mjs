@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, validateActivityDeadlineUtc, activityDeadlineInput, activityDeadlineFromInput } from "../js/topic-availability.js";
+import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, validateActivityDeadlineUtc, activityDeadlineInput, activityDeadlineFromInput, currentScheduledTerm, schoolTodayISO } from "../js/topic-availability.js";
 
 const today = "2026-10-14";
 const locked = { locked: true, date: "" };
 const unlocked = { locked: false, date: "" };
 const fromUpdate = (update) => ({ locked: update.isLocked, date: update.scheduledDate });
+
+test('the dashboard follows the latest term actually released to an owned section, not shared defaults or future releases',()=>{
+  const terms=['term_01','term_02','term_03'].map(id=>({id,lessons:[{isLocked:false,sectionSchedules:{}}]}));
+  assert.equal(currentScheduledTerm(terms,['A'],today),'term_01');
+  terms[1].lessons[0].sectionSchedules.A={isLocked:false,scheduledDate:''};
+  assert.equal(currentScheduledTerm(terms,['A'],today),'term_02');
+  terms[2].lessons[0].sectionSchedules.B={isLocked:false,scheduledDate:''};
+  assert.equal(currentScheduledTerm(terms,['A'],today),'term_02');
+  terms[2].lessons[0].sectionSchedules.A={isLocked:true,scheduledDate:'2026-10-15'};
+  assert.equal(currentScheduledTerm(terms,['A'],today),'term_02');
+  assert.equal(currentScheduledTerm(terms,['A'],'2026-10-15'),'term_03');
+  terms[2].lessons[0].sectionSchedules.A={isLocked:true,scheduledDate:''};
+  assert.equal(currentScheduledTerm(terms,['A'],'2026-10-16'),'term_02');
+  terms[2].lessons[0].sectionSchedules.A=null;
+  assert.equal(currentScheduledTerm(terms,['A'],today),'term_02');
+  assert.equal(schoolTodayISO(new Date('2026-10-14T16:00:00Z')),'2026-10-15');
+});
 
 test("activity deadlines round-trip between Philippine input time and UTC across day boundaries", () => {
   assert.equal(activityDeadlineFromInput("2026-11-03T07:30"), "2026-11-02T23:30:00.000Z");

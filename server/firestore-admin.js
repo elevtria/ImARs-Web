@@ -99,10 +99,10 @@ export class FirestoreAdmin {
       : await this.request("documents/" + path.split("/").map(encodeURIComponent).join("/"));
     return result ? { data: decodeFields(result.fields), wire: decodeFields(result.fields, true), updateTime: result.updateTime } : null;
   }
-  async getAll(paths) {
+  async getAll(paths, { fieldPaths } = {}) {
     if (!Array.isArray(paths) || !paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     const names = paths.map(path => this.name(path));
-    const rows = await this.request("documents:batchGet", { method: "POST", body: JSON.stringify({ documents: names }) });
+    const rows = await this.request("documents:batchGet", { method: "POST", body: JSON.stringify({ documents: names, ...(fieldPaths ? { mask: { fieldPaths } } : {}) }) });
     const records = new Map();
     for (const row of rows || []) {
       const name = row.found?.name || row.missing;

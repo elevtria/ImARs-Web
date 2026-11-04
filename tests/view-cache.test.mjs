@@ -223,3 +223,12 @@ test('a failed curriculum lookup retries without downloading the reused student 
   assert.equal(app.calls.length,4);assert.equal(app.calls.at(-1).includeStudents,false);
   assert.equal(app.paints.at(-1).termId,'term_02');assert.equal(app.paints.at(-1).total,50);
 });
+
+test('dashboard report can skip curriculum while Analytics later loads only its own term metadata',async()=>{
+  const app=pagedReportHarness();await app.open({allTerms:true,sectionId:'',includeCurriculum:false});await app.tick();
+  assert.equal(app.calls.length,2);assert.ok(app.calls.every(row=>row.includeCurriculum===false));
+  assert.equal(app.paints.at(-1).total,50);
+  await app.open({termId:'term_03',sectionId:'A'});
+  assert.equal(app.calls.length,3);assert.equal(app.calls.at(-1).includeStudents,false);
+  assert.equal(app.paints.at(-1).total,50);assert.equal(app.paints.at(-1).termId,'term_03');
+});

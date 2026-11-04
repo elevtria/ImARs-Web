@@ -52,6 +52,25 @@ unlocks them, preserving saved deadlines, other terms, other sections and shared
 defaults. The repeated Term 2 `lesson_04` is excluded, just as it is from the
 activity list. Unsaved deadline edits stay in the form.
 
+## Dashboard term selection
+
+The dashboard automatically shows the highest-numbered term with at least one
+topic explicitly released to any section assigned to that teacher. A saved
+`sectionSchedules/{sectionId}` entry is required to advance: shared unlocked
+defaults and other teachers' section settings do not advance this teacher's
+card. A scheduled topic counts when its release day arrives in Philippine time;
+future releases and invalid entries remain locked. If no section has an explicit
+release, the card starts at Term 1. Relocking every released topic in the latest
+term returns the card to the latest remaining released term.
+
+The card displays **Available** or **Upcoming** based on schedule access, separate
+from whether a learner has completed it. Its authenticated metadata request reads
+at most 12 fixed lesson documents, using a field mask that excludes question and
+answer content, and returns only the teacher's section entries. It reads no
+student roster, counts or performance results. The card reuses the existing view
+cache, refreshes quietly, and reevaluates its dates at midnight/resume without
+requesting student results. Dashboard averages still combine all three terms.
+
 ## Optional activity deadline
 
 Activity Schedule provides a deadline field for the selected section. Teachers
