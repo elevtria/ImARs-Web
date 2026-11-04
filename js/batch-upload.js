@@ -47,6 +47,7 @@ let existingStudentIds = new Set();
 let dbExistingStudentClassCodes = {};
 let dbExistingNameOwners = {};  // normalized fullName -> studentId
 let dbExistingEmailOwners = {}; // normalized email -> studentId
+let dbExistingClaimedIds = new Set(); // studentIds that already claimed their account
 
 function formatSectionLabel(rawName) {
   const clean = String(rawName || "").trim().replace(/\s*[-–—]\s*/g, " – ");
@@ -313,116 +314,110 @@ async function handleFileSelected(file) {
     return;
   }
 
+  let rows = [];
   try {
     document.getElementById("dropTitle").textContent = "Validating data...";
     document.getElementById("dropHint").textContent = "Checking student details against database…";
 
-    existingStudentIds.clear();
-    dbExistingStudentClassCodes = {};
-    dbExistingNameOwners = {};
-    dbExistingEmailOwners = {};
-
     const data = await file.arrayBuffer();
     const workbook = window.XLSX.read(data, { type: "array", raw: false });
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
-
-    const MAX_ROWS = 100;
-    if (rows.length > MAX_ROWS + 1) { 
-      document.getElementById("dropTitle").textContent = "Too many records";
-      document.getElementById("dropHint").textContent = `Limit uploads to ${MAX_ROWS} students at a time.`;
-      return;
-    }
-
-    const candidateIds = rows.slice(1).map(row => {
-      const id = String(row[2] ?? "").trim();
-      return /^\d{8}$/.test(id) ? "00" + id : id;
-    }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
-    
-    const uniqueCandidateIds = [...new Set(candidateIds)];
-    
-    if (uniqueCandidateIds.length > 0) {
-      // 1. Verify existence globally to prevent overwriting other users
-      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
-      for (const id of verifiedExisting) {
-        existingStudentIds.add(id);
-      }
-    }
-
-    // 2. Fetch existing students from Firestore to check duplicate Names, Emails, and ClassCodes
-    try {
-      const studentsQ = query(collection(db, "users"), where("role", "==", "student"));
-      const studentsSnap = await getDocs(studentsQ);
-
-      studentsSnap.forEach(docSnap => {
-        const sData = docSnap.data();
-        const docId = docSnap.id;
-        existingStudentIds.add(docId);
-        dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
-
-        const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
-        const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
-        if (cleanName) {
-          dbExistingNameOwners[cleanName] = docId;
-        }
-
-        const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
-        if (rawEmail) {
-          dbExistingEmailOwners[rawEmail] = docId;
-        }
-      });
-    } catch (err) {
-      console.warn("Full student query fallback to teacher roster:", err);
-      if (currentTeacherId) {
-        const rosterQ = query(collection(db, "users"), where("teacherId", "==", currentTeacherId));
-        const rosterSnap = await getDocs(rosterQ);
-        rosterSnap.forEach(docSnap => {
-          const sData = docSnap.data();
-          const docId = docSnap.id;
-          existingStudentIds.add(docId);
-          dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
-
-          const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
-          const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
-          if (cleanName) dbExistingNameOwners[cleanName] = docId;
-
-          const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
-          if (rawEmail) dbExistingEmailOwners[rawEmail] = docId;
-        });
-      }
-    }
-
-    // Build the raw data structure
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.join("").trim() === "") continue;
-
-      const firstName = String(row[0] ?? "").trim();
-      const lastName = String(row[1] ?? "").trim();
-      let studentId = String(row[2] ?? "").trim();
-      const email = String(row[3] ?? "").trim().toLowerCase();
-
-      if (studentId && /^\d{8}$/.test(studentId)) studentId = "00" + studentId;
-
-      const isExisting = existingStudentIds.has(studentId);
-      const fullName = `${firstName} ${lastName}`.trim();
-      
-      previewData.push({
-        rowNum: i + 1,
-        firstName, lastName, fullName, studentId, email,
-        isValid: false, 
-        isExisting, 
-        errors: []
-      });
-    }
-
-    validateAllRows();
-    
+    rows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "" });
   } catch (err) {
     console.error("Failed to parse file:", err);
     document.getElementById("dropTitle").textContent = "Error reading file";
     document.getElementById("dropHint").textContent = "Please upload a valid .xlsx or .csv file.";
+    return;
   }
+
+  const MAX_ROWS = 100;
+  if (rows.length > MAX_ROWS + 1) { 
+    document.getElementById("dropTitle").textContent = "Too many records";
+    document.getElementById("dropHint").textContent = `Limit uploads to ${MAX_ROWS} students at a time.`;
+    return;
+  }
+
+  existingStudentIds.clear();
+  dbExistingStudentClassCodes = {};
+  dbExistingNameOwners = {};
+  dbExistingEmailOwners = {};
+  dbExistingClaimedIds.clear();
+
+  const candidateIds = rows.slice(1).map(row => {
+    const id = String(row[2] ?? "").trim();
+    return /^\d{8}$/.test(id) ? "00" + id : id;
+  }).filter(id => /^[A-Za-z0-9_-]{1,128}$/.test(id));
+  
+  const uniqueCandidateIds = [...new Set(candidateIds)];
+  
+  if (uniqueCandidateIds.length > 0) {
+    // 1. Verify existence globally to prevent overwriting other users
+    try {
+      const verifiedExisting = await checkStudentIds(uniqueCandidateIds);
+      for (const id of verifiedExisting) {
+        existingStudentIds.add(id);
+      }
+    } catch (err) {
+      console.warn("Could not check global student IDs:", err);
+    }
+  }
+
+  // 2. Fetch the teacher's roster using the allowed teacherId query to check duplicate Names, Emails, and ClassCodes
+  try {
+    const teacherIdToQuery = currentTeacherId || "TEACH1000";
+    const rosterQ = query(collection(db, "users"), where("teacherId", "==", teacherIdToQuery));
+    const rosterSnap = await getDocs(rosterQ);
+
+    rosterSnap.forEach(docSnap => {
+      const sData = docSnap.data();
+      const docId = docSnap.id;
+      existingStudentIds.add(docId);
+      dbExistingStudentClassCodes[docId] = String(sData.classCode || "").trim();
+
+      if (sData.isClaimed === true || sData.uid) {
+        dbExistingClaimedIds.add(docId);
+      }
+
+      const rawFullName = sData.fullName || sData.displayName || `${sData.firstName || ""} ${sData.lastName || ""}`;
+      const cleanName = String(rawFullName).trim().toLowerCase().replace(/\s+/g, " ");
+      if (cleanName) {
+        dbExistingNameOwners[cleanName] = docId;
+      }
+
+      const rawEmail = String(sData.providedEmail || sData.email || "").trim().toLowerCase();
+      if (rawEmail) {
+        dbExistingEmailOwners[rawEmail] = docId;
+      }
+    });
+  } catch (err) {
+    console.warn("Failed to fetch teacher roster for duplicate validation:", err);
+  }
+
+  // Build the raw data structure
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.join("").trim() === "") continue;
+
+    const firstName = String(row[0] ?? "").trim();
+    const lastName = String(row[1] ?? "").trim();
+    let studentId = String(row[2] ?? "").trim();
+    const email = String(row[3] ?? "").trim().toLowerCase();
+
+    if (studentId && /^\d{8}$/.test(studentId)) studentId = "00" + studentId;
+
+    const isExisting = existingStudentIds.has(studentId);
+    const fullName = `${firstName} ${lastName}`.trim();
+    
+    previewData.push({
+      rowNum: i + 1,
+      firstName, lastName, fullName, studentId, email,
+      isValid: false, 
+      isExisting, 
+      errors: []
+    });
+  }
+
+  validateAllRows();
 }
 
 // --- GLOBAL TABLE VALIDATION ENGINE ---
