@@ -7,19 +7,54 @@ if (navigationDrawer) {
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
     const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
-    let pointerInside = panel.matches(":hover");
+    let pointerInside = false;
+    let keyboardNavigation = false;
     let collapseTimer;
     const updateCompact = () => {
-      const focused = panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
+      const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
       navigationDrawer.classList.toggle("is-compact", desktop.matches && hoverPointer.matches && !pointerInside && !focused);
     };
-    panel.addEventListener("pointerenter", () => { clearTimeout(collapseTimer); pointerInside = true; updateCompact(); });
-    panel.addEventListener("pointerleave", () => { pointerInside = false; clearTimeout(collapseTimer); collapseTimer = setTimeout(updateCompact, 220); });
+    const setPointerInside = inside => {
+      if (inside === pointerInside) return;
+      pointerInside = inside;
+      clearTimeout(collapseTimer);
+      if (inside) updateCompact();
+      else collapseTimer = setTimeout(updateCompact, 220);
+    };
+    const resetHover = () => {
+      pointerInside = false;
+      keyboardNavigation = false;
+      clearTimeout(collapseTimer);
+      updateCompact();
+    };
+    panel.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") setPointerInside(true); });
+    panel.addEventListener("pointerleave", () => setPointerInside(false));
+    // Pointerleave can be missed when the page, window or hit-tested element
+    // changes. An outside pointer move must not leave the menu expanded.
+    document.addEventListener("pointermove", event => {
+      if (!desktop.matches || !hoverPointer.matches || event.pointerType === "touch") return;
+      const wasKeyboardNavigation = keyboardNavigation;
+      keyboardNavigation = false;
+      setPointerInside(panel.contains(event.target));
+      if (!pointerInside && wasKeyboardNavigation) updateCompact();
+    }, { passive: true });
+    document.addEventListener("pointerdown", event => {
+      keyboardNavigation = false;
+      if (desktop.matches && hoverPointer.matches) setPointerInside(panel.contains(event.target));
+      updateCompact();
+    }, { passive: true });
+    document.addEventListener("pointerleave", () => setPointerInside(false));
+    document.addEventListener("keydown", event => {
+      if (event.key === "Tab") keyboardNavigation = true;
+    });
+    window.addEventListener("blur", resetHover);
+    window.addEventListener("pagehide", resetHover);
+    window.addEventListener("pageshow", resetHover);
     panel.addEventListener("focusin", updateCompact);
     panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
-    hoverPointer.addEventListener("change", updateCompact);
+    hoverPointer.addEventListener("change", resetHover);
     const syncLayout = () => {
-      updateCompact();
+      resetHover();
       navigationDrawer.setAttribute("aria-hidden", String(!desktop.matches && !navigationDrawer.classList.contains("open")));
     };
     desktop.addEventListener("change", syncLayout);
@@ -48,7 +83,11 @@ if (navigationDrawer) {
     };
     close.addEventListener("click", closeNavigation);
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && navigationDrawer.classList.contains("open")) closeNavigation();
+      if (event.key !== "Escape") return;
+      if (desktop.matches) {
+        resetHover();
+        if (panel.contains(document.activeElement)) document.activeElement.blur();
+      } else if (navigationDrawer.classList.contains("open")) closeNavigation();
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();
