@@ -1,0 +1,104 @@
+/* Shared theme controls; palette overrides are screen-only to preserve exports. */
+.theme-toggle {
+  display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px;
+  padding: 0; border: 1px solid var(--line, #a4b8d973); border-radius: 12px;
+  color: var(--ink, #2c3a4f); background: var(--surface, #ffffff9e); cursor: pointer;
+}
+.theme-toggle:hover { background: var(--ice, #bfc8e2); }
+.theme-toggle:focus-visible { outline: 3px solid #81a2c1; outline-offset: 3px; }
+.theme-toggle-floating { position: fixed; top: max(16px, env(safe-area-inset-top)); right: 16px; z-index: 25; }
+.theme-toggle .theme-sun { display: none; }
+[data-theme="dark"] .theme-toggle .theme-sun { display: block; }
+[data-theme="dark"] .theme-toggle .theme-moon { display: none; }
+@media screen {
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --mist: #101824; --ice: #293a50; --sky: #90aed3; --steel: #81a2c1;
+    --ink: #e3ebf5; --muted: #a5b4c7; --surface: #1b2738; --line: #35465d;
+    --shadow: 0 10px 30px #00000030;
+    --portal-ink: #e3ebf5; --portal-muted: #a5b4c7; --portal-line: #35465d;
+    --admin-bg: #101824; --admin-card: #1b2738; --admin-ink: #e3ebf5;
+    --admin-muted: #a5b4c7; --admin-line: #35465d;
+    --admin-purple: #b6a2ff; --admin-cyan: #70d1f4; --admin-green: #5ed9b0; --admin-pink: #ff8ac6;
+    --topic-chip-ink: #c5bdff; --topic-chip-bg: #34345a; --chart-track: #35465d;
+  }
+  [data-theme="dark"] body {
+    color: var(--ink);
+    background: radial-gradient(ellipse at 10% 0%, #24395280, transparent 55%), #101824;
+  }
+  [data-theme="dark"] :is(.topbar, .admin-topbar) { background: #101824e8; border-color: var(--line); }
+  [data-theme="dark"] :is(#drawer .drawer-panel, .admin-drawer-panel) { background: #152031; border-color: var(--line); }
+  [data-theme="dark"] body :is(.card, .card.section, .term-card, .panel, .metric-card, .profile-card,
+    .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
+    .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
+    .quiz-library-card, .quiz-question-card, .login-card, .modal-card, .modal-content,
+    .manual-sheet, .manual-step-card, .manual-tool-card, .quiz-generation-card) {
+    background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); color: var(--ink);
+  }
+  [data-theme="dark"] body :is(.hero, .intro, .teacher-dashboard .stats .stat-link) {
+    background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
+  }
+  [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
+    .quiz-file-selected, .quiz-upload-icon, .quiz-preview, .quiz-library-empty, .quiz-schedule-card,
+    .view-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,
+    .ring-center, .analytics-donut-inner, .profile-info-grid > div, .activity-term-toggle,
+    .quiz-review-footer, .quiz-editor-toolbar, .quiz-availability-card, .quiz-release-option,
+    .quiz-library-scheduler, .quiz-empty-state, .quiz-suggestion-card, .quiz-suggestion-answer,
+    .quiz-question-controls button, .quiz-library-actions button, .quiz-add-question,
+    .account-menu, .modal-box, .lock-all, .date-btn) {
+    background: #223249; border-color: var(--line); color: var(--ink);
+  }
+  [data-theme="dark"] body :is(dialog, #adminLoginModal, #studentRecordDialog, #archiveStudentForm,
+    .profile-dialog, .teacher-dialog) { background: var(--surface); border-color: var(--line); color: var(--ink); }
+  [data-theme="dark"] dialog::backdrop { background: #030810aa; }
+  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+    background: #142031; color: var(--ink); border-color: #49617e;
+  }
+  [data-theme="dark"] body :is(input, textarea)::placeholder { color: #9aaec6; }
+  [data-theme="dark"] body :is(input, select, textarea):focus-visible { outline: 2px solid #90bfea; outline-offset: 2px; }
+  [data-theme="dark"] body :is(h1, h2, h3, h4, .page-title, .current-page, .stat .value, .stat .label,
+    .topic strong, .record .student strong, .teacher-cell strong, .teacher-name-line strong,
+    .teacher-stat strong, .profile-info-grid dd, .analytics-teacher-name, .section-title-row h2,
+    .record-progress-value, .ring-center strong, .table-wrap td, .table-scroll td) { color: var(--ink); }
+  [data-theme="dark"] body :is(.hint, .lead, .field, .page-intro p, .profile-heading p, .manage-heading p,
+    .analytics-heading p, .teacher-contact, .teacher-stat small, .teacher-cell small, .profile-summary p,
+    .profile-summary small, .profile-info-grid dt, .school-year-status, .student-detail-heading p,
+    .archive-section-hint, .action p, .login-card small, .login-card h1 + p, .login-page label,
+    .login-field > .field-icon, #adminModalDescription, .quiz-field-label, .quiz-help-text,
+    .manual-tool-card p, .manual-checklist, .manual-sheet-footer, .record .student small) { color: var(--muted); }
+  [data-theme="dark"] body :is(.icon-btn, .menu-button, .drawer-close, .help-btn, .help-button,
+    .ghost-btn, .btn-ghost, .nav-close, .profile-dialog-close, .dialog-close, .profile-cancel-button,
+    .cancel-button, #closeStudentRecord, #closeAdminModalBtn, #cancelAdminModalBtn, #cancelArchiveStudent,
+    .open-student-record, .archive-student-btn, .unarchive-student-btn, .student-detail-navigation button) {
+    background: #223249; border-color: var(--line); color: var(--ink);
+  }
+  [data-theme="dark"] body :is(.sy-chip, .admin-year, .summary-icon, .action-icon, .section-chip,
+    .quiz-library-count, .quiz-view-tab span, .student-status-switch span, .teacher-count) { background: #2b4059; color: #d5e7ff; }
+  [data-theme="dark"] body :is(.side-user, .admin-side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
+  [data-theme="dark"] body :is(td, th, .scan-row, .file-row, .profile-info-grid > div, .analytics-card-footer) { border-color: var(--line); }
+  [data-theme="dark"] body :is(.table-wrap, .table-scroll) tbody tr:nth-child(even) { background: #22324966; }
+  [data-theme="dark"] body :is(.action, .record, .stat-link, .quiz-dropzone):hover { background: #2b4059; }
+  [data-theme="dark"] body :is(.bar, .meter, .progress-track, .section-meter-track) { background: #35465d; }
+  [data-theme="dark"] .track { stroke: #35465d; }
+  [data-theme="dark"] body :is(.error, #error, #adminError, .school-year-status.error) { color: #ff9c9c; }
+  [data-theme="dark"] .floating-cube { opacity: .18; }
+  /* Utility classes used by the sign-in page and dynamically generated dialogs. */
+  [data-theme="dark"] body :is(.bg-white, .bg-mist, .bg-slate-50, .bg-gray-50) { background: var(--surface); }
+  [data-theme="dark"] body :is(.text-slate-900, .text-gray-700) { color: var(--ink); }
+  [data-theme="dark"] body :is(.text-slate-400, .text-slate-500, .text-slate-600, .text-gray-500) { color: var(--muted); }
+  [data-theme="dark"] #openAdminModalBtn { color: #a6c9ff; border-color: #6089bd; }
+  [data-theme="dark"] #teacherSubmitBtn { color: #151200; }
+  [data-theme="dark"] body :is(.quiz-release-option.selected, .quiz-suggestion-card.accepted) { background: #29445b; border-color: var(--steel); }
+  [data-theme="dark"] body :is(.pill-pending, .st-upcoming, .term-foot, .topic-title, .topic-meta,
+    .quiz-option-label, .quiz-release-option strong, .quiz-library-meta, .quiz-field-hint,
+    .quiz-stepper li, .quiz-view-tab, .quiz-limit) { color: var(--muted); }
+  [data-theme="dark"] body :is(.manual-note, .student-archive-badge) { background: #3b321e; color: #ffe3a0; }
+  [data-theme="dark"] body .manual-note b { color: #ffd37e; }
+  [data-theme="dark"] body :is(.c-purple, .purple) { color: #b6a2ff; }
+  [data-theme="dark"] body :is(.c-green, .green) { color: #5ed9b0; }
+  [data-theme="dark"] body :is(.c-pink, .pink) { color: #ff8ac6; }
+  [data-theme="dark"] .web-session-notice { background: #352d19; color: #ffe3a0; border-color: #947437; }
+  [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
+}
+@media print { .theme-toggle { display: none !important; } }

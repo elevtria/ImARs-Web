@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <script src="js/theme.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ImARs · Class Analytics</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -13,6 +14,7 @@
   <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/theme.css" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -50,8 +52,8 @@
 
           <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
             <button type="button" class="term-tab-btn active" data-term="term_01" aria-pressed="true" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
-            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
-            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
+            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: var(--surface, #fff); color: var(--ink, #374151); font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
+            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: var(--surface, #fff); color: var(--ink, #374151); font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
           </div>
       <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
       <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell data-await-content="analytics-summary">

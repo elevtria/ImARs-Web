@@ -88,7 +88,7 @@ function renderDashboard(report) {
 
     const ringEl = document.getElementById("learningRing");
     if (ringEl) {
-      ringEl.style.background = `conic-gradient(#6c5ce7 ${avgPostPct}%, #e2e8f0 0%)`;
+      ringEl.style.background = `conic-gradient(#6c5ce7 ${avgPostPct}%, var(--chart-track, #e2e8f0) 0%)`;
     }
 
     // 5. Populate Teacher Performance Snapshot Table

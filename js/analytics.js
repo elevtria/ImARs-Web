@@ -184,7 +184,7 @@ function renderTopics(baseStudents) {
   );
 
   if (filteredTopics.length === 0) {
-    topicsContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">No lessons found for this term.</p>`;
+    topicsContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: var(--muted, #64748b); padding: 20px;">No lessons found for this term.</p>`;
     return;
   }
 
@@ -206,8 +206,8 @@ function renderTopics(baseStudents) {
         </svg>
       </div>
       <strong style="font-size: 1.25rem; display: block;">${completionRate}%</strong>
-      <span style="display:inline-block; font-size: 0.72rem; font-weight: 700; color: #4f46e5; background: #eef2ff; padding: 2px 8px; border-radius: 9999px; margin-bottom: 4px;">${escapeHtml(termTag)}</span>
-      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: #374151;">${escapeHtml(stat.name)}</span>
+      <span style="display:inline-block; font-size: 0.72rem; font-weight: 700; color: var(--topic-chip-ink, #4f46e5); background: var(--topic-chip-bg, #eef2ff); padding: 2px 8px; border-radius: 9999px; margin-bottom: 4px;">${escapeHtml(termTag)}</span>
+      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: var(--ink, #374151);">${escapeHtml(stat.name)}</span>
     `;
     topicsContainer.appendChild(topicEl);
   });
@@ -219,8 +219,8 @@ termButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     termButtons.forEach((b) => {
       b.setAttribute("aria-pressed", "false");
-      b.style.background = "#fff";
-      b.style.color = "#374151";
+      b.style.background = "var(--surface, #fff)";
+      b.style.color = "var(--ink, #374151)";
     });
     btn.setAttribute("aria-pressed", "true");
     btn.style.background = "#4f46e5";
