@@ -52,7 +52,7 @@
   [data-theme="dark"] body :is(dialog, #adminLoginModal, #studentRecordDialog, #archiveStudentForm,
     .profile-dialog, .teacher-dialog) { background: var(--surface); border-color: var(--line); color: var(--ink); }
   [data-theme="dark"] dialog::backdrop { background: #030810aa; }
-  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(:where(.search input)), select, textarea) {
     background: #142031; color: var(--ink); border-color: #49617e;
   }
   [data-theme="dark"] body :is(input, textarea)::placeholder { color: #9aaec6; }
