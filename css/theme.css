@@ -159,6 +159,9 @@
   [data-theme="dark"] #studentRecordContent .record-progress-tile .bar { background: #35465d; }
   [data-theme="dark"] #studentRecordContent .c-cyan { color: #70d1f4; }
   [data-theme="dark"] #studentRecordContent .c-amber { color: #ffd16a; }
+  /* Download action cells are layout wrappers, not dashboard action cards. */
+  [data-theme="dark"] body .file-row .action,
+  [data-theme="dark"] body .file-row .action:hover { background: transparent; }
   [data-theme="dark"] .web-session-notice { background: #352d19; color: #ffe3a0; border-color: #947437; }
   [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
 }
