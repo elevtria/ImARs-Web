@@ -98,6 +98,51 @@
   [data-theme="dark"] body :is(.c-purple, .purple) { color: #b6a2ff; }
   [data-theme="dark"] body :is(.c-green, .green) { color: #5ed9b0; }
   [data-theme="dark"] body :is(.c-pink, .pink) { color: #ff8ac6; }
+  /* Nested controls must not retain translucent white light-mode fills. */
+  [data-theme="dark"] body :is(.module, .search, .quiz-choice, .quiz-type-option,
+    .quiz-stepper-input button, .quiz-stepper li:not(.active):not(.done) span) {
+    background: #223249; border-color: var(--line); color: var(--ink);
+  }
+  [data-theme="dark"] body .module span { color: var(--muted); }
+  [data-theme="dark"] body .search input {
+    background: transparent; color: var(--ink); box-shadow: none;
+  }
+  [data-theme="dark"] body .search svg { color: var(--muted); }
+  [data-theme="dark"] body .search:focus-within { border-color: var(--steel); }
+  [data-theme="dark"] body :is(.quiz-choice, .quiz-type-option, .quiz-stepper-input button):hover:not(:disabled) {
+    background: #2b4059; border-color: var(--steel);
+  }
+  [data-theme="dark"] body :is(.quiz-choice.selected, .quiz-type-option.selected) {
+    background: #29445b; border-color: #90bfea; color: #e1f1ff;
+    box-shadow: 0 0 0 1px #90bfea40;
+  }
+  [data-theme="dark"] body .quiz-type-icon { background: #2b4059; color: #b8ddff; }
+  [data-theme="dark"] body .quiz-type-option b { color: var(--ink); }
+  [data-theme="dark"] body .quiz-type-option small { color: var(--muted); }
+  [data-theme="dark"] body .quiz-type-option:focus-within { outline: 2px solid #90bfea; outline-offset: 2px; }
+  /* Apply the same fill to row headers and data cells, including expanded records. */
+  [data-theme="dark"] body :is(.performance-table-wrap, .activity-record-results-wrap) {
+    background: var(--surface); border-color: var(--line);
+  }
+  [data-theme="dark"] body :is(.performance-table, .activity-record-results) tbody > tr > :is(th, td) {
+    background: var(--surface); color: var(--ink); border-color: var(--line);
+  }
+  [data-theme="dark"] body :is(.performance-table, .activity-record-results) tbody > tr:nth-child(even) > :is(th, td) {
+    background: #1e2d41;
+  }
+  [data-theme="dark"] body :is(.performance-table, .activity-record-results) tbody > tr:hover > :is(th, td) {
+    background: #263a52;
+  }
+  [data-theme="dark"] body :is(.performance-table, .activity-record-results) thead th {
+    background: #223249; color: #bbcee4; border-color: var(--line);
+  }
+  [data-theme="dark"] body :is(.activity-record-completed, .activity-record-chevron,
+    .activity-result-score, .activity-record-detail-head > span, .table-avatar) {
+    background: #2b4059; color: #b8ddff;
+  }
+  [data-theme="dark"] body .activity-result-score.is-empty { background: #223249; color: var(--muted); }
+  [data-theme="dark"] body .activity-result-time { color: #b8ddff; }
+  [data-theme="dark"] body .improvement-value { color: #5ed9b0; }
   [data-theme="dark"] .web-session-notice { background: #352d19; color: #ffe3a0; border-color: #947437; }
   [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
 }
