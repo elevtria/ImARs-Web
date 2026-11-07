@@ -362,7 +362,7 @@ function renderTopics(records, emptyMessage = "No lessons found for this term.")
         </svg>
       </div>
       <strong style="font-size: 1.25rem; display: block;">${completionRate === null ? "—" : `${completionRate}%`}</strong>
-      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: #374151;">${escapeHtml(record.title)}</span>
+      <span style="display:block; max-width: 150px; margin: 0 auto; line-height: 1.25; font-size: 0.85rem; font-weight: 600; color: var(--ink, #374151);">${escapeHtml(record.title)}</span>
     `;
     topicsContainer.appendChild(topicEl);
   });
