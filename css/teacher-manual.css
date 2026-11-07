@@ -1,0 +1,150 @@
+/* Screen guide: short section summaries first, full instructions on demand. */
+body.teacher-manual-page { background: #e5eaf1; }
+.teacher-manual-page .login-cubes { display: none; }
+#manual.manual-page { max-width: 1040px; padding-top: 28px; }
+
+.manual-sheet {
+  margin-bottom: 16px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .88);
+  box-shadow: var(--shadow);
+}
+.manual-sheet-teach { background: rgba(255, 255, 255, .88); }
+.manual-cover { padding: 4px 0 20px; border: 0; border-radius: 0; background: transparent; }
+body.teacher-manual-page .manual-hero { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.manual-hero h1 { font-size: clamp(28px, 3vw, 36px); font-weight: 800; letter-spacing: -.04em; }
+.manual-hero p { margin-top: 7px; max-width: 620px; font-size: 15px; line-height: 1.6; }
+.manual-cover-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.manual-cover-actions .banner-btn { min-height: 38px; padding: 8px 13px; font-size: 12px; }
+
+.manual-sheet-heading, .manual-sheet-heading-light {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 0 4px;
+  cursor: pointer;
+}
+.manual-section-chip, .manual-sheet-teach .manual-section-chip {
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #eaf1f8;
+  color: #41658b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.manual-sheet-heading h2 { font-size: 20px; font-weight: 800; letter-spacing: -.03em; line-height: 1.3; }
+.manual-sheet-heading p { margin-top: 4px; font-size: 13px; line-height: 1.5; }
+.manual-section-toggle {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f3f7fb;
+  color: #41658b;
+}
+.manual-section-toggle:hover, .manual-section-toggle:focus-visible { background: #e4eff9; border-color: var(--steel); }
+.manual-section-toggle svg { transition: transform .18s ease; }
+.manual-sheet[data-open="false"] .manual-section-toggle svg { transform: rotate(-90deg); }
+.manual-sheet[data-open="false"] .manual-setup-grid,
+.manual-sheet[data-open="false"] .manual-tool-grid,
+.manual-sheet[data-open="false"] .manual-note { display: none; }
+
+.manual-setup-grid { margin-top: 22px; grid-template-columns: minmax(250px, .9fr) minmax(0, 1.4fr); gap: 16px; }
+.manual-feature-card {
+  min-height: 0;
+  padding: 22px;
+  border: 1px solid #c9d8e8;
+  border-radius: 16px;
+  background: #edf4fa;
+  color: var(--ink);
+}
+.manual-feature-kicker, .manual-step-card .manual-step-kicker, .manual-tool-card .manual-step-kicker {
+  color: #4c7395;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.manual-feature-card h3 { margin-top: 10px; font-size: 20px; font-weight: 800; line-height: 1.3; }
+.manual-feature-card p { color: #50657c; font-size: 14px; line-height: 1.6; }
+.manual-feature-card .manual-link { color: #2f638c; font-size: 13px; }
+.manual-step-stack { gap: 10px; }
+.manual-step-card { grid-template-columns: 34px minmax(0, 1fr); min-height: 0; padding: 15px; gap: 13px; border-radius: 14px; }
+.manual-step-number, .manual-step-card:nth-child(2) .manual-step-number, .manual-step-card:nth-child(3) .manual-step-number, .manual-step-card:nth-child(4) .manual-step-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #d9e8f5;
+  color: #365f85;
+  box-shadow: none;
+}
+.manual-step-icon { display: none; }
+.manual-step-card h3 { margin: 4px 0; font-size: 15px; font-weight: 800; }
+.manual-step-card p { font-size: 13px; line-height: 1.6; }
+
+.manual-tool-grid { margin-top: 22px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.manual-tool-card {
+  min-height: 0;
+  padding: 20px;
+  border-radius: 15px;
+  border-color: #d7e1ed;
+  background: #f9fbfd;
+}
+.manual-tool-card::before, .manual-tool-icon { display: none; }
+.manual-tool-card h3 { margin: 7px 0 9px; font-size: 16px; font-weight: 800; line-height: 1.4; }
+.manual-tool-card p, .manual-checklist { color: #52677d; font-size: 14px; line-height: 1.65; }
+.manual-tool-card p + p { margin-top: 10px; }
+.manual-tool-card .manual-link { padding-top: 16px; font-size: 13px; }
+.manual-link { font-size: 13px; }
+.manual-note { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: #f4f8fc; color: #52677d; font-size: 13px; line-height: 1.6; }
+.manual-note b { color: #365f85; }
+.manual-sync-note { margin-bottom: 0; }
+.manual-sheet-footer { display: none; }
+
+@media (max-width: 760px) {
+  #manual.manual-page { padding: 18px 14px 80px; }
+  .manual-sheet { padding: 18px; }
+  .manual-cover { grid-template-columns: 1fr; }
+  .manual-cover-actions { display: flex; }
+  .manual-setup-grid, .manual-tool-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .manual-sheet-heading, .manual-sheet-heading-light { grid-template-columns: 1fr auto; gap: 8px 12px; }
+  .manual-section-chip { grid-column: 1 / -1; justify-self: start; }
+  .manual-sheet-heading > div { grid-column: 1; }
+  .manual-section-toggle { grid-column: 2; grid-row: 2; }
+  .manual-cover-actions .banner-btn { flex: 1 1 140px; }
+}
+
+/* Keep exports and printouts complete, regardless of the on-screen section state. */
+.manual-export-sheet .manual-tool-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.manual-export-sheet .manual-section-toggle { display: none; }
+.manual-export-sheet .manual-sheet-heading { grid-template-columns: auto minmax(0, 1fr); }
+.manual-export-sheet .manual-tool-card p, .manual-export-sheet .manual-checklist, .manual-export-sheet .manual-feature-card p { font-size: 12px; }
+.manual-export-sheet .manual-tool-card { padding: 14px; }
+
+[data-theme="dark"] body.teacher-manual-page { background: #101824; }
+[data-theme="dark"] body.teacher-manual-page .manual-hero { background: transparent; border: 0; }
+[data-theme="dark"] body.teacher-manual-page .manual-feature-card,
+[data-theme="dark"] body.teacher-manual-page .manual-note { background: #223249; border-color: var(--line); color: var(--ink); }
+[data-theme="dark"] body.teacher-manual-page .manual-feature-card p { color: var(--muted); }
+[data-theme="dark"] body.teacher-manual-page .manual-section-chip,
+[data-theme="dark"] body.teacher-manual-page .manual-section-toggle,
+[data-theme="dark"] body.teacher-manual-page .manual-step-number { background: #293a50; border-color: var(--line); color: #b8d4ec; }
+[data-theme="dark"] body.teacher-manual-page .manual-note b,
+[data-theme="dark"] body.teacher-manual-page .manual-feature-card .manual-link { color: #b8d4ec; }
+
+@media print {
+  .manual-section-toggle { display: none !important; }
+  .manual-sheet-heading { grid-template-columns: auto minmax(0, 1fr); }
+  .manual-sheet[data-open="false"] .manual-setup-grid { display: grid !important; }
+  .manual-sheet[data-open="false"] .manual-tool-grid { display: grid !important; }
+  .manual-sheet[data-open="false"] .manual-note { display: flex !important; }
+  .manual-tool-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .manual-tool-card p, .manual-checklist, .manual-feature-card p { font-size: 11px; }
+}

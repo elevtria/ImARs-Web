@@ -1,3 +1,32 @@
+const manualSheets = Array.from(document.querySelectorAll("#manual .manual-sheet"));
+
+function setManualSection(sheet, open) {
+  sheet.dataset.open = String(open);
+  const button = sheet.querySelector(".manual-section-toggle");
+  button.setAttribute("aria-expanded", String(open));
+  button.setAttribute("aria-label", `${open ? "Collapse" : "Expand"} ${sheet.querySelector(".manual-sheet-heading h2").textContent}`);
+}
+
+manualSheets.forEach(sheet => {
+  setManualSection(sheet, false);
+  const toggle = sheet.querySelector(".manual-section-toggle");
+  toggle.addEventListener("click", () => {
+    const opening = sheet.dataset.open !== "true";
+    manualSheets.forEach(item => setManualSection(item, opening && item === sheet));
+  });
+  sheet.querySelector(".manual-sheet-heading").addEventListener("click", event => {
+    if (!event.target.closest("button")) toggle.click();
+  });
+});
+
+document.getElementById("manual").addEventListener("click", event => {
+  const link = event.target.closest('a[href^="#"]');
+  if (!link) return;
+  const heading = document.getElementById(link.getAttribute("href").slice(1));
+  const sheet = heading?.closest(".manual-sheet");
+  if (sheet) manualSheets.forEach(item => setManualSection(item, item === sheet));
+});
+
 document.getElementById("printManual").onclick = () => {
   window.print();
 };
@@ -45,6 +74,7 @@ document.getElementById("downloadPdf").onclick = async (event) => {
     for (const [index, sheet] of sheets.entries()) {
       const copy = sheet.cloneNode(true);
       copy.classList.add("manual-export-sheet");
+      copy.dataset.open = "true";
       copy.querySelector(".manual-cover-actions")?.remove();
       const links = [];
       const worker = window.html2pdf().set({
