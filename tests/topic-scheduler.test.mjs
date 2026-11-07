@@ -6,10 +6,10 @@ import * as availability from "../js/topic-availability.js";
 import { encodeView, decodeView } from "../js/view-cache.js";
 import { setLoadingState } from "../js/loading.js";
 
-async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null, emitAfterWrite = true, identity = { uid: "test-teacher" } } = {}) {
+async function scheduler({ chooseSection = true, sections = ["A", "C"], rememberedSection = null, emitAfterWrite = true, identity = { uid: "test-teacher" }, initialViews = [], beforeSections = () => {} } = {}) {
   const elements = new Map();
   const listeners = new Map();
-  const savedViews = new Map();
+  const savedViews = new Map(initialViews);
   const records = new Map(["term_01", "term_02", "term_03"].map((term) => [term,
     Array.from({ length: 4 }, (_, index) => ({ id: `lesson_0${index + 1}`, isLocked: true, scheduledDate: "", lessonOrder: index + 1 }))
   ]));
@@ -17,6 +17,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   let rejectWrite = false;
   const batchSizes = [];
   const reads = [], subscriptionOptions = [];
+  const revealed = [];
   function element(id) {
     if (!elements.has(id)) elements.set(id, {
       innerHTML: "", textContent: "", value: "", dataset: {}, events: {},
@@ -42,18 +43,22 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     record.sectionSchedules = { ...record.sectionSchedules, [sectionId]: { activityDeadlineUtc: "", ...record.sectionSchedules?.[sectionId], ...schedule } };
   }
   const context = vm.createContext({
-    setLoadingState, revealContent: () => {},
+    setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     ...availability, console: { error() {} }, Date,
     document: { getElementById: element, addEventListener() {} },
     window: { setTimeout() {} }, localStorage: { getItem: () => null, setItem() {} },
     getApps: () => [], initializeApp: () => ({}), getAuth: () => ({}), getFirestore: () => ({}),
-    prepareTeacherCache: () => ({ get: (_, key) => key === "schedule:section" && rememberedSection ? { id: rememberedSection } : null, put: (_, key, value) => savedViews.set(key, value), invalidate() {} }),
+    prepareTeacherCache: () => ({ get: (_, key) => savedViews.get(key) ?? (key === "schedule:section" && rememberedSection ? { id: rememberedSection } : null), put: (_, key, value) => savedViews.set(key, value), invalidate() {} }),
     encodeView, decodeView,
     collection: (_, ...path) => path, doc: (_, ...path) => Object.assign(path, { id: path.at(-1) }),
     query: ref => ref, where: () => ({}),
-    getDocsWithLoading: async ref => (reads.push(ref[0]), ref[0] === "users"
-      ? { size: 1, docs: [{ id: "TEACH1000", data: () => ({ role: "teacher" }) }] }
-      : { docs: sections.map(id => ({ id, data: () => ({ SectionName: `Section ${id}` }) })) }),
+    getDocsWithLoading: async ref => {
+      reads.push(ref[0]);
+      if (ref[0] === "users") return { size: 1, docs: [{ id: "TEACH1000", data: () => ({ role: "teacher" }) }] };
+      await Promise.resolve();
+      await beforeSections({ element });
+      return { docs: sections.map(id => ({ id, data: () => ({ SectionName: `Section ${id}` }) })) };
+    },
     onAuthStateChanged: (_, callback) => { authChanged = callback; },
     onSnapshot: (ref, options, callback) => {
       subscriptionOptions.push(options);
@@ -78,6 +83,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
       };
     }
   });
+  context.quietSnapshot = context.onSnapshot;
   const source = readFileSync(new URL("../js/topic-scheduler.js", import.meta.url), "utf8")
     .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "");
   vm.runInContext(source, context);
@@ -88,7 +94,7 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
     element("scheduleSection").events.change();
   }
   return {
-    element, records, emit, listeners, authChanged, savedViews, batchSizes, reads, subscriptionOptions,
+    element, records, emit, listeners, authChanged, savedViews, batchSizes, reads, subscriptionOptions, revealed,
     denyWrites: () => { rejectWrite = true; },
     activityClick: (value, mode, date = "", deadline = "") => {
       const card = {
@@ -118,12 +124,56 @@ async function scheduler({ chooseSection = true, sections = ["A", "C"], remember
   };
 }
 
-test("verified teacher identities load sections without a redundant profile request and use minute background checks", async () => {
+test("verified teacher identities load sections without a redundant profile request and use five-minute background checks", async () => {
   const app = await scheduler({ identity: { uid: "test-teacher", role: "teacher", id: "TEACH1000" } });
   assert.deepEqual(app.reads, ["classes"]);
   assert.equal(app.listeners.size, 3);
-  assert.ok(app.subscriptionOptions.every(options => options.refreshIntervalMs === 60000));
+  assert.ok(app.subscriptionOptions.every(options => options.refreshIntervalMs === 300000));
   assert.match(app.element("terms").innerHTML, /0\/4 unlocked/);
+});
+
+test("a fresh scheduler reveals populated section choices and explains why schedule cards wait", async () => {
+  const app = await scheduler({ chooseSection: false, identity: { uid: "test-teacher", role: "teacher", id: "TEACH1000" } });
+  assert.match(app.element("scheduleSection").innerHTML, /Section A/);
+  assert.ok(app.revealed.includes("schedule-sections"));
+  assert.ok(!app.revealed.includes("schedule"));
+  assert.match(app.element("syncStatus").textContent, /Choose a section/);
+  assert.match(app.element("terms").innerHTML, /Term 1/);
+  assert.match(app.element("activityScheduleList").innerHTML, /Processes of Changes of State/);
+  assert.equal((app.element("activityScheduleList").innerHTML.match(/data-activity="/g) || []).length, 11);
+  app.element("scheduleSection").value = "A";
+  app.element("scheduleSection").events.change();
+  assert.ok(app.revealed.includes("schedule"));
+  assert.equal(app.element("syncStatus").textContent, "");
+});
+
+test("return visits paint saved server schedules before the background section check and keep edits disabled until verified", async () => {
+  const first = await scheduler();
+  await first.click("lock", "0-0");
+  let restored = false;
+  const second = await scheduler({ chooseSection: false, initialViews: first.savedViews, identity: { uid: "test-teacher", role: "teacher", id: "TEACH1000" }, beforeSections: ({ element }) => {
+    restored = true;
+    assert.equal(element("scheduleSection").value, "A");
+    assert.match(element("terms").innerHTML, /1\/4 unlocked/);
+    assert.match(element("terms").innerHTML, /data-lock="0-0"[^>]*disabled/);
+    assert.match(element("activityScheduleList").innerHTML, /value="now" selected/);
+    assert.match(element("activityScheduleList").innerHTML, /activity-schedule-save[^>]*disabled/);
+  } });
+  assert.equal(restored, true);
+  assert.doesNotMatch(second.element("terms").innerHTML, /data-lock="0-0"[^>]*disabled/);
+});
+
+test("cached schedules defer each term until its own freshness expires without extending older terms", async () => {
+  const first = await scheduler();
+  const checks = [Date.now() - 120000, Date.now() - 300001, Date.now() + 10000];
+  first.savedViews.set("schedule:checked-at", checks);
+  const second = await scheduler({ initialViews: first.savedViews });
+  assert.ok(second.subscriptionOptions[0].initialDelayMs > 170000 && second.subscriptionOptions[0].initialDelayMs <= 180000);
+  assert.equal(second.subscriptionOptions[1].initialDelayMs, 0, "an expired term must refresh immediately");
+  assert.equal(second.subscriptionOptions[2].initialDelayMs, 0, "future cache timestamps must not delay a server check");
+  first.savedViews.delete("schedule:checked-at");
+  const legacy = await scheduler({ initialViews: first.savedViews });
+  assert.ok(legacy.subscriptionOptions.every(options => options.initialDelayMs === 0));
 });
 
 test("live snapshots update badges, unlocked counts, and progress together", async () => {
@@ -216,7 +266,7 @@ test("make all available keeps deadline drafts and fails without partial local c
   assert.match(failed.element("activityScheduleStatus").textContent, /Could not update/);
   assert.doesNotMatch(failed.element("activityScheduleList").innerHTML, /data-activity-unlockall="0"[^>]*disabled/);
   const unselected = await scheduler({ chooseSection: false });
-  assert.doesNotMatch(unselected.element("activityScheduleList").innerHTML, /data-activity-unlockall/);
+  assert.match(unselected.element("activityScheduleList").innerHTML, /data-activity-unlockall="0"[^>]*disabled/);
   await unselected.activityUnlockAll(0);
   assert.deepEqual(unselected.batchSizes, []);
 });

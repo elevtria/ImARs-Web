@@ -1,5 +1,4 @@
-import { onAuthStateChanged, signOut as firebaseSignOut } from "./firebase-auth.js";
-import { webProtectionEnabled } from "./web-login.js";
+import { getSessionTiming, onAuthStateChanged, signOut as firebaseSignOut } from "./firebase-auth.js";
 import { invalidateTeacherViews } from "./view-cache.js";
 import { startSessionMonitor } from "./session-monitor.js";
 
@@ -32,28 +31,19 @@ function sessionNotice() {
 export function initWebSession(auth) {
   if (initialized.has(auth)) return initialized.get(auth);
   const setup = (async () => {
-    let enabled, ui;
-    while (true) {
-      try { enabled = await webProtectionEnabled(); break; }
-      catch {
-        ui ||= sessionNotice();
-        ui.show("connection");
-        await new Promise(resolve => setTimeout(resolve, 5000));
-      }
-    }
-    if (!enabled) { ui?.show(null); return false; }
-    ui ||= sessionNotice();
-    ui.show(null);
+    const ui = sessionNotice();
     let monitor, uid;
     onAuthStateChanged(auth, user => {
-      if (user?.uid === uid) return;
+      if (monitor && user?.uid === uid) return;
       monitor?.stop();
       uid = user?.uid;
       if (!uid) return;
       monitor = startSessionMonitor({
+        intervalMs: 5 * 60_000,
+        initialTiming: getSessionTiming(auth),
         visible: () => document.visibilityState !== "hidden",
         check: active => fetch("/api/web-auth/session", { method: "POST", credentials: "same-origin", cache: "no-store",
-          headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify({ active }), signal: AbortSignal.timeout(10_000) }),
+          headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify({ active, timing: "relative" }), signal: AbortSignal.timeout(10_000) }),
         notice: kind => ui.show(kind),
         onExpired: async () => {
           invalidateTeacherViews();
@@ -67,7 +57,7 @@ export function initWebSession(auth) {
       window.addEventListener(name, event => { if (event.isTrusted) monitor?.activity(); }, { passive: true });
     }
     window.addEventListener("focus", () => monitor?.refresh());
-    window.addEventListener("pageshow", () => monitor?.refresh());
+    window.addEventListener("pagehide", () => { monitor?.stop(); monitor = null; });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") monitor?.refresh(); });
     ui.button.addEventListener("click", () => monitor?.staySignedIn());
     return true;

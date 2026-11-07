@@ -9,6 +9,63 @@ import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
 
+test("identity and new session checks return countdowns without exposing timestamps or credentials", async () => {
+  const app = fixture(), cookie = await app.login();
+  const identity = await app.auth("identity", {}, cookie);
+  assert.equal(identity.status, 200);
+  const { user, session } = await identity.json();
+  assert.equal(user.uid, "teacher-a");
+  const check = await app.auth("session", { active: false, timing: "relative" }, cookie);
+  assert.equal(check.status, 200);
+  for (const timing of [session, await check.json()]) {
+    assert.deepEqual(Object.keys(timing).sort(), ["checkInMs", "expiresBy", "remainingMs"]);
+    assert.equal(timing.expiresBy, "idle");
+    assert.ok(timing.remainingMs > 0 && timing.remainingMs <= 30 * 60_000);
+  }
+  assert.equal((await app.auth("identity", {}, undefined)).status, 401);
+});
+
+test("class and curriculum responses expose only page fields; quiz list never contains the answer key", async () => {
+  const app = fixture(), cookie = await app.login();
+  Object.assign(app.data.get("classes/A"), { CreatedAutomatically: true, privateField: "private-class-field" });
+  Object.assign(app.data.get("terms/term_01/lessons/lesson_01"), {
+    postTest: [{ question: "Visible label", correctAnswer: "private-key-answer" }],
+    preTest: [{ correctAnswer: "private-pretest" }],
+    sectionSchedules: { A: { isLocked: true, activityDeadlineUtc: "", note: "private-note" }, B: { isLocked: false } }
+  });
+  app.data.set("generatedQuizzes/owned", { title: "Owned quiz", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A", questions: [{ text: "Question", correctIndex: 0 }] });
+  const query = (path, field, value) => ({ action: "query", reference: { kind: "query", path, filters: field ? [{ field, op: "==", value }] : [] } });
+  const response = await app.call({ action: "reads", reads: [query("classes", "teacherId", "TEACH1000"), query("terms/term_01/lessons"), query("generatedQuizzes", "teacherUid", "teacher-a")] }, cookie);
+  assert.equal(response.status, 200);
+  const { results } = await response.json();
+  assert.deepEqual(results[0].documents[0].data, { SectionName: "A" });
+  assert.deepEqual(results[1].documents[0].data.postTest, [{ question: "Visible label" }]);
+  assert.deepEqual(results[1].documents[0].data.sectionSchedules, { A: { isLocked: true, activityDeadlineUtc: "" } });
+  assert.deepEqual(results[2].documents[0].data, { title: "Owned quiz", sectionId: "A", questionCount: 1 });
+  assert.doesNotMatch(JSON.stringify(results), /private-|correctAnswer|correctIndex/);
+  const edit = await app.call({ action: "get", reference: { kind: "document", path: "generatedQuizzes/owned" } }, cookie);
+  assert.equal((await edit.json()).document.data.questions[0].correctIndex, 0, "the owner can still edit the quiz");
+});
+
+test("heatmap pages read one topic for up to 25 students and only in the teacher's section", async () => {
+  const app = fixture(), cookie = await app.login();
+  for (let i = 0; i < 30; i++) app.data.set("users/HEATMAP" + i, { role: "student", classCode: "A", teacherId: "TEACH1000" });
+  const getAll = app.store.getAll.bind(app.store), batches = [];
+  app.store.getAll = (paths, options) => { batches.push({ paths, options }); return getAll(paths); };
+  app.store.count = () => assert.fail("heatmap pages need no roster counts");
+  const input = { action: "teacher-report-page", termId: "term_02", sectionId: "A", heatmapLesson: "lesson_03", includeCurriculum: false };
+  const first = await app.call(input, cookie); assert.equal(first.status, 200);
+  const page = await first.json(); assert.equal(page.students.length, 25); assert.ok(page.cursor);
+  assert.deepEqual(page.students[0].document.data, {});
+  assert.equal(batches.length, 1); assert.equal(batches[0].paths.length, 25);
+  assert.ok(batches[0].paths.every(path => path.endsWith("/term_02/lessons/lesson_03")));
+  assert.equal((await app.call({ ...input, sectionId: "B" }, cookie)).status, 403);
+  assert.equal((await app.call({ ...input, batchSize: 100 }, cookie)).status, 400);
+  const next = await app.call({ ...input, cursor: page.cursor }, cookie);
+  assert.equal(next.status, 200); assert.equal((await next.json()).students.length, 6);
+  assert.equal(batches[1].paths.length, 6);
+});
+
 test('dashboard topic metadata stays bounded, strips answers and foreign schedules, and reads no students or results',async()=>{
   const app=fixture(),cookie=await app.login(),batches=[],queries=[];
   const getAll=app.store.getAll.bind(app.store),query=app.store.query.bind(app.store);
@@ -484,10 +541,32 @@ test("a public invitation and an unverified Auth account cannot grant website ac
 
 test("public school-year reads expose only the year, and disabled Auth identities fail verification", async () => {
   const app = fixture();
-  const response = await webData({ env: app.env, request: new Request("https://imars.example.test/api/web-data/school-year") }, { store: app.store });
-  assert.deepEqual(await response.json(), { startYear: 2027 });
+  let yearReads = 0;
+  const get = app.store.get.bind(app.store);
+  app.store.get = path => { if (path === "webSettings/schoolYear") yearReads++; return get(path); };
+  const read = () => webData({ env: app.env, request: new Request("https://imars.example.test/api/web-data/school-year") }, { store: app.store });
+  const responses = await Promise.all(Array.from({ length: 8 }, read));
+  for (const response of responses) assert.deepEqual(await response.json(), { startYear: 2027 });
+  assert.deepEqual(await (await read()).json(), { startYear: 2027 });
+  assert.equal(yearReads, 1);
   app.data.get("users/TEACH1000").authDisabled = true;
   await assert.rejects(staffProfile(accounts[0], app.store), error => error.status === 401);
+});
+
+test("quiz generation is throttled per teacher before parsing material or contacting the provider", async t => {
+  const app = fixture(), cookie = await app.login();
+  app.env.GEMINI_API_KEY = "fixture-not-a-real-key";
+  const provider = t.mock.method(globalThis, "fetch", () => assert.fail("A throttled request must not reach the provider"));
+  const bucket = app.env.WEB_LOGIN_STATE.get("quiz-generation:teacher-a");
+  for (let i = 0; i < 6; i++) assert.equal((await bucket.fetch("https://private/generation-rate")).status, 200);
+  let cancelled = false;
+  const material = new ReadableStream({ pull() { assert.fail("A throttled upload must not be read"); }, cancel() { cancelled = true; } }, { highWaterMark: 0 });
+  const request = new Request("https://imars.example.test/api/generate-quiz", { method: "POST", headers: { Cookie: cookie, "Content-Type": "application/pdf" }, body: material, duplex: "half" });
+  const response = await generateQuiz({ env: app.env, request }, { store: app.store });
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Retry-After"), "60");
+  assert.equal(cancelled, true);
+  assert.equal(provider.mock.callCount(), 0);
 });
 
 test("oversized streamed JSON, invalid dates and duplicate batch paths are rejected without a partial save", async () => {

@@ -41,10 +41,11 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-      <section class="hero" data-auth-shell>
+      <section class="hero" data-auth-shell data-await-content="student-records">
         <div>
           <h1 data-auth-shell>Student Records</h1>
           <p>Term performance · AR &amp; module engagement</p>
+          <button type="button" id="quizSubmissionsBtn" class="ghost-btn" disabled>Quiz Submissions</button>
         </div>
         <div class="record-controls">
           <div class="select-wrap">
@@ -73,8 +74,8 @@
         <button type="button" id="activeStudentsTab" aria-pressed="true">Active <span id="activeStudentsCount">0</span></button>
         <button type="button" id="archivedStudentsTab" aria-pressed="false">Archived <span id="archivedStudentsCount">0</span></button>
       </div>
-      <button type="button" id="archiveSectionBtn" class="ghost-btn archive-section-btn" disabled>Archive section</button>
-      <p class="archive-section-hint">Select a section to archive its active students together.</p>
+      <button type="button" id="archiveSectionBtn" class="ghost-btn archive-section-btn" disabled data-await-content="student-records">Archive section</button>
+      <p class="archive-section-hint" data-await-content="student-records">Select a section to archive its active students together.</p>
       <!-- Dynamic Student Records Container -->
       <div id="recordsContainer" class="student-record-list" aria-label="Student list" data-loading-path="classes users" data-loading-label="Loading student records…" data-await-content="student-records">
         <!-- Records will be injected here by JS -->
@@ -183,6 +184,7 @@
   <script src="js/ui.js"></script>
   <!-- Script converted to module -->
   <script type="module" src="js/student-records.js"></script>
+  <script type="module" src="js/quiz-review.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>

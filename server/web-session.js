@@ -1,5 +1,5 @@
 export const RENEW_AFTER_MS = 15 * 60_000;
-export const IDLE_AFTER_MS = 15 * 60_000;
+export const IDLE_AFTER_MS = 30 * 60_000;
 export const ABSOLUTE_AFTER_MS = 12 * 60 * 60_000;
 export const PREVIOUS_GRACE_MS = 30_000;
 const MAX_SESSIONS = 20;

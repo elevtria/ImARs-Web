@@ -3,6 +3,9 @@ const encode = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").re
 const utf8 = value => new TextEncoder().encode(value);
 let cachedToken;
 let pendingToken;
+const quotaBackoff = new Map();
+export const databaseQuotaFailure = error => error?.code === "DATABASE_QUOTA_EXCEEDED" || error?.cause?.code === "DATABASE_QUOTA_EXCEEDED";
+const quotaError = () => Object.assign(new Error("The data service usage limit has been reached. Please try again later."), { status: 503, code: "DATABASE_QUOTA_EXCEEDED", upstreamStatus: 429 });
 
 export function serviceAccount(env) {
   const value = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT_JSON || "null");
@@ -77,6 +80,8 @@ export class FirestoreAdmin {
     return "projects/imars-db-a733b/databases/(default)/documents/" + path;
   }
   async request(suffix, options = {}) {
+    const credential = this.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    if ((quotaBackoff.get(credential) || 0) > Date.now()) throw quotaError();
     const token = await serviceToken(this.env, this.fetcher);
     const response = await this.fetcher("https://firestore.googleapis.com/v1/projects/imars-db-a733b/databases/(default)/" + suffix, {
       ...options, headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, signal: AbortSignal.timeout(10_000)
@@ -84,9 +89,15 @@ export class FirestoreAdmin {
     if (response.status === 404) return null;
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
+      if (response.status === 429 && body.error?.status === "RESOURCE_EXHAUSTED") {
+        if (quotaBackoff.size > 20) quotaBackoff.clear();
+        quotaBackoff.set(credential, Date.now() + 60_000);
+        throw quotaError();
+      }
       const conflict = response.status === 409 || ['ABORTED', 'ALREADY_EXISTS', 'FAILED_PRECONDITION'].includes(body.error?.status);
       const error = new Error(conflict ? "Account state changed. Please retry signing in." : "Account access unavailable");
       error.status = conflict ? 409 : 503;
+      error.upstreamStatus = response.status;
       throw error;
     }
     return response.json();

@@ -1,11 +1,11 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, where } from "./firebase-data.js";
+import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
-import { openQuizReview, closeQuizReview } from "./quiz-review.js";
+import { showTeacherView } from "./teacher-view.js";
 
 const firebaseApp = initializeApp();
 const auth = getAuth(firebaseApp);
@@ -13,6 +13,7 @@ const firestore = getFirestore(firebaseApp);
 
 (() => {
   const fileInput = document.getElementById("quizFile");
+  const generateButton = document.getElementById("generateQuiz");
   const dropzone = document.getElementById("quizDropzone");
   const selectedFileRow = document.getElementById("selectedFileRow");
   const setupStatus = document.getElementById("setupStatus");
@@ -26,7 +27,6 @@ const firestore = getFirestore(firebaseApp);
   const setupStep = document.getElementById("setupStep");
   const reviewStep = document.getElementById("reviewStep");
   const editorStep = document.getElementById("editorStep");
-  let libraryStorageKey = "imars-generated-quizzes:anonymous";
   let selectedFile = null;
   let teacherProfileId = null;
   let teacherSections = [];
@@ -34,9 +34,12 @@ const firestore = getFirestore(firebaseApp);
   let difficulty = "Medium";
   let generatedQuestions = [];
   let editorQuestions = [];
-  let editingQuizId = null;
+  let editingQuiz = null;
+  let editRequest = 0;
   let expandedScheduleQuizId = null;
   let scheduleBusy = false;
+  let generating = false;
+  const updateGenerateButton = () => { generateButton.disabled = generating || !selectedFile; };
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({
@@ -93,11 +96,11 @@ const firestore = getFirestore(firebaseApp);
 
   async function loadTeacherQuizzes(user) {
     try {
-      const snapshot = await getDocs(query(collection(firestore, "generatedQuizzes"), where("teacherUid", "==", user.uid)));
-      const quizzes = snapshot.docs.map((quizDocument) => ({ ...quizDocument.data(), id: quizDocument.id }));
-      saveQuizzes(quizzes);
-      renderLibrary();
-      revealContent("quiz-library");
+      await showTeacherView({ app: firebaseApp, user, page: "quiz-library-metadata", freshForMs: 300_000, refreshIntervalMs: 300_000,
+        load: async () => {
+          const snapshot = await getDocs(query(collection(firestore, "generatedQuizzes"), where("teacherUid", "==", user.uid)));
+          return quizSummaries(snapshot.docs.map(row => ({ ...row.data(), id: row.id })));
+        }, render: quizzes => { saveQuizzes(quizzes); renderLibrary(); }, painted: () => revealContent("quiz-library") });
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
@@ -126,15 +129,13 @@ const firestore = getFirestore(firebaseApp);
     return quizCache.slice();
   }
 
-  function saveQuizzes(quizzes) {
-    quizCache = Array.isArray(quizzes) ? quizzes : [];
-    try {
-      localStorage.setItem(libraryStorageKey, JSON.stringify(quizCache));
-      return true;
-    } catch (error) {
-      return true;
-    }
+  function quizSummaries(quizzes) {
+    return quizzes.map(({ id, title, section, sectionId, assignmentScope, type, availability, availableAt, questionCount, questions }) => ({
+      id, title, section, sectionId, assignmentScope, type, availability, availableAt,
+      questionCount: Number.isInteger(questionCount) ? questionCount : (questions?.length || 0)
+    }));
   }
+  function saveQuizzes(quizzes) { quizCache = quizSummaries(quizzes); }
 
   function setView(view) {
     const showLibrary = view === "library";
@@ -170,11 +171,12 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function handleFile(file) {
-    if (!file) return;
+    if (!file || generating) return;
     const extension = fileExtension(file);
     const supported = ["pdf", "docx", "ppt", "pptx"];
     if (!supported.includes(extension)) {
       selectedFile = null;
+      updateGenerateButton();
       selectedFileRow.hidden = true;
       fileInput.value = "";
       showStatus(setupStatus, "Please select a PDF, DOCX, PPT, or PPTX file.", true);
@@ -183,12 +185,14 @@ const firestore = getFirestore(firebaseApp);
     const sizeError = quizFileSizeError(file.size);
     if (sizeError) {
       selectedFile = null;
+      updateGenerateButton();
       selectedFileRow.hidden = true;
       fileInput.value = "";
       showStatus(setupStatus, sizeError, true);
       return;
     }
     selectedFile = file;
+    updateGenerateButton();
     document.getElementById("selectedFileName").textContent = file.name;
     document.getElementById("fileTypeBadge").textContent = extension.toUpperCase();
     selectedFileRow.hidden = false;
@@ -208,26 +212,28 @@ const firestore = getFirestore(firebaseApp);
   }
 
   async function startGeneration() {
+    if (generating) return;
     const error = validateSetup();
     if (error) {
       showStatus(setupStatus, error, true);
       return;
     }
-    if (!auth.currentUser) {
+    const user = auth.currentUser;
+    if (!user) {
       showStatus(setupStatus, "Sign in with your teacher account before generating a quiz.", true);
       return;
     }
-    const button = document.getElementById("generateQuiz");
+    const button = generateButton;
     const loadingOverlay = document.getElementById("quizGenerationOverlay");
-    button.disabled = true;
+    generating = true;
+    updateGenerateButton();
     button.setAttribute("aria-busy", "true");
     loadingOverlay.hidden = false;
     loadingOverlay.setAttribute("aria-busy", "true");
     showStatus(setupStatus, "", false);
     try {
       const material = await prepareMaterial(selectedFile);
-      const user = auth.currentUser;
-      if (!user) throw new Error("Your sign-in expired. Please sign in again.");
+      if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
       const questions = await requestQuiz({
         ...material,
@@ -236,6 +242,7 @@ const firestore = getFirestore(firebaseApp);
         difficulty,
         questionType: document.querySelector("input[name='questionType']:checked").value
       }, user.uid);
+      if (auth.currentUser?.uid !== user.uid) return;
 
       generatedQuestions = questions.map((question) => ({
         ...question,
@@ -252,7 +259,8 @@ const firestore = getFirestore(firebaseApp);
     } finally {
       loadingOverlay.hidden = true;
       loadingOverlay.setAttribute("aria-busy", "false");
-      button.disabled = false;
+      generating = false;
+      updateGenerateButton();
       button.setAttribute("aria-busy", "false");
     }
   }
@@ -304,7 +312,8 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     editorQuestions = ready.map((question) => ({ ...question, id: makeId(), options: question.options.slice() }));
-    editingQuizId = null;
+    editingQuiz = null;
+    editRequest++;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
     document.getElementById("editorSectionName").textContent = "Assign in My quizzes → Schedule";
     document.getElementById("quizAvailability").hidden = true;
@@ -387,9 +396,9 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     const quizzes = loadQuizzes();
-    const oldQuiz = quizzes.find((quiz) => quiz.id === editingQuizId);
+    const oldQuiz = editingQuiz;
     const quiz = {
-      id: editingQuizId || makeId(),
+      id: oldQuiz?.id || makeId(),
       title: title,
       section: oldQuiz ? oldQuiz.section : "Not assigned",
       sectionId: oldQuiz ? oldQuiz.sectionId : "",
@@ -496,7 +505,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${(quiz.questions || []).length} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${writtenQuestion(quiz.type) || quiz.type === "modified-true-false" ? `<button type="button" data-review-quiz="${escapeHtml(quiz.id)}">Review answers</button>` : ""}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -528,20 +537,17 @@ const firestore = getFirestore(firebaseApp);
     let saved = false;
     try {
       const reference = doc(firestore, "generatedQuizzes", id);
-      const current = await getDoc(reference);
-      if (!current.exists() || current.data().teacherUid !== auth.currentUser.uid) throw new Error("This quiz is no longer available. Reload the page.");
       const updated = {
-        ...current.data(),
-        id,
         assignmentScope: allSections ? "all" : "section",
         sectionId: allSections ? "" : section.id,
         section: allSections ? "All my sections" : section.name,
         availability,
-        availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
-        updatedAt: new Date().toISOString()
+        availableAt: availability === "scheduled" ? releaseDate.toISOString() : ""
       };
-      await setDoc(reference, updated);
-      saveQuizzes(loadQuizzes().map(item => item.id === id ? updated : item));
+      const uid = auth.currentUser?.uid;
+      await updateDoc(reference, updated);
+      if (auth.currentUser?.uid !== uid) return;
+      saveQuizzes(loadQuizzes().map(item => item.id === id ? { ...item, ...updated } : item));
       expandedScheduleQuizId = null;
       saved = true;
       showStatus(libraryStatus, `Release saved for ${quiz.title} · ${assignmentLabel(updated)}.`, false);
@@ -557,11 +563,25 @@ const firestore = getFirestore(firebaseApp);
     }
   }
 
-  function editQuiz(id) {
-    const quiz = loadQuizzes().find((item) => item.id === id);
-    if (!quiz) return;
-    editingQuizId = quiz.id;
-    editorQuestions = (quiz.questions || []).map((question) => ({
+  async function editQuiz(id) {
+    const uid = auth.currentUser?.uid;
+    if (!uid || !loadQuizzes().some(item => item.id === id)) return;
+    const request = ++editRequest;
+    const status = document.getElementById("libraryStatus");
+    let quiz;
+    try {
+      const current = await getDoc(doc(firestore, "generatedQuizzes", id));
+      if (request !== editRequest || auth.currentUser?.uid !== uid) return;
+      if (!current.exists() || current.data().teacherUid !== uid) throw new Error("This quiz is no longer available.");
+      const { questions, ...metadata } = current.data();
+      quiz = { ...metadata, id };
+      editorQuestions = questions;
+    } catch {
+      if (request === editRequest && auth.currentUser?.uid === uid) showStatus(status, "Could not open the quiz. Please try again.", true);
+      return;
+    }
+    editingQuiz = quiz;
+    editorQuestions = (editorQuestions || []).map((question) => ({
       ...question,
       id: question.id || makeId(),
       text: question.text || "",
@@ -569,6 +589,7 @@ const firestore = getFirestore(firebaseApp);
       correctIndex: Number.isInteger(question.correctIndex) ? question.correctIndex : 0
     }));
     selectedFile = null;
+    updateGenerateButton();
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("editorTitle").value = quiz.title || "";
@@ -596,9 +617,11 @@ const firestore = getFirestore(firebaseApp);
 
   function resetNewQuiz() {
     selectedFile = null;
+    updateGenerateButton();
     generatedQuestions = [];
     editorQuestions = [];
-    editingQuizId = null;
+    editingQuiz = null;
+    editRequest++;
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("quizTitle").value = "";
@@ -622,9 +645,19 @@ const firestore = getFirestore(firebaseApp);
 
   loadSections();
   renderLibrary();
+  updateGenerateButton();
+  // Remove full quiz copies saved by older versions of the library.
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index--) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("imars-generated-quizzes:")) localStorage.removeItem(key);
+    }
+  } catch {}
   onAuthStateChanged(auth, async (user) => {
-    closeQuizReview();
-    libraryStorageKey = user ? "imars-generated-quizzes:" + user.uid : "imars-generated-quizzes:anonymous";
+    editRequest++;
+    editingQuiz = null;
+    editorQuestions = [];
+    generatedQuestions = [];
     librarySectionFilter.value = "";
     teacherSections = [];
     renderSectionFilter();
@@ -641,7 +674,9 @@ const firestore = getFirestore(firebaseApp);
   fileInput.addEventListener("change", () => handleFile(fileInput.files[0]));
   document.getElementById("removeFile").addEventListener("click", (event) => {
     event.preventDefault();
+    if (generating) return;
     selectedFile = null;
+    updateGenerateButton();
     fileInput.value = "";
     selectedFileRow.hidden = true;
     showStatus(setupStatus, "", false);
@@ -759,8 +794,6 @@ const firestore = getFirestore(firebaseApp);
     renderLibrary();
   });
   libraryList.addEventListener("click", async (event) => {
-    const review = event.target.closest("[data-review-quiz]");
-    if (review && auth.currentUser) { void openQuizReview(review.dataset.reviewQuiz, auth.currentUser.uid); return; }
     const schedule = event.target.closest("[data-schedule-quiz]");
     if (schedule && !scheduleBusy) {
       expandedScheduleQuizId = expandedScheduleQuizId === schedule.dataset.scheduleQuiz ? null : schedule.dataset.scheduleQuiz;

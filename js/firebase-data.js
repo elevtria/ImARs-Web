@@ -3,6 +3,7 @@ import { wrapFirestoreReads } from "./firebase-loading.js";
 import { createReadPool } from "./data-read-pool.js";
 import { invalidateTeacherViews, teacherViewCache } from "./view-cache.js";
 import { webRequest, visitUser } from "./web-login.js";
+import { getAuth } from "./firebase-auth.js";
 
 const database = Object.freeze({ name: "website" });
 const listeners = new Map();
@@ -74,11 +75,25 @@ async function readDocument(reference) {
   return snapshot((await request({ action: "get", reference })).document);
 }
 async function readCollection(reference) {
-  return querySnapshot((await request({ action: "query", reference })).documents);
+  // Section pickers share a small, verified-account cache across page visits.
+  // Student records, account profiles and quiz answer keys never enter it.
+  const cacheable = reference.path === "classes" && reference.filters?.length === 1 &&
+    reference.filters[0].field === "teacherId" && reference.filters[0].op === "==";
+  const user = cacheable ? getAuth().currentUser : null;
+  const cache = user ? teacherViewCache() : null;
+  if (cache) cache.setOwner(user.uid);
+  const cacheKey = "data:sections:" + key(reference), version = cache?.version();
+  const saved = cache?.get(user.uid, cacheKey, 300_000);
+  if (Array.isArray(saved)) return querySnapshot(saved, true);
+  const records = (await request({ action: "query", reference })).documents;
+  const allowed = new Set(["SectionName", "sectionName", "name", "teacherId", "gradeLevel", "createdAt", "updatedAt"]);
+  if (cache && getAuth().currentUser?.uid === user.uid && records.every(row => row.data && Object.keys(row.data).every(field => allowed.has(field))))
+    cache.put(user.uid, cacheKey, records, version);
+  return querySnapshot(records);
 }
-function querySnapshot(records) {
+function querySnapshot(records, fromCache = false) {
   const docs = records.map(snapshot);
-  return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback), metadata: { fromCache: false, hasPendingWrites: false } };
+  return { docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback), metadata: { fromCache, hasPendingWrites: false } };
 }
 const key = reference => JSON.stringify(reference);
 const pool = createReadPool({ equal: (_kind, a, b) => key(a) === key(b) });
@@ -152,7 +167,13 @@ export const getDocsWithLoading = loadingReads.getDocs;
 export const onSnapshotWithLoading = loadingReads.onSnapshot;
 async function commit(writes) {
   await request({ action: "commit", writes });
-  invalidateTeacherViews();
+  // Schedule edits do not change dashboard scores. Retain the last topic view
+  // for display while its new schedule loads, and preserve the existing scores.
+  const scheduleOnly = writes.length && writes.every(write => /^terms\/term_0[1-3]\/lessons\/lesson_0[1-4]$/.test(write.path));
+  invalidateTeacherViews(scheduleOnly ? {
+    keep: ["dashboard-summary-v1", "quiz-library-metadata", "records:state", "schedule:section"],
+    recheck: ["dashboard-topics-v1"]
+  } : undefined);
   for (const group of listeners.values()) {
     if (!writes.some(write => group.reference.kind === "document" ? write.path === group.reference.path : write.path.slice(0, write.path.lastIndexOf("/")) === group.reference.path)) continue;
     group.revision++;

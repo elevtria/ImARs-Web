@@ -28,16 +28,31 @@ test("cards reveal only for their completed data group and remain visible during
   assert.equal(summary.has("data-content-ready"), true, "background updates must not hide populated cards");
 });
 
-test("pending cards are hidden while the sidebar/header and auth privacy guard remain independent", () => {
+test("pending card layouts stay in place while unpopulated values and controls wait for data", () => {
   const css = readFileSync(new URL("../css/loading.css", import.meta.url), "utf8");
   assert.match(css, /\[data-await-content\]:not\(\[data-content-ready\]\)/);
-  assert.match(css, /body\[data-auth-pending\] \[data-await-content\]/);
+  assert.ok(!css.includes("> * { visibility: hidden"), "headings and card controls must not become empty skeletons");
+  assert.ok(!css.includes("min-height: 72px") && !css.includes("width: min(160px"), "do not replace real card layouts with generic placeholder blocks");
+  assert.match(css, /\[data-await-content\]\[hidden\] \{ display: none/);
+  assert.ok(!/\[data-await-content\]:not\(\[data-content-ready\]\)[^{]*\{[^}]*display:\s*none/.test(css), "waiting for data must not collapse card layouts");
   assert.ok(!css.includes(".topbar") && !css.includes("#drawer"));
   for (const file of ["index.html", "analytics.html", "topic-scheduler.html", "student-records.html", "admin-dashboard.html", "admin-profile.html", "manage-teachers.html", "school-analytics.html"]) {
     const html = readFileSync(new URL("../" + file, import.meta.url), "utf8");
     assert.match(html, /data-await-content=/, file);
     assert.ok(!/<(?:header|aside)\b[^>]*data-await-content/.test(html), file + " navigation must stay visible");
     assert.ok(!/<[^>]*data-await-content[^>]*data-content-ready/.test(html), file + " cards must not reveal before their data callback");
+  }
+});
+
+test("startup privacy keeps fixed card labels visible without allowing names, scores or cached values", () => {
+  const css = readFileSync(new URL("../css/app.css", import.meta.url), "utf8");
+  assert.match(css, /body\[data-auth-pending\] main \[data-public-label\] \{ visibility: visible !important/);
+  const scheduler = readFileSync(new URL("../topic-scheduler.html", import.meta.url), "utf8");
+  for (const label of ["Term 1", "Term 2", "Term 3", "Activity Schedule"]) assert.match(scheduler, new RegExp('data-public-label[^>]*>' + label));
+  const dashboard = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  for (const id of ["greeting", "studentCountVal", "avgPreTestVal", "avgPostTestVal", "avgArTimeVal"]) {
+    const tag = dashboard.match(new RegExp('<[^>]+id="' + id + '"[^>]*>'))?.[0];
+    assert.ok(tag && !tag.includes("data-public-label"), id + " must remain private until verified");
   }
 });
 

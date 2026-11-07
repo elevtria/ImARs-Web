@@ -71,11 +71,11 @@ export function showTeacherView(options) {
 }
 
 async function renderTeacherView(options) {
-  const { app, user, page, load, render, painted = () => {}, freshForMs = 60000, refreshOnly = false } = options;
+  const { app, user, page, load, render, painted = () => {}, freshForMs = 60000, refreshIntervalMs = 60000, refreshOnly = false } = options;
   if (getAuth(app).currentUser?.uid !== user.uid) return;
   if (!refreshOnly) {
     refreshViews.get(page)?.();
-    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true })));
+    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true }), refreshIntervalMs));
   }
   const cache = prepareTeacherCache(app, user);
   let version = cache.version();

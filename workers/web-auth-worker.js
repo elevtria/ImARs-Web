@@ -1,7 +1,7 @@
 import { decision, emptyState, passwordFailed, resetAfterApproval, verifiedSuccess } from "../server/web-lockout.js";
 import { checkSession, createSession, pruneSessions, sessionTiming, validSessionId } from "../server/web-session.js";
 import { DashboardSummary } from "../server/dashboard-summary.js";
-import { FirestoreAdmin } from "../server/firestore-admin.js";
+import { FirestoreAdmin, databaseQuotaFailure } from "../server/firestore-admin.js";
 
 const apiKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -40,7 +40,7 @@ export class WebLoginState {
   alarm() {
     const result = this.pending.then(() => this.dashboard.step());
     this.pending = result.catch(() => {});
-    return result.catch(async error => { await this.dashboard.schedule(30_000); throw error; });
+    return result.catch(async error => { await this.dashboard.schedule(databaseQuotaFailure(error) ? 900_000 : 30_000); throw error; });
   }
 
   async handle(request) {
@@ -86,18 +86,23 @@ export class WebLoginState {
       await this.storage.put("roster:" + body.id, { ...previous, id: body.id, active: false });
       return json({ ok: true });
     }
-    if (action === "/rate") {
+    if (action === "/rate" || action === "/generation-rate") {
       const now = this.now();
       let bucket = await this.storage.get("rate");
       if (!bucket || now >= bucket.until) bucket = { count: 0, until: now + 60_000 };
-      if (bucket.count >= 60) return json({ error: "Too many requests. Please wait a minute." }, 429);
+      const maximum = action === "/generation-rate" ? 6 : 60;
+      if (bucket.count >= maximum) return json({ error: "Too many requests. Please wait a minute." }, 429);
       await this.storage.put("rate", { ...bucket, count: bucket.count + 1 });
       return json({ allowed: true });
     }
     const state = (await this.storage.get("account")) ?? emptyState();
     const access = decision(state, this.now());
     if (action === "/status") return json({ ...access, version: state.version, stage: state.stage });
-    if (action === "/unlock" || action === "/logout") {
+    if (action === "/session-logout" && request.method === "POST") {
+      const session = checkSession(await this.storage.get("sessions") || {}, await request.json(), state.version, this.now());
+      if (!session) return json({ error: "Please sign in to the website again." }, 401);
+    }
+    if (action === "/unlock" || action === "/logout" || (action === "/session-logout" && request.method === "POST")) {
       await this.storage.put("account", action === "/unlock" ? resetAfterApproval(state) : { ...state, version: state.version + 1 });
       await this.storage.put("sessions", {});
       return json({ ok: true });
@@ -105,10 +110,15 @@ export class WebLoginState {
     if (action === "/session" && request.method === "POST") {
       const now = this.now();
       const body = await request.json();
-      const sessions = pruneSessions(await this.storage.get("sessions"), state.version, now);
+      const saved = await this.storage.get("sessions");
+      const sessions = pruneSessions(saved, state.version, now);
+      const lastActiveAt = sessions[body.family]?.lastActiveAt;
       const checked = access.allowed && checkSession(sessions, body, state.version, now,
         { active: body.active === true, rotate: body.rotate === true });
-      await this.storage.put("sessions", sessions);
+      if (Object.keys(sessions).length !== Object.keys(saved || {}).length ||
+          (checked && (checked.rotated || checked.session.lastActiveAt !== lastActiveAt))) {
+        await this.storage.put("sessions", sessions);
+      }
       if (!checked) return json({ error: "Please sign in to the website again." }, 401);
       // Only the private Pages binding sees this state, never browser JSON.
       return json({ ...checked, timing: sessionTiming(checked.session, now) });

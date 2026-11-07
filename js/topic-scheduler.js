@@ -71,6 +71,7 @@ terms.forEach((term, index) => {
 });
 
 let isReady = false;
+let sectionsVerified = false;
 let isSaving = false;
 let dateTarget = null;
 const sectionSelect = document.getElementById("scheduleSection");
@@ -85,8 +86,8 @@ let activityMessage = "";
 const activityOpenTerms = [false, false, false];
 const activityDrafts = new Map();
 const activityKey = (termIndex, topicIndex, sectionId = selectedSection) => `${sectionId}:${termIndex}-${topicIndex}`;
-const setSyncStatus = (message, state = "") => {
-  setLoadingState(syncStatus, state === "pending", "Saving schedule");
+const setSyncStatus = (message, state = "", label = "Saving schedule") => {
+  setLoadingState(syncStatus, state === "pending", label);
   syncStatus.textContent = message;
   syncStatus.dataset.state = state;
   syncStatus.hidden = !message && state !== "pending";
@@ -114,7 +115,7 @@ function scheduledActivityTopics() {
   // Longitudinal Waves uses the Term 3 entry in the activity list.
   return terms.map((term, termIndex) => term.topics
     .map((topic, topicIndex) => ({ topic, topicIndex }))
-    .filter(({ topic }) => TERM_IDS[termIndex] !== "term_02" || topic.docId !== "lesson_04"));
+    .filter(({ topicIndex }) => TERM_IDS[termIndex] !== "term_02" || topicIndex !== 3));
 }
 
 function renderActivitySchedule() {
@@ -122,46 +123,43 @@ function renderActivitySchedule() {
   const activityCount = activityTopics.reduce((total, topics) => total + topics.length, 0);
   setLoadingState(activityStatus, isSaving, "Saving activity access");
   activityStatus.textContent = isSaving ? "" : activityMessage || (isReady ? `${activityCount} lesson activities in your schedule` : "");
-  if (!isReady) {
-    activityList.innerHTML = selectedSection ? "" : '<p class="quiz-schedule-empty">Select a section to manage its activities.</p>';
-    return;
-  }
   if (!isSaving && activityList.contains(document.activeElement) && document.activeElement.matches("select, input")) return;
   activityList.innerHTML = terms.map((term, termIndex) => {
     const open = activityOpenTerms[termIndex];
     const availableCount = activityTopics[termIndex].filter(({ topic }) => !isTopicLocked(topic)).length;
     const allAvailable = activityTopics[termIndex].length > 0 && availableCount === activityTopics[termIndex].length;
     const rows = activityTopics[termIndex].map(({ topic, topicIndex }) => {
-    const state = topicAvailability(topic);
+    const state = isReady ? topicAvailability(topic) : { label: "—", locked: true };
     const draft = activityDrafts.get(activityKey(termIndex, topicIndex));
     const mode = draft?.mode || (state.label === "Scheduled" ? "scheduled" : state.locked ? "locked" : "now");
     const date = draft?.date ?? topic.date;
     const deadline = draft?.deadline ?? activityDeadlineInput(topic.activityDeadlineUtc);
     return `<article class="quiz-schedule-card" data-activity="${termIndex}-${topicIndex}">
-      <div class="quiz-schedule-info"><span class="quiz-schedule-section">${escapeHtml(term.name)}</span><h3>${escapeHtml(topic.title)}</h3><p>${escapeHtml(state.label)}${state.label === "Scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
+      <div class="quiz-schedule-info"><span class="quiz-schedule-section" data-public-label>${escapeHtml(term.name)}</span><h3 ${!isReady ? "data-public-label" : ""}>${escapeHtml(isReady ? topic.title : DEFAULT_TERMS[termIndex].topics[topicIndex].title)}</h3><p>${escapeHtml(state.label)}${state.label === "Scheduled" ? ` · Opens ${formatDate(topic.date)}` : ""}</p></div>
       <div class="quiz-schedule-controls">
-        <label class="quiz-schedule-access">Access <select class="activity-schedule-mode" aria-label="Access for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}>
-          <option value="locked" ${mode === "locked" ? "selected" : ""}>Locked</option>
-          <option value="now" ${mode === "now" ? "selected" : ""}>Available now</option>
-          <option value="scheduled" ${mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
+        <label class="quiz-schedule-access">Access <select class="activity-schedule-mode" aria-label="Access for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>
+          ${!isReady ? '<option value="" selected>Choose a section</option>' : ""}
+          <option value="locked" ${isReady && mode === "locked" ? "selected" : ""}>Locked</option>
+          <option value="now" ${isReady && mode === "now" ? "selected" : ""}>Available now</option>
+          <option value="scheduled" ${isReady && mode === "scheduled" ? "selected" : ""}>Scheduled release</option>
         </select></label>
         <div class="quiz-schedule-dates">
-          <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
-          <label>Deadline (optional, Philippine time)<input class="activity-schedule-deadline" type="datetime-local" value="${escapeHtml(deadline)}" ${mode === "scheduled" && date ? `min="${escapeHtml(date)}T00:00"` : ""} aria-label="Activity deadline for ${escapeHtml(topic.title)}" ${isSaving ? "disabled" : ""}></label>
+          <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}></label>
+          <label>Deadline (optional, Philippine time)<input class="activity-schedule-deadline" type="datetime-local" value="${isReady ? escapeHtml(deadline) : ""}" ${mode === "scheduled" && date ? `min="${escapeHtml(date)}T00:00"` : ""} aria-label="Activity deadline for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}></label>
         </div>
-        <button class="primary-btn activity-schedule-save" type="button" ${isSaving ? "disabled" : ""}>Save access</button>
+        <button class="primary-btn activity-schedule-save" type="button" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>Save access</button>
       </div>
     </article>`;
     }).join("");
     return `<section class="activity-term ${open ? "open" : ""}">
       <button class="activity-term-toggle" type="button" data-activity-term="${termIndex}" aria-expanded="${open}" aria-controls="activityTermRows${termIndex}">
-        <span class="activity-term-name">${escapeHtml(term.name)}</span>
+        <span class="activity-term-name" data-public-label>${escapeHtml(term.name)}</span>
         <span class="activity-term-summary">${activityTopics[termIndex].length} activities <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
       </button>
       <div class="activity-term-rows" id="activityTermRows${termIndex}"${open ? "" : " hidden"}>${rows}
         <div class="term-foot">
-          <span>${availableCount}/${activityTopics[termIndex].length} activities available</span>
-          <button class="lock-all" type="button" data-activity-unlockall="${termIndex}" aria-label="${allAvailable ? `All activities in ${escapeHtml(term.name)} are available` : `Make all activities available in ${escapeHtml(term.name)}`}" ${!selectedSection || isSaving || allAvailable ? "disabled" : ""}>
+          <span>${isReady ? availableCount : "—"}/${activityTopics[termIndex].length} activities available</span>
+          <button class="lock-all" type="button" data-activity-unlockall="${termIndex}" aria-label="${allAvailable ? `All activities in ${escapeHtml(term.name)} are available` : `Make all activities available in ${escapeHtml(term.name)}`}" ${!isReady || !sectionsVerified || !selectedSection || isSaving || allAvailable ? "disabled" : ""}>
             ${allAvailable ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg> All available' : `${lockIcon(false)} Make all available`}
           </button>
         </div>
@@ -183,9 +181,9 @@ function render() {
       <article class="term-card theme-${theme} ${term.open ? "open" : ""}" data-term="${ti}">
         <button class="term-head" type="button" data-toggle="${ti}">
           <div class="term-head-left">
-            <div class="term-num">${ti + 1}</div>
+            <div class="term-num" data-public-label>${ti + 1}</div>
             <div>
-              <div class="term-name">${term.name}</div>
+              <div class="term-name" data-public-label>${term.name}</div>
               <span class="term-status ${status.cls}">${status.label}</span>
             </div>
           </div>
@@ -202,16 +200,16 @@ function render() {
               <div class="topic-left">
                 <div class="topic-num">${ki + 1}</div>
                 <div>
-                  <h3>${escapeHtml(topic.title)}</h3>
-                  <small>AR Module · Pre &amp; Post Test</small>
+                  <h3 ${!isReady ? "data-public-label" : ""}>${escapeHtml(isReady ? topic.title : DEFAULT_TERMS[ti].topics[ki].title)}</h3>
+                  <small data-public-label>AR Module · Pre &amp; Post Test</small>
                 </div>
               </div>
               <div class="topic-actions">
-                <button class="date-btn ${topic.date ? "has-date" : ""}" type="button" data-date="${ti}-${ki}" ${!isReady || isSaving ? "disabled" : ""}>
+                <button class="date-btn ${topic.date ? "has-date" : ""}" type="button" data-date="${ti}-${ki}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>
                   ${calIcon} ${formatDate(topic.date)}
                 </button>
                 <span class="pill ${state.cls}">${state.label}</span>
-                <button class="lock-btn ${isTopicLocked(topic) ? "locked" : ""}" type="button" data-lock="${ti}-${ki}" aria-label="${isTopicLocked(topic) ? "Unlock" : "Lock"} topic" ${!isReady || isSaving ? "disabled" : ""}>
+                <button class="lock-btn ${isTopicLocked(topic) ? "locked" : ""}" type="button" data-lock="${ti}-${ki}" aria-label="${isTopicLocked(topic) ? "Unlock" : "Lock"} topic" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>
                   ${lockIcon(isTopicLocked(topic))}
                 </button>
               </div>
@@ -219,7 +217,7 @@ function render() {
           `; }).join("")}
           <div class="term-foot">
             <span>${isReady ? `${unlocked}/${total} topics unlocked · ${locked} locked` : "—"}</span>
-            <button class="lock-all" type="button" data-lockall="${ti}" ${!isReady || isSaving ? "disabled" : ""}>
+            <button class="lock-all" type="button" data-lockall="${ti}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>
               ${lockIcon(!allLocked)}
               ${allLocked ? "Unlock All" : "Lock All"}
             </button>
@@ -292,11 +290,12 @@ sectionSelect.addEventListener("change", () => {
   document.getElementById("dateModal").classList.remove("open");
   activityMessage = "";
   latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
-  setSyncStatus("");
+  setSyncStatus("", isReady ? "" : "pending", "Loading schedules");
   render();
 });
 
 function sectionUpdate(fields) {
+  if (!sectionsVerified) throw new Error("Wait for your assigned sections to finish updating.");
   if (!assignedSections.some(section => section.id === selectedSection)) throw new Error("Select one of your assigned sections.");
   return { ...fields, sectionId: selectedSection };
 }
@@ -346,11 +345,18 @@ function watchScheduleFromFirestore(generation, user) {
   let saved = null;
   try { if (stored) saved = decodeView(stored); } catch {}
   if (!Array.isArray(saved) || saved.length !== TERM_IDS.length || saved.some(snapshot => snapshot.docs?.length !== 4)) saved = null;
-  setSyncStatus("");
+  const refreshMs = 300_000;
+  const storedChecks = cache.get(user.uid, "schedule:checked-at");
+  const checkedAt = TERM_IDS.map((_, index) => saved && Number.isFinite(storedChecks?.[index]) && storedChecks[index] <= Date.now() ? storedChecks[index] : 0);
+  setSyncStatus("", "pending", "Loading schedules");
   const snapshots = Array(TERM_IDS.length).fill(null);
   latestSchedules = snapshots;
   const showLoadError = (error, termIndex) => {
     if (generation !== scheduleGeneration) return;
+    if (snapshots[termIndex] && !["permission-denied", "unauthenticated"].includes(error.code)) {
+      setSyncStatus("Showing saved schedules. Updates will retry automatically.", "error");
+      return;
+    }
     snapshots[termIndex] = null;
     isReady = false;
     render();
@@ -362,23 +368,31 @@ function watchScheduleFromFirestore(generation, user) {
 
   stopScheduleListeners = TERM_IDS.map((termId, termIndex) => {
     const lessonsRef = collection(db, "terms", termId, "lessons");
-    const receive = (snapshot) => {
+    const receive = (snapshot, restored = false) => {
       if (generation !== scheduleGeneration) return;
       try {
+        const unchanged = snapshots[termIndex] && JSON.stringify(encodeView(snapshots[termIndex])) === JSON.stringify(encodeView(snapshot));
+        const wasReady = isReady;
         receiveSectionSchedule(termIndex, snapshot);
         snapshots[termIndex] = snapshot;
+        if (!restored && !snapshot.metadata?.fromCache && !snapshot.metadata?.hasPendingWrites) checkedAt[termIndex] = Date.now();
         isReady = Boolean(selectedSection) && snapshots.every(Boolean);
-        render();
+        if (!unchanged || wasReady !== isReady) render();
+        else if (activityDrafts.size) renderActivitySchedule();
         if (snapshots.every(Boolean) && !isSaving) {
-          setSyncStatus("");
-          if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) cache.put(user.uid, "schedule:sections", encodeView(snapshots));
+          if (assignedSections.length) setSyncStatus(selectedSection ? "" : "Choose a section to view its schedules.");
+          if (!snapshots.some(item => item.metadata.hasPendingWrites || item.metadata.fromCache)) {
+            cache.put(user.uid, "schedule:sections", encodeView(snapshots));
+            cache.put(user.uid, "schedule:checked-at", checkedAt);
+          }
         }
       } catch (error) {
         showLoadError(error, termIndex);
       }
     };
-    if (saved) receive(saved[termIndex]);
-    return (saved ? quietSnapshot : onSnapshot)(lessonsRef, { includeMetadataChanges: true, refreshIntervalMs: 60000 }, receive, (error) => {
+    if (saved) receive(saved[termIndex], true);
+    return (saved ? quietSnapshot : onSnapshot)(lessonsRef, { includeMetadataChanges: true, refreshIntervalMs: refreshMs,
+      initialDelayMs: checkedAt[termIndex] ? Math.max(0, refreshMs - (Date.now() - checkedAt[termIndex])) : 0 }, receive, (error) => {
       if (error.code === "permission-denied" || error.code === "unauthenticated") cache.invalidate();
       showLoadError(error, termIndex);
     });
@@ -397,6 +411,7 @@ onAuthStateChanged(auth, async (user) => {
   stopScheduleListeners.forEach((stop) => stop());
   stopScheduleListeners = [];
   isReady = false;
+  sectionsVerified = false;
   assignedSections = [];
   selectedSection = "";
   latestSchedules = [];
@@ -412,6 +427,7 @@ onAuthStateChanged(auth, async (user) => {
   }
 
   try {
+    setSyncStatus("", "pending", "Loading sections");
     // The verified website identity already includes the current profile ID.
     // The data gateway still verifies the staff account and section ownership.
     let teacherId = user.role === "teacher" ? user.id : null;
@@ -421,22 +437,49 @@ onAuthStateChanged(auth, async (user) => {
       if (profiles.size !== 1 || profiles.docs[0].data().role !== "teacher") throw new Error("Teacher access is required.");
       teacherId = profiles.docs[0].id;
     }
-    const sections = await getDocsWithLoading(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
+    const cache = prepareTeacherCache(app, user);
+    const savedSections = cache.get(user.uid, "schedule:assigned-sections");
+    const previous = cache.get(user.uid, "schedule:section");
+    if (Array.isArray(savedSections) && savedSections.every(section => typeof section.id === "string" && typeof section.name === "string")) {
+      assignedSections = savedSections;
+      sectionSelect.innerHTML = '<option value="">Select a section</option>' + assignedSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
+      if (assignedSections.some(section => section.id === previous?.id)) {
+        selectedSection = previous.id; sectionSelect.value = selectedSection;
+      }
+      render();
+      revealContent("schedule-sections");
+    }
+    const pendingSections = getDocsWithLoading(query(collection(db, "classes"), where("teacherId", "==", teacherId)));
+    // Independent reads enter the existing request batch together. A second
+    // authenticated HTTP round trip is not needed just to start lesson reads.
+    watchScheduleFromFirestore(generation, user);
+    const sections = await pendingSections;
     if (generation !== scheduleGeneration) return;
     assignedSections = sections.docs.map(section => ({ id: section.id, name: section.data().SectionName || section.id }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    sectionsVerified = true;
+    cache.put(user.uid, "schedule:assigned-sections", assignedSections);
     sectionSelect.innerHTML = '<option value="">Select a section</option>' + assignedSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
-    const previous = prepareTeacherCache(app, user).get(user.uid, "schedule:section");
-    if (assignedSections.some(section => section.id === previous?.id)) {
+    if (!assignedSections.some(section => section.id === selectedSection)) selectedSection = "";
+    if (!selectedSection && assignedSections.some(section => section.id === previous?.id)) {
       selectedSection = previous.id;
       sectionSelect.value = selectedSection;
     }
+    sectionSelect.value = selectedSection;
+    latestSchedules.forEach((snapshot, index) => { if (snapshot) receiveSectionSchedule(index, snapshot); });
+    isReady = Boolean(selectedSection) && latestSchedules.length === TERM_IDS.length && latestSchedules.every(Boolean);
     render();
-    setSyncStatus(assignedSections.length ? "" : "No sections are assigned to your account.");
-    if (!assignedSections.length) { revealContent("schedule"); return; }
-    watchScheduleFromFirestore(generation, user);
+    revealContent("schedule-sections");
+    if (selectedSection && !isReady) setSyncStatus("", "pending", "Loading schedules");
+    else setSyncStatus(assignedSections.length ? selectedSection ? "" : "Choose a section to view its schedules." : "No sections are assigned to your account.");
+    if (!assignedSections.length) {
+      stopScheduleListeners.forEach(stop => stop()); stopScheduleListeners = [];
+      revealContent("schedule");
+    }
   } catch (error) {
     if (generation !== scheduleGeneration) return;
+    stopScheduleListeners.forEach(stop => stop()); stopScheduleListeners = [];
+    revealContent("schedule-sections");
     setSyncStatus(`Could not load your sections: ${error.message}`, "error");
   }
 });

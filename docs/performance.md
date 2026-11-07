@@ -1,5 +1,96 @@
 # Data-fetch performance
 
+## Browser responses and quota, 2026-11-06
+
+Measure Firestore reads per active teacher hour and per report page alongside
+the total daily reads in the Firebase Usage tab. Separate website requests
+from mobile and background reconciliation where the available metrics allow.
+Keep one dashboard summary per verified teacher scope and refresh the existing
+cards without clearing them. Cold summaries retry up to five times with backoff,
+then use the usual background interval.
+
+- Reuse the server session. Visible tabs check it every five minutes during
+  normal operation. Hidden tabs pause, focus reuses the pending check and
+  quota failures honor the server retry delay. Protected requests still verify
+  authorization. The passive browser warning of a revoked session may take
+  up to five minutes while the tab is visible.
+- Coalesce repeated public school-year reads for one minute within a server
+  runtime. Publish only the year. A successful settings save invalidates that
+  runtime's cached value.
+- Reuse a matching Analytics report for the heatmap. Otherwise fetch a single
+  term, section and lesson in pages of 25 learners. Keep aggregate counts in
+  memory for requested pages. The quiz library receives metadata and counts,
+  and quiz release updates do not download the question bank.
+- Keep generated quiz input temporary. Both hosts limit generation starts to
+  six per teacher per minute per host. Keep the existing PDF and abandoned-job
+  cleanup. Preserve stored student submissions. Measure the size and age of
+  quiz revisions and attempts before adopting a retention policy.
+
+The November 6 read-only production rules audit verified that anonymous reads
+were denied for generated quizzes, generated quiz revisions and private session
+records. A legacy curriculum lesson was anonymously readable and contained
+answer fields. The live rules also allow broad reads of legacy user and result
+records and permit broad class and test-result writes. Website response
+projections do not restrict direct Firestore requests. Coordinate the mobile
+migration before tightening these rules: move answer keys to server-only
+documents, grade on the server, and replace direct roster/result access with
+authorized access. Then test first-time claim, offline sync and class ownership
+with the supported mobile build before publishing restrictive rules.
+
+## Local cache reuse, 2026-11-05
+
+Dashboard views, selected-term Student Records and shared report reuse now use
+a five-minute freshness window. Previously, cross-report reuse expired after
+one minute even though the report background step ran every five minutes.
+Returning to a fresh view avoids a duplicate data fetch; stale saved views may
+remain visible while the normal bounded request updates them. Quiet checks
+pause in hidden tabs. Another device's new progress may take up to the refresh
+interval to appear; this is a quota/freshness tradeoff, not real-time delivery.
+
+The existing authenticated, tab-scoped view cache also shares small assigned
+section queries between page modules. It stores only recognized section
+metadata, never profile documents, student query results or quiz answer keys.
+Topic Scheduler records the server-check time of each term separately and waits
+for the remaining freshness interval before its next background read. Restoring
+a saved view does not extend that server-check timestamp.
+
+Successful writes invalidate cached entries through the existing version
+mechanism. Account changes and sign-out clear private view caches, and late
+responses cannot repopulate another account's cache. Live identity/session
+checks and server-side ownership checks remain required; no private data is
+fetched before login. Browser storage restrictions fall back to normal reads.
+The public school-year label retains its separate five-minute cache.
+
+Regression checks cover navigation without repeated section reads, five-minute
+expiry, post-save invalidation, account isolation, per-term schedule delays and
+cross-report reuse after two minutes. These caches reduce repeated client reads;
+they do not eliminate first-load reads, mobile traffic or server reconciliation,
+and do not replenish an already exhausted Firestore quota.
+
+## Quota incident, 2026-11-05
+
+Read-only checks of both a public setting and a private session path returned
+Firestore HTTP 429 `RESOURCE_EXHAUSTED`, with "Quota exceeded." Both hosts use
+this database, so profile/session checks can block sign-in on both. This is
+different from an incorrect password or a hosting deployment failure.
+
+The shared Firestore adapter now reports a specific usage-limit error and pauses
+repeat requests for 60 seconds in the same runtime after a quota response.
+Protected HTML shows a readable service-unavailable page rather than raw JSON.
+Security checks continue to fail closed; cached data cannot replace authorization.
+
+Report refresh steps now use five-minute intervals and reuse reports younger
+than five minutes. Dashboard full reconciliations use a 6,000-lesson-read daily
+budget estimate per teacher per host rather than 24,000. This is a planning
+limit, not a project-wide quota guarantee: profiles, other queries, mobile and
+multiple teachers also consume reads. Quota failures delay summary jobs for
+15 minutes; the Cloudflare teacher-preparation cron runs every six hours.
+Mobile-driven dirty updates remain separate from full reconciliation.
+
+Firestore free usage includes 50,000 document reads per day and resets around
+midnight Pacific time. Redeploying either host does not replenish database quota.
+Billing remains disabled. See [Firebase quota documentation](https://firebase.google.com/docs/firestore/quotas).
+
 ## What was measured
 
 Read-only requests against the production website and bounded reads using the
