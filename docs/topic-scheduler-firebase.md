@@ -139,3 +139,25 @@ a legacy control; section-specific scheduling is managed on the website.
 Production Firestore rules are managed outside this repository; this change does
 not deploy or relax them. Students should retain read-only schedule access.
 Website writes use the authenticated server gateway. No R2 storage is required.
+
+## Mobile schedule API
+
+The optional `studentSchedule` capability from `GET /api/account-access/config`
+advertises this route when `STUDENT_SCHEDULE_ENABLED=true` on the backend.
+
+- Send `POST /api/account-access/learning-schedule` with a Firebase ID token in
+  `Authorization: Bearer <token>` and JSON `{"termId":"term_02"}`. The server
+  derives the student's current section. Accepted terms are `term_01` through
+  `term_03`.
+- The response has `termId`, `sectionId`, `serverTimeUtc`, `schoolDate`
+  (Philippine date), and `lessons`. Each lesson has `lessonId`, `isLocked`,
+  `scheduledDate`, `activityDeadlineUtc`, `available`, `lessonOrder`, and
+  `title`. Dates or deadlines
+  with no value are empty strings. A missing lesson must stay locked.
+- Request once per selected term. A 401 permits one token refresh and retry.
+  Treat 403 as lost access, 409 as capability unavailable, and 429 or 503 as a
+  temporary failure. Keep a cached schedule only for its verified account and
+  section.
+
+The route reads the same Firestore schedules as Topic Scheduler until the
+shared database cutover.

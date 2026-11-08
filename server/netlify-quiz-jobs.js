@@ -1,4 +1,4 @@
-import { FirestoreAdmin } from "./firestore-admin.js";
+import { appStore } from "./supabase-app-store.js";
 import { requireStaff, readJson, staffProfile, stateCall } from "./web-auth.js";
 import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js";
 import { MAX_QUIZ_FILE_BYTES, MAX_QUIZ_TEXT_CHARACTERS } from "../js/quiz-limits.js";
@@ -13,7 +13,7 @@ const validId = id => typeof id === "string" && /^[a-f0-9]{32}$/.test(id);
 const chunkKey = (id, index) => `quiz-chunks/${id}/${String(index).padStart(2, "0")}`;
 const digest = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), byte => byte.toString(16).padStart(2, "0")).join("");
 
-export async function netlifyQuizJobs({ request, env, store }, { database = new FirestoreAdmin(env), authenticate = requireStaff, now = () => Date.now(), dispatch = dispatchJob } = {}) {
+export async function netlifyQuizJobs({ request, env, store }, { database = appStore(env), authenticate = requireStaff, now = () => Date.now(), dispatch = dispatchJob } = {}) {
   try {
     const actor = await authenticate(request, env, database);
     if (actor.role !== "teacher") throw fail("Only a teacher can generate quizzes.", 403);
@@ -76,7 +76,7 @@ export async function netlifyQuizJobs({ request, env, store }, { database = new 
   } catch (error) { return json({ error: [400, 401, 403, 409, 410, 413, 429].includes(error.status) ? error.message : "The quiz upload could not be completed. Please retry." }, error.status || 503); }
 }
 
-export async function runNetlifyQuiz(id, env, store, { database = new FirestoreAdmin(env), generate = generateQuiz, now = () => Date.now() } = {}) {
+export async function runNetlifyQuiz(id, env, store, { database = appStore(env), generate = generateQuiz, now = () => Date.now() } = {}) {
   if (!validId(id)) throw new Error("Invalid quiz job");
   const key = "quiz-jobs/" + id, previous = await store.getWithMetadata(key, { type: "json", consistency: "strong" }), job = previous?.data;
   if (!job || job.status !== "queued" || job.expiresAt <= now()) return;

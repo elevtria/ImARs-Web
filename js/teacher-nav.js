@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged, signOut } from "./firebase-auth.js";
 import { initWebSession } from "./web-session.js";
+import { initTeacherNotifications } from "./teacher-notifications.js";
 
 const nameElement = document.querySelector(".side-user .user-meta strong");
 const avatarElement = document.querySelector(".side-user .user-avatar");
@@ -25,6 +26,7 @@ if (nameElement && avatarElement) {
   const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
   const auth = getAuth(app);
   initWebSession(auth);
+  initTeacherNotifications(app, auth);
 
   onAuthStateChanged(auth, (user) => {
     if (!user) return;

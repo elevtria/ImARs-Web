@@ -25,6 +25,16 @@ export async function serviceToken(env, fetcher = fetch, now = Date.now()) {
   return job.promise;
 }
 
+export async function firebaseIdentity(env, uid, fetcher = fetch) {
+  const token = await serviceToken(env, fetcher);
+  const response = await fetcher("https://identitytoolkit.googleapis.com/v1/projects/imars-db-a733b/accounts:lookup", {
+    method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ localId: [uid] }), signal: AbortSignal.timeout(10_000)
+  });
+  if (!response.ok) throw new Error("Account access unavailable");
+  return (await response.json()).users?.find(user => user.localId === uid) || null;
+}
+
 async function requestServiceToken(account, fetcher, now) {
   const issued = Math.floor(now / 1000);
   const payload = encode(utf8(JSON.stringify({ alg: "RS256", typ: "JWT" }))) + "." + encode(utf8(JSON.stringify({
@@ -177,15 +187,8 @@ export class FirestoreAdmin {
     this.transaction = null;
     await this.request("documents:rollback", { method: "POST", body: JSON.stringify({ transaction }) });
   }
-  async identity(uid) {
-    const token = await serviceToken(this.env, this.fetcher);
-    const response = await this.fetcher("https://identitytoolkit.googleapis.com/v1/projects/imars-db-a733b/accounts:lookup", {
-      method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ localId: [uid] }), signal: AbortSignal.timeout(10_000)
-    });
-    if (!response.ok) throw new Error("Account access unavailable");
-    const result = await response.json();
-    return result.users?.find(user => user.localId === uid) || null;
+  identity(uid) {
+    return firebaseIdentity(this.env, uid, this.fetcher);
   }
   async commit(writes) {
     const prepared = [];

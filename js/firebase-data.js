@@ -197,7 +197,14 @@ export function writeBatch() {
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
 export const getTeacherTopicOverview = () => request({ action: "teacher-topic-overview" });
-export const getDashboardSummary = () => request({ action: "dashboard-summary" });
+export function getDashboardSummary() {
+  const uid = visitUser();
+  const load = () => {
+    if (visitUser() !== uid) throw new Error("Sign-in changed.");
+    return request({ action: "dashboard-summary" });
+  };
+  return uid ? pool.read("dashboard-summary", uid, load) : load();
+}
 async function studentPageRequest(action, options, requestOptions) {
   const uid = visitUser(), cache = teacherViewCache(), version = cache.version();
   const scope = options.sectionId || (options.firstSection ? "first" : "all");

@@ -27,7 +27,10 @@ test("one shared teacher record enforces both login directions across independen
   const store = sharedStore();
   const webEpoch = await openTeacherSession(env, store, teacher, "web");
   assert.equal(await checkTeacherSession(env, store, teacher, "web", webEpoch), true);
+  const sessionPath = "_accountAccess/teacher-a/sessions/teacher";
+  const version = store.rows.get(sessionPath).updateTime;
   assert.equal(await openTeacherSession(env, store, teacher, "web"), webEpoch, "same-platform tabs can coexist");
+  assert.equal(store.rows.get(sessionPath).updateTime, version, "an unchanged web session does not write to the database");
   await openTeacherSession(env, store, teacher, "mobile", receipt("a"));
   assert.equal(await checkTeacherSession(env, store, teacher, "web", webEpoch), false);
   assert.equal(await checkTeacherSession(env, store, teacher, "mobile", receipt("a")), true);

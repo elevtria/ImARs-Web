@@ -29,10 +29,31 @@ function fixture(transport, { now = Date.now, sharedCache } = {}) {
       return { ok: true, json: async () => result.results[0].document.data };
     }
   });
-  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion,getStudentPage,getTeacherReportPage});", context);
+  const api = vm.runInContext(source + "\n({doc,collection,query,where,orderBy,limit,getDoc,getDocs,setDoc,writeBatch,onSnapshot,serverTimestamp,arrayUnion,getStudentPage,getTeacherReportPage,getDashboardSummary});", context);
   return { api, calls, timers, delays, context, events, cache, setUser: value => { uid = value; cache.setOwner(uid); }, invalidated: () => invalidated };
 }
 const document = (path, data) => ({ id: path.split("/").at(-1), path, data });
+
+test("dashboard and bell share pending summaries within one visit without caching the result", async () => {
+  const releases = [];
+  const f = fixture(() => new Promise(resolve => releases.push(resolve)));
+  const dashboard = f.api.getDashboardSummary(), bell = f.api.getDashboardSummary();
+  await flush();
+  assert.equal(f.calls.length, 1);
+  f.setUser("teacher-b");
+  const other = f.api.getDashboardSummary();
+  await flush();
+  assert.equal(f.calls.length, 2);
+  releases[0]({ ready: false }); releases[1]({ ready: true });
+  assert.equal((await dashboard).ready, false);
+  assert.equal((await bell).ready, false);
+  assert.equal((await other).ready, true);
+  const fresh = f.api.getDashboardSummary();
+  await flush();
+  assert.equal(f.calls.length, 3);
+  releases[2]({ ready: false });
+  assert.equal((await fresh).ready, false);
+});
 
 test("assigned section lists survive navigation without duplicate reads, expire, and invalidate after confirmed saves", async () => {
   let now = 1000000;

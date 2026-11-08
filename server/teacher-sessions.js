@@ -18,8 +18,10 @@ export async function openTeacherSession(env, store, account, platform, receipt)
     const previous = await store.get(key);
     // Existing website tabs may coexist. A mobile takeover always changes the
     // epoch, so an old website cookie can never revive after another web login.
-    const epoch = platform === "web" && owned(previous?.data, account) && previous.data.platform === "web" && valid(previous.data.epoch)
-      ? previous.data.epoch : random();
+    const existingWebSession = platform === "web" && owned(previous?.data, account) &&
+      previous.data.platform === "web" && valid(previous.data.epoch);
+    if (existingWebSession && previous.data.mobileReceiptHash === "") return previous.data.epoch;
+    const epoch = existingWebSession ? previous.data.epoch : random();
     const data = { schemaVersion: 1, uid: account.uid, profileId: account.id, platform, epoch,
       mobileReceiptHash: platform === "mobile" ? await digest(receipt) : "", updatedAt: { $type: "serverTimestamp" } };
     try {

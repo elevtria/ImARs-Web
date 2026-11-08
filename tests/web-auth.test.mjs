@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
 import { decision, emptyState, passwordFailed, verifiedSuccess, resetAfterApproval, cooldowns } from "../server/web-lockout.js";
 import { WebLoginState, default as privateWorker } from "../workers/web-auth-worker.js";
@@ -7,6 +8,7 @@ import { authApi, protectWebsite, signSession, webSession, staffProfile } from "
 import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } from "../server/web-session.js";
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
+import { decodeFields, encodeFields } from "../server/firestore-admin.js";
 
 const accounts = [
   { id: "TEACH1000", uid: "teacher-a", email: "teacher@example.test", role: "teacher" },
@@ -143,6 +145,57 @@ function fixture() {
     now: () => time, advance: amount => { time += amount; }, count: () => verifications,
     outage: () => { outage = true; }, wrongUid: () => { wrongUid = true; } };
 }
+
+test("teacher sign-in and session checks use Supabase even when Firestore is unavailable", async t => {
+  const app = fixture();
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" } });
+  const dataset = "9b92e1e1-fbf5-4983-a570-c01fccd16c4d";
+  const teacher = accounts[0];
+  const sessionPath = "webSettings/accountAccess/accounts/" + teacher.uid + "/sessions/teacher";
+  const time = "2026-11-08T07:00:00Z";
+  const rows = new Map([["users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: true }]]);
+  Object.assign(app.env, {
+    WEB_DATA_ENABLED: "true", TEACHER_SESSION_SYNC_ENABLED: "true", IMARS_SUPABASE_WEB_DATA: "true",
+    IMARS_SUPABASE_URL: "https://fixture.supabase.co", IMARS_SUPABASE_APP_DATASET_ID: dataset,
+    SUPABASE_SECRET_KEY: "sb_secret_fixture",
+    FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "imars-db-a733b", private_key: privateKey,
+      client_email: "fixture@imars-db-a733b.iam.gserviceaccount.com" })
+  });
+  let firestoreCalls = 0, identityCalls = 0;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname === "firestore.googleapis.com") {
+      firestoreCalls++;
+      return Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 });
+    }
+    if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "fixture", expires_in: 3600 });
+    if (url.hostname === "identitytoolkit.googleapis.com") {
+      identityCalls++;
+      return Response.json({ users: [{ localId: teacher.uid, email: teacher.email, emailVerified: true }] });
+    }
+    assert.equal(url.hostname, "fixture.supabase.co");
+    if (url.pathname.endsWith("/imars_app_datasets")) return Response.json([{ revision: dataset }]);
+    if (url.pathname.endsWith("/imars_app_documents")) {
+      const paths = url.searchParams.get("path").slice(4, -1).split(",");
+      return Response.json(paths.filter(path => rows.has(path)).map(path => ({ path, fields: encodeFields(rows.get(path)), update_time: time })));
+    }
+    assert.match(url.pathname, /\/rpc\/imars_commit_app_documents$/);
+    const { changes } = JSON.parse(options.body);
+    assert.equal(changes[0].path, sessionPath);
+    assert.equal(changes[0].previous, null);
+    rows.set(sessionPath, decodeFields(changes[0].fields));
+    return new Response(null, { status: 204 });
+  });
+
+  const signedIn = await app.login(teacher.id, "correct");
+  assert.equal(signedIn.status, 200);
+  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 200);
+  rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: false });
+  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 403);
+  assert.equal(identityCalls, 1);
+  assert.equal(firestoreCalls, 0);
+});
 
 test("three failures cause five minutes, the next three five hours, and the final three require manual recovery", () => {
   let state = emptyState(), now = 1000;

@@ -45,6 +45,9 @@ test("prepared dashboard keeps all-term metrics, zero scores and the latest 25 s
   assert.equal(summary.postSum, 240); assert.equal(summary.arMinutes, 180);
   assert.equal(summary.recent.length, 25); assert.equal(summary.recent[0].id, "S00000");
   assert.ok(!JSON.stringify(summary).includes("postTestScore"));
+  assert.equal(summary.notifications.length, 50);
+  assert.equal(new Set(summary.notifications.map(item => item.id)).size, 50);
+  assert.ok(summary.notifications.some(item => item.studentId === "S00000" && item.kind === "pre"));
 });
 
 test("1,000-student preparation is bounded and warm reads fetch zero Firestore result documents", async t => {
@@ -67,6 +70,7 @@ test("a confirmed mobile lesson change rereads only that lesson and updates tota
   assert.deepEqual(f.batches.flat().filter(path => path.includes("/test_results/")), [path]);
   await f.engine.invalidate(["S00000"], "term_03/lessons/lesson_01"); await f.finish();
   assert.equal((await f.engine.read(f.scope)).summary.postSum, 26, "retries must not double-count points");
+  assert.equal((await f.engine.read(f.scope)).summary.notifications.length, 6, "grading must not create another completion notification");
 });
 
 test("archiving and moving a student removes their contribution without a full roster scan", async () => {
@@ -74,6 +78,7 @@ test("archiving and moving a student removes their contribution without a full r
   f.data.get("users/S00000").active = false;
   await f.engine.invalidate(["S00000"]); await f.finish();
   assert.equal((await f.engine.read(f.scope)).summary.total, 1);
+  assert.ok((await f.engine.read(f.scope)).summary.notifications.every(item => item.studentId !== "S00000"));
   f.data.get("users/S00001").classCode = "B";
   await f.engine.invalidate(["S00001"]); await f.finish();
   assert.equal((await f.engine.read(f.scope)).summary.total, 0);

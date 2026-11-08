@@ -1,7 +1,8 @@
 import { decision, emptyState, passwordFailed, resetAfterApproval, verifiedSuccess } from "../server/web-lockout.js";
 import { checkSession, createSession, pruneSessions, sessionTiming, validSessionId } from "../server/web-session.js";
 import { DashboardSummary } from "../server/dashboard-summary.js";
-import { FirestoreAdmin, databaseQuotaFailure } from "../server/firestore-admin.js";
+import { databaseQuotaFailure } from "../server/firestore-admin.js";
+import { appStore } from "../server/supabase-app-store.js";
 
 const apiKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -178,7 +179,7 @@ export default {
   async scheduled(_event, env) {
     // Prepare new teachers before their first website visit. Existing summaries
     // are left intact; mobile notifications and authenticated visits refresh them.
-    const store = new FirestoreAdmin(env);
+    const store = appStore(env);
     const teachers = await store.query("users", { filters: [{ field: "role", value: "teacher" }], limit: 5000 });
     for (const teacher of teachers) {
       if (!teacher.data.uid || teacher.data.active === false || ["inactive", "disabled", "deleted", "archived"].includes(String(teacher.data.status || "").toLowerCase())) continue;

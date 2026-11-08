@@ -1,14 +1,21 @@
-import { FirestoreAdmin } from "./firestore-admin.js";
+import { appStore, supabaseWebData } from "./supabase-app-store.js";
+import { lessonNotifications, latestNotifications } from "../js/test-notifications.js";
 
 const valid = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const active = data => data && data.active !== false && !["inactive", "disabled", "deleted", "archived"].includes(String(data.status || "").toLowerCase());
 const positive = value => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 const time = value => { const date = new Date(value || 0); return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.getTime() : 0; };
-const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, recent: [] });
+const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, recent: [], notifications: [] });
 const profileFields = ["active", "status", "role", "classCode", "displayName", "fullName"];
 const resultFields = ["isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isPostTestCompleted", "postTestScore", "postTestTotalQuestions", "postTestHeatmap",
-  "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
-const signature = sections => JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
+  "preTestCompletedAt", "postTestCompletedAt", "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
+export function dashboardScope(sections, env) {
+  const scope = JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
+  return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
+}
+export function dashboardRefreshInterval(summary) {
+  return Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
+}
 export const lessonPaths = id => [1, 2, 3].flatMap(term => [1, 2, 3, 4].map(lesson => `users/${id}/test_results/term_0${term}/lessons/lesson_0${lesson}`));
 
 function points(data, kind, maximum) {
@@ -40,16 +47,18 @@ export function summarizeStudent(id, profile, section, lessons) {
 
 export function addStudent(totals, row) {
   totals.total++;
+  totals.notifications = latestNotifications([...(totals.notifications || []), ...(row.notifications || [])]);
   for (const field of ["preSum", "preCount", "postSum", "postCount", "arMinutes"]) totals[field] += row[field];
-  if (row.hasActivity) totals.recent = [...totals.recent, row].sort((a, b) => b.lastActive - a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0, 25);
+  const { notifications, ...recentRow } = row;
+  if (row.hasActivity) totals.recent = [...totals.recent, recentRow].sort((a, b) => b.lastActive - a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0, 25);
   return totals;
 }
 
 // Each teacher has a separate private Durable Object. Only compact rollups are
 // retained; answers, passwords and full lesson documents are never cached here.
 export class DashboardSummary {
-  constructor(storage, env, { store = new FirestoreAdmin(env), now = () => Date.now(), report = () => {} } = {}) {
-    this.storage = storage; this.store = store; this.now = now; this.report = report;
+  constructor(storage, env, { store = appStore(env), now = () => Date.now(), report = () => {} } = {}) {
+    this.storage = storage; this.store = store; this.now = now; this.report = report; this.env = env;
   }
   async schedule(delay = 1000) {
     const next = this.now() + delay, alarm = await this.storage.getAlarm();
@@ -59,7 +68,7 @@ export class DashboardSummary {
     if (!valid(body.id) || !valid(body.uid) || !Array.isArray(body.sections) || body.sections.length > 500 ||
         body.sections.some(row => !valid(row.id) || typeof row.name !== "string" || row.name.length > 300) ||
         new Set(body.sections.map(row => row.id)).size !== body.sections.length) throw new Error("Invalid dashboard scope");
-    const previous = await this.storage.get("dashboard:config"), scope = signature(body.sections);
+    const previous = await this.storage.get("dashboard:config"), scope = dashboardScope(body.sections, this.env);
     if (!previous || previous.id !== body.id || previous.uid !== body.uid || previous.scope !== scope) {
       await this.storage.put("dashboard:config", { id: body.id, uid: body.uid, sections: body.sections, scope });
       await this.start();
@@ -68,7 +77,7 @@ export class DashboardSummary {
     // Legacy app builds have no sync notification. Reconcile quietly while the
     // dashboard is in use. Leave room for mobile, login checks and both hosts
     // within the shared free database quota.
-    const interval = Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
+    const interval = dashboardRefreshInterval(summary);
     if (!summary || summary.scope !== scope || (!body.warmOnly && this.now() - summary.reconciledAt >= interval)) {
       if (!await this.storage.get("dashboard:job")) await this.start();
     }
@@ -77,7 +86,7 @@ export class DashboardSummary {
   }
   async read(body) {
     const config = await this.storage.get("dashboard:config"), summary = await this.storage.get("dashboard:summary");
-    if (!config || config.id !== body.id || config.uid !== body.uid || config.scope !== signature(body.sections)) return null;
+    if (!config || config.id !== body.id || config.uid !== body.uid || config.scope !== dashboardScope(body.sections, this.env)) return null;
     if (!summary || summary.scope !== config.scope) return { ready: false };
     const { generation, scope, ...result } = summary;
     const pending = Boolean(await this.storage.get("dashboard:job")) || (await this.storage.list({ prefix: "dashboard:dirty:", limit: 1 })).size > 0;
@@ -122,10 +131,14 @@ export class DashboardSummary {
         if (saved?.generation === generation) lessons = saved.lessons || {};
         for (const path of requested(profile)) {
           const part = summarizeStudent("", {}, "", records.get(path) ? [records.get(path).data] : []);
+          const [termId, , lessonId] = path.split("/test_results/")[1].split("/");
+          part.notifications = lessonNotifications(profile.id, profile.data.displayName || profile.data.fullName || "Student", section.name,
+            termId, lessonId, records.get(path)?.data || {});
           delete part.id; delete part.name; delete part.section;
           lessons[path.split("/test_results/")[1]] = part;
         }
         row = summarizeStudent(profile.id, profile.data, section.name, []);
+        row.notifications = Object.values(lessons).flatMap(part => (part.notifications || []).map(item => ({ ...item, name: row.name, section: row.section })));
         for (const part of Object.values(lessons)) {
           for (const field of ["preSum", "preCount", "postSum", "postCount", "arMinutes"]) row[field] += part[field];
           row.lastActive = Math.max(row.lastActive, part.lastActive); row.hasActivity ||= part.hasActivity;

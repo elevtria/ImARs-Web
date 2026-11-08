@@ -1,0 +1,50 @@
+{
+  "fixture": "30 students, 3 terms, 4 lessons per term; 100ms simulated Firestore response per query; no real Firebase access",
+  "results": [
+    {
+      "page": "Dashboard",
+      "beforeMs": 3802,
+      "afterMs": 949,
+      "outcome": "loaded",
+      "dataMs": 739,
+      "renderMs": 16,
+      "startupMs": 151,
+      "readyMs": 933,
+      "queries": 35,
+      "duplicateReadsAvoided": 1,
+      "documentsReceived": 153,
+      "failedReads": 0,
+      "maxConcurrentReads": 8
+    },
+    {
+      "page": "Analytics",
+      "beforeMs": 10118,
+      "afterMs": 1749,
+      "outcome": "loaded",
+      "dataMs": 1553,
+      "renderMs": 7,
+      "startupMs": 158,
+      "readyMs": 1734,
+      "queries": 96,
+      "duplicateReadsAvoided": 1,
+      "documentsReceived": 392,
+      "failedReads": 0,
+      "maxConcurrentReads": 8
+    },
+    {
+      "page": "Records",
+      "beforeMs": 9806,
+      "afterMs": 1708,
+      "outcome": "loaded",
+      "dataMs": 1556,
+      "renderMs": 11,
+      "startupMs": 123,
+      "readyMs": 1700,
+      "queries": 93,
+      "duplicateReadsAvoided": 1,
+      "documentsReceived": 380,
+      "failedReads": 0,
+      "maxConcurrentReads": 8
+    }
+  ]
+}

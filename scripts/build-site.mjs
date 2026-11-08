@@ -15,7 +15,7 @@ if (relative(root, output) !== "dist" || basename(output) !== "dist") {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-const pages = (await readdir(root)).filter((name) => name.endsWith(".html"));
+const pages = (await readdir(root)).filter(name => name.endsWith(".html") && !name.startsWith("_"));
 const publicPaths = [...pages, "assets", "css", "js", "_routes.json"];
 for (const name of publicPaths) {
   await cp(join(root, name), join(output, name), {
@@ -29,7 +29,7 @@ for (const name of publicPaths) {
 const theme = { tailwind: {} };
 runInNewContext(await readFile(join(root, "js/tailwind.config.js"), "utf8"), theme, { timeout: 1000 });
 const utilityStyles = await postcss([tailwindcss({ ...theme.tailwind.config,
-  content: [join(root, "*.html").replaceAll("\\", "/"), join(root, "js", "*.js").replaceAll("\\", "/"),
+  content: [...pages.map(name => join(root, name).replaceAll("\\", "/")), join(root, "js", "*.js").replaceAll("\\", "/"),
     "!" + join(root, "js", "*.min.js").replaceAll("\\", "/")]
 })]).process("@tailwind base; @tailwind components; @tailwind utilities;", { from: undefined });
 await writeFile(join(output, "css/utilities.css"), utilityStyles.css);
