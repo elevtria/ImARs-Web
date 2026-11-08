@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/floating-cubes.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="teacher-manual-page" data-auth-pending>
+<body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
     <header class="topbar">
@@ -47,12 +47,18 @@
       <section class="manual-sheet manual-sheet-setup" aria-labelledby="setupHeading" data-auth-shell>
         <div class="manual-cover">
           <div class="manual-cover-main">
+            <div class="manual-kicker"><span>ImARs · TEACHER FIELD GUIDE</span><span data-school-year>SY 2026–27</span></div>
             <section class="hero manual-hero" data-auth-shell>
               <div>
                 <h1 data-auth-shell>Teacher Manual</h1>
                 <p>Follow the steps below to set up your class, prepare lessons, and review student results.</p>
               </div>
+              <div class="manual-stamp" aria-label="ImARs Learning Platform">
+                <img class="manual-stamp-mark" src="assets/imars-logo.png" alt="ImARs logo" />
+                <span><b>ImARs</b><small>PLAN · SYNC · REVIEW</small></span>
+              </div>
             </section>
+            <div class="manual-meta-row"><span>GRADE 6 SCIENCE</span><i aria-hidden="true"></i><span>3 TERMS · 12 TOPICS</span><i aria-hidden="true"></i><span>UPDATED NOVEMBER 2026</span></div>
           </div>
           <div class="manual-cover-actions">
             <button class="banner-btn" id="downloadPdf" type="button">
@@ -71,7 +77,7 @@
           <div><h2 id="setupHeading">Set up your classroom</h2><p>Sign in, check your class, and import your student roster.</p></div>
         </div>
 
-        <div class="manual-setup-grid" id="manualSetupContent">
+        <div class="manual-setup-grid">
           <aside class="manual-feature-card">
             <span class="manual-feature-kicker">YOUR TEACHER ACCOUNT</span>
             <h3>Start with your class overview.</h3>
@@ -85,25 +91,25 @@
           <div class="manual-step-stack">
             <article class="manual-step-card" data-auth-shell>
               <span class="manual-step-number">1</span>
-              <div><span class="manual-step-kicker">BATCH UPLOAD</span><h3>Choose the destination section</h3><p>Open Batch Upload and select “Upload to section.” Use Add Section if needed; the new section is saved to your teacher account.</p></div>
+              <div><span class="manual-step-kicker">BATCH UPLOAD</span><h3>Choose the destination section</h3><p>Open Batch Upload and select “Upload to section.” Add a section first if needed.</p></div>
               <span class="manual-step-icon" aria-hidden="true">↗</span>
             </article>
             <article class="manual-step-card" data-auth-shell>
               <span class="manual-step-number">2</span>
-              <div><span class="manual-step-kicker">OFFICIAL TEMPLATE</span><h3>Fill in one student per row</h3><p>Download the Excel or CSV template. Keep these columns in order: <b>First Name, Last Name, Student ID, Email.</b> Replace the example students with your roster.</p></div>
+              <div><span class="manual-step-kicker">OFFICIAL TEMPLATE</span><h3>Fill in one student per row</h3><p>Download the Excel or CSV template. Keep <b>First Name, Last Name, Student ID, Email</b> in order and replace the examples.</p></div>
               <span class="manual-step-icon" aria-hidden="true">＋</span>
             </article>
             <article class="manual-step-card" data-auth-shell>
               <span class="manual-step-number">3</span>
-              <div><span class="manual-step-kicker">REVIEW THE IMPORT</span><h3>Upload and check the preview</h3><p>Drag in a .xlsx or .csv file, or choose Browse File. Select Confirm Import, then check the student count, names, IDs, and destination section.</p></div>
+              <div><span class="manual-step-kicker">REVIEW THE IMPORT</span><h3>Upload and check the preview</h3><p>Choose your .xlsx or .csv file and select Confirm Import. Check the names, IDs, and section in the preview.</p></div>
               <span class="manual-step-icon" aria-hidden="true">▤</span>
             </article>
             <article class="manual-step-card" data-auth-shell>
               <span class="manual-step-number">4</span>
-              <div><span class="manual-step-kicker">SAVE YOUR ROSTER</span><h3>Confirm and wait for success</h3><p>Select Confirm Import in the dialog to save the students. Wait for the success message, then open Student Records to check the selected section.</p></div>
+              <div><span class="manual-step-kicker">SAVE YOUR ROSTER</span><h3>Confirm and wait for success</h3><p>Select Confirm Import, wait for success, then check the section in Student Records.</p></div>
               <span class="manual-step-icon" aria-hidden="true">↑</span>
             </article>
-            <div class="manual-note"><b>Student IDs</b><span>Keep existing IDs, including leading zeros. A blank ID creates a new ID; importing an existing ID updates that student. The dropdown sets the section for every row.</span></div>
+            <div class="manual-note"><b>Student IDs</b><span>Keep leading zeros. A blank ID creates a new student; an existing ID updates that student. The section choice applies to every row.</span></div>
             <a class="manual-link" href="batch-upload.html">Open Batch Upload <span aria-hidden="true">↗</span></a>
           </div>
         </div>
@@ -115,48 +121,48 @@
           <span class="manual-section-chip">02 · PREPARE</span>
           <div><h2 id="prepareHeading">Plan lessons and prepare activities</h2><p>Manage lesson access, review quizzes, and download classroom markers.</p></div>
         </div>
-        <div class="manual-tool-grid" id="manualPrepareContent">
+        <div class="manual-tool-grid">
           <article class="manual-tool-card manual-tool-blue" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">▦</div><span class="manual-step-kicker">TOPIC SCHEDULER · DATES</span>
             <h3>Schedule lesson access</h3>
-            <p>Expand a term and choose Set date. A future date locks the topic until that day; choosing today unlocks it now. Save and wait for confirmation. Clear the date to cancel the schedule while keeping its current availability.</p>
-            <p>Term counts and Year Progress show <b>unlocked topics</b>. Scheduled topics count when their release date arrives. Check student reports for actual lesson completion.</p>
+            <p>Expand a term and select Set date. A future date keeps the topic locked until release; today makes it available now. Save the change, or clear the date to cancel the schedule.</p>
+            <p>Term counts and Year Progress show <b>unlocked topics</b>, not student completion.</p>
             <a class="manual-link" href="topic-scheduler.html">Open Topic Scheduler <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-yellow" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">▣</div><span class="manual-step-kicker">TOPIC SCHEDULER · LOCKS</span>
             <h3>Control topic availability</h3>
-            <p>Use a topic’s lock button, or Lock All / Unlock All for a term. A manual lock or unlock clears the scheduled date and updates the availability count. To release a locked topic later, set a new date after locking it.</p>
-            <p>Select your section, make the change, and wait for “Saved”.</p>
+            <p>Use a topic’s lock button, or Lock All / Unlock All for a term. Manual changes clear the scheduled date; set a new date if you want a later release.</p>
+            <p>Select your section and wait for “Saved” before leaving.</p>
           </article>
           <article class="manual-tool-card manual-tool-green" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">＋</div><span class="manual-step-kicker">QUIZ GENERATOR · SETUP</span>
             <h3>Create questions from a lesson</h3>
-            <p>Upload a PDF, DOCX, or PPTX up to 10 MB. Convert legacy PowerPoint files to PPTX or PDF first. Add a title, choose your section, and select 1–50 questions, difficulty, and multiple choice or true/false.</p>
-            <p>Select Generate quiz. Your learning content is sent to the AI service to create questions.</p>
+            <p>Upload a PDF, DOCX, or PPTX up to 10 MB. Add a title and section, then choose 1–50 questions, difficulty, and question type. Convert older PowerPoint files to PPTX or PDF first.</p>
+            <p>Select Generate quiz to create AI suggestions from the material.</p>
             <a class="manual-link" href="quiz-generator.html">Open Quiz Generator <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-blue" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">✓</div><span class="manual-step-kicker">QUIZ GENERATOR · REVIEW</span>
             <h3>Check every question and answer</h3>
-            <p>Accept the suggestions you want or discard unsuitable ones. In the editor, correct the wording, answer choices, and correct answer. Add or remove questions as needed, keeping the quiz within 50 questions.</p>
-            <p>Review accuracy and suitability for your class before saving or making the quiz available.</p>
+            <p>Accept useful suggestions and discard unsuitable ones. Edit wording, choices, and correct answers. Add or remove questions as needed, up to 50 total.</p>
+            <p>Check accuracy and suitability before saving the quiz.</p>
           </article>
           <article class="manual-tool-card manual-tool-yellow" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">◷</div><span class="manual-step-kicker">QUIZ GENERATOR · SAVE</span>
             <h3>Choose when a quiz is available</h3>
-            <p>Choose Save as draft to keep it locked, Available now to mark it available for the selected section, or Schedule for a future date and time. Scheduling uses your device’s local time.</p>
-            <p>Select Save quiz and check the confirmation in My quizzes. Use Edit to revise a saved quiz or Delete to remove it.</p>
+            <p>Choose Save as draft, Available now, or Schedule for a future date and time. Scheduled times use your device’s local time.</p>
+            <p>Save the quiz and confirm it appears in My quizzes. Use Edit or Delete as needed.</p>
           </article>
           <article class="manual-tool-card manual-tool-green" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">↓</div><span class="manual-step-kicker">OFFLINE SYNC &amp; AR MARKERS</span>
             <h3>Prepare marker files before class</h3>
-            <p>Download a topic ZIP or all markers, extract the images, and prepare them for the student AR app. The teacher portal provides the files; AR activities run in the student app.</p>
-            <p>Progress tracks download requests. Check that the ZIP actually downloaded. Export Report saves a CSV of marker download status, separate from student grades.</p>
+            <p>Download a topic ZIP or all markers, then extract the images for the student AR app. AR activities run in that app.</p>
+            <p>Progress tracks requests, so confirm the ZIP downloaded. Export Report saves marker download status, not grades.</p>
             <a class="manual-link" href="offline-sync.html">Open marker downloads <span aria-hidden="true">↗</span></a>
           </article>
         </div>
-        <div class="manual-note"><b>Before going offline</b><span>Sign in and download the files you need while connected. Marker download progress can sync to your teacher account; the ZIP files still need to be downloaded on each device. Roster imports, quiz generation, and saving results need an internet connection.</span></div>
+        <div class="manual-note"><b>Before going offline</b><span>Sign in and download markers on each device while connected. Roster imports, quiz generation, and saving results still need internet access.</span></div>
         <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · LESSON PREPARATION</span><span>02 <i aria-hidden="true"></i> 03</span></div>
       </section>
 
@@ -165,39 +171,39 @@
           <span class="manual-section-chip">03 · SYNC &amp; REVIEW</span>
           <div><h2 id="syncHeading">Sync offline results with a Grade QR code</h2><p>Use the student’s results QR code, then review the saved records.</p></div>
         </div>
-        <div class="manual-note manual-sync-note"><b>QR offline sync only</b><span>The portal scanner transfers students’ offline learning results. It does not scan printed AR markers or open 3D lessons. Keep the teacher device online to save the results to the class records.</span></div>
-        <div class="manual-tool-grid" id="manualSyncContent">
+        <div class="manual-note manual-sync-note"><b>QR offline sync only</b><span>The portal scanner transfers student results. It does not scan AR markers or open 3D lessons. Keep the teacher device online to save results.</span></div>
+        <div class="manual-tool-grid">
           <article class="manual-tool-card manual-tool-blue" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">1</div><span class="manual-step-kicker">SCAN OR UPLOAD</span>
             <h3>Read the student’s Grade QR</h3>
-            <p>Ask the student to display their Grade QR code from the student app. Open Scan QR (Offline Sync), choose Open Device Camera, allow camera access, and hold the full QR code inside the frame.</p>
-            <p>Alternatively, choose “Or upload a QR code screenshot / image” and select a clear image of the Grade QR code.</p>
+            <p>Ask the student to display their Grade QR. Open Scan QR (Offline Sync), allow camera access, and keep the whole code inside the frame.</p>
+            <p>You can also upload a clear screenshot or image of the code.</p>
             <a class="manual-link" href="sync-offline-results.html">Open QR offline sync <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-yellow" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">2</div><span class="manual-step-kicker">CHECK THE RESULT</span>
             <h3>Confirm the student and sync status</h3>
-            <p>The result dialog shows the student’s name and ID, pre/post-test averages, learning gain, and a lesson breakdown. Check the identity and wait for <b>“All Terms &amp; Lessons Synced!”</b> before treating the transfer as saved.</p>
-            <p>Recent Scans lists recent QR activity. Reopen Student Records or Analytics to load the updated results.</p>
+            <p>Check the student’s name, ID, averages, and lesson breakdown. Wait for <b>“All Terms &amp; Lessons Synced!”</b> to confirm the save.</p>
+            <p>Recent Scans lists QR activity. Reopen Student Records or Analytics for updated results.</p>
           </article>
           <article class="manual-tool-card manual-tool-green" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">3</div><span class="manual-step-kicker">RETRY OR CONTINUE</span>
             <h3>Finish one student at a time</h3>
-            <p>If the dialog says “Displayed from QR (Offline Mode),” saving was not confirmed. Reconnect and scan or upload the Grade QR again, then check for the success message.</p>
-            <p>Close the result or choose Scan Another. The camera stops after a successful read; open it again or upload the next student’s QR image.</p>
+            <p>If the dialog says “Displayed from QR (Offline Mode),” saving was not confirmed. Reconnect, scan or upload again, and wait for success.</p>
+            <p>Choose Scan Another for the next student. Reopen the camera if needed.</p>
           </article>
           <article class="manual-tool-card manual-tool-blue" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">▤</div><span class="manual-step-kicker">STUDENT RECORDS</span>
             <h3>Review each learner</h3>
-            <p>Search by student name and filter by section. Each record shows available AR time, module time, pre/post-test results, overall score, and last activity.</p>
-            <p>“N/A” or missing time means the relevant data is not available. A Grade QR transfers test results; it does not supply AR or module time.</p>
+            <p>Search by name or filter by section. Records show AR and module time, test results, overall score, and last activity.</p>
+            <p>Missing time means it was not recorded. Grade QR sync transfers test results, not AR or module time.</p>
             <a class="manual-link" href="student-records.html">Open Student Records <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-yellow" data-auth-shell>
             <div class="manual-tool-icon" aria-hidden="true">↗</div><span class="manual-step-kicker">ANALYTICS</span>
             <h3>Compare progress across lessons</h3>
-            <p>Review overall pre/post-test averages and improvement. Search names or filter sections in the student table; use the term tabs for topic completion rates.</p>
-            <p>The table includes students with paired pre/post-test results. Its name and section filters apply to the table, while the overview remains a combined summary.</p>
+            <p>Compare pre/post-test averages and improvement. Search or filter the student table, and switch terms for topic completion rates.</p>
+            <p>Table filters affect student rows; the overview remains a combined summary.</p>
             <a class="manual-link" href="analytics.html">Open Analytics <span aria-hidden="true">↗</span></a>
           </article>
           <article class="manual-tool-card manual-tool-green" data-auth-shell>
