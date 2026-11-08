@@ -1,4 +1,5 @@
 import { FirestoreAdmin, databaseQuotaFailure } from "./firestore-admin.js";
+import { SupabaseAppStore } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
@@ -18,6 +19,7 @@ const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "d
   "subject", "sections", "section", "classCode", "teacherId", "adviserId", "teacher", "gradeSection", "sectionName", "className", "school", "roleLabel",
   "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "archiveReason", "avatarId", "isRegistered", "isClaimed", "joined"];
 const schoolYears = new WeakMap();
+const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
 
 async function readSchoolYear(store) {
@@ -27,7 +29,7 @@ async function readSchoolYear(store) {
   if (entry?.until > Date.now()) return entry.value;
   entry = {};
   schoolYears.set(key, entry);
-  entry.pending = store.get("webSettings/schoolYear").then(row => {
+  entry.pending = store.get(schoolYearPath).then(row => {
     const year = row?.data.startYear;
     entry.value = { startYear: Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : 2026 };
     entry.until = Date.now() + 60_000;
@@ -428,26 +430,37 @@ async function teacherTopicOverview(scope) {
   }) })) };
 }
 
-export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
+export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff,
+  settingsFetcher = fetch } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
-  let started = false;
+  const supabaseSettings = env.IMARS_SUPABASE_WEB_SETTINGS === "true";
+  let transaction;
+  const settingsStore = () => supabaseSettings ? new SupabaseAppStore(env, settingsFetcher) : store;
   try {
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
-      return respond(await readSchoolYear(store));
+      return respond(await readSchoolYear(settingsStore()));
     }
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
     const actorBefore = await authenticate(request, env, store);
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
-    if (["commit", "create-teacher"].includes(body.action)) { await store.begin(); started = true; }
+    if (["commit", "create-teacher"].includes(body.action)) {
+      const changesSchoolYear = body.action === "commit" && Array.isArray(body.writes) && body.writes.some(write => write?.path === schoolYearPath);
+      if (supabaseSettings && changesSchoolYear) {
+        if (actorBefore.role !== "admin") throw fail();
+        if (body.writes.length !== 1) throw fail("Save the school year separately.", 400);
+        transaction = settingsStore();
+      } else transaction = store;
+      await transaction.begin();
+    }
     // Re-read the actor inside the transaction so disabling the actor or
     // reassigning a class races safely with the write rather than granting it.
-    const actor = started ? await authenticate(request, env, store) : actorBefore;
+    const actor = transaction ? await authenticate(request, env, store) : actorBefore;
     authenticationMs = Date.now() - requestStarted;
-    const scope = new Scope(store, actor);
+    const scope = new Scope(transaction || store, actor);
     if (body.action === "dashboard-summary") {
       if (actor.role !== "teacher") throw fail();
       if (env.DASHBOARD_SUMMARIES_ENABLED !== "true") return respond({ enabled: false });
@@ -480,7 +493,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       // The private reservation's nonce is committed only by this action.
       // Mobile registration merges UID fields into the existing invitation.
       await scope.get("users/" + invitation.id);
-      await store.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); started = false;
+      await transaction.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); transaction = null;
       return respond({ id: invitation.id });
     }
     if (body.action === "check-student-ids") {
@@ -526,7 +539,10 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       }
       const results = [];
       for (let index = 0; index < refs.length; index += 8) results.push(...await Promise.all(refs.slice(index, index + 8).map(async ref => {
-        if (ref.kind === "document") return { document: output(ref.path, await scope.get(ref.path), undefined, sectionIds) };
+        if (ref.kind === "document") {
+          const row = ref.path === schoolYearPath && supabaseSettings ? await settingsStore().get(ref.path) : await scope.get(ref.path);
+          return { document: output(ref.path, row, undefined, sectionIds) };
+        }
         if (batchedResults.has(ref.path)) return { documents: batchedResults.get(ref.path) };
         if (ref.path === "users" && ref.filters.some(filter => filter.field === "uid")) {
           return { documents: [output("users/" + actor.id, await scope.get("users/" + actor.id), actor.id)] };
@@ -553,8 +569,9 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       if (!Array.isArray(body.writes) || !body.writes.length || body.writes.length > 100 || new Set(body.writes.map(write => write?.path)).size !== body.writes.length) throw fail("Save between 1 and 100 distinct records at a time.", 400);
       const writes = [];
       for (const write of body.writes) writes.push(await scope.write(write));
-      await store.commit(writes); started = false;
-      if (writes.some(write => write.path === "webSettings/schoolYear")) schoolYears.delete(schoolYearCacheKey(store));
+      await transaction.commit(writes);
+      if (writes.some(write => write.path === schoolYearPath)) schoolYears.delete(schoolYearCacheKey(transaction));
+      transaction = null;
       if (env.DASHBOARD_SUMMARIES_ENABLED === "true" && actor.role === "teacher") {
         const ids = [...new Set(writes.filter(write => /^users\/[A-Za-z0-9_-]+(?:\/test_results\/|$)/.test(write.path)).map(write => write.path.split("/")[1]))];
         if (ids.length) {
@@ -574,7 +591,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
     }
     throw fail("Unknown data operation.", 400);
   } catch (error) {
-    if (started) await store.rollback().catch(() => {});
+    if (transaction) await transaction.rollback().catch(() => {});
     if (databaseQuotaFailure(error)) return respond({ error: error.message, code: "DATABASE_QUOTA_EXCEEDED" }, 503);
     const status = [400, 401, 403, 409, 413].includes(error.status) ? error.status : 503;
     return respond({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,

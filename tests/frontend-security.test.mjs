@@ -248,9 +248,7 @@ test("post-test heatmap escapes question text and switching loaded topics adds n
     record("lesson_02", { isPostTestCompleted: true, postTestScore: 0, postTestTotalQuestions: 1, postTestHeatmap: [false], postTestQuestionOrder: [0] })
   ]);
   const app = page("analytics.js", data); await app.render();
-  assert.match(app.element("questionHeatmapStatus").textContent, /Choose a topic/);
-  app.element("heatmapTopicFilter").value = "lesson_01";
-  await app.element("heatmapTopicFilter").events.change();
+  assert.equal(app.element("heatmapTopicFilter").value, "lesson_01");
   const chart = app.element("questionHeatmapRows").html();
   assertTextOnly(chart); assert.ok(chart.includes("0/1 wrong") && chart.includes("1/1 wrong"));
   assert.match(app.element("questionHeatmapStatus").textContent, /1 mapped/);
@@ -261,15 +259,13 @@ test("post-test heatmap escapes question text and switching loaded topics adds n
   assert.match(app.element("questionHeatmapRows").html(), /100%/);
 });
 
-test("the heatmap explains why legacy shuffled attempts cannot be shown", async () => {
+test("the heatmap explains why attempts with invalid question order cannot be shown", async () => {
   const data = activityReportData(["A"]);
   data.curriculumSnap = snapshot([record("lesson_01", { title: "Topic One", postTest: [{ question: "First question" }] })]);
   data.sections[0].students[0].results[0].lessonsSnap = snapshot([
-    record("lesson_01", { isPostTestCompleted: true, postTestTotalQuestions: 1, postTestHeatmap: [false] })
+    record("lesson_01", { isPostTestCompleted: true, postTestTotalQuestions: 1, postTestHeatmap: [false], postTestQuestionOrder: [1] })
   ]);
   const app = page("analytics.js", data); await app.render();
-  app.element("heatmapTopicFilter").value = "lesson_01";
-  await app.element("heatmapTopicFilter").events.change();
   assert.match(app.element("questionHeatmapRows").textContent, /lack a valid question order/);
   assert.doesNotMatch(app.element("questionHeatmapRows").html(), /0%/);
 });

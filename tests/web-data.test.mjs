@@ -553,6 +553,47 @@ test("public school-year reads expose only the year, and disabled Auth identitie
   await assert.rejects(staffProfile(accounts[0], app.store), error => error.status === 401);
 });
 
+test("Supabase school year is shared by public reads and authorized admin saves", async () => {
+  const app = fixture(), teacher = await app.login(), admin = await app.login("ADMIN1000", "admin");
+  const dataset = "dff51df7-8387-4afe-9871-536eff43ea2c";
+  const revision = "b95916dc-8e8b-4870-8ae8-8cde9c3e9033";
+  const path = "webSettings/schoolYear";
+  const updated = "2026-11-08T03:00:00Z";
+  let fields = { startYear: { integerValue: "2027" }, updatedBy: { stringValue: "private" } }, commits = 0;
+  const env = { ...app.env, IMARS_SUPABASE_WEB_SETTINGS: "true", IMARS_SUPABASE_URL: "https://fixture.supabase.co",
+    SUPABASE_SECRET_KEY: "sb_secret_fixture", IMARS_SUPABASE_APP_DATASET_ID: dataset };
+  const settingsFetcher = async (url, options) => {
+    assert.equal(options.headers.apikey, env.SUPABASE_SECRET_KEY);
+    if (url.pathname.endsWith("/imars_app_datasets")) return Response.json([{ revision }]);
+    if (url.pathname.endsWith("/imars_app_documents")) {
+      assert.equal(url.searchParams.get("dataset_id"), "eq." + dataset);
+      return Response.json([{ path, fields, update_time: updated }]);
+    }
+    assert.match(url.pathname, /\/rpc\/imars_commit_app_documents$/);
+    const body = JSON.parse(options.body);
+    assert.equal(body.expected_revision, revision);
+    assert.equal(body.changes[0].previous, updated);
+    assert.equal(body.changes[0].path, path);
+    fields = body.changes[0].fields;
+    commits++;
+    return new Response(null, { status: 204 });
+  };
+  const handle = request => webData({ env, request }, { store: app.store, settingsFetcher });
+  const read = () => handle(new Request("https://imars.example.test/api/web-data/school-year"));
+  const write = { operation: "set", path, merge: true,
+    data: { startYear: 2030, endYear: 2031, updatedBy: "admin-a", updatedAt: stamp } };
+  const save = (cookie, writes) => handle(app.request("/api/web-data", { action: "commit", writes }, cookie));
+  const original = structuredClone(app.data.get(path));
+  assert.deepEqual(await (await read()).json(), { startYear: 2027 });
+  assert.equal((await save(teacher, [write])).status, 403);
+  assert.equal((await save(admin, [write, { ...write, path: "webSettings/other" }])).status, 400);
+  assert.equal(commits, 0);
+  assert.equal((await save(admin, [write])).status, 200);
+  assert.equal(commits, 1);
+  assert.deepEqual(await (await read()).json(), { startYear: 2030 });
+  assert.deepEqual(app.data.get(path), original);
+});
+
 test("quiz generation is throttled per teacher before parsing material or contacting the provider", async t => {
   const app = fixture(), cookie = await app.login();
   app.env.GEMINI_API_KEY = "fixture-not-a-real-key";

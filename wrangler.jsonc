@@ -8,7 +8,18 @@
   // protection or change Firebase rules.
   "env": {
     "production": {
-      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true", "STUDENT_QUIZZES_ENABLED": "true", "STUDENT_SCHEDULE_ENABLED": "true", "TEACHER_MOBILE_SESSIONS_ENABLED": "true", "DASHBOARD_SUMMARIES_ENABLED": "true", "TEACHER_SESSION_SYNC_ENABLED": "true" },
+      "vars": {
+        "WEB_LOGIN_ENABLED": "true",
+        "WEB_DATA_ENABLED": "true",
+        "STUDENT_QUIZZES_ENABLED": "true",
+        "STUDENT_SCHEDULE_ENABLED": "true",
+        "TEACHER_MOBILE_SESSIONS_ENABLED": "true",
+        "DASHBOARD_SUMMARIES_ENABLED": "true",
+        "TEACHER_SESSION_SYNC_ENABLED": "true",
+        "IMARS_SUPABASE_WEB_SETTINGS": "true",
+        "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
+        "IMARS_SUPABASE_APP_DATASET_ID": "c248ee4d-e1bf-4653-b6e9-f061846c149d"
+      },
       "durable_objects": {
         "bindings": [{
           "name": "WEB_LOGIN_STATE",
