@@ -1,6 +1,6 @@
 import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { collection, doc, getDocs, getFirestore, limit, onSnapshot, query, serverTimestamp, setDoc, where } from "./firebase-data.js";
+import { collection, doc, getDoc, getDocs, getFirestore, limit, query, serverTimestamp, setDoc, where } from "./firebase-data.js";
 import { setLoadingState } from "./loading.js";
 
 const app = getApps().find(candidate => candidate.name === "[DEFAULT]") || initializeApp();
@@ -11,26 +11,28 @@ const labels = document.querySelectorAll("[data-school-year]");
 const select = document.getElementById("schoolYearSelect");
 const status = document.getElementById("schoolYearStatus");
 const CACHE_KEY = "imars-school-year-v1";
-const REFRESH_MS = 5 * 60_000;
+const FRESH_FOR_MS = 24 * 60 * 60_000;
 let confirmedYear = 2026;
 let loaded = false;
 let canEdit = false;
 let saving = false;
 let generation = 0;
-let stopListening;
+let cachedYear;
+let pendingRead;
 
 const validYear = year => Number.isInteger(year) && year >= 2000 && year <= 2100;
 const label = year => `SY ${year}–${String(year + 1).slice(-2)}`;
 function savedYear() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(CACHE_KEY));
-    if (validYear(saved?.startYear) && Number.isFinite(saved.checkedAt) && saved.checkedAt <= Date.now() && Date.now() - saved.checkedAt < REFRESH_MS) return saved;
+    if (validYear(saved?.startYear) && Number.isFinite(saved.checkedAt) && saved.checkedAt <= Date.now()) return saved;
   } catch {}
-  return null;
+  return cachedYear;
 }
 function rememberYear(year) {
   // This public label is independent of staff/student caches and contains no account data.
-  try { window.localStorage.setItem(CACHE_KEY, JSON.stringify({ startYear: year, checkedAt: Date.now() })); } catch {}
+  cachedYear = { startYear: year, checkedAt: Date.now() };
+  try { window.localStorage.setItem(CACHE_KEY, JSON.stringify(cachedYear)); } catch {}
 }
 function showStatus(message = "", error = false) {
   if (!status) return;
@@ -72,7 +74,6 @@ window.addEventListener("storage", event => {
 });
 onAuthStateChanged(auth, async user => {
   const currentGeneration = ++generation;
-  stopListening?.();
   loaded = false;
   canEdit = false;
   refreshControl();
@@ -81,31 +82,30 @@ onAuthStateChanged(auth, async user => {
 
   const saved = savedYear();
   if (saved) displayYear(saved.startYear);
-  stopListening = onSnapshot(reference, { includeMetadataChanges: true, refreshIntervalMs: REFRESH_MS,
-    initialDelayMs: !select && saved ? REFRESH_MS - (Date.now() - saved.checkedAt) : 0 }, snapshot => {
-    if (currentGeneration !== generation || snapshot.metadata.hasPendingWrites) return;
-    const year = snapshot.exists() ? snapshot.data().startYear : 2026;
-    if (!validYear(year)) { loaded = true; refreshControl(); showStatus("Choose a school year to replace the invalid saved setting.", true); return; }
-    loaded = true;
-    rememberYear(year);
-    displayYear(year);
-    refreshControl();
-  }, () => {
-    if (currentGeneration !== generation) return;
-    showStatus("Unable to load the school year. Refresh to try again.", true);
-    refreshControl();
-  });
-
-  if (select) {
-    try {
+  if (!select && saved && Date.now() - saved.checkedAt < FRESH_FOR_MS) return;
+  try {
+    if (select) {
       const allowed = await isAdministrator(user);
       if (currentGeneration !== generation) return;
       canEdit = allowed;
-      showStatus(allowed ? "" : "Only administrators can change the school year.", !allowed);
-      refreshControl();
-    } catch {
-      if (currentGeneration === generation) showStatus("Unable to verify administrator access. Refresh to try again.", true);
+      if (!canEdit) { showStatus("Only administrators can change the school year.", true); return; }
     }
+    const startedAt = Date.now();
+    pendingRead ||= getDoc(reference).finally(() => { pendingRead = undefined; });
+    const snapshot = await pendingRead;
+    if (currentGeneration !== generation) return;
+    const newer = savedYear();
+    const year = newer?.checkedAt > startedAt ? newer.startYear : snapshot.exists() ? snapshot.data().startYear : 2026;
+    loaded = true;
+    if (validYear(year)) {
+      rememberYear(year);
+      displayYear(year);
+      showStatus();
+    } else showStatus("Choose a school year to replace the invalid saved setting.", true);
+  } catch {
+    if (currentGeneration === generation) showStatus("Unable to load the school year. Refresh to try again.", true);
+  } finally {
+    if (currentGeneration === generation) refreshControl();
   }
 });
 

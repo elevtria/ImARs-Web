@@ -38,6 +38,23 @@ test("successful writes invalidate other tabs' views and prevent an old request 
   assert.equal(first.put("teacher-a", "records", [2], started), false);
 });
 
+test("schedule writes preserve dashboard scores and keep old topics for a quiet recheck", () => {
+  const cache = createViewCache({ storage: storage(), versions: storage() });
+  cache.setOwner("a");
+  const oldVersion = cache.version();
+  cache.put("a", "dashboard-summary-v1", { total: 35 });
+  cache.put("a", "dashboard-topics-v1", { topic: "Last loaded topic" });
+  cache.put("a", "schedule:checked-at", [Date.now()]);
+  cache.invalidate({ keep: ["dashboard-summary-v1"], recheck: ["dashboard-topics-v1"] });
+  assert.deepEqual(cache.get("a", "dashboard-summary-v1", 300_000), { total: 35 });
+  assert.equal(cache.get("a", "dashboard-topics-v1", 300_000), null);
+  assert.deepEqual(cache.get("a", "dashboard-topics-v1"), { topic: "Last loaded topic" });
+  assert.equal(cache.get("a", "schedule:checked-at"), null);
+  assert.equal(cache.put("a", "dashboard-topics-v1", { topic: "Late result" }, oldVersion), false);
+  cache.invalidate();
+  assert.equal(cache.get("a", "dashboard-summary-v1"), null);
+});
+
 test("a freshly prepared dashboard avoids a duplicate read while writes still require new data", async () => {
   const app = controller();
   await app.display({ load: async () => ({ score: 8 }) });
@@ -176,6 +193,10 @@ test('reports paint the first 25 students before further background work and reu
   await app.tick();assert.equal(app.calls.length,2);assert.equal(app.paints.at(-1).loaded,50);assert.equal(app.paints.at(-1).complete,true);
   assert.equal(app.calls[1].includeCounts,false);assert.equal(app.paints.at(-1).total,50,'later pages reuse the first page totals');
   await app.open({});assert.equal(app.calls.length,2,'a recent return must not reload the report');
+  const paintings=app.paints.length;
+  app.leave();await app.open({restoredPage:true});
+  assert.equal(app.calls.length,2,'the browser-restored report is already loaded');
+  assert.equal(app.paints.length,paintings,'existing report rows stay in place');
   app.time(60001);await app.refresh();assert.equal(app.calls.length,3,'one automatic check updates one page only');
   assert.equal(app.calls[2].includeCurriculum,false);assert.equal(app.paints.at(-1).loaded,50);
   app.leave();await app.tick();assert.equal(app.calls.length,3,'leaving stops further background reads');
@@ -196,6 +217,16 @@ test('combined dashboard reports retain bounded loading and supply a fresh selec
   await app.tick();assert.equal(app.calls.length,2);assert.equal(app.calls[1].includeCounts,false);
   await app.open({allTerms:true,sectionId:""});assert.equal(app.calls.length,2);
   await app.open({termId:"term_01"});assert.equal(app.calls.length,2);assert.equal(app.paints.at(-1).total,50);assert.equal(app.paints.at(-1).termId,"term_01");
+});
+
+test('report sharing remains fresh for five minutes and confirmed writes still discard it immediately',async()=>{
+  const app=pagedReportHarness();await app.open({allTerms:true,sectionId:''});await app.tick();
+  app.time(120000);await app.open({termId:'term_01',sectionId:'A'});
+  assert.equal(app.calls.length,2,'returning after two minutes must reuse the existing all-term report');
+  app.time(300001);await app.open({termId:'term_01',sectionId:'A'});
+  assert.equal(app.calls.length,3,'an expired report must fetch the next bounded page');
+  app.cache.invalidate();await app.open({termId:'term_01',sectionId:'A'});
+  assert.equal(app.calls.length,4,'a confirmed save invalidates the cache before the five-minute expiry');
 });
 
 test('1000-student reports paint 25 first, finish in eleven bounded requests without counts, then reuse the selected-term dataset',async()=>{

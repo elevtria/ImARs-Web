@@ -56,7 +56,7 @@ Teacher ID/password and admin ID/email/password sign-in remain. Passwords travel
 over HTTPS to the same-origin login endpoint and are verified server-side. No
 Firebase ID/refresh token is returned to browser JavaScript. Website sessions use
 Secure, HttpOnly, SameSite=Strict, signed cookies, the existing server lockout,
-15-minute rotation/idle deadlines and 12-hour absolute limit. A UID, role and
+15-minute rotation, 30-minute idle deadline and 12-hour absolute limit. A UID, role and
 random tab marker in session storage control fresh-visit UI behavior; they are
 not login credentials. Browser owners can still inspect their own cookies and
 authorized responses in DevTools.

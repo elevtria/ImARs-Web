@@ -1,5 +1,8 @@
-body [data-await-content]:not([data-content-ready]),
-body[data-auth-pending] [data-await-content] { display:none !important; }
+/* Card headings and layouts stay visible. Only numeric placeholders wait for
+   data; authentication privacy is enforced separately in app.css. */
+body [data-await-content]:not([data-content-ready]) .value { position: relative; visibility: hidden; }
+body:not([data-auth-pending]) [data-await-content]:not([data-content-ready]) .value::after { content: "—"; position: absolute; inset: 0; visibility: visible; }
+body [data-await-content][hidden] { display: none !important; }
 .section-data-loading, [data-loading="true"] { margin: 8px 0; grid-column: 1 / -1; display: inline-flex; align-items: center; min-height: 20px; color: #41658b; vertical-align: middle; }
 .section-data-loading[hidden], [data-loading="true"][hidden] { display: none; }
 .section-data-loading::before, [data-loading="true"]::before, button[aria-busy="true"]:not(.login-submit)::before { content: ""; display: inline-block; box-sizing: border-box; flex: 0 0 16px; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: section-data-spin .8s linear infinite; }

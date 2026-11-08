@@ -38,7 +38,8 @@ function harness(size=3) {
   const names=["recordsContainer","emptyState","studentSearch","sectionFilter","activeStudentsTab","archivedStudentsTab","activeStudentsCount","archivedStudentsCount","archiveStudentModal","archiveStudentForm","archiveReason","confirmArchiveStudent","archiveStudentError","cancelArchiveStudent","archiveStudentName","archiveStudentTitle","archiveSectionBtn","previousRecordsPage","nextRecordsPage","recordsPageStatus","recordsTerm"];
   const ids=Object.fromEntries(names.map(id=>[id,new Element(id === "sectionFilter" ? "select" : "div")]));
   const profiles=new Map(Array.from({length:size},(_,i)=>["S"+String(i).padStart(4,"0"),{displayName:i===0?'A <Student> "One"':"Student "+i,active:size===3&&i===1?false:true,classCode:"A"}]));
-  const cache=createViewCache({storage:storage(),versions:storage()}), auth={currentUser:{uid:"teacher-a"}};
+  let cacheTime=Date.now();
+  const cache=createViewCache({storage:storage(),versions:storage(),now:()=>cacheTime}), auth={currentUser:{uid:"teacher-a"}};
   const classes=[doc("A",{SectionName:"A & B"})], lesson=doc("lesson_01",{isPreTestCompleted:true,isPostTestCompleted:true,preTestScore:1,preTestTotalQuestions:2,postTestScore:2,postTestTotalQuestions:2,arTimeMinutes:4});
   const pageReads=[],resultReads=[],writes=[],alerts=[];
   let authChanged,refresh,confirmation=true,denied=false,failBatch=0,batches=0,pageReader,resultReader;
@@ -65,7 +66,7 @@ function harness(size=3) {
   const click=async(selector,button)=>{await ids.recordsContainer.emit("click",{target:{closest:k=>k===selector?button:null}});await flush();};
   const performance=async id=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id}});await flush();};
   const archive=async id=>{await click(".archive-student-btn",ids.recordsContainer.children.find(c=>c.dataset.studentId===id).querySelector(".archive-student-btn"));ids.archiveReason.value="graduated";await ids.archiveStudentForm.emit("submit");};
-  return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:()=>authChanged(auth.currentUser),refresh:()=>refresh(),
+  return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:options=>authChanged(auth.currentUser,options),refresh:()=>refresh(),advanceCache:ms=>{cacheTime+=ms;},
     setEncoder:encode=>{context.encodeView=encode;},
     staleResults:()=>vm.runInContext('for(const section of recordData.sections) for(const student of section.students) student.resultsAt=0; cacheCurrentPage();',context),
     setPageReader:fn=>{pageReader=fn;},setResultReader:fn=>{resultReader=fn;},setConfirm:v=>{confirmation=v;},deny:()=>{denied=true;},failBatch:v=>{failBatch=v;}};
@@ -107,6 +108,21 @@ test("next, previous and a return visit reuse page caches without reading the en
   const app=harness(1000);await app.load();await app.ids.nextRecordsPage.emit("click");assert.equal(app.pageReads.length,2);
   assert.equal(app.ids.recordsContainer.children[0].dataset.studentId,"S0025");await app.ids.previousRecordsPage.emit("click");await app.load();
   assert.equal(app.pageReads.length,2);assert.equal(app.resultReads.length,0);
+});
+test("returning to Student Records keeps the visible cards and refreshes a stale page without a foreground request",async()=>{
+  const app=harness();await app.load();
+  const card=app.ids.recordsContainer.children[0];
+  await app.load({restored:true});
+  assert.equal(app.pageReads.length,1);
+  assert.equal(app.ids.recordsContainer.children[0],card);
+  app.advanceCache(300001);
+  const pending=deferred();app.setPageReader(()=>pending.promise);
+  const returning=app.load({restored:true});await flush();
+  assert.equal(app.ids.recordsContainer.children[0],card);
+  assert.equal(app.pageReads.length,2);
+  assert.equal(app.pageReads[1].includeResults,undefined,"quiet refresh must not re-fetch the visible cards' results in bulk");
+  pending.reject(new Error("Temporarily unavailable"));await returning;
+  assert.equal(app.ids.recordsContainer.children[0],card);
 });
 test("archiving changes only the selected card, retains safe names and adjusts exact totals without additional reads",async()=>{
   const app=harness();await app.load();await app.performance("S0000");const untouched=app.ids.recordsContainer.children[1];await app.archive("S0000");

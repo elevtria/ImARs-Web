@@ -41,7 +41,7 @@
   }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
     .quiz-file-selected, .quiz-upload-icon, .quiz-preview, .quiz-library-empty, .quiz-schedule-card,
-    .view-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,
+    .view-switch, .analytics-term-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,
     .ring-center, .analytics-donut-inner, .profile-info-grid > div, .activity-term-toggle,
     .quiz-review-footer, .quiz-editor-toolbar, .quiz-availability-card, .quiz-release-option,
     .quiz-library-scheduler, .quiz-empty-state, .quiz-suggestion-card, .quiz-suggestion-answer,
@@ -49,6 +49,8 @@
     .account-menu, .modal-box, .lock-all, .date-btn) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
+  [data-theme="dark"] .analytics-term-switch button[aria-pressed="false"]:hover { background: #2b4059; }
+  [data-theme="dark"] .analytics-term-switch button:focus-visible { outline-color: #90bfea; }
   [data-theme="dark"] body :is(dialog, #adminLoginModal, #studentRecordDialog, #archiveStudentForm,
     .profile-dialog, .teacher-dialog) { background: var(--surface); border-color: var(--line); color: var(--ink); }
   [data-theme="dark"] dialog::backdrop { background: #030810aa; }

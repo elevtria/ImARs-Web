@@ -2,6 +2,7 @@
 .env*
 node_modules/
 .wrangler/
+.netlify/
 dist/
 .vs/
 .vscode/.vs/

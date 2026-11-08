@@ -2,6 +2,18 @@ import { activityPercent } from "./activity-score.js";
 
 const asMinutes = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 
+export function testRawScore(result, kind) {
+  const prefix = kind === "pre" ? "preTest" : "postTest";
+  if (result?.[kind === "pre" ? "isPreTestCompleted" : "isPostTestCompleted"] !== true) return null;
+  const total = result[prefix + "TotalQuestions"];
+  let score = result[prefix + "Score"];
+  if (kind === "post" && score == null && Array.isArray(result.postTestHeatmap) && result.postTestHeatmap.length === total && result.postTestHeatmap.every(value => typeof value === "boolean")) {
+    score = result.postTestHeatmap.filter(value => value === true).length;
+  }
+  return typeof score === "number" && Number.isFinite(score) && typeof total === "number" && Number.isFinite(total) && total > 0 && score >= 0 && score <= total
+    ? { score, total } : null;
+}
+
 export function activityMinutes(result) {
   const direct = asMinutes(result?.lessonTimeMinutes) ?? asMinutes(result?.arTimeMinutes);
   if (direct !== null) return direct;
@@ -30,12 +42,16 @@ export function buildStudentActivityRecords(curriculum, sections, termLabels, te
           if (!result) return null;
           const student = studentDoc.data();
           const score = activityPercent(result);
+          const preTest = testRawScore(result, "pre");
+          const postTest = testRawScore(result, "post");
           const minutes = activityMinutes(result);
           const completed = result.isLessonCompleted === true || result.isARCompleted === true || result.completed === true;
-          if (!completed && score === null && minutes === null) return null;
+          if (!completed && score === null && preTest === null && postTest === null && minutes === null) return null;
           return {
             name: student.displayName || student.fullName || "Student",
             score,
+            preTest,
+            postTest,
             rawScore: score === null ? null : Number(result.activityScore),
             totalScore: score === null ? null : Number(result.activityTotalQuestions ?? result.activityTotalPoints),
             minutes,

@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { startSessionMonitor } from "../js/session-monitor.js";
 
-function fixture() {
+function fixture(initialTiming) {
   let time = 0, timerId = 0, expires = 0, hidden = false, responder;
   const jobs = new Map(), requests = [], notices = [];
   const timing = () => ({ serverNow: time, idleUntil: time + 900_000, absoluteUntil: 43_200_000, renewAt: time + 900_000 });
   const monitor = startSessionMonitor({
     now: () => time, schedule(fn, delay) { jobs.set(++timerId, { fn, at: time + delay }); return timerId; },
-    cancel: id => jobs.delete(id), visible: () => !hidden,
+    cancel: id => jobs.delete(id), visible: () => !hidden, initialTiming,
     check: async active => { requests.push(active); return responder ? responder(active) : Response.json(timing()); },
     onExpired: async () => { expires++; }, notice: kind => notices.push(kind)
   });
@@ -28,6 +28,17 @@ function fixture() {
     respond: fn => { responder = fn; }, hide: value => { hidden = value; } };
 }
 
+test("verified identity timing replaces the initial session request and accepts relative updates", async () => {
+  const app = fixture({ remainingMs: 600_000, checkInMs: 300_000, expiresBy: "idle" });
+  app.monitor.refresh();
+  await app.advance(29_999);
+  assert.deepEqual(app.requests, []);
+  app.respond(() => Response.json({ remainingMs: 40_000, checkInMs: 20_000, expiresBy: "absolute" }));
+  await app.advance(1);
+  assert.deepEqual(app.requests, [false]);
+  assert.equal(app.notices.at(-1), "absolute");
+});
+
 test("background checks are passive; real activity is coalesced and returning to a tab does not manufacture activity", async () => {
   const app = fixture();
   await app.advance(60_000);
@@ -35,10 +46,18 @@ test("background checks are passive; real activity is coalesced and returning to
   for (let i = 0; i < 100; i++) app.monitor.activity();
   await app.advance(30_000);
   assert.equal(app.requests.filter(Boolean).length, 1);
+  const recent = app.requests.length;
   app.monitor.refresh(); await app.advance(0);
-  assert.equal(app.requests.at(-1), false);
+  assert.equal(app.requests.length, recent, "a just-checked tab reuses its recent check on focus");
+  await app.advance(5000);
+  app.monitor.refresh(); await app.advance(0);
+  assert.equal(app.requests.length, recent, "returning before the scheduled check must not start a request");
+  const beforeHiding = app.requests.length;
   app.hide(true); app.monitor.activity();
-  await app.advance(30_000);
+  await app.advance(120_000);
+  assert.equal(app.requests.length, beforeHiding);
+  app.hide(false); app.monitor.refresh(); await app.advance(0);
+  assert.equal(app.requests.length, beforeHiding + 1);
   assert.equal(app.requests.at(-1), false);
   app.monitor.stop();
   assert.equal(app.jobs.size, 0);
@@ -92,6 +111,28 @@ test("network errors preserve pending activity and retry instead of claiming the
   await app.advance(5000);
   assert.equal(app.requests.at(-1), true);
   assert.equal(app.notices.at(-1), null);
+});
+
+test("a server access denial closes the session instead of polling again", async () => {
+  const app = fixture();
+  app.respond(() => new Response(null, { status: 403 }));
+  await app.advance(60_000);
+  assert.deepEqual(app.requests, [false]);
+  assert.equal(app.expires(), 1);
+  assert.equal(app.jobs.size, 0);
+});
+
+test("quota retries honor the server's delay despite activity or repeated focus", async () => {
+  const app = fixture();
+  app.respond(() => new Response(null, { status: 503, headers: { "Retry-After": "60" } }));
+  await app.advance(0);
+  app.monitor.activity(); app.monitor.refresh(); app.monitor.staySignedIn();
+  await app.advance(59_999);
+  assert.deepEqual(app.requests, [false]);
+  app.respond(() => Response.json(app.timing()));
+  await app.advance(1);
+  assert.deepEqual(app.requests, [false, true]);
+  assert.equal(app.expires(), 0);
 });
 
 test("activity during a pending request is retained and stopped monitors ignore late responses", async () => {

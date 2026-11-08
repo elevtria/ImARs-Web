@@ -1,5 +1,6 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
-import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
+import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const cookieName = "__Host-imars-web";
 const encoder = new TextEncoder();
@@ -8,10 +9,19 @@ const json = (body, status = 200, headers = {}) => Response.json(body, {
 });
 export const enabled = env => env.WEB_LOGIN_ENABLED === "true";
 export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
+const reusableShells = new WeakSet();
+export const isReusablePortalShell = response => reusableShells.has(response);
+const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
+  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
 const hmacKey = secret => crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+function logAuthFailure(phase, error) {
+  const reasons = ["Web login protection is not configured", "Invalid staff roster", "An administrator is required", "Login state unavailable", "Account access unavailable", "Account access setup is incomplete"];
+  console.warn(JSON.stringify({ event: "auth-unavailable", phase, reason: reasons.includes(error?.message) ? error.message : "unexpected", type: error?.name,
+    causeType: error?.cause?.name, upstreamStatus: error?.cause?.upstreamStatus || error?.upstreamStatus }));
+}
 
 export function settings(env) {
   if (typeof env.WEB_SESSION_SECRET !== "string" || env.WEB_SESSION_SECRET.length < 32 || !env.WEB_LOGIN_STATE) {
@@ -42,9 +52,10 @@ export async function stateCall(env, name, action, body) {
   return { result, status: response.status, ok: response.ok };
 }
 
-export async function signSession(env, account, session, host) {
+export async function signSession(env, account, session, host, teacherSession) {
   const value = base64(encoder.encode(JSON.stringify({ uid: account.uid, role: account.role, id: account.id,
     version: session.version, family: session.family, sid: session.sid, aud: host,
+    ...(account.role === "teacher" && teacherSession ? { teacherSession } : {}),
     iat: Math.floor(session.rotatedAt / 1000), exp: Math.floor(session.absoluteUntil / 1000) })));
   const signature = await crypto.subtle.sign("HMAC", await hmacKey(env.WEB_SESSION_SECRET), encoder.encode(value));
   return `${value}.${base64(new Uint8Array(signature))}`;
@@ -64,35 +75,38 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   return { id, uid: profile.data.uid, role: "teacher", email: invitation.email, requiresVerifiedEmail: true };
 }
 
-async function inspectSession(request, env, { now = Date.now(), active = false, rotate = false, store } = {}) {
-  const accounts = settings(env);
+async function sessionClaims(request, env, now) {
   const value = request.headers.get("Cookie")?.split(/;\s*/).find(item => item.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
   if (!value || value.length > 2048) return null;
   try {
     const parts = value.split(".");
     if (parts.length !== 2 || !await crypto.subtle.verify("HMAC", await hmacKey(env.WEB_SESSION_SECRET), unbase64(parts[1]), encoder.encode(parts[0]))) return null;
     const payload = JSON.parse(new TextDecoder().decode(unbase64(parts[0])));
-    const account = typeof payload.id === "string" ? await resolveStaff(env, payload.id, accounts, store) : null;
     const time = Math.floor(now / 1000);
-    if (!account || account.uid !== payload.uid || account.role !== payload.role ||
-        (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== account.uid) ||
+    if (typeof payload.uid !== "string" || !payload.uid || payload.uid.length > 128 || typeof payload.id !== "string" ||
+        (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== payload.uid) ||
         payload.aud !== new URL(request.url).host || !Number.isSafeInteger(payload.exp) ||
         payload.exp <= time || !Number.isSafeInteger(payload.iat) || payload.iat > time + 30 ||
         payload.exp <= payload.iat || payload.exp - payload.iat > ABSOLUTE_AFTER_MS / 1000 ||
         !validSessionId(payload.family) || !validSessionId(payload.sid) || !Number.isSafeInteger(payload.version)) return null;
-    let checked;
-    try {
-      checked = await stateCall(env, `account:${account.uid}`, "session", {
-        family: payload.family, sid: payload.sid, version: payload.version, active, rotate
-      });
-    } catch { throw new Error("Login state unavailable"); }
+    return payload;
+  } catch { return null; }
+}
+
+async function inspectSession(request, env, { now = Date.now(), active = false, store } = {}) {
+  const accounts = settings(env);
+  const payload = await sessionClaims(request, env, now);
+  if (!payload) return null;
+  const credentials = { family: payload.family, sid: payload.sid, version: payload.version };
+  try {
+    const checked = await stateCall(env, `account:${payload.uid}`, "session", { ...credentials, active });
     if (checked.status === 401) return null;
     if (!checked.ok) throw new Error("Login state unavailable");
-    return { account, ...checked.result };
-  } catch (error) {
-    if (error.message === "Login state unavailable") throw error;
-    return null;
-  }
+    const account = await resolveStaff(env, payload.id, accounts, store);
+    if (!account || account.uid !== payload.uid || account.role !== payload.role) return null;
+    if (!await checkTeacherSession(env, store || new FirestoreAdmin(env), account, "web", payload.teacherSession)) return null;
+    return { account, ...checked.result, credentials, teacherSession: payload.teacherSession };
+  } catch (error) { throw new Error("Login state unavailable", { cause: error }); }
 }
 
 export async function webSession(request, env, now = Date.now(), store) {
@@ -108,7 +122,7 @@ export async function staffProfile(account, store, now = Date.now()) {
   // can be read independently; neither result grants access on its own.
   const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
-  const key = store.env || store;
+  const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
   if (!cache) { cache = new Map(); identities.set(key, cache); }
   let identity = cache.get(account.uid);
@@ -151,6 +165,11 @@ export async function requireStaff(request, env, store = new FirestoreAdmin(env)
 
 const publicUser = account => ({ uid: account.uid, id: account.id, role: account.role,
   displayName: String(account.profile?.displayName || account.profile?.fullName || "") });
+const publicTiming = ({ serverNow, idleUntil, absoluteUntil, renewAt }) => ({
+  remainingMs: Math.max(0, Math.min(idleUntil, absoluteUntil) - serverNow),
+  checkInMs: Math.max(0, renewAt - serverNow),
+  expiresBy: absoluteUntil <= idleUntil ? "absolute" : "idle"
+});
 
 export async function readJson(request, maximum = 8192) {
   if (Number(request.headers.get("Content-Length") || 0) > maximum) throw Object.assign(new Error("Request too large."), { status: 413 });
@@ -172,9 +191,19 @@ export async function readJson(request, maximum = 8192) {
   } finally { reader?.releaseLock(); }
 }
 
+async function renewSession(env, checked) {
+  if (checked.previous || checked.timing.serverNow < checked.timing.renewAt) return checked;
+  // Rotate only after upstream checks succeed. An outage must not consume a
+  // valid cookie before the browser can receive its replacement.
+  const renewed = await stateCall(env, `account:${checked.account.uid}`, "session", { ...checked.credentials, rotate: true });
+  if (renewed.status === 401) return null;
+  if (!renewed.ok) throw new Error("Login state unavailable");
+  return { ...checked, ...renewed.result };
+}
+
 async function renewalHeaders(request, env, checked) {
   if (!checked?.rotated || checked.previous) return {};
-  const token = await signSession(env, checked.account, checked.session, new URL(request.url).host);
+  const token = await signSession(env, checked.account, checked.session, new URL(request.url).host, checked.teacherSession);
   return { "Set-Cookie": cookie(token) };
 }
 
@@ -191,7 +220,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
   const action = new URL(request.url).pathname.replace(/\/$/, "").split("/").at(-1);
   if (action === "config" && request.method === "GET") {
     if (!enabled(env)) return dataEnabled(env) ? json({ error: "Website account setup is incomplete." }, 503) : json({ enabled: false });
-    try { settings(env); if (dataEnabled(env) && !store) serviceAccount(env); return json({ enabled: true, ...(dataEnabled(env) ? { backend: true } : {}) }); }
+    try { settings(env); if (dataEnabled(env) && !store) serviceAccount(env); return json({ enabled: true, ...(dataEnabled(env) ? { backend: true } : {}), ...(env.TEACHER_SESSION_SYNC_ENABLED === "true" ? { teacherSessionSync: true } : {}) }); }
     catch { return json({ error: "Login protection setup needs website maintenance." }, 503); }
   }
   if (!enabled(env)) return action === "logout" ? json({ ok: true }, 200, { "Set-Cookie": cookie("", 0) }) : json({ error: "Web login protection is not enabled." }, 409);
@@ -226,28 +255,41 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       }
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
       const approved = dataEnabled(env) ? await staffProfile(account, store || new FirestoreAdmin(env), now) : null;
-      if (approved?.role === "teacher") {
+      if (approved?.role === "teacher" && env.TEACHER_SESSION_SYNC_ENABLED !== "true") {
         const revoked = await stateCall(env, `account:${approved.uid}`, "mobile-revoke", {});
         if (!revoked.ok) throw new Error("Mobile session update failed");
       }
-      const token = await signSession(env, account, attempt.result.session, new URL(request.url).host);
+      const teacherSession = approved?.role === "teacher" ? await openTeacherSession(env, store || new FirestoreAdmin(env), approved, "web") : undefined;
+      const token = await signSession(env, account, attempt.result.session, new URL(request.url).host, teacherSession);
       return json(approved ? { user: publicUser(approved) } : { email: account.email }, 200, { "Set-Cookie": cookie(token) });
     }
-    if (action === "identity") return json({ user: publicUser(await requireStaff(request, env, store || new FirestoreAdmin(env))) });
+    if (action === "identity") {
+      if (!dataEnabled(env)) return json({ error: "Website account setup is incomplete." }, 503);
+      const database = store || new FirestoreAdmin(env);
+      const checked = await inspectSession(request, env, { now, store: database });
+      if (!checked) return json({ error: "Please sign in to the website." }, 401);
+      const user = await staffProfile(checked.account, database, now);
+      return json({ user: publicUser(user), session: publicTiming(checked.timing) });
+    }
     if (action === "session") {
       if (typeof body.active !== "boolean") return json({ error: "Invalid session request." }, 400);
-      const checked = await inspectSession(request, env, { now, active: body.active, rotate: true, store });
+      const checked = await inspectSession(request, env, { now, active: body.active, store });
       if (!checked) return json({ error: "Your website session expired. Please sign in again." }, 401);
       if (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== checked.account.uid) return json({ error: "Your sign-in changed. Please sign in again." }, 401);
       if (dataEnabled(env)) await staffProfile(checked.account, store || new FirestoreAdmin(env), now);
-      return json(checked.timing, 200, await renewalHeaders(request, env, checked));
+      const renewed = await renewSession(env, checked);
+      if (!renewed) return json({ error: "Your website session expired. Please sign in again." }, 401);
+      return json(body.timing === "relative" ? publicTiming(renewed.timing) : renewed.timing, 200, await renewalHeaders(request, env, renewed));
     }
     if (action === "logout") {
-      const account = await webSession(request, env, now, store);
-      if (!account && request.headers.has("X-Web-User")) return json({ error: "Your sign-in changed." }, 401);
-      if (account) {
-        const result = await stateCall(env, `account:${account.uid}`, "logout", {});
-        if (!result.ok) throw new Error("Logout failed");
+      const payload = await sessionClaims(request, env, now);
+      if (!payload && request.headers.has("X-Web-User")) return json({ error: "Your sign-in changed." }, 401);
+      if (payload) {
+        const result = await stateCall(env, `account:${payload.uid}`, "session-logout", {
+          family: payload.family, sid: payload.sid, version: payload.version
+        });
+        if (!result.ok && result.status !== 401) throw new Error("Logout failed");
+        if (result.status === 401 && request.headers.has("X-Web-User")) return json({ error: "Your sign-in changed." }, 401);
       }
       return json({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
     }
@@ -264,6 +306,8 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     return json({ error: "Not found." }, 404);
   } catch (error) {
     // Never log or echo passwords, cookies, upstream tokens, or server secrets.
+    if (databaseQuotaFailure(error)) return json({ error: "Sign-in is temporarily unavailable because the data service usage limit was reached. Please try again later.", code: "DATABASE_QUOTA_EXCEEDED" }, 503, { "Retry-After": "60" });
+    if (![400, 401, 403, 413].includes(error.status)) logAuthFailure("api:" + action, error);
     return [400, 401, 403, 413].includes(error.status) ? json({ error: error.message }, error.status)
       : json({ error: "Login protection is temporarily unavailable. Contact website maintenance." }, 503);
   }
@@ -284,7 +328,7 @@ export async function protectWebsite(context, now = Date.now()) {
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
   if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/")) return context.next();
   try {
-    const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/"), rotate: true });
+    const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);
@@ -296,9 +340,28 @@ export async function protectWebsite(context, now = Date.now()) {
     const response = await context.next();
     const protectedResponse = new Response(response.body, response);
     protectedResponse.headers.set("Cache-Control", "private, no-store");
-    for (const [name, value] of Object.entries(await renewalHeaders(request, env, checked))) protectedResponse.headers.set(name, value);
+    if (response.ok) {
+      try {
+        const renewed = await renewSession(env, checked);
+        for (const [name, value] of Object.entries(await renewalHeaders(request, env, renewed))) protectedResponse.headers.set(name, value);
+      } catch (error) { logAuthFailure("portal-renewal", error); }
+    }
+    // These HTML files are static shells. The browser hides private content
+    // on page exit and verifies the visit again before revealing a restored view.
+    // Leave API responses and responses carrying a replacement cookie no-store.
+    const staticHtml = response.status === 200 && protectedResponse.headers.get("Content-Type")?.includes("text/html");
+    if (request.method === "GET" && staticPortalShells.has(path) && (staticHtml || response.status === 304) && !protectedResponse.headers.has("Set-Cookie")) {
+      protectedResponse.headers.set("Cache-Control", "private, no-cache");
+      reusableShells.add(protectedResponse);
+    }
     return protectedResponse;
-  } catch {
+  } catch (error) {
+    logAuthFailure("portal", error);
+    if (databaseQuotaFailure(error)) {
+      const message = "The data service usage limit has been reached. Please try again later.";
+      if (!path.startsWith("/api/")) return new Response(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ImARs · Temporarily unavailable</title><body><main><h1>Temporarily unavailable</h1><p>${message}</p><a href="/login">Return to login</a></main></body></html>`, { status: 503, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": "60" } });
+      return json({ error: message, code: "DATABASE_QUOTA_EXCEEDED" }, 503, { "Retry-After": "60" });
+    }
     return json({ error: "Login protection is temporarily unavailable. Contact website maintenance." }, 503);
   }
 }

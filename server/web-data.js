@@ -1,4 +1,4 @@
-import { FirestoreAdmin } from "./firestore-admin.js";
+import { FirestoreAdmin, databaseQuotaFailure } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
@@ -17,6 +17,24 @@ const date = value => typeof value === "string" && /^\d{4}-\d\d-\d\d$/.test(valu
 const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName", "providedEmail", "email",
   "subject", "sections", "section", "classCode", "teacherId", "adviserId", "teacher", "gradeSection", "sectionName", "className", "school", "roleLabel",
   "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "archiveReason", "avatarId", "isRegistered", "isClaimed", "joined"];
+const schoolYears = new WeakMap();
+const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
+
+async function readSchoolYear(store) {
+  const key = schoolYearCacheKey(store);
+  let entry = schoolYears.get(key);
+  if (entry?.pending) return entry.pending;
+  if (entry?.until > Date.now()) return entry.value;
+  entry = {};
+  schoolYears.set(key, entry);
+  entry.pending = store.get("webSettings/schoolYear").then(row => {
+    const year = row?.data.startYear;
+    entry.value = { startYear: Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : 2026 };
+    entry.until = Date.now() + 60_000;
+    return entry.value;
+  }).finally(() => { entry.pending = null; });
+  return entry.pending;
+}
 
 function reference(value) {
   if (!object(value) || !["document", "query"].includes(value.kind) || typeof value.path !== "string") throw fail("Invalid data request.", 400);
@@ -40,6 +58,10 @@ class Scope {
   get(path) {
     if (!this.reads.has(path)) this.reads.set(path, this.store.get(path));
     return this.reads.get(path);
+  }
+  assignedClasses() {
+    this.classes ||= this.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: this.actor.id }] });
+    return this.classes;
   }
   async ownsClass(id) {
     if (!part(id)) throw fail();
@@ -108,7 +130,8 @@ class Scope {
   async write(input) {
     if (!object(input) || !["set", "update", "delete"].includes(input.operation)) throw fail("Invalid save request.", 400);
     const ref = reference({ kind: "document", path: input.path }), p = ref.parts, actor = this.actor;
-    const row = await this.get(ref.path), previous = row?.data, data = input.data;
+    const row = await this.get(ref.path), previous = row?.data;
+    let data = input.data;
     if (input.operation === "delete") {
       if (p[0] === "generatedQuizzes" && p.length === 2) await this.quiz(p[1]);
       else if (p[0] === "users" && p.length === 2 && actor.role === "teacher" && previous?.role === "student" && previous.active === false) await this.student(p[1]);
@@ -200,6 +223,9 @@ class Scope {
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
+      const releaseOnly = input.operation === "update" && names(["section", "sectionId", "assignmentScope", "availability", "availableAt"]);
+      const release = releaseOnly ? data : null;
+      if (releaseOnly) data = { ...previous, ...release };
       const assignment = quizAssignmentScope(data);
       if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
       if (assignment === "section") await this.ownsClass(data.sectionId);
@@ -214,17 +240,38 @@ class Scope {
           (writtenQuestion(data.type) && (!Array.isArray(question.options) || question.options.length !== 0 || question.correctIndex !== -1)) || !normalizeQuizQuestion(question, data.type))) throw fail("Check the quiz questions and answer guides.", 400);
       if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
       if (data.availability === "scheduled" ? !Number.isFinite(Date.parse(data.availableAt)) || Date.parse(data.availableAt) <= Date.now() : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
-      return { ...input, data: { ...data, questionCount: data.questions.length, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
+      return { ...input, data: { ...(release || data), questionCount: data.questions.length, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
   }
 }
 
-function output(path, row, id = path.split("/").at(-1)) {
+const pick = (source, keys) => Object.fromEntries(keys.filter(key => Object.hasOwn(source, key)).map(key => [key, source[key]]));
+
+function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
   const source = row?.wire || row?.data;
-  const data = !source ? null : path.startsWith("users/") && path.split("/").length === 2
-    ? Object.fromEntries(Object.entries(source).filter(([key]) => profileFields.includes(key))) : source;
+  let data = source ?? null;
+  if (source && /^users\/[^/]+$/.test(path)) data = pick(source, profileFields);
+  if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"]);
+  if (source && /^generatedQuizzes\/[^/]+$/.test(path)) {
+    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "createdAt", "demo", "teacherUid"]);
+    data.questions = Array.isArray(source.questions) ? source.questions.filter(object).map(question =>
+      pick(question, ["id", "text", "options", "correctIndex", "answer", "points", "rubric", "explanation", "correction"])) : [];
+  }
+  if (source && /^terms\/[^/]+(?:\/lessons\/[^/]+)?$/.test(path)) {
+    data = pick(source, ["title", "name", "topicTitle", "lessonOrder", "isLocked", "scheduledDate"]);
+    if (Array.isArray(source.postTest)) data.postTest = source.postTest.map(item => ({ question: typeof item?.question === "string" ? item.question : "" }));
+    if (object(source.sectionSchedules)) {
+      data.sectionSchedules = Object.fromEntries(sectionIds.filter(id => object(source.sectionSchedules[id])).map(id => [id,
+        pick(source.sectionSchedules[id], ["isLocked", "scheduledDate", "activityDeadlineUtc"])]));
+    }
+  }
   return { id, path, data };
+}
+
+function quizListEntry(row) {
+  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt"]);
+  return { id: row.id, path: "generatedQuizzes/" + row.id, data: { ...data, questionCount: Array.isArray(row.data.questions) ? row.data.questions.length : 0 } };
 }
 
 async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25 } = {}) {
@@ -243,7 +290,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
     throw fail("Invalid student performance page.", 400);
   }
   if (body.includeTeacher !== undefined && typeof body.includeTeacher !== "boolean") throw fail("Invalid teacher details request.", 400);
-  const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
+  const classes = await scope.assignedClasses();
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   if (body.firstSection === true && !sectionId) sectionId = classes[0]?.id || "";
@@ -327,28 +374,33 @@ async function teacherReportPage(scope, body) {
   if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
   const batchSize = body.batchSize ?? 25;
   if (![25, 100].includes(batchSize)) throw fail("Invalid report batch size.", 400);
+  const heatmap = body.heatmapLesson !== undefined;
+  if (heatmap && (typeof body.heatmapLesson !== "string" || !lesson(body.heatmapLesson) || !body.sectionId || body.allTerms === true || batchSize !== 25)) throw fail("Choose one section and topic.", 400);
   const termIds = body.allTerms === true ? ["term_01", "term_02", "term_03"] : [body.termId];
-  const curriculumPromise = body.includeCurriculum === false ? null : (async () => {
+  const curriculumPromise = heatmap || body.includeCurriculum === false ? null : (async () => {
     const path = "terms/" + body.termId;
-    const [row, lessons] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 })]);
-    return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson)) };
+    const [row, lessons, classes] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 }), scope.assignedClasses()]);
+    const sectionIds = classes.map(section => section.id);
+    return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson, lesson.id, sectionIds)) };
   })().then(value => ({ value }), error => ({ error }));
-  const { pendingCounts, ...page } = await studentPage(scope, { ...body, status: "active", search: "", limit: batchSize }, { deferCounts: true, maximumLimit: 100 });
+  const { pendingCounts, ...page } = await studentPage(scope, { ...body, ...(heatmap ? { includeCounts: false } : {}), status: "active", search: "", limit: batchSize }, { deferCounts: true, maximumLimit: 100 });
   // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
   // their documents in batches of at most 100, only for verified roster rows.
-  const paths = page.students.flatMap(row => termIds.flatMap(termId => [1, 2, 3, 4].map(index => `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`)));
+  const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
+  const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
+  const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const records = new Map();
   for (let offset = 0; offset < paths.length; offset += 400) {
     const batches = [];
-    for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100)));
+    for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100), heatmap ? { fieldPaths: heatmapFields } : undefined));
     for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
   }
   const students = page.students.map(row => {
-    const results = termIds.map(termId => ({ termId, lessons: [1, 2, 3, 4].flatMap(index => {
-      const path = `users/${row.document.id}/test_results/${termId}/lessons/lesson_0${index}`, record = records.get(path);
-      return record ? [output(path, record)] : [];
+    const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
+      const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
+      return record ? [output(path, heatmap ? { data: pick(record.wire || record.data, heatmapFields) } : record)] : [];
     }) }));
-    return { ...row, ...(body.allTerms === true ? { termResults: results } : { lessons: results[0].lessons }) };
+    return { ...row, ...(heatmap ? { document: { ...row.document, data: {} } } : {}), ...(body.allTerms === true ? { termResults: results } : { lessons: results[0].lessons }) };
   });
   const curriculumResult = await curriculumPromise;
   if (curriculumResult?.error) throw curriculumResult.error;
@@ -383,9 +435,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
   let started = false;
   try {
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
-      const row = await store.get("webSettings/schoolYear");
-      const startYear = row?.data.startYear;
-      return respond({ startYear: Number.isInteger(startYear) && startYear >= 2000 && startYear <= 2100 ? startYear : 2026 });
+      return respond(await readSchoolYear(store));
     }
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
@@ -462,6 +512,8 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       // Authorize the whole group before returning any records; memoized class
       // checks are shared across a page's concurrent report requests.
       await Promise.all(refs.map(ref => scope.authorizeRead(ref)));
+      const sectionIds = actor.role === "teacher" && refs.some(ref => ref.parts[0] === "terms" && ref.parts[2] === "lessons")
+        ? (await scope.assignedClasses()).map(section => section.id) : [];
       const batchedResults = new Map();
       for (let index = 0; index < resultQueries.length; index += 25) {
         const group = resultQueries.slice(index, index + 25);
@@ -474,12 +526,12 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       }
       const results = [];
       for (let index = 0; index < refs.length; index += 8) results.push(...await Promise.all(refs.slice(index, index + 8).map(async ref => {
-        if (ref.kind === "document") return { document: output(ref.path, await scope.get(ref.path)) };
+        if (ref.kind === "document") return { document: output(ref.path, await scope.get(ref.path), undefined, sectionIds) };
         if (batchedResults.has(ref.path)) return { documents: batchedResults.get(ref.path) };
         if (ref.path === "users" && ref.filters.some(filter => filter.field === "uid")) {
           return { documents: [output("users/" + actor.id, await scope.get("users/" + actor.id), actor.id)] };
         }
-        let records = await store.query(ref.path, ref);
+        let records = ref.path === "classes" ? (await scope.assignedClasses()).slice(0, ref.limit) : await store.query(ref.path, ref);
         if (ref.path === "generatedQuizzes") {
           // Old or forged UID matches never grant access to another profile's
           // quizzes or sections after a teacher account has been replaced.
@@ -493,7 +545,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
             } catch (error) { if (error.status === 403) return null; throw error; }
           }))).filter(Boolean);
         }
-        return { documents: records.map(row => output(ref.path + "/" + row.id, row, row.id)) };
+        return { documents: records.map(row => ref.path === "generatedQuizzes" ? quizListEntry(row) : output(ref.path + "/" + row.id, row, row.id, sectionIds)) };
       })));
       return respond(body.action === "reads" ? { results } : results[0]);
     }
@@ -502,6 +554,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       const writes = [];
       for (const write of body.writes) writes.push(await scope.write(write));
       await store.commit(writes); started = false;
+      if (writes.some(write => write.path === "webSettings/schoolYear")) schoolYears.delete(schoolYearCacheKey(store));
       if (env.DASHBOARD_SUMMARIES_ENABLED === "true" && actor.role === "teacher") {
         const ids = [...new Set(writes.filter(write => /^users\/[A-Za-z0-9_-]+(?:\/test_results\/|$)/.test(write.path)).map(write => write.path.split("/")[1]))];
         if (ids.length) {
@@ -522,6 +575,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
     throw fail("Unknown data operation.", 400);
   } catch (error) {
     if (started) await store.rollback().catch(() => {});
+    if (databaseQuotaFailure(error)) return respond({ error: error.message, code: "DATABASE_QUOTA_EXCEEDED" }, 503);
     const status = [400, 401, 403, 409, 413].includes(error.status) ? error.status : 503;
     return respond({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,
       code: status === 401 ? "unauthenticated" : status === 403 ? "permission-denied" : status === 409 ? "aborted" : "unavailable" }, status);

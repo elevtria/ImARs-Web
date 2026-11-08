@@ -19,14 +19,14 @@ export class QuizReviewStore extends FirestoreAdmin {
     return rows.filter(row => row.document).map(({ document }) => ({ path: document.name.split("/documents/")[1], data: decodeFields(document.fields), updateTime: document.updateTime }));
   }
 }
-async function cursor(env, actor, quizId, value, now) {
+async function cursor(env, actor, quizId, sectionId, value, now) {
   if (!value) return null;
   try {
     if (typeof value !== "string" || value.length > 4096) throw 0;
     const [body, signature, extra] = value.split(".");
     if (extra || !await crypto.subtle.verify("HMAC", await key(env), from64(signature), bytes(body))) throw 0;
     const parsed = JSON.parse(new TextDecoder().decode(from64(body)));
-    if (parsed.uid !== actor.uid || parsed.id !== actor.id || parsed.quizId !== quizId || parsed.exp <= now || !Array.isArray(parsed.after) || parsed.after.length !== 2 || !Number.isFinite(Date.parse(parsed.after[0])) || !/^users\/[A-Za-z0-9_-]+\/generated_quiz_attempts\/[a-f0-9]{32}$/.test(parsed.after[1])) throw 0;
+    if (parsed.uid !== actor.uid || parsed.id !== actor.id || parsed.quizId !== quizId || parsed.sectionId !== sectionId || parsed.exp <= now || !Array.isArray(parsed.after) || parsed.after.length !== 2 || !Number.isFinite(Date.parse(parsed.after[0])) || !/^users\/[A-Za-z0-9_-]+\/generated_quiz_attempts\/[a-f0-9]{32}$/.test(parsed.after[1])) throw 0;
     return parsed.after;
   } catch { throw fail("CURSOR_INVALID", 400); }
 }
@@ -52,26 +52,33 @@ export async function quizReview({ request, env }, { store = new QuizReviewStore
     if (env.STUDENT_QUIZZES_ENABLED !== "true") throw fail("BACKEND_NOT_CONFIGURED", 503);
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
-    const body = await readJson(request, 65536);
     const initialActor = await authenticate(request, env, store);
-    if (!only(body, ["action", "quizId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade"].includes(body.action)) throw fail("INVALID_REQUEST", 400);
+    const body = await readJson(request, 65536);
+    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade"].includes(body.action) ||
+        (body.sectionId !== undefined && body.sectionId !== "" && !validPart(body.sectionId))) throw fail("INVALID_REQUEST", 400);
     if (body.action === "grade") { await store.begin(); transaction = true; }
     const actor = transaction ? await authenticate(request, env, store) : initialActor;
     const q = await ownedQuiz(actor, store, body.quizId);
+    const sectionId = body.sectionId || q.sectionId || "";
+    if (body.sectionId && body.sectionId !== q.sectionId) {
+      if (!quizAssignedToSection(q, body.sectionId)) throw fail("FORBIDDEN");
+      await ownedSection(actor, store, body.sectionId);
+    }
     if (body.action === "list") {
-      const rows = await store.reviewPage(actor, body.quizId, q.sectionId, await cursor(env, actor, body.quizId, body.cursor, now()));
-      const sections = new Map(), items = [];
+      const rows = await store.reviewPage(actor, body.quizId, sectionId, await cursor(env, actor, body.quizId, sectionId, body.cursor, now()));
+      const sections = new Map(sectionId ? [[sectionId, Promise.resolve(true)]] : []), items = [];
       for (const row of rows.slice(0, 20)) {
         const id = row.data.context.sectionId;
+        if (sectionId && id !== sectionId) continue;
         if (!sections.has(id)) sections.set(id, ownedSection(actor, store, id).then(() => true, error => { if (error.status === 403) return false; throw error; }));
-        if (await sections.get(id)) items.push({ studentId: row.data.context.studentId, attemptId: row.path.split("/").at(-1), submittedAtUtc: row.data.submittedAt, revision: row.updateTime });
+        if (await sections.get(id)) items.push({ studentId: row.data.context.studentId, sectionId: id, attemptId: row.path.split("/").at(-1), submittedAtUtc: row.data.submittedAt, revision: row.updateTime });
       }
-      return respond({ items, nextCursor: rows.length > 20 ? await sign(env, { uid: actor.uid, id: actor.id, quizId: body.quizId, exp: now() + 3600_000, after: [rows[19].data.submittedAt, rows[19].path] }) : "" });
+      return respond({ items, nextCursor: rows.length > 20 ? await sign(env, { uid: actor.uid, id: actor.id, quizId: body.quizId, sectionId, exp: now() + 3600_000, after: [rows[19].data.submittedAt, rows[19].path] }) : "" });
     }
     if (!validPart(body.studentId) || !/^[a-f0-9]{32}$/.test(body.attemptId)) throw fail("INVALID_REQUEST", 400);
     const path = `users/${body.studentId}/generated_quiz_attempts/${body.attemptId}`, attempt = await store.get(path), a = attempt?.data;
-    if (!a || a.quizId !== body.quizId || a.context?.teacherUid !== actor.uid || a.context?.teacherProfileId !== actor.id || !quizAssignedToSection(q, a.context?.sectionId) || !validPart(a.snapshotId) || !a.receipt) throw fail("FORBIDDEN");
-    await ownedSection(actor, store, a.context.sectionId);
+    if (!a || a.quizId !== body.quizId || a.context?.teacherUid !== actor.uid || a.context?.teacherProfileId !== actor.id || !quizAssignedToSection(q, a.context?.sectionId) || (sectionId && a.context.sectionId !== sectionId) || !validPart(a.snapshotId) || !a.receipt) throw fail("FORBIDDEN");
+    if (!sectionId) await ownedSection(actor, store, a.context.sectionId);
     const snapshot = (await store.get("generatedQuizRevisions/" + a.snapshotId))?.data;
     if (!snapshot || snapshot.quizId !== body.quizId || snapshot.revision !== a.revision || !["essay", "identification-explanation", "modified-true-false"].includes(snapshot.type)) throw fail("FORBIDDEN");
     if (body.action === "open") return respond({ studentId: body.studentId, attemptId: body.attemptId, revision: attempt.updateTime, type: snapshot.type, title: snapshot.title, questions: snapshot.questions, answers: a.answers, status: a.status });

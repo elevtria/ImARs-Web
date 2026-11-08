@@ -9,16 +9,16 @@ import { fixture as dataFixture } from "./fixtures/web-data.js";
 
 const source = readFileSync(new URL("../js/firebase-data.js", import.meta.url), "utf8").replace(/^import[^\n]+\n/gm, "").replace(/^export /gm, "");
 const flush = async () => { for (let index = 0; index < 3; index++) await new Promise(resolve => setImmediate(resolve)); };
-function fixture(transport, { now = Date.now } = {}) {
+function fixture(transport, { now = Date.now, sharedCache } = {}) {
   const calls = [], timers = new Map(), delays = new Map(), events = new Map();
   const memory = new Map();
   const storage = { get length() { return memory.size; }, key: i => [...memory.keys()][i], getItem: key => memory.get(key) || null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
-  const cache = createViewCache({ storage, versions: storage, now });
+  const cache = sharedCache || createViewCache({ storage, versions: storage, now });
   let uid = "teacher-a";
   cache.setOwner(uid);
   let invalidated = 0, nextTimer = 0;
   const context = vm.createContext({ Date: now === Date.now ? Date : class extends Date { static now() { return now(); } }, crypto, performance, queueMicrotask, createReadPool, wrapFirestoreReads, AbortSignal,
-    startLoading: () => () => {}, withLoading: operation => operation(), invalidateTeacherViews: () => { invalidated++; cache.invalidate(); }, teacherViewCache: () => cache, visitUser: () => uid,
+    startLoading: () => () => {}, withLoading: operation => operation(), invalidateTeacherViews: () => { invalidated++; cache.invalidate(); }, teacherViewCache: () => cache, visitUser: () => uid, getAuth: () => ({ currentUser: uid ? { uid } : null }),
     setTimeout(callback, delay) { timers.set(++nextTimer, callback); delays.set(nextTimer, delay); return nextTimer; }, clearTimeout(id) { timers.delete(id); delays.delete(id); },
     window: { location: { pathname: "/index" }, addEventListener(name, callback) { events.set(name, callback); }, removeEventListener(name) { events.delete(name); } },
     document: { visibilityState: "visible", addEventListener(name, callback) { events.set(name, callback); }, removeEventListener(name) { events.delete(name); } },
@@ -33,6 +33,40 @@ function fixture(transport, { now = Date.now } = {}) {
   return { api, calls, timers, delays, context, events, cache, setUser: value => { uid = value; cache.setOwner(uid); }, invalidated: () => invalidated };
 }
 const document = (path, data) => ({ id: path.split("/").at(-1), path, data });
+
+test("assigned section lists survive navigation without duplicate reads, expire, and invalidate after confirmed saves", async () => {
+  let now = 1000000;
+  const transport = body => body.action === "commit" ? { ok: true } : { results: body.reads.map(() => ({ documents: [document("classes/A", { SectionName: "Section A", teacherId: "TEACH1000" })] })) };
+  const first = fixture(transport, { now: () => now });
+  const sections = api => api.query(api.collection({}, "classes"), api.where("teacherId", "==", "TEACH1000"));
+  await first.api.getDocs(sections(first.api));
+  const next = fixture(transport, { now: () => now, sharedCache: first.cache });
+  const saved = await next.api.getDocs(sections(next.api));
+  assert.equal(next.calls.length, 0); assert.equal(saved.metadata.fromCache, true);
+  assert.equal(saved.docs[0].data().SectionName, "Section A");
+  now += 300001;
+  await next.api.getDocs(sections(next.api)); assert.equal(next.calls.length, 1);
+  await next.api.setDoc(next.api.doc({}, "classes", "A"), { SectionName: "Updated" });
+  await next.api.getDocs(sections(next.api)); assert.equal(next.calls.length, 3);
+  next.setUser("teacher-b");
+  await next.api.getDocs(sections(next.api)); assert.equal(next.calls.length, 4);
+});
+
+test("section caching never stores profiles, students, answer keys or late results from a different account", async () => {
+  let finish;
+  const app = fixture(body => new Promise(resolve => { finish = () => resolve({ results: body.reads.map(item => ({ documents: [document(item.reference.path + "/A", { SectionName: "Section A", teacherId: "TEACH1000" })] })) }); }));
+  const ref = app.api.query(app.api.collection({}, "classes"), app.api.where("teacherId", "==", "TEACH1000"));
+  const old = app.api.getDocs(ref); await flush(); app.setUser("teacher-b"); finish(); await old;
+  const current = app.api.getDocs(ref); await flush(); assert.equal(app.calls.length, 2); finish(); await current;
+  for (const path of ["users", "generatedQuizzes", "terms/term_01/lessons"]) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const read = app.api.getDocs(app.api.collection({}, path)); await flush(); finish(); await read;
+    }
+  }
+  assert.equal(app.calls.length, 8);
+  app.setUser(null);
+  const signedOut = app.api.getDocs(ref); await flush(); assert.equal(app.calls.length, 9); finish(); await signedOut;
+});
 
 test("batch-upload receives its own verified teacher and assigned sections in one count-free metadata request",async()=>{
   const backend=dataFixture(),cookie=await backend.login();

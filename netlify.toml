@@ -1,0 +1,25 @@
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[edge_functions]]
+  function = "portal"
+  path = "/*"
+  excludedPath = ["/api/*", "/.netlify/*", "/assets/*", "/sw.js", "/favicon.ico"]
+
+[[redirects]]
+  from = "/scan-qr-ar"
+  to = "/sync-offline-results"
+  status = 302
+
+[[redirects]]
+  from = "/scan-qr-ar.html"
+  to = "/sync-offline-results"
+  status = 302

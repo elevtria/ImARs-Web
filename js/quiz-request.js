@@ -12,6 +12,10 @@ export async function requestQuiz(payload, uid) {
   }
   const signal = AbortSignal.timeout(isPdf ? PDF_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
   try {
+    if (globalThis.document?.querySelector('meta[name="imars-quiz-transport"]')?.content === "netlify-jobs") {
+      const { requestNetlifyQuiz } = await import("./netlify-quiz-request.js");
+      return await requestNetlifyQuiz(settings, isPdf ? pdfFile : null, uid, signal);
+    }
     const response = await fetch("/api/generate-quiz", {
       method: "POST", credentials: "same-origin", cache: "no-store",
       headers: { ...(uid ? { "X-Web-User": uid } : {}),

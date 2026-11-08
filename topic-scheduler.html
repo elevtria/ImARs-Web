@@ -43,23 +43,27 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-      <section class="hero" data-auth-shell>
+      <section class="hero" data-auth-shell data-await-content="schedule-sections">
         <div>
           <h1 data-auth-shell>Topic Scheduler</h1>
           <div class="quiz-schedule-controls">
-            <label class="quiz-schedule-access" for="scheduleSection">Schedule for section
+            <label class="quiz-schedule-access" for="scheduleSection" data-public-label>Schedule for section
               <select id="scheduleSection" disabled><option value="">Select a section</option></select>
             </label>
           </div>
-          <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite"></p>
         </div>
       </section>
+      <p class="scheduler-sync-status" id="syncStatus" role="status" aria-live="polite"></p>
 
-      <section class="terms" id="terms" data-auth-shell data-await-content="schedule"></section>
+      <section class="terms" id="terms" data-auth-shell data-await-content="schedule">
+        <article class="term-card theme-yellow"><div class="term-head"><div class="term-head-left"><div class="term-num" data-public-label>1</div><div class="term-name" data-public-label>Term 1</div></div></div></article>
+        <article class="term-card theme-green"><div class="term-head"><div class="term-head-left"><div class="term-num" data-public-label>2</div><div class="term-name" data-public-label>Term 2</div></div></div></article>
+        <article class="term-card theme-blue"><div class="term-head"><div class="term-head-left"><div class="term-num" data-public-label>3</div><div class="term-name" data-public-label>Term 3</div></div></div></article>
+      </section>
 
       <section class="progress-card quiz-scheduler" aria-labelledby="activitySchedulerHeading" data-auth-shell data-await-content="schedule">
         <div class="quiz-scheduler-heading">
-          <div><h2 id="activitySchedulerHeading">Activity Schedule</h2><p class="scheduler-progress-copy">Choose when each lesson topic becomes available to learners.</p></div>
+          <div><h2 id="activitySchedulerHeading" data-public-label>Activity Schedule</h2><p class="scheduler-progress-copy" data-public-label>Choose when each lesson topic becomes available to learners.</p></div>
         </div>
         <p class="scheduler-sync-status" id="activityScheduleStatus" role="status" aria-live="polite"></p>
         <div id="activityScheduleList" class="quiz-schedule-list"></div>
@@ -67,7 +71,7 @@
 
       <section class="progress-card" data-auth-shell data-await-content="schedule">
         <h2 data-auth-shell>Year Progress</h2>
-        <p class="scheduler-progress-copy">Based on topics currently unlocked for learners.</p>
+        <p class="scheduler-progress-copy" data-public-label>Based on topics currently unlocked for learners.</p>
         <div class="year-grid" id="yearProgress"></div>
       </section>
     </main>

@@ -30,8 +30,9 @@ test("generation, review, unassigned draft and all-section release use the actua
     collection:(_db,path)=>path, query:(path)=>path, where:()=>null, doc:(_db,_collection,id)=>id,
     getDocs:async path=>path==="users" ? docs([["TEACH1",{role:"teacher"}]]) : path==="classes" ? docs([["A",{SectionName:"Section A"}],["C",{SectionName:"Section C"}]]) : docs([...quizzes]),
     getDoc:async id=>({exists:()=>quizzes.has(id),data:()=>quizzes.get(id)}),
-    setDoc:async (id,data)=>{quizzes.set(id,structuredClone(data));saves.push(structuredClone(data));}, deleteDoc:async()=>{},
-    onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, openQuizReview(){}, closeQuizReview(){},
+    setDoc:async (id,data)=>{quizzes.set(id,structuredClone(data));saves.push(structuredClone(data));},
+    updateDoc:async (id,data)=>{assert.ok(!Object.hasOwn(data,"questions"));const updated={...quizzes.get(id),...data};quizzes.set(id,updated);saves.push(updated);}, deleteDoc:async()=>{},
+    onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, showTeacherView:async ({load,render,painted})=>{render(await load());painted();},
     requestQuiz:async payload=>{requested=payload;return [{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}];},
     extractOfficeText:async()=>"Water freezes.", localStorage:{setItem(){}},
     window:{scrollTo(){},confirm:()=>true},
@@ -39,8 +40,10 @@ test("generation, review, unassigned draft and all-section release use the actua
   };
   vm.runInNewContext(readFileSync(new URL("../js/quiz-generator.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm,""),context);
   await authenticated({uid:"teacher-a"});
+  assert.equal(element("generateQuiz").disabled,true);
   const file = Object.assign(new Blob(["PDF fixture"]),{name:"water.pdf"});
   element("quizFile").files=[file]; element("quizFile").listeners.change();
+  assert.equal(element("generateQuiz").disabled,false);
   element("questionCount").value="1";
   await element("generateQuiz").listeners.click();
   assert.equal(requested.sectionId,undefined);
@@ -49,6 +52,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("editorStep").hidden,false);
   assert.equal(element("quizAvailability").hidden,true);
   await element("saveQuiz").listeners.click();
+  assert.equal(element("generateQuiz").disabled,true);
   assert.equal(saves[0].assignmentScope,"unassigned"); assert.equal(saves[0].sectionId,""); assert.equal(saves[0].availability,"draft");
   assert.match(element("quizLibraryList").innerHTML,/All my sections/);
   const form = new Element(); form.dataset.scheduleForm=saves[0].id;

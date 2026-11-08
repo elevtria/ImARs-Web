@@ -132,7 +132,7 @@ termFilter.addEventListener("change", () => {
   const sharedStudents = new Map((shared?.pages || []).flatMap(page => page.students).map(row => [row.studentDoc.id, row]));
   const key = "records:page:" + JSON.stringify({ filter: pageFilter, cursor: cursors[pageIndex] });
   const sections = recordData.sections.map(section => ({ ...section, students: section.students.map(student => {
-    const saved = cache.get(user.uid, "records:results:" + pageFilter.termId + ":" + student.studentDoc.id, 60000);
+    const saved = cache.get(user.uid, "records:results:" + pageFilter.termId + ":" + student.studentDoc.id, 300_000);
     let results = sharedStudents.get(student.studentDoc.id)?.results || [];
     if (saved) try { results = decodeView(saved); } catch {}
     return { studentDoc: student.studentDoc, results, resultsLoaded: results.length > 0, resultsAt: saved ? Date.now() : shared?.checkedAt || 0, resultsLoading: false, resultsError: false };
@@ -180,7 +180,7 @@ function renderRecords(data, key) {
   revealContent("student-records");
 }
 
-async function loadRecordsPage({ background = false, scroll = false } = {}) {
+async function loadRecordsPage({ background = false, scroll = false, restoredPage = false } = {}) {
   const user = auth.currentUser;
   if (!user) return;
   if (background && pageBusy) return;
@@ -209,8 +209,13 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
   };
   if (saved && !background) {
     let restored = false;
-    try { renderRecords(decodeView(saved), key); restored = true; } catch {}
-    if (restored && cache.get(user.uid, key, 60000)) { if (!Array.isArray(recordData.counts)) void refreshCounts(); if (scroll) recordsContainer.scrollIntoView?.({ block: "start" }); return; }
+    try {
+      if (restoredPage && pageCacheKey === key && recordData && JSON.stringify(saved) === JSON.stringify(encodeRecords(recordData))) applyFilters();
+      else renderRecords(decodeView(saved), key);
+      restored = true;
+    } catch {}
+    if (restored && cache.get(user.uid, key, 300_000)) { if (!Array.isArray(recordData.counts)) void refreshCounts(); if (scroll) recordsContainer.scrollIntoView?.({ block: "start" }); return; }
+    if (restored) background = true;
   }
   if (!background && filter.status === "active" && !filter.search) {
     const reused = reuseTeacherReport(cache, user.uid, { termId: filter.termId, sectionId: filter.sectionId, now: Date.now() });
@@ -244,7 +249,7 @@ async function loadRecordsPage({ background = false, scroll = false } = {}) {
     if (cache.version() !== version) return;
     const sections = result.classes.map(classDoc => ({ classDoc, students: rows.filter(row => row.classId === classDoc.id).map(row => {
       const previous = recordData?.sections.flatMap(section => section.students).find(student => student.studentDoc.id === row.studentDoc.id);
-      const remembered = cache.get(user.uid, "records:results:" + filter.termId + ":" + row.studentDoc.id, 60000);
+      const remembered = cache.get(user.uid, "records:results:" + filter.termId + ":" + row.studentDoc.id, 300_000);
       const sameTerm = previous?.results[0]?.termId === filter.termId;
       const results = row.results || (sameTerm && previous?.resultsLoaded ? previous.results : remembered ? decodeView(remembered) : null);
       return { studentDoc: row.studentDoc, results: results || [], resultsLoaded: Boolean(results),
@@ -285,7 +290,7 @@ async function loadStudentPerformance(id, { background = false } = {}) {
   const termId = pageFilter.termId || "term_01", requestKey = termId + ":" + id;
   const find = () => recordData?.sections.flatMap(section => section.students.map(student => ({ section, student }))).find(item => item.student.studentDoc.id === id);
   let row = find();
-  if (!user || !row || (row.student.resultsLoaded && (!background || Date.now() - (row.student.resultsAt || 0) < 60000)) || reportRequests.has(requestKey)) return;
+  if (!user || !row || (row.student.resultsLoaded && (!background || Date.now() - (row.student.resultsAt || 0) < 300_000)) || reportRequests.has(requestKey)) return;
   const current = row.student;
   if (!background) { current.resultsLoading = true; current.resultsError = false; }
   const replace = () => {
@@ -478,7 +483,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   return card;
 }
 
-onAuthStateChanged(auth, async user => {
+onAuthStateChanged(auth, async (user, { restored = false } = {}) => {
   stopUpdates?.(); pageAbort?.abort(); reportRequests.clear(); observedCards?.disconnect();
   if (!user) { window.location.href = "login.html"; return; }
   if (recordOwnerUid !== user.uid) { recordData = null; counts = []; dynamicCards = []; recordsContainer.replaceChildren(); }
@@ -492,8 +497,8 @@ onAuthStateChanged(auth, async user => {
     for (const status of ["active", "archived"]) document.getElementById(status + "StudentsTab").setAttribute("aria-pressed", String(recordStatus === status));
   }
   termFilter.value = pageFilter.termId;
-  await loadRecordsPage();
-  stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }));
+  await loadRecordsPage({ restoredPage: restored });
+  stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }), 300_000);
 });
 
 

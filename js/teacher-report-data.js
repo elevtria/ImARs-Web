@@ -92,26 +92,35 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true }) {
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, restoredPage = false }) {
+    const key = "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
+    const nextCache = prepareTeacherCache(app, account);
+    const nextVersion = nextCache.version();
+    const keep = restoredPage && user?.uid === account.uid && options?.key === key && options.termId === termId &&
+      options.includeCurriculum === includeCurriculum && version === nextVersion && state?.pages.length && nextCache.get(account.uid, key);
     stop(); user = account; const token = generation;
-    cache = prepareTeacherCache(app, user); version = cache.version();
-    options = { termId, sectionId, allTerms, includeCurriculum, key: "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all") };
-    state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
-    const saved = cache.get(user.uid, options.key);
-    if (saved) try {
-      const restored = decodeView(saved);
-      const pages = restored.pages.map(index => { const page = cache.get(user.uid, options.key + ":" + index); if (!page) throw new Error("Incomplete cached report"); return decodeView(page); });
-      state = { ...restored, pages }; paint();
-    } catch { cache.remove(options.key); }
-    if (!state.pages.length) {
-      const reused = reuseTeacherReport(cache, user.uid, { ...options, now: Date.now() });
-      if (reused) {
-        state = reused;
-        if (state.curriculumSnap || !includeCurriculum) paint();
+    cache = nextCache; version = nextVersion;
+    options = { termId, sectionId, allTerms, includeCurriculum, key };
+    if (!keep) {
+      state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
+      const saved = cache.get(user.uid, options.key);
+      if (saved) try {
+        const restored = decodeView(saved);
+        const pages = restored.pages.map(index => { const page = cache.get(user.uid, options.key + ":" + index); if (!page) throw new Error("Incomplete cached report"); return decodeView(page); });
+        state = { ...restored, pages }; paint();
+      } catch { cache.remove(options.key); }
+      if (!state.pages.length) {
+        const reused = reuseTeacherReport(cache, user.uid, { ...options, now: Date.now() });
+        if (reused) {
+          state = reused;
+          if (state.curriculumSnap || !includeCurriculum) paint();
+        }
       }
     }
-    stopUpdates = watchVisibleData(app, user, () => update(token));
-    if (!state.pages.length || (includeCurriculum && !state.curriculumSnap) || Date.now() - state.checkedAt >= 60000) await update(token);
+    // Report pages contain many lesson records. A five-minute background step
+    // avoids repeatedly rereading entire class reports on the free database.
+    stopUpdates = watchVisibleData(app, user, () => update(token), 300_000);
+    if (!state.pages.length || (includeCurriculum && !state.curriculumSnap) || Date.now() - state.checkedAt >= 300_000) await update(token);
     else if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
   } };
 }

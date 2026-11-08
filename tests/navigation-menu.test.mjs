@@ -131,3 +131,30 @@ test("transitions capture public navigation only and respect reduced motion; log
     assert.ok(!/<link\b[^>]*rel="stylesheet"[^>]*href="css\/portal-design.css"/.test(html));
   }
 });
+
+
+const quizUiSource = readFileSync(new URL("../js/ui.js", import.meta.url), "utf8");
+function quizMenu(entries) {
+  const links = [];
+  const link = (href, active = false) => ({ href, classList: { contains: name => active && name === "active" },
+    remove() { links.splice(links.indexOf(this), 1); }, after(item) { links.splice(links.indexOf(this) + 1, 0, item); }, append() {} });
+  links.push(...entries.map(([href, active]) => link(href, active)));
+  const nav = { querySelectorAll: () => links.slice(), append: item => links.push(item) };
+  vm.runInNewContext(quizUiSource, { URL, window: { location: { href: "https://imars.example/student-records", origin: "https://imars.example" } },
+    document: { querySelector: selector => selector === ".side-nav" ? nav : null, getElementById: () => null, createElement: () => link("") } });
+  return links;
+}
+
+test("Quiz Generator navigation does not duplicate when hosting cleans .html links", () => {
+  for (const href of ["quiz-generator.html", "/quiz-generator", "/quiz-generator/", "https://imars.example/quiz-generator.html"]) {
+    const links = quizMenu([[href, true]]);
+    assert.equal(links.length, 1); assert.equal(links[0].href, href);
+  }
+});
+
+test("duplicate quiz entries collapse to the active link and missing links follow the scheduler", () => {
+  const links = quizMenu([["/quiz-generator", false], ["quiz-generator.html", true]]);
+  assert.equal(links.length, 1); assert.equal(links[0].href, "quiz-generator.html");
+  const added = quizMenu([["/topic-scheduler", false], ["/analytics", false]]);
+  assert.deepEqual(added.map(link => link.href), ["/topic-scheduler", "quiz-generator.html", "/analytics"]);
+});

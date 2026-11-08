@@ -47,3 +47,26 @@ test("all-section quiz reviews retain current class ownership checks", async () 
   await store.reviewPage({ id: "TEACH1", uid: "teacher-a" }, "quiz1", "", null);
   assert.equal(query.limit, 21); assert.equal(query.where.compositeFilter.filters.length, 4);
 });
+
+test("submission filters and cursors cannot cross sections", async () => {
+  const f = await setup("essay", { assignmentScope: "all", sectionId: "" });
+  f.put("classes/C", { teacherId: "TEACH1" });
+  let reads = 0;
+  f.store.reviewPage = async (_actor, _quiz, sectionId) => {
+    reads++;
+    assert.equal(sectionId, "A");
+    return Array.from({ length: 21 }, (_, i) => ({
+      path: "users/S1/generated_quiz_attempts/" + i.toString(16).padStart(32, "0"),
+      data: { context: { sectionId: "A", studentId: "S1" }, submittedAt: "2026-10-29T00:00:00Z" }
+    }));
+  };
+  const response = await f.callReview({ action: "list", sectionId: "A" });
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.items.length, 20);
+  assert.ok(page.nextCursor);
+  assert.equal((await f.callReview({ action: "list", sectionId: "C", cursor: page.nextCursor })).status, 400);
+  assert.equal((await f.callReview({ action: "open", sectionId: "C" })).status, 403);
+  assert.equal((await f.callReview({ action: "list", sectionId: "B" })).status, 403);
+  assert.equal(reads, 1);
+});

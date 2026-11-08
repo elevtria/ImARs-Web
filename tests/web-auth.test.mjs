@@ -68,6 +68,28 @@ test("security headers also cover redirects from protected routes", async () => 
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
 });
 
+test("only verified static portal shells can be revalidated for history reuse", async () => {
+  const app = fixture();
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  for (const [path, cookie, status, contentType, setCookie, expected] of [
+    ["/index.html", teacher, 200, "text/html", false, "private, no-cache"],
+    ["/topic-scheduler", teacher, 304, null, false, "private, no-cache"],
+    ["/student-records", teacher, 200, "text/html", true, "private, no-store"],
+    ["/manage-teachers", admin, 200, "text/html", false, "private, no-cache"],
+    ["/api/web-data", teacher, 200, "application/json", false, "private, no-store"],
+    ["/login", teacher, 200, "text/html", false, "private, no-store"]
+  ]) {
+    const response = await onRequest({ env: app.env, request: new Request("https://imars.example.test" + path, { headers: { Cookie: cookie } }),
+      next: async () => new Response(status === 304 ? null : "Static fixture", { status, headers: {
+        "Cache-Control": "private, no-cache", ...(contentType ? { "Content-Type": contentType } : {}),
+        ...(setCookie ? { "Set-Cookie": "test=fixture; HttpOnly; Secure" } : {})
+      } }) });
+    assert.equal(response.status, status, path);
+    assert.equal(response.headers.get("Cache-Control"), expected, path);
+  }
+});
+
 test("both sign-in pages stay public with security headers while protected HTML stays in middleware routes", async () => {
   const app = fixture();
   const routes = JSON.parse(readFileSync(new URL("../_routes.json", import.meta.url), "utf8"));
@@ -382,11 +404,12 @@ test("teacher and admin page navigation can renew the cookie without changing pa
 
 test("passive checks cannot keep an idle session alive or revive it using browser timestamps", async () => {
   const app = fixture();
-  const cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
-  for (let minute = 1; minute < 15; minute++) {
+  let cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
+  for (let minute = 1; minute < IDLE_AFTER_MS / 60_000; minute++) {
     app.advance(60_000);
     const response = await app.call("session", { active: false, now: 0, idleUntil: 99999999999999 }, cookie);
     assert.equal(response.status, 200);
+    cookie = app.cookieOf(response) || cookie;
   }
   app.advance(60_000);
   assert.equal((await app.call("session", { active: true, now: 0 }, cookie)).status, 401);

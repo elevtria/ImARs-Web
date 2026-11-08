@@ -139,7 +139,8 @@ const report = createTeacherReport({ app,
 onAuthStateChanged(auth, async user => {
   if (!user) { topicOverview = null; topicOwnerUid = null; clearTimeout(topicTimer); clearTimeout(summaryTimer); window.location.href = "login.html"; return; }
   topicOwnerUid = user.uid;
-  const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", load: () => getTeacherTopicOverview(), render: renderCurrentTopics })
+  const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", freshForMs: 300_000, refreshIntervalMs: 300_000,
+    load: () => getTeacherTopicOverview(), render: renderCurrentTopics })
     .catch(error => {
       console.error("Topic overview update failed:", error);
       const modules = document.getElementById("modulesContainer");
@@ -148,14 +149,14 @@ onAuthStateChanged(auth, async user => {
         revealContent("dashboard-topics");
       }
     });
-  const summaryOptions = { app, user, page: "dashboard-summary-v1", load: async () => {
+  const summaryOptions = { app, user, page: "dashboard-summary-v1", freshForMs: 300_000, refreshIntervalMs: 300_000, load: async () => {
     let result = await getDashboardSummary();
     if (!result.enabled) return { legacy: true };
     // Only the first preparation waits. Subsequent visits get the durable
     // summary immediately; no student report pages are downloaded here.
-    for (let attempt = 0; !result.ready && attempt < 150; attempt++) {
+    for (let attempt = 0; !result.ready && attempt < 5; attempt++) {
       if (auth.currentUser?.uid !== user.uid) throw new Error("Sign-in changed.");
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, Math.min(30_000, 5000 * 2 ** attempt)));
       if (auth.currentUser?.uid !== user.uid) throw new Error("Sign-in changed.");
       if (document.visibilityState === "hidden") continue;
       result = await getDashboardSummary();
@@ -171,11 +172,15 @@ onAuthStateChanged(auth, async user => {
     clearTimeout(summaryTimer);
     if (result.pending) summaryTimer = setTimeout(() => {
       if (auth.currentUser?.uid === user.uid && document.visibilityState !== "hidden") void showTeacherView({ ...summaryOptions, refreshOnly: true }).catch(() => {});
-    }, 4000);
+    }, 30_000);
   } };
   const summary = showTeacherView(summaryOptions).catch(error => {
     console.error("Dashboard update failed:", error);
-    if (auth.currentUser?.uid === user.uid) document.getElementById("dashboardReportStatus").textContent = "Could not update results. Retrying automatically.";
+    if (auth.currentUser?.uid === user.uid) {
+      const status = document.getElementById("dashboardReportStatus");
+      setLoadingState(status, false);
+      status.textContent = "Could not update results. Retrying automatically.";
+    }
   });
   await Promise.all([summary, topics]);
 });

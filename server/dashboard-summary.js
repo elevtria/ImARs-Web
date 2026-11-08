@@ -66,8 +66,9 @@ export class DashboardSummary {
     }
     const summary = await this.storage.get("dashboard:summary");
     // Legacy app builds have no sync notification. Reconcile quietly while the
-    // dashboard is in use, with a read budget of at most 24k lesson reads/day.
-    const interval = Math.max(300_000, (summary?.total || 0) * 12 / 24_000 * 86_400_000);
+    // dashboard is in use. Leave room for mobile, login checks and both hosts
+    // within the shared free database quota.
+    const interval = Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
     if (!summary || summary.scope !== scope || (!body.warmOnly && this.now() - summary.reconciledAt >= interval)) {
       if (!await this.storage.get("dashboard:job")) await this.start();
     }

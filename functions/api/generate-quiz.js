@@ -1,6 +1,6 @@
 import { MAX_QUIZ_TEXT_CHARACTERS, QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion } from "../../js/quiz-limits.js";
 import { QuizRequestError as RequestValidationError, readQuizMaterial, uploadPdf, deletePdf } from "../../server/quiz-material.js";
-import { dataEnabled, requireStaff } from "../../server/web-auth.js";
+import { dataEnabled, requireStaff, stateCall } from "../../server/web-auth.js";
 import { FirestoreAdmin } from "../../server/firestore-admin.js";
 
 const FIREBASE_PROJECT_ID = "imars-db-a733b";
@@ -8,7 +8,7 @@ const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 const GENERATION_TIMEOUT_MS = 60000;
 const MAX_PDF_BASE64_CHARACTERS = 14000000;
 
-export async function onRequestPost(context, { store = new FirestoreAdmin(context.env), authenticate = requireStaff } = {}) {
+export async function onRequestPost(context, { store = new FirestoreAdmin(context.env), authenticate = requireStaff, limitGeneration = true } = {}) {
   const { request, env } = context;
   const started = Date.now();
   let uploadedFile;
@@ -20,6 +20,11 @@ export async function onRequestPost(context, { store = new FirestoreAdmin(contex
     const gateway = dataEnabled(env);
     const staff = gateway ? await authenticate(request, env, store) : null;
     if (gateway && staff.role !== "teacher") return jsonResponse({ error: "Only a teacher account can generate quizzes." }, 403);
+    if (staff && limitGeneration) {
+      const limit = await stateCall(env, "quiz-generation:" + staff.uid, "generation-rate");
+      if (limit.status === 429) return Response.json({ error: "Too many quiz requests. Please wait a minute." }, { status: 429, headers: { "Retry-After": "60", "Cache-Control": "no-store" } });
+      if (!limit.ok) return jsonResponse({ error: "Quiz generation is temporarily unavailable." }, 503);
+    }
     const authorization = request.headers.get("Authorization") || "";
     const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!gateway && !idToken) return jsonResponse({ error: "Please sign in with a teacher account first." }, 401);

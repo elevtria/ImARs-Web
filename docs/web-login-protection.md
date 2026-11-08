@@ -46,8 +46,9 @@ the account's existing web sessions.
 
 Both portals require a fresh website login for a new visit. The browser uses
 the signed Cloudflare session instead of Firebase browser authentication. The
-login page clears the old visit marker; a direct URL, bookmark, new tab or
-restored history entry returns to login. Navigation inside the website and reloads during the same visit keep sign-in.
+login page clears the old visit marker. A direct URL, bookmark, or new tab needs
+sign-in. Internal links, reloads and same-origin history entries can resume the
+current visit after server verification.
 Browser restoration behavior varies, so the website also checks the navigation
 entry and its per-tab visit marker instead of relying on closing events alone.
 
@@ -59,9 +60,10 @@ data callbacks wait for a server-verified staff identity with its approved UID,
 role and live profile active status. An unavailable check
 does not fall back to cached student records. Logout clears this tab's saved
 views, notifies other website tabs for that UID, and hides history pages before
-they can be restored. Portal HTML uses `private, no-store`; existing immutable
-static-asset caching stays in place. Protected pages start hidden until the
-shared check succeeds. All of this reuses the existing auth, CSS and cache files.
+they can be restored. Known static portal shells can be revalidated privately so
+history navigation can reuse a page. Login, API responses, and responses that set
+cookies use `no-store`. A restored view stays hidden until the server verifies
+the same visit. Immutable static assets remain separately cached.
 
 These website checks do not prevent direct Firestore calls while database rules
 are public. They do not implement mobile-triggered website logout; that needs an
@@ -75,7 +77,7 @@ When protection is enabled, both portals use these server-enforced limits:
 - A previous credential has a 30-second allowance for overlapping requests. It
   cannot obtain a replacement cookie or extend inactivity. After that allowance,
   the server rejects it even if its signature and original expiry are still valid.
-- Inactivity ends the session after 15 minutes. Visible input activity sends an
+- Inactivity ends the session after 30 minutes. Visible input activity sends an
   update, coalesced to avoid requests on every mouse movement. Passive background
   checks and merely focusing a tab do not extend the deadline. A warning appears
   during the last minute, with a **Stay signed in** button.
@@ -87,12 +89,14 @@ in the Durable Object and survive restarts. Each account retains up to 20 browse
 sessions; signing in on a 21st retires the oldest. Tabs in the same browser share
 the server cookie, but each new website visit must still sign in in its own tab.
 The cookie has no persistent Max-Age/Expires; the server still enforces its
-15-minute idle and 12-hour absolute limits independently. This is scoped to one
+30-minute idle and 12-hour absolute limits independently. This is scoped to one
 host; production and preview sessions do not cross hosts.
 
-The browser checks approximately every 30 seconds (sooner near a deadline), and
-shows a reconnecting notice on network/server errors. Only a confirmed 401 ends
-the browser session; a second check accommodates a concurrent tab's renewal.
+The visible browser checks every five minutes during normal operation and checks
+sooner near a warning, expiry or renewal. It uses the identity response to start
+its countdown. Focus resumes the existing timer, and hidden tabs pause checks.
+Network errors trigger a retry with backoff. A confirmed 401 or a 403 ends the
+browser session. A second check accommodates concurrent cookie renewal after a 401.
 Sleeping tabs check on return. The server still rejects an expired session even
 if a browser timer is paused, removed, or changed. A valid stolen current session
 can simulate activity until it is retired; rotation is an additional safeguard,
@@ -219,10 +223,28 @@ their web cookie; do not delete the Durable Object namespace to unlock one user.
 
 ## Teacher sign-in across website and mobile
 
-A successful, fully verified teacher website login clears that teacher's mobile
-session receipts in the existing private `WEB_LOGIN_STATE` object. Wrong
-passwords, failed account checks, administrator logins and other teachers do not
-invalidate that receipt. Mobile sign-in does not end a website session.
+A successful, fully verified teacher login claims the active platform in one
+server-owned record shared by Cloudflare and Netlify. Website login invalidates
+that teacher's mobile receipt; mobile password login invalidates that teacher's
+website cookies on both hosts. Wrong passwords, failed account checks,
+administrator logins and other teachers do not change this record.
+
+`TEACHER_SESSION_SYNC_ENABLED=true` enables the shared check. The private record
+is `_accountAccess/{uid}/sessions/teacher`, already denied to Firestore clients
+by the deployed rules. It stores the platform, a random epoch, a hash of the
+mobile receipt, and the verified teacher IDs. No password, Firebase token or
+raw mobile receipt is stored there. Conditional writes retry concurrent claims.
+Only verified password login changes platform ownership; passive checks and
+Firebase token refresh do not. Same-platform website tabs may coexist, but a
+previous cookie cannot revive after switching through mobile and back to web.
+
+Website cookies carry the shared epoch in their signed payload. Every protected
+request checks it against the current record; browser rotation retains it.
+Mobile receipt checks require both the host's existing receipt and the shared
+record. Revocation reads are not cached across requests. Database/network
+failures return a temporary error rather than a false logout. This adds one
+small private read to teacher session validation; it does not query student data.
+No Firebase billing, rule changes or new credentials are required.
 
 The teacher-session-login endpoint issues a random receipt after Firebase identity
 and password proof, checking the existing approved website staff list;
@@ -230,7 +252,7 @@ and password proof, checking the existing approved website staff list;
 Firebase ID token and current approved teacher profile. A saved
 Firebase login alone cannot recreate a receipt after the website invalidates it.
 Receipts stay in private Durable Object storage, with at most 20 per account;
-no Firestore rule, schema, billing or new-secret changes are required.
+no Firestore rule, billing or new-secret changes are required.
 `TEACHER_MOBILE_SESSIONS_ENABLED=true` enables these two teacher-only endpoints
 independently of `ACCOUNT_ACCESS_ENABLED`. The latter remains disabled in the
 current production setup; no student bindings or student login flow are migrated.
@@ -242,6 +264,13 @@ caches and opens `Student_Login`; temporary network failures retry without
 claiming a logout. Students retain their existing flow. An offline/backgrounded
 device cannot detect invalidation until it reconnects/resumes. This is application
 sign-out behavior; it does not replace Firebase data authorization rules.
+
+The existing mobile endpoint contract is unchanged. The installed APK must
+actually call `teacher-session-login` after password login and monitor
+`mobile-session` with the returned receipt. Enabling shared checks requires
+teachers to sign in once again because older cookies/receipts do not contain
+shared state. Rebuild the APK if its installed version lacks the monitor or
+receipt login path. Neither backend deployment installs a mobile update.
 
 Deploy the private Worker before Pages. Rebuild and install the updated mobile
 APK: existing installed builds do not perform the new check. A teacher upgrading
@@ -258,7 +287,7 @@ locks, simultaneous attempts, persistent state across actor reconstruction,
 forged/expired cookies, encoded admin paths, direct Firebase token bypass attempts,
 administrator/maintenance recovery, and rejection of unconfigured browser login.
 Session tests also cover random IDs, simultaneous-tab renewal, old-credential
-retirement, passive polling, 15-minute idle and 12-hour absolute boundaries,
+retirement, passive polling, 30-minute idle and 12-hour absolute boundaries,
 durable state, bounded sessions, connection failures, and browser warning/retry.
 Cloudflare deployment and end-to-end sign-in with real accounts remain owner
 checks after the binding and secrets exist.

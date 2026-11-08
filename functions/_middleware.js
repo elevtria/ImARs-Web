@@ -1,4 +1,4 @@
-import { protectWebsite } from "../server/web-auth.js";
+import { isReusablePortalShell, protectWebsite } from "../server/web-auth.js";
 
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -26,6 +26,8 @@ export async function onRequest(context) {
   secured.headers.set("X-Frame-Options", "DENY");
   secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   secured.headers.set("Permissions-Policy", "camera=(self), microphone=(), geolocation=()");
-  if (secured.headers.get("Content-Type")?.includes("text/html")) secured.headers.set("Cache-Control", "private, no-store");
+  if (secured.headers.get("Content-Type")?.includes("text/html") && !isReusablePortalShell(response)) {
+    secured.headers.set("Cache-Control", "private, no-store");
+  }
   return secured;
 }

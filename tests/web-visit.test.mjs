@@ -14,14 +14,14 @@ const storage = entries => {
 };
 const grant = (uid = "teacher-a", role = "teacher", startedAt = Date.now()) => JSON.stringify({ uid, role, startedAt, tabId: "imars-web:fixture-tab" });
 
-function page({ path = "/index", type = "navigate", referrer = "", user = { uid: "teacher-a" }, saved,
+function page({ path = "/index", type = "navigate", referrer = "", user = { uid: "teacher-a" }, saved, navigation,
     profile = { uid: "teacher-a", role: "teacher", active: true }, profiles, read, passwordFails = false, sessionStorage = storage(), name = "imars-web:fixture-tab" } = {}) {
   if (saved) sessionStorage.setItem(VISIT, saved);
   const events = {}, calls = [], deliveries = [];
   const application = {};
   const body = { pending: path !== "/login", setAttribute() { this.pending = true; }, removeAttribute() { this.pending = false; } };
   const main = { cleared: false, inert: path !== "/login", replaceChildren() { this.cleared = true; } };
-  const location = { pathname: path, origin: "https://imars.example.test", replace(url) { this.redirect = url; } };
+  const location = { pathname: path, origin: "https://imars.example.test", href: "https://imars.example.test" + path, replace(url) { this.redirect = url; } };
   const approved = async () => {
     const result = read ? await read() : null;
     const rows = result ? result.docs.map(row => row.data()) : profiles || (profile ? [profile] : []);
@@ -30,7 +30,7 @@ function page({ path = "/index", type = "navigate", referrer = "", user = { uid:
     return record;
   };
   const context = vm.createContext({
-    window: { name, location, sessionStorage, localStorage: storage(), performance: { getEntriesByType: () => [{ type }] },
+    window: { name, location, navigation, sessionStorage, localStorage: storage(), performance: { getEntriesByType: () => [{ type }] },
       addEventListener: (name, callback) => { (events[name] ||= []).push(callback); } },
     document: { referrer, body, querySelector: () => main }, URL, Date, crypto,
     webRequest: async () => { calls.push(["profile"]); return { user: await approved() }; },
@@ -48,6 +48,7 @@ function page({ path = "/index", type = "navigate", referrer = "", user = { uid:
   const auth = api.getAuth(application);
   const observe = callback => api.onAuthStateChanged(auth, callback || (user => deliveries.push(user?.uid || null)));
   return { api, auth, app: application, body, main, location, calls, deliveries, observe, sessionStorage,
+    setName: value => { context.window.name = value; },
     emit: (name, event) => { for (const listener of events[name] || []) listener(event); } };
 }
 
@@ -101,7 +102,7 @@ test("failed passwords, missing/duplicate profiles, wrong roles, and disabled pr
 });
 
 test("internal page navigation and reloads keep the current visit without another password prompt", async () => {
-  for (const options of [{ referrer: "https://imars.example.test/index" }, { type: "reload" }]) {
+  for (const options of [{ referrer: "https://imars.example.test/index" }, { type: "reload" }, { type: "back_forward", referrer: "https://imars.example.test/index" }]) {
     const app = page({ saved: grant(), ...options }); app.observe(); await flush();
     assert.deepEqual(app.deliveries, ["teacher-a"]);
     assert.equal(app.body.pending, false);
@@ -129,10 +130,10 @@ test("a new tab cannot reuse session storage copied from its opener, even with a
   assert.deepEqual(app.deliveries, []); assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
 });
 
-test("mismatched UIDs, expired visits, restored history and cross-portal navigation require login", async () => {
+test("mismatched UIDs, expired visits, external history and cross-portal navigation require login", async () => {
   for (const options of [
     { saved: grant("other-uid") }, { saved: grant("teacher-a", "teacher", Date.now() - 12 * 60 * 60_000) },
-    { type: "back_forward" }, { path: "/admin-dashboard" }
+    { type: "back_forward", referrer: "https://other.example.test/" }, { type: "back_forward", name: "" }, { path: "/admin-dashboard" }
   ]) {
     const app = page({ saved: grant(), referrer: "https://imars.example.test/index", ...options });
     app.observe(); await flush();
@@ -166,6 +167,49 @@ test("returning to a live history page rechecks access before un-hiding it", asy
   app.emit("pagehide", {}); app.emit("pageshow", { persisted: true }); await flush();
   assert.equal(app.body.pending, false);
   assert.equal(app.calls.filter(call => call[0] === "profile").length, 2);
+});
+
+test("a history snapshot from a previous sign-in stays hidden after a new visit starts", async () => {
+  const app = page({ saved: grant(), type: "reload" }); app.observe(); await flush();
+  app.emit("pagehide", {});
+  const newVisit = { ...JSON.parse(grant()), tabId: "imars-web:second-visit" };
+  app.setName(newVisit.tabId);
+  app.sessionStorage.setItem(VISIT, JSON.stringify(newVisit));
+  app.emit("pageshow", { persisted: true }); await flush();
+  assert.deepEqual(app.deliveries, ["teacher-a"]);
+  assert.equal(app.body.pending, true);
+  assert.equal(app.main.cleared, true);
+});
+
+test("the teacher and admin sidebars reuse verified entries from this visit and leave other links alone", async () => {
+  const origin = "https://imars.example.test";
+  const tabId = "imars-web:fixture-tab";
+  for (const { role, current, previous, next } of [
+    { role: "teacher", current: "/topic-scheduler", previous: "/", next: "/student-records" },
+    { role: "admin", current: "/admin-profile", previous: "/admin-dashboard", next: "/manage-teachers" }
+  ]) {
+    const opened = [], entry = (index, path, visit) => ({ index, key: String(index), url: origin + path, getState: () => ({ imarsVisit: visit }) });
+    const currentEntry = entry(1, current);
+    const navigation = { currentEntry, entries: () => [entry(0, previous, tabId), currentEntry, entry(2, next, tabId), entry(3, "/teacher-manual", "imars-web:old")],
+      updateCurrentEntry({ state }) { currentEntry.getState = () => state; },
+      traverseTo(key) { opened.push(key); return { committed: Promise.resolve(), finished: Promise.resolve() }; } };
+    const app = page({ path: current, type: "reload", saved: grant(`${role}-a`, role), profile: { uid: `${role}-a`, role }, navigation });
+    app.observe(); await flush();
+    assert.equal(navigation.currentEntry.getState().imarsVisit, tabId);
+    const click = (href, options = {}) => {
+      let prevented = false;
+      const link = { href, hasAttribute: () => false };
+      app.emit("click", { button: 0, target: { closest: () => link }, preventDefault() { prevented = true; }, ...options });
+      return prevented;
+    };
+    assert.equal(click(origin + (previous === "/" ? "/index.html" : previous + ".html")), true);
+    assert.equal(click(origin + next + ".html"), true);
+    assert.equal(click(origin + current + ".html"), true);
+    assert.equal(click(origin + "/teacher-manual"), false);
+    assert.equal(click(origin + next, { ctrlKey: true }), false);
+    assert.equal(click("https://other.example.test" + next), false);
+    assert.deepEqual(opened, ["0", "2"]);
+  }
 });
 
 test("a late role check from a page being left cannot unhide its history snapshot", async () => {

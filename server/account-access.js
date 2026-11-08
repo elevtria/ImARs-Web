@@ -1,6 +1,7 @@
 import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
 import { stateCall, resolveStaff, settings } from "./web-auth.js";
 import { authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
+import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -38,7 +39,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
   const mobileAction = ["teacher-session-login", "mobile-session"].includes(action);
   const progressAction = action === "progress-synced" && env.DASHBOARD_SUMMARIES_ENABLED === "true";
   if (action === "config" && request.method === "GET") {
-    if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}) });
+    if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}), ...(teacherSessions && env.TEACHER_SESSION_SYNC_ENABLED === "true" ? { teacherSessionSync: true } : {}) });
     try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true }); }
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
@@ -95,6 +96,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
         if (signedIn.localId !== account.uid || !signedIn.idToken || signedIn.mfaPendingCredential) throw fail("Please sign in again.", 401);
         const opened = await stateCall(env, `account:${account.uid}`, "mobile-login", {});
         if (!opened.ok) throw new Error("Mobile sign-in unavailable");
+        await openTeacherSession(env, store, account, "mobile", opened.result.mobileSession);
         return json({ ok: true, profileId: account.id, role: "teacher", uid: account.uid, mobileSession: opened.result.mobileSession });
       }
       if (typeof body.mobileSession !== "string" || !/^[a-f0-9]{64}$/.test(body.mobileSession)) throw fail("Please sign in again.", 401);
@@ -102,6 +104,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (!limited.ok) throw fail("Please wait before checking your session again.", limited.status === 429 ? 429 : 503);
       const checked = await stateCall(env, `account:${account.uid}`, "mobile-session", { mobileSession: body.mobileSession });
       if (!checked.ok) throw fail("Please sign in again.", checked.status === 401 ? 401 : 503);
+      if (!await checkTeacherSession(env, store, account, "mobile", body.mobileSession)) throw fail("Please sign in again.", 401);
       return json({ ok: true, profileId: account.id, role: "teacher" });
     }
 
@@ -125,6 +128,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (roleOf(candidate) === "teacher" && candidate.uid) {
         const opened = await stateCall(env, `account:${candidate.uid}`, "mobile-login", {});
         if (!opened.ok) throw new Error("Mobile sign-in unavailable");
+        await openTeacherSession(env, store, { id, uid: candidate.uid, role: "teacher" }, "mobile", opened.result.mobileSession);
         return json({ email: loginEmail, uid: candidate.uid, mobileSession: opened.result.mobileSession });
       }
       return json({ email: loginEmail });

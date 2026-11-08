@@ -20,6 +20,8 @@ after(async () => { await environment?.cleanup(); });
 
 test("website gateway REST transactions preserve existing fields, transform timestamps/arrays, query nested results and delete only authorized quizzes", async () => {
   const store = new FirestoreAdmin({});
+  const documentName = store.name.bind(store);
+  store.name = path => documentName(path).replace("imars-db-a733b", projectId);
   store.request = async (suffix, options = {}) => {
     const response = await fetch("http://127.0.0.1:58087/v1/projects/" + projectId + "/databases/(default)/" + suffix, {
       ...options, headers: { Authorization: "Bearer owner", "Content-Type": "application/json" },

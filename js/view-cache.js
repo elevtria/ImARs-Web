@@ -27,7 +27,8 @@ export function createViewCache({ storage, versions, now = Date.now, maxAge = 15
       if (!uid || uid !== owner) return null;
       try {
         const entry = JSON.parse(storage.getItem(PREFIX + page));
-        if (!entry || entry.uid !== uid || entry.version !== version() || now() - entry.savedAt > Math.min(maxAge, maximumAge) || entry.savedAt > now()) return null;
+        if (!entry || entry.uid !== uid || entry.version !== version() || (entry.stale && maximumAge < maxAge) ||
+            now() - entry.savedAt > Math.min(maxAge, maximumAge) || entry.savedAt > now()) return null;
         return entry.value;
       } catch { return null; }
     },
@@ -42,9 +43,21 @@ export function createViewCache({ storage, versions, now = Date.now, maxAge = 15
       } catch { return false; }
     },
     remove(page) { try { storage?.removeItem(PREFIX + page); } catch {} },
-    invalidate() {
+    invalidate({ keep = [], recheck = [] } = {}) {
+      const previousVersion = version();
+      const retained = new Map();
+      if (owner) for (const page of [...keep, ...recheck]) try {
+        const entry = JSON.parse(storage.getItem(PREFIX + page));
+        if (entry?.uid === owner && entry.version === previousVersion && now() - entry.savedAt <= maxAge && entry.savedAt <= now()) {
+          retained.set(page, { ...entry, stale: entry.stale || recheck.includes(page) });
+        }
+      } catch {}
       clear();
       try { versions?.setItem(VERSION, `${now()}:${Math.random()}`); } catch {}
+      const nextVersion = version();
+      for (const [page, entry] of retained) try {
+        storage.setItem(PREFIX + page, JSON.stringify({ ...entry, version: nextVersion }));
+      } catch {}
     },
     clear
   };
@@ -59,11 +72,11 @@ export function teacherViewCache() {
   }
   return instance;
 }
-export const invalidateTeacherViews = () => teacherViewCache().invalidate();
+export const invalidateTeacherViews = options => teacherViewCache().invalidate(options);
 
 const DISPLAY_FIELDS = new Set([
   "displayName", "fullName", "active", "archiveReason", "SectionName", "sectionName", "name", "title", "topicTitle", "gradeLevel", "GradeLevel", "grade", "Grade", "lessonOrder", "isLocked", "scheduledDate", "sectionSchedules",
-  "isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted", "isARCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap", "activityScore", "activityTotalQuestions", "activityTotalPoints",
+  "isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted", "isARCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap", "postTestQuestionOrder", "activityScore", "activityTotalQuestions", "activityTotalPoints",
   "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice", "timestamp", "lastUpdated", "completedAt"
 ]);
 
@@ -81,6 +94,8 @@ export function encodeView(value, seen = new WeakSet()) {
   if (typeof value.data === "function" && typeof value.exists === "function") {
     const data = value.data();
     const display = data && Object.fromEntries(Object.entries(data).filter(([key]) => DISPLAY_FIELDS.has(key)));
+    // The heatmap needs question labels, not answer keys or choice contents.
+    if (display && Array.isArray(data.postTest)) display.postTest = data.postTest.map(question => ({ question: typeof question?.question === "string" ? question.question : "" }));
     return { $imars: "doc", id: value.id, exists: value.exists(), data: encodeView(display, seen) };
   }
   if (Array.isArray(value)) return value.map(item => encodeView(item, seen));
@@ -113,11 +128,11 @@ export function reuseTeacherReport(cache, uid, { termId = "term_01", sectionId =
     `teacher-report:all-terms-v1:${sectionId || "all"}`, "teacher-report:all-terms-v1:all"
   ])];
   for (const key of keys) try {
-    const stored = cache.get(uid, key, 60000);
+    const stored = cache.get(uid, key, 300_000);
     if (!stored) continue;
     const saved = decodeView(stored);
     if (!saved.complete || !Array.isArray(saved.pages) || !Array.isArray(saved.classes) || !Array.isArray(saved.counts) ||
-        !Number.isFinite(saved.checkedAt) || saved.checkedAt > now || now - saved.checkedAt >= 60000) continue;
+        !Number.isFinite(saved.checkedAt) || saved.checkedAt > now || now - saved.checkedAt >= 300_000) continue;
     const selected = sectionId === "first" ? saved.classes[0]?.id : sectionId;
     const counts = saved.counts.filter(row => !selected || row.classId === selected);
     if (selected && !counts.length) continue;

@@ -4,6 +4,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
 import { buildStudentActivityRecords } from "../js/student-activity-record.js";
+import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
 import { encodeView } from "../js/view-cache.js";
 import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "../js/topic-availability.js";
@@ -37,10 +38,11 @@ class Element {
 function page(file, report, resolveReport) {
   const elements = new Map();
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
+  const termButtons = ["term_01", "term_02", "term_03"].map(term => Object.assign(new Element(), { dataset: { term } }));
   let authChanged, requested, controllerIndex = 0;
   const requests = [], controllers = [], revealed = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -57,11 +59,11 @@ function page(file, report, resolveReport) {
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
     window: { location: {},addEventListener(){} },
-    document: { getElementById: element, querySelector: element, querySelectorAll: () => [], addEventListener() {},
+    document: { getElementById: element, querySelector: element, querySelectorAll: selector => selector === ".term-tab-btn" ? termButtons : [], addEventListener() {},
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, context, requested:()=>requested, requests, controllers, revealed, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, render: () => authChanged({ uid: "teacher-a" }) };
 }
 
 function assertTextOnly(html) {
@@ -238,6 +240,40 @@ test("activity section dropdown shows each topic once and reuses loaded sections
   assert.equal(dropdown.value, "B");
 });
 
+test("post-test heatmap escapes question text and switching loaded topics adds no report requests", async () => {
+  const data = activityReportData(["A"]);
+  data.curriculumSnap = snapshot([record("lesson_01", { title: "Topic One", postTest: [{ question: attack }, { question: "Second question" }] }), record("lesson_02", { title: "Topic Two", postTest: [{ question: "Another question" }] })]);
+  data.sections[0].students[0].results[0].lessonsSnap = snapshot([
+    record("lesson_01", { isPostTestCompleted: true, postTestScore: 1, postTestTotalQuestions: 2, postTestHeatmap: [false, true], postTestQuestionOrder: [1, 0] }),
+    record("lesson_02", { isPostTestCompleted: true, postTestScore: 0, postTestTotalQuestions: 1, postTestHeatmap: [false], postTestQuestionOrder: [0] })
+  ]);
+  const app = page("analytics.js", data); await app.render();
+  assert.match(app.element("questionHeatmapStatus").textContent, /Choose a topic/);
+  app.element("heatmapTopicFilter").value = "lesson_01";
+  await app.element("heatmapTopicFilter").events.change();
+  const chart = app.element("questionHeatmapRows").html();
+  assertTextOnly(chart); assert.ok(chart.includes("0/1 wrong") && chart.includes("1/1 wrong"));
+  assert.match(app.element("questionHeatmapStatus").textContent, /1 mapped/);
+  const before = app.requests.length;
+  app.element("heatmapTopicFilter").value = "lesson_02"; app.element("heatmapTopicFilter").events.change();
+  assert.equal(app.requests.length, before);
+  assert.match(app.element("questionHeatmapRows").html(), /Another question/);
+  assert.match(app.element("questionHeatmapRows").html(), /100%/);
+});
+
+test("the heatmap explains why legacy shuffled attempts cannot be shown", async () => {
+  const data = activityReportData(["A"]);
+  data.curriculumSnap = snapshot([record("lesson_01", { title: "Topic One", postTest: [{ question: "First question" }] })]);
+  data.sections[0].students[0].results[0].lessonsSnap = snapshot([
+    record("lesson_01", { isPostTestCompleted: true, postTestTotalQuestions: 1, postTestHeatmap: [false] })
+  ]);
+  const app = page("analytics.js", data); await app.render();
+  app.element("heatmapTopicFilter").value = "lesson_01";
+  await app.element("heatmapTopicFilter").events.change();
+  assert.match(app.element("questionHeatmapRows").textContent, /lack a valid question order/);
+  assert.doesNotMatch(app.element("questionHeatmapRows").html(), /0%/);
+});
+
 test("an activity-only section request keeps other analytics unchanged and student details paginated", async () => {
   const main = activityReportData(["A"]), app = page("analytics.js", main, (input, index) => index === 0 ? activityReportData([input.sectionId], { termId: input.termId, count: 30 }) : main);
   await app.render();
@@ -247,7 +283,10 @@ test("an activity-only section request keeps other analytics unchanged and stude
   assert.equal(app.requests.length, 2); assert.equal(app.requests[1].index, 0); assert.equal(app.requests[1].sectionId, "B");
   assert.equal(app.requests[1].termId, "term_01");
   const table = app.element("studentActivityBody").html();
-  assert.ok(table.includes("Learner B 24")); assert.ok(!table.includes("Learner B 25")); assert.ok(table.includes("Next page")); assert.ok(table.includes("0/10 · 0%"));
+  assert.ok(table.includes("Learner B 24")); assert.ok(!table.includes("Learner B 25")); assert.ok(table.includes("Next page")); assert.ok(table.includes("0/10"));
+  assert.ok(!table.includes("%"), "topic results display raw scores rather than percentages");
+  assert.ok(["Pre-test", "Post-test", "Activity score", "Recorded time"].every(label => table.includes(label)));
+  assert.ok(table.includes("0/5") && table.includes("8/10") && table.includes("2 min"), "the expanded topic uses that lesson's raw tests and recorded time");
   assert.equal(app.element("#studentGrid tbody").html(), before);
   dropdown.value = "A"; await dropdown.events.change();
   app.controllers[0].render(activityReportData(["B"]));
@@ -277,30 +316,34 @@ test("changing terms keeps the activity section and ignores results from the pre
   assert.equal(app.element("studentActivityBody").html(), table);
 });
 
-test("the activity term dropdown opens Terms 2 and 3 without reloading the main analytics report", async () => {
-  const main = activityReportData(["A"]), app = page("analytics.js", main, input => input.termId === "term_01" && input.sectionId === "first"
-    ? main : activityReportData([input.sectionId], { termId: input.termId }));
+test("the shared term and activity section drive completion rates without another report", async () => {
+  const app = page("analytics.js", null, input => {
+    const data = activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId, count: 2 });
+    data.curriculumSnap = snapshot([record("lesson_01", { title: `Topic for ${input.termId}` })]);
+    if (input.termId === "term_02" || input.sectionId === "B") {
+      data.sections[0].students[0].results[0].lessonsSnap = snapshot([]);
+    }
+    return data;
+  });
   await app.render();
-  const term = app.element("activityTermFilter"), section = app.element("activitySectionFilter");
-  const performance = app.element("#studentGrid tbody").html();
-  assert.equal(term.value, "term_01"); assert.equal(term.disabled, false);
-  term.value = "term_02"; await term.events.change();
-  assert.equal(app.requests.at(-1).termId, "term_02"); assert.equal(app.requests.at(-1).sectionId, "A");
-  assert.match(app.element("studentActivityBody").html(), /Term 2/);
-  const count = app.requests.length;
-  await term.events.change(); assert.equal(app.requests.length, count, "the current term must not start a duplicate report");
-  term.value = "term_03"; await term.events.change();
-  assert.match(app.element("studentActivityBody").html(), /Term 3/);
-  const before = app.element("studentActivityBody").html();
-  app.controllers[0].render(activityReportData(["A"], { termId: "term_02" }));
-  assert.equal(app.element("studentActivityBody").html(), before, "late Term 2 results must not overwrite Term 3");
-  app.controllers[1].render(main);
-  assert.equal(term.value, "term_03", "a main-report background update must preserve the activity term");
+  const topics = app.element("topicsContainer"), section = app.element("activitySectionFilter");
+  assert.match(topics.html(), /100%.*Topic for term_01/s);
+  await app.termButtons[1].events.click();
+  assert.match(topics.html(), /50%.*Topic for term_02/s);
+  assert.match(app.element("studentActivityBody").html(), /1\/2 completed/);
+  assert.equal(app.element("questionHeatmapScope").textContent, "Term 2 · Section A");
+  await app.termButtons[1].events.click();
+  assert.equal(app.requests.length, 2, "the current term must not start a duplicate report");
+  await app.termButtons[2].events.click();
+  assert.match(topics.html(), /100%.*Topic for term_03/s);
   section.value = "B"; await section.events.change();
-  assert.equal(app.requests.at(-1).termId, "term_03"); assert.equal(app.requests.at(-1).sectionId, "B");
-  assert.equal(app.requests.filter(request => request.index === 1).length, 1);
-  assert.equal(app.element("#studentGrid tbody").html(), performance);
-  const requests = app.requests.length; term.value = "term_04"; await term.events.change(); assert.equal(app.requests.length, requests);
+  assert.match(topics.html(), /50%.*Topic for term_03/s);
+  assert.equal(app.element("topicCompletionScope").textContent, "Term 3 · Section B");
+  assert.equal(app.element("questionHeatmapScope").textContent, "Term 3 · Section B");
+  assert.equal(app.requests.length, 4, "completion and heatmap scope add no report request");
+  const before = topics.html();
+  app.controllers[0].render(activityReportData(["B"], { termId: "term_02" }));
+  assert.equal(topics.html(), before, "late Term 2 results must not overwrite Term 3");
 });
 
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {

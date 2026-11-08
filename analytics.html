@@ -43,18 +43,18 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-      <section class="hero" data-auth-shell>
+      <section class="hero" data-auth-shell data-await-content="analytics-students">
         <div>
           <h1 data-auth-shell>Class Analytics</h1>
           <p>Performance overview — <span id="analyticsTermLabel">Term 1</span> · <span id="sectionSummary">—</span> (<span id="studentCount">0</span> students)</p>
         </div>
       </section>
 
-          <div class="view-switch" id="termSwitch" style="display: flex; gap: 8px;">
-            <button type="button" class="term-tab-btn active" data-term="term_01" aria-pressed="true" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #4f46e5; color: #fff; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 1</button>
-            <button type="button" class="term-tab-btn" data-term="term_02" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: var(--surface, #fff); color: var(--ink, #374151); font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 2</button>
-            <button type="button" class="term-tab-btn" data-term="term_03" style="padding: 6px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: var(--surface, #fff); color: var(--ink, #374151); font-size: 0.85rem; font-weight: 600; cursor: pointer;">Term 3</button>
-          </div>
+      <div class="analytics-term-switch" id="termSwitch" role="group" aria-label="Analytics term">
+        <button type="button" class="term-tab-btn" data-term="term_01" aria-pressed="true">Term 1</button>
+        <button type="button" class="term-tab-btn" data-term="term_02" aria-pressed="false">Term 2</button>
+        <button type="button" class="term-tab-btn" data-term="term_03" aria-pressed="false">Term 3</button>
+      </div>
       <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
       <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell data-await-content="analytics-summary">
         <h2 data-auth-shell>Class Average</h2>
@@ -94,7 +94,7 @@
 
       <section class="section" style="padding: 8px 4px 20px;" data-auth-shell data-await-content="analytics-students">
         <div class="section-head performance-head">
-          <h2 data-auth-shell>Individual Student Performance</h2>
+          <h2 data-auth-shell>Overall Individual Student Performance</h2>
         </div>
         <div class="performance-controls">
           <label class="select-wrap">
@@ -127,19 +127,12 @@
 
       <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell data-await-content="analytics-activities">
         <div class="section-head performance-head">
-          <h2 id="studentActivityHeading">Student Activity Record</h2>
+          <h2 id="studentActivityHeading" data-public-label>Student Activity Record</h2>
           <div class="activity-record-filters">
-          <label class="activity-section-filter" for="activityTermFilter">
-            <span>Term</span>
-            <span class="select-wrap">
-              <select id="activityTermFilter" aria-controls="studentActivityBody" disabled><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
-            </span>
-          </label>
           <label class="activity-section-filter" for="activitySectionFilter">
             <span>Section</span>
             <span class="select-wrap">
-              <select id="activitySectionFilter" aria-controls="studentActivityBody" disabled><option value="">Select a section</option></select>
+              <select id="activitySectionFilter" aria-controls="studentActivityBody questionHeatmapRows topicsContainer" disabled><option value="">Select a section</option></select>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
             </span>
           </label>
@@ -154,11 +147,21 @@
       </section>
 
 <div class="student-detail-navigation" aria-label="Student performance pages" data-await-content="analytics-students"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
-<!-- Topic Completion Rate Section -->
+      <section class="card section question-heatmap" aria-labelledby="questionHeatmapHeading" data-auth-shell>
+        <div class="section-head"><div><h2 id="questionHeatmapHeading" data-public-label>Post-test Question Heatmap</h2><p class="scheduler-progress-copy">See which questions learners answered incorrectly.</p></div></div>
+        <div class="activity-record-filters">
+          <label>Topic <select id="heatmapTopicFilter" aria-controls="questionHeatmapRows" disabled><option value="">Select a topic</option></select></label>
+        </div>
+        <p id="questionHeatmapScope" class="scheduler-progress-copy"></p>
+        <p id="questionHeatmapStatus" class="scheduler-progress-copy" role="status" aria-live="polite">Choose a topic to view post-test results.</p>
+        <div id="questionHeatmapRows" class="question-heatmap-rows"></div>
+        <button id="heatmapMore" class="btn-ghost" type="button" hidden>Load more results</button>
+        <div class="question-heatmap-legend" aria-label="Wrong-answer rate"><span><i class="heatmap-low"></i>Low: 0–33%</span><span><i class="heatmap-moderate"></i>Moderate: over 33–66%</span><span><i class="heatmap-high"></i>High: over 66%</span></div>
+      </section>
+
       <section class="card section" data-auth-shell data-await-content="analytics-topics">
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
-          <h2 style="margin: 0;" data-auth-shell>Topic Completion Rate</h2>
-
+          <div><h2 style="margin: 0;" data-auth-shell>Topic Completion Rate</h2><p id="topicCompletionScope" class="scheduler-progress-copy"></p></div>
         </div>
         <div class="topics" id="topicsContainer" data-loading-path="terms users" data-loading-label="Loading topic analytics…" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 20px;">
           <p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 20px;">
