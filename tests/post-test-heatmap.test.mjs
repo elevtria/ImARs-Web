@@ -8,16 +8,24 @@ const lesson = doc("lesson_01", { title: "Topic", postTest: [{ question: "Questi
 const student = (id, data, termId = "term_02", lessonId = "lesson_01") => ({ studentDoc: doc(id, {}), results: [{ termId, lessonsSnap: { docs: [doc(lessonId, data)] } }] });
 const result = (answers, order) => ({ isPostTestCompleted: true, postTestHeatmap: answers, postTestQuestionOrder: order, postTestTotalQuestions: 3 });
 
-test("wrong answers map back from shuffled presentation order to the correct question", () => {
-  const sections = [{ students: [student("one", result([false, true, true], [2, 0, 1])), student("two", result([false, true, false], [0, 1, 2]))] }];
+test("wrong answers map back from shuffled presentation order or natural mobile order to the correct question", () => {
+  const sections = [{ students: [
+    student("one", result([false, true, true], [2, 0, 1])),
+    student("two", result([false, true, false], [0, 1, 2])),
+    student("natural-mobile", result([false, false, true], undefined))
+  ] }];
   const chart = buildPostTestHeatmap(lesson, sections, "term_02");
-  assert.equal(chart.mapped, 2); assert.equal(chart.unmapped, 0);
-  assert.deepEqual(chart.rows.map(row => [row.text, row.wrong, row.answered, row.rate]), [["Question A", 1, 2, 50], ["Question B", 0, 2, 0], ["Question C", 2, 2, 100]]);
+  assert.equal(chart.mapped, 3); assert.equal(chart.unmapped, 0);
+  assert.deepEqual(chart.rows.map(row => [row.text, row.wrong, row.answered, Math.round(row.rate)]), [
+    ["Question A", 2, 3, 67],
+    ["Question B", 1, 3, 33],
+    ["Question C", 2, 3, 67]
+  ]);
 });
 
-test("legacy, corrupt and incomplete mappings never invent wrong answers or count pre-tests", () => {
+test("corrupt and incomplete mappings never invent wrong answers or count pre-tests", () => {
   const sections = [{ students: [
-    student("legacy", result([false, false, false], undefined)),
+    student("invalid-order", result([false, false, false], null)),
     student("duplicate", result([false, false, false], [0, 0, 2])),
     student("string", result([false, "false", true], [0, 1, 2])),
     student("partial", result([false], [0])),
