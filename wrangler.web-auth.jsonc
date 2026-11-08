@@ -5,6 +5,11 @@
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "IMARS_SUPABASE_WEB_DATA": "true",
+    "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
+    "IMARS_SUPABASE_APP_DATASET_ID": "f6c5b9bf-7864-4755-803b-8cc31c63bd06"
+  },
   "triggers": { "crons": ["0 */6 * * *"] },
   "durable_objects": {
     "bindings": [{ "name": "WEB_LOGIN_STATE", "class_name": "WebLoginState" }]

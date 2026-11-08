@@ -94,7 +94,7 @@ export class NetlifyState {
     const config = projection?.config, summary = projection?.summary;
     const sameScope = config?.id === body.id && config.uid === body.uid && config.scope === dashboardScope(body.sections, this.env);
     const ready = sameScope && summary?.scope === config.scope;
-    const interval = dashboardRefreshInterval(summary, this.env);
+    const interval = dashboardRefreshInterval(summary);
     if (!sameScope || (!body.warmOnly && ready && this.now() - summary.reconciledAt >= interval && !projection.pending)) {
       return this.transact(name, async actor => json(await actor.dashboard.configure(body)));
     }

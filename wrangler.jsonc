@@ -16,9 +16,9 @@
         "TEACHER_MOBILE_SESSIONS_ENABLED": "true",
         "DASHBOARD_SUMMARIES_ENABLED": "true",
         "TEACHER_SESSION_SYNC_ENABLED": "true",
-        "IMARS_SUPABASE_WEB_SETTINGS": "true",
+        "IMARS_SUPABASE_WEB_DATA": "true",
         "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
-        "IMARS_SUPABASE_APP_DATASET_ID": "c248ee4d-e1bf-4653-b6e9-f061846c149d"
+        "IMARS_SUPABASE_APP_DATASET_ID": "f6c5b9bf-7864-4755-803b-8cc31c63bd06"
       },
       "durable_objects": {
         "bindings": [{

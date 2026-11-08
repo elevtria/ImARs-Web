@@ -12,8 +12,8 @@ export function dashboardScope(sections, env) {
   const scope = JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
 }
-export function dashboardRefreshInterval(summary, env) {
-  return supabaseWebData(env) ? 300_000 : Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
+export function dashboardRefreshInterval(summary) {
+  return Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
 }
 export const lessonPaths = id => [1, 2, 3].flatMap(term => [1, 2, 3, 4].map(lesson => `users/${id}/test_results/term_0${term}/lessons/lesson_0${lesson}`));
 
@@ -74,7 +74,7 @@ export class DashboardSummary {
     // Legacy app builds have no sync notification. Reconcile quietly while the
     // dashboard is in use. Leave room for mobile, login checks and both hosts
     // within the shared free database quota.
-    const interval = dashboardRefreshInterval(summary, this.env);
+    const interval = dashboardRefreshInterval(summary);
     if (!summary || summary.scope !== scope || (!body.warmOnly && this.now() - summary.reconciledAt >= interval)) {
       if (!await this.storage.get("dashboard:job")) await this.start();
     }
