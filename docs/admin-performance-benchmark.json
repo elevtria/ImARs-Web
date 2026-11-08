@@ -1,0 +1,33 @@
+{
+  "fixture": "30 students, Term 1, 4 lessons; 100ms artificial query latency; no production traffic",
+  "results": [
+    {
+      "page": "admin-dashboard.html",
+      "beforeMs": 3512,
+      "afterMs": 803,
+      "warmMs": 118,
+      "peak": 8
+    },
+    {
+      "page": "school-analytics.html",
+      "beforeMs": 3439,
+      "afterMs": 775,
+      "warmMs": 113,
+      "peak": 8
+    },
+    {
+      "page": "manage-teachers.html",
+      "beforeMs": 3433,
+      "afterMs": 798,
+      "warmMs": 129,
+      "peak": 8
+    },
+    {
+      "page": "admin-profile.html",
+      "beforeMs": 237,
+      "afterMs": 257,
+      "warmMs": 107,
+      "peak": 2
+    }
+  ]
+}

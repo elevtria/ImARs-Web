@@ -1,13 +1,14 @@
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
+import { lessonNotifications, latestNotifications } from "../js/test-notifications.js";
 
 const valid = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const active = data => data && data.active !== false && !["inactive", "disabled", "deleted", "archived"].includes(String(data.status || "").toLowerCase());
 const positive = value => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 const time = value => { const date = new Date(value || 0); return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date.getTime() : 0; };
-const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, recent: [] });
+const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, recent: [], notifications: [] });
 const profileFields = ["active", "status", "role", "classCode", "displayName", "fullName"];
 const resultFields = ["isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isPostTestCompleted", "postTestScore", "postTestTotalQuestions", "postTestHeatmap",
-  "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
+  "preTestCompletedAt", "postTestCompletedAt", "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
 export function dashboardScope(sections, env) {
   const scope = JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
@@ -46,8 +47,10 @@ export function summarizeStudent(id, profile, section, lessons) {
 
 export function addStudent(totals, row) {
   totals.total++;
+  totals.notifications = latestNotifications([...(totals.notifications || []), ...(row.notifications || [])]);
   for (const field of ["preSum", "preCount", "postSum", "postCount", "arMinutes"]) totals[field] += row[field];
-  if (row.hasActivity) totals.recent = [...totals.recent, row].sort((a, b) => b.lastActive - a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0, 25);
+  const { notifications, ...recentRow } = row;
+  if (row.hasActivity) totals.recent = [...totals.recent, recentRow].sort((a, b) => b.lastActive - a.lastActive || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).slice(0, 25);
   return totals;
 }
 
@@ -128,10 +131,14 @@ export class DashboardSummary {
         if (saved?.generation === generation) lessons = saved.lessons || {};
         for (const path of requested(profile)) {
           const part = summarizeStudent("", {}, "", records.get(path) ? [records.get(path).data] : []);
+          const [termId, , lessonId] = path.split("/test_results/")[1].split("/");
+          part.notifications = lessonNotifications(profile.id, profile.data.displayName || profile.data.fullName || "Student", section.name,
+            termId, lessonId, records.get(path)?.data || {});
           delete part.id; delete part.name; delete part.section;
           lessons[path.split("/test_results/")[1]] = part;
         }
         row = summarizeStudent(profile.id, profile.data, section.name, []);
+        row.notifications = Object.values(lessons).flatMap(part => (part.notifications || []).map(item => ({ ...item, name: row.name, section: row.section })));
         for (const part of Object.values(lessons)) {
           for (const field of ["preSum", "preCount", "postSum", "postCount", "arMinutes"]) row[field] += part[field];
           row.lastActive = Math.max(row.lastActive, part.lastActive); row.hasActivity ||= part.hasActivity;
