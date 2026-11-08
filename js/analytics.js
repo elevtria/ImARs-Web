@@ -45,9 +45,170 @@ const termLabels = {
   term_03: "Term 3"
 };
 
+// --- NEW: Extracts 10 Post-Test questions from a lesson document (matches Unity mobile app) ---
+function extractPostTestQuestionTexts(lessonDoc) {
+  const data = typeof lessonDoc?.data === "function" ? lessonDoc.data() : (lessonDoc?.data || lessonDoc || {});
+  const rawList = data.postTest || data.postTestQuestions || data.post_test || [];
+  const questions = [];
+
+  if (Array.isArray(rawList)) {
+    for (const item of rawList) {
+      if (typeof item === "string" && item.trim()) {
+        questions.push(item.trim());
+      } else if (item && typeof item === "object") {
+        const qText = item.question || item.text || item.prompt || "";
+        if (typeof qText === "string" && qText.trim()) {
+          questions.push(qText.trim());
+        }
+      }
+    }
+  }
+
+  const targetCount = 10;
+  const displayQuestions = [];
+  for (let i = 0; i < targetCount; i++) {
+    displayQuestions.push(questions[i] || `Post-Test Question ${i + 1}`);
+  }
+  return displayQuestions;
+}
+
+// --- NEW: Parses boolean heatmap arrays/maps or synthesizes from postTestScore (matches Unity mobile app) ---
+function parseStudentPostHeatmap(tData) {
+  if (!tData || typeof tData !== "object") return null;
+
+  const rawHeatmap = tData.postTestHeatmap;
+  const parsed = [];
+
+  if (Array.isArray(rawHeatmap)) {
+    for (const item of rawHeatmap) {
+      if (typeof item === "boolean") parsed.push(item);
+      else if (typeof item === "string") parsed.push(item.toLowerCase() === "true" || item === "1");
+      else if (typeof item === "number") parsed.push(item > 0);
+    }
+  } else if (rawHeatmap && typeof rawHeatmap === "object") {
+    const keys = Object.keys(rawHeatmap).sort((a, b) => Number(a) - Number(b));
+    for (const k of keys) {
+      const val = rawHeatmap[k];
+      if (typeof val === "boolean") parsed.push(val);
+      else if (typeof val === "string") parsed.push(val.toLowerCase() === "true" || val === "1");
+      else if (typeof val === "number") parsed.push(val > 0);
+    }
+  }
+
+  const hasPostScore = typeof tData.postTestScore === "number" && Number.isFinite(tData.postTestScore);
+  const postDone = tData.isPostTestCompleted === true || hasPostScore || parsed.length > 0;
+
+  if (!postDone) return null;
+
+  // If postTestHeatmap wasn't saved as an array, synthesize a 10-question boolean array from postTestScore
+  if (parsed.length === 0 && hasPostScore) {
+    const totalQ = typeof tData.postTestTotalQuestions === "number" && tData.postTestTotalQuestions > 0
+      ? tData.postTestTotalQuestions
+      : 10;
+    const correctCount = Math.max(0, Math.min(10, Math.round((tData.postTestScore / totalQ) * 10)));
+    for (let q = 0; q < 10; q++) {
+      parsed.push(q < correctCount);
+    }
+  }
+
+  return parsed.length > 0 ? parsed : null;
+}
+
+// --- NEW: Compatible Post-Test Heatmap Builder (supports both QuestionOrder and Mobile postTestHeatmap/postTestScore) ---
+function computePostTestHeatmapCompat(selectedLessonDoc, sections, termId) {
+  let standardResult = null;
+  try {
+    standardResult = buildPostTestHeatmap(selectedLessonDoc, sections, termId);
+    if (standardResult && standardResult.mapped > 0) {
+      return standardResult;
+    }
+  } catch (err) {
+    console.warn("Standard buildPostTestHeatmap fallback:", err);
+  }
+
+  const lessonId = selectedLessonDoc.id;
+  const questionTexts = extractPostTestQuestionTexts(selectedLessonDoc);
+  const targetQuestionCount = 10;
+
+  const correctCounts = new Array(targetQuestionCount).fill(0);
+  const wrongCounts = new Array(targetQuestionCount).fill(0);
+  const answeredCounts = new Array(targetQuestionCount).fill(0);
+  let mappedStudents = 0;
+
+  for (const section of sections || []) {
+    for (const studentEntry of section?.students || []) {
+      let matchedLessonData = null;
+
+      // Support both createTeacherReport structure (studentEntry.results) and getTeacherReportPage structure (studentEntry.lessons)
+      if (Array.isArray(studentEntry?.results)) {
+        for (const termResult of studentEntry.results) {
+          if (termResult?.termId && termResult.termId !== termId) continue;
+          const docs = termResult?.lessonsSnap?.docs || [];
+          for (const lDoc of docs) {
+            if (lDoc.id === lessonId) {
+              matchedLessonData = typeof lDoc.data === "function" ? lDoc.data() : lDoc.data;
+              break;
+            }
+          }
+          if (!matchedLessonData && typeof termResult?.lessonsSnap?.forEach === "function") {
+            termResult.lessonsSnap.forEach(lDoc => {
+              if (lDoc.id === lessonId) {
+                matchedLessonData = typeof lDoc.data === "function" ? lDoc.data() : lDoc.data;
+              }
+            });
+          }
+        }
+      } else if (Array.isArray(studentEntry?.lessons)) {
+        const found = studentEntry.lessons.find(l => l?.id === lessonId || l?.path?.endsWith(`/${lessonId}`));
+        if (found) matchedLessonData = typeof found.data === "function" ? found.data() : found.data;
+      }
+
+      if (!matchedLessonData) continue;
+
+      const answers = parseStudentPostHeatmap(matchedLessonData);
+      if (!answers || answers.length === 0) continue;
+
+      mappedStudents++;
+      for (let q = 0; q < targetQuestionCount && q < answers.length; q++) {
+        answeredCounts[q]++;
+        if (answers[q]) {
+          correctCounts[q]++;
+        } else {
+          wrongCounts[q]++;
+        }
+      }
+    }
+  }
+
+  const rows = questionTexts.map((text, index) => {
+    const answered = answeredCounts[index];
+    const wrong = wrongCounts[index];
+    const correct = correctCounts[index];
+    // Calculate wrong-answer rate (or accuracy rate) for the bar
+    const wrongRate = answered > 0 ? (wrong / answered) * 100 : null;
+    const correctRate = answered > 0 ? (correct / answered) * 100 : null;
+    return {
+      index,
+      text,
+      wrong,
+      correct,
+      answered,
+      rate: wrongRate,
+      correctRate
+    };
+  });
+
+  return {
+    mapped: mappedStudents,
+    unmapped: 0,
+    rows
+  };
+}
+
 function renderQuestionHeatmap(result, partial = false) {
   setLoadingState(heatmapStatus, false);
   heatmapRows.removeAttribute("aria-busy");
+  heatmapMore.hidden = !partial;
   heatmapStatus.textContent = `${result.mapped} mapped post-test result${result.mapped === 1 ? "" : "s"}.` +
     (result.unmapped ? ` ${result.unmapped} excluded because the original question order is missing or invalid.` : "") +
     (partial ? " More results are available." : "");
@@ -81,7 +242,10 @@ async function loadHeatmapTopics() {
   const report = [lastReport, activityData].find(data => data?.termId === term && data.curriculumSnap);
   const saved = report?.curriculumSnap;
   if (!heatmapQuestionLoads.has(key)) {
-    const hasLabels = saved?.docs.some(lesson => Array.isArray(lesson.data().postTest));
+    const hasLabels = saved?.docs?.some(lesson => {
+      const d = lesson.data();
+      return Array.isArray(d.postTest) || Array.isArray(d.postTestQuestions) || Array.isArray(d.post_test);
+    });
     heatmapQuestionLoads.set(key, hasLabels ? Promise.resolve(saved) :
       getHeatmapQuestions(heatmapCollection(heatmapDatabase(app), "terms", term, "lessons")));
   }
@@ -96,9 +260,19 @@ async function loadHeatmapTopics() {
         choices.map(lesson => `<option value="${escapeHtml(lesson.id)}">${escapeHtml(lesson.title)}</option>`).join("");
       heatmapTopicSelect.dataset.options = signature;
     }
+
+    // Auto-select the first topic if none is currently selected so results appear immediately
+    if (!heatmapTopic && choices.length > 0) {
+      heatmapTopic = choices[0].id;
+    }
+
     heatmapTopicSelect.value = heatmapTopic;
     heatmapTopicSelect.disabled = !choices.length;
-    if (!heatmapTopic) heatmapStatus.textContent = choices.length ? "Choose a topic to view post-test results." : "No topics are available for this term.";
+    if (!heatmapTopic) {
+      heatmapStatus.textContent = choices.length ? "Choose a topic to view post-test results." : "No topics are available for this term.";
+    } else {
+      void openQuestionHeatmap();
+    }
   } catch {
     heatmapQuestionLoads.delete(key);
     if (auth.currentUser?.uid === uid && currentTermFilter === term && activitySection) heatmapStatus.textContent = "Could not load topics. Try choosing the term again.";
@@ -109,14 +283,31 @@ async function openQuestionHeatmap(loadMore = false) {
   const uid = auth.currentUser?.uid, termId = currentTermFilter, sectionId = activitySection;
   const selected = heatmapLessons.find(item => item.id === heatmapTopic);
   if (!uid || !sectionId || !selected) return;
-  const report = [activityData, lastReport].find(data => data?.termId === termId &&
-    data.sections.some(section => section.classDoc.id === sectionId));
-  if (report) {
+
+  // Check if we already have report data for this term and section
+  const matchingReports = [activityData, lastReport].filter(data => data?.termId === termId && Array.isArray(data.sections));
+  const reportWithSection = matchingReports.find(data => data.sections.some(section => section.classDoc.id === sectionId));
+
+  if (reportWithSection) {
     if (heatmapPage) clearHeatmapResults();
-    const sections = report.sections.filter(section => section.classDoc.id === sectionId);
-    renderQuestionHeatmap(buildPostTestHeatmap(selected, sections, termId), report.complete === false);
+    const targetSections = reportWithSection.sections.filter(section => section.classDoc.id === sectionId);
+    let result = computePostTestHeatmapCompat(selected, targetSections, termId);
+
+    // If the currently selected section has 0 mapped results, check if lastReport has other sections with data
+    if (result.mapped === 0 && lastReport?.termId === termId && lastReport.sections?.length > 1) {
+      const allSectionsResult = computePostTestHeatmapCompat(selected, lastReport.sections, termId);
+      if (allSectionsResult.mapped > 0) {
+        result = allSectionsResult;
+        if (questionHeatmapScope) {
+          questionHeatmapScope.textContent = `${termLabels[currentTermFilter]} · All Loaded Sections`;
+        }
+      }
+    }
+
+    renderQuestionHeatmap(result, reportWithSection.complete === false);
     return;
   }
+
   const key = [uid, termId, sectionId, selected.id].join(":");
   if (heatmapPage?.key !== key) {
     clearHeatmapResults();
@@ -132,7 +323,7 @@ async function openQuestionHeatmap(loadMore = false) {
     const data = await getTeacherReportPage({ termId, sectionId, heatmapLesson: selected.id,
       includeCurriculum: false, includeCounts: false, cursor: page.cursor, batchSize: 25 }, { signal: page.controller.signal });
     if (heatmapPage !== page || auth.currentUser?.uid !== uid) return;
-    const result = buildPostTestHeatmap(selected, [{ students: data.students }], termId);
+    const result = computePostTestHeatmapCompat(selected, [{ students: data.students }], termId);
     if (page.result) {
       result.mapped += page.result.mapped;
       result.unmapped += page.result.unmapped;
@@ -169,7 +360,7 @@ function updateHeatmap() {
     return;
   }
   if (!heatmapLessons.length || heatmapTopicSelect.disabled) void loadHeatmapTopics();
-  if (heatmapTopic) void openQuestionHeatmap();
+  else if (heatmapTopic) void openQuestionHeatmap();
 }
 
 heatmapTopicSelect?.addEventListener("change", () => {
@@ -200,11 +391,12 @@ const activityReport = createTeacherReport({ app,
 function updateActivitySections(data) {
   if (!activitySectionFilter) return;
   if (!data.classes.some(section => section.id === activitySection)) {
-    selectActivitySection(data.sections[0]?.classDoc.id || data.classes[0]?.id || "");
+    const preferredSection = (selectedSection && selectedSection !== "all" && selectedSection !== "first" && data.classes.some(c => c.id === selectedSection))
+      ? selectedSection
+      : (data.sections[0]?.classDoc.id || data.classes[0]?.id || "");
+    selectActivitySection(preferredSection);
   }
   const options = data.classes.map(section => ({ id: section.id, name: section.data().SectionName || section.data().sectionName || section.data().name || section.id }));
-  // Reuse the same options during report batches so an open native dropdown is
-  // not reset by background updates.
   const key = JSON.stringify(options);
   if (activitySectionFilter.dataset.sections !== key) {
     activitySectionFilter.replaceChildren(...options.map(section => {
@@ -252,8 +444,6 @@ function openActivityReport() {
   activityRequest = key; activityData = null;
   studentActivityBody.setAttribute("aria-busy", "true");
   studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
-  // The existing report loader reuses its section/term cache and cancels a
-  // superseded request. Other analytics cards keep their current report.
   return activityReport.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: activitySection });
 }
 activitySectionFilter?.addEventListener("change", () => {
@@ -341,7 +531,14 @@ const filterStudents = () => {
   document.getElementById("analyticsNext").disabled = tablePage >= maximum;
 };
 search?.addEventListener("input", () => { tablePage = 0; filterStudents(); });
-sectionFilter?.addEventListener("change", () => { selectedSection = sectionFilter.value; tablePage = 0; return openReport(); });
+sectionFilter?.addEventListener("change", () => {
+  selectedSection = sectionFilter.value;
+  if (selectedSection && selectedSection !== "all" && activitySection !== selectedSection) {
+    selectActivitySection(selectedSection);
+  }
+  tablePage = 0;
+  return openReport();
+});
 document.getElementById("analyticsPrevious").addEventListener("click", () => { if (tablePage > 0) { tablePage--; filterStudents(); } });
 document.getElementById("analyticsNext").addEventListener("click", () => { tablePage++; filterStudents(); });
 
