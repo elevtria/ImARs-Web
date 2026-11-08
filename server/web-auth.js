@@ -1,5 +1,6 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
-import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { appStore } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const cookieName = "__Host-imars-web";
@@ -61,7 +62,7 @@ export async function signSession(env, account, session, host, teacherSession) {
   return `${value}.${base64(new Uint8Array(signature))}`;
 }
 
-export async function resolveStaff(env, identifier, accounts = settings(env), store = new FirestoreAdmin(env)) {
+export async function resolveStaff(env, identifier, accounts = settings(env), store = appStore(env)) {
   const initial = accounts.find(item => item.id.toLowerCase() === identifier.toLowerCase() || (item.role === "admin" && item.email.toLowerCase() === identifier.toLowerCase()));
   const id = identifier.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
@@ -104,7 +105,7 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
     if (!checked.ok) throw new Error("Login state unavailable");
     const account = await resolveStaff(env, payload.id, accounts, store);
     if (!account || account.uid !== payload.uid || account.role !== payload.role) return null;
-    if (!await checkTeacherSession(env, store || new FirestoreAdmin(env), account, "web", payload.teacherSession)) return null;
+    if (!await checkTeacherSession(env, store || appStore(env), account, "web", payload.teacherSession)) return null;
     return { account, ...checked.result, credentials, teacherSession: payload.teacherSession };
   } catch (error) { throw new Error("Login state unavailable", { cause: error }); }
 }
@@ -149,7 +150,7 @@ export async function staffProfile(account, store, now = Date.now()) {
   return { ...account, profile, row };
 }
 
-export async function requireStaff(request, env, store = new FirestoreAdmin(env)) {
+export async function requireStaff(request, env, store = appStore(env)) {
   if (!dataEnabled(env) || !enabled(env)) throw Object.assign(new Error("Website account setup is incomplete."), { status: 503 });
   const origin = request.headers.get("Origin");
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
@@ -254,18 +255,18 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
         attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
       }
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
-      const approved = dataEnabled(env) ? await staffProfile(account, store || new FirestoreAdmin(env), now) : null;
+      const approved = dataEnabled(env) ? await staffProfile(account, store || appStore(env), now) : null;
       if (approved?.role === "teacher" && env.TEACHER_SESSION_SYNC_ENABLED !== "true") {
         const revoked = await stateCall(env, `account:${approved.uid}`, "mobile-revoke", {});
         if (!revoked.ok) throw new Error("Mobile session update failed");
       }
-      const teacherSession = approved?.role === "teacher" ? await openTeacherSession(env, store || new FirestoreAdmin(env), approved, "web") : undefined;
+      const teacherSession = approved?.role === "teacher" ? await openTeacherSession(env, store || appStore(env), approved, "web") : undefined;
       const token = await signSession(env, account, attempt.result.session, new URL(request.url).host, teacherSession);
       return json(approved ? { user: publicUser(approved) } : { email: account.email }, 200, { "Set-Cookie": cookie(token) });
     }
     if (action === "identity") {
       if (!dataEnabled(env)) return json({ error: "Website account setup is incomplete." }, 503);
-      const database = store || new FirestoreAdmin(env);
+      const database = store || appStore(env);
       const checked = await inspectSession(request, env, { now, store: database });
       if (!checked) return json({ error: "Please sign in to the website." }, 401);
       const user = await staffProfile(checked.account, database, now);
@@ -276,7 +277,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       const checked = await inspectSession(request, env, { now, active: body.active, store });
       if (!checked) return json({ error: "Your website session expired. Please sign in again." }, 401);
       if (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== checked.account.uid) return json({ error: "Your sign-in changed. Please sign in again." }, 401);
-      if (dataEnabled(env)) await staffProfile(checked.account, store || new FirestoreAdmin(env), now);
+      if (dataEnabled(env)) await staffProfile(checked.account, store || appStore(env), now);
       const renewed = await renewSession(env, checked);
       if (!renewed) return json({ error: "Your website session expired. Please sign in again." }, 401);
       return json(body.timing === "relative" ? publicTiming(renewed.timing) : renewed.timing, 200, await renewalHeaders(request, env, renewed));
@@ -295,7 +296,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     }
     if (action === "unlock") {
       const owner = await maintenance(request, env);
-      const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || new FirestoreAdmin(env)) : await webSession(request, env, now);
+      const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || appStore(env)) : await webSession(request, env, now);
       if (!owner && caller?.role !== "admin") return json({ error: "Administrator or maintenance access is required." }, 403);
       const target = await resolveStaff(env, String(body.identifier || "").trim(), accounts, store);
       if (!target || (!owner && target.role !== "teacher")) return json({ error: "An administrator can unlock teachers. Maintenance must restore an administrator." }, 403);

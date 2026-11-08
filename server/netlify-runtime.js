@@ -3,7 +3,7 @@ import { NetlifyState } from "./netlify-state.js";
 
 const keys = ["FIREBASE_SERVICE_ACCOUNT_JSON", "GEMINI_API_KEY", "WEB_SESSION_SECRET", "WEB_MAINTENANCE_KEY", "WEB_STAFF_ACCOUNTS",
   "STUDENT_QUIZ_CURSOR_SECRET", "STUDENT_SCHEDULE_ENABLED", "NETLIFY_BACKGROUND_SECRET", "URL", "NETLIFY_BACKUP_ENABLED",
-  "IMARS_SUPABASE_WEB_SETTINGS", "IMARS_SUPABASE_URL", "IMARS_SUPABASE_APP_DATASET_ID", "SUPABASE_SECRET_KEY"];
+  "IMARS_SUPABASE_WEB_DATA", "IMARS_SUPABASE_WEB_SETTINGS", "IMARS_SUPABASE_URL", "IMARS_SUPABASE_APP_DATASET_ID", "SUPABASE_SECRET_KEY"];
 // A deployment's identity-status cache must survive per-request env wrappers.
 // Profile roles, active status and section ownership are still checked live.
 const staffIdentityCacheKey = {};

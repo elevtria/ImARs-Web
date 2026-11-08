@@ -1,6 +1,7 @@
 import { readJson } from "./web-auth.js";
 import { QUIZ_TYPES, normalizeQuizQuestion, writtenQuestion, quizAssignedToSection } from "../js/quiz-limits.js";
 import { StudentQuizStore } from "./student-quiz-store.js";
+import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { authenticateStudent, studentContext, quizRate, quizFailure as fail, validPart } from "./student-quiz-auth.js";
 
 const object = value => value && typeof value === "object" && !Array.isArray(value);
@@ -93,7 +94,7 @@ function canonical(body) {
     answers: Array.isArray(body.answers) ? body.answers.map(a => ({ questionId: a?.questionId, optionIndex: a?.optionIndex, value: a?.value, explanation: a?.explanation, correction: a?.correction })).sort((a, b) => String(a.questionId).localeCompare(String(b.questionId))) : null };
 }
 
-export async function studentQuizzes({ request, env }, { store = new StudentQuizStore(env), authenticate = authenticateStudent, rate = quizRate, now = Date.now, fetcher = fetch } = {}) {
+export async function studentQuizzes({ request, env }, { store, authenticate = authenticateStudent, rate = quizRate, now = Date.now, fetcher = fetch } = {}) {
   const started = performance.now();
   const respond = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", "Server-Timing": `student-quiz;dur=${(performance.now() - started).toFixed(1)}`, ...(status === 405 ? { Allow: "POST" } : {}), ...(status === 429 ? { "Retry-After": "60" } : {}) } });
   if (env.STUDENT_QUIZZES_ENABLED !== "true") return respond({ code: "BACKEND_NOT_CONFIGURED", error: "Teacher quizzes are temporarily unavailable." }, 503);
@@ -101,6 +102,7 @@ export async function studentQuizzes({ request, env }, { store = new StudentQuiz
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ code: "INVALID_REQUEST", error: "Use JSON." }, 415);
   let transaction = false;
   try {
+    store ??= supabaseWebData(env) ? appStore(env, fetcher) : new StudentQuizStore(env, fetcher);
     if ((env.STUDENT_QUIZ_CURSOR_SECRET || env.WEB_SESSION_SECRET || "").length < 32) throw fail("BACKEND_NOT_CONFIGURED", 503);
     const action = new URL(request.url).pathname.split("/").filter(Boolean).at(-1);
     if (!["list", "start", "access", "submit"].includes(action)) throw fail("NOT_FOUND", 404);

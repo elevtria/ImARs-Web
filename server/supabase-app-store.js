@@ -1,8 +1,16 @@
-import { decodeFields, encodeFields } from "./firestore-admin.js";
+import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
 
 const id = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const part = /^[A-Za-z0-9_-]{1,128}$/;
 const conflict = () => Object.assign(new Error("The records changed. Reload and try again."), { status: 409 });
+export const supabaseDocumentPath = path => path.replace(/^_accountAccess\//, "webSettings/accountAccess/accounts/");
+export const sortableTimestamp = value => value.replace(/(?:\.(\d{1,9}))?Z$/, (_, fraction = "") => "." + fraction.padEnd(9, "0") + "Z");
+const quoted = value => JSON.stringify(value);
+
+export const supabaseWebData = env => env.IMARS_SUPABASE_WEB_DATA === "true";
+export function appStore(env, fetcher = fetch) {
+  return supabaseWebData(env) ? new SupabaseAppStore(env, fetcher) : new FirestoreAdmin(env, fetcher);
+}
 
 function validatePath(path, document) {
   const parts = path.split("/");
@@ -11,13 +19,11 @@ function validatePath(path, document) {
   }
 }
 
-function asDocument(row, fieldPaths) {
+function asDocument(row) {
   if (!row) return null;
-  const fields = fieldPaths ? Object.fromEntries(fieldPaths.filter(field => Object.hasOwn(row.fields, field))
-    .map(field => [field, row.fields[field]])) : row.fields;
   return {
-    id: row.path.split("/").at(-1), data: decodeFields(fields),
-    wire: decodeFields(fields, true), updateTime: row.update_time
+    id: row.path.split("/").at(-1), data: decodeFields(row.fields),
+    wire: decodeFields(row.fields, true), updateTime: row.update_time
   };
 }
 
@@ -85,22 +91,37 @@ export class SupabaseAppStore {
   }
 
   async getAll(paths, { fieldPaths } = {}) {
-    const rows = await this.rawDocuments(paths);
-    return new Map(paths.map(path => [path, asDocument(rows.get(path), fieldPaths)]));
+    const rows = await this.rawDocuments(paths, fieldPaths);
+    return new Map(paths.map(path => {
+      const row = rows.get(supabaseDocumentPath(path));
+      return [path, row ? this.projected(row, fieldPaths) : null];
+    }));
   }
 
-  async rawDocuments(paths) {
+  async rawDocuments(paths, fieldPaths) {
     if (!paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     for (const path of paths) validatePath(path, true);
-    // Keep URLs bounded even for batches of long document IDs.
-    const rows = new Map();
-    for (let index = 0; index < paths.length; index += 16) {
-      const response = await this.documents("GET", {
-        path: "in.(" + paths.slice(index, index + 16).join(",") + ")", select: "path,fields,update_time"
-      });
-      for (const row of await response.json()) rows.set(row.path, row);
+    paths = paths.map(supabaseDocumentPath);
+    // Most batches fit into a few reads. Leave room in the URL for projections.
+    const groups = [];
+    let group = [];
+    let length = 0;
+    for (const path of paths) {
+      if (length + path.length + 3 > 3300 && group.length) {
+        groups.push(group);
+        group = [];
+        length = 0;
+      }
+      group.push(path);
+      length += path.length + 3;
     }
-    return rows;
+    groups.push(group);
+    const select = this.selection(fieldPaths);
+    const pages = await Promise.all(groups.map(async group => {
+      const response = await this.documents("GET", { path: "in.(" + group.join(",") + ")", select });
+      return response.json();
+    }));
+    return new Map(pages.flat().map(row => [row.path, row]));
   }
 
   filter(path, filters) {
@@ -135,7 +156,7 @@ export class SupabaseAppStore {
     while (rows.length < limit + 1) {
       const size = Math.min(250, limit + 1 - rows.length);
       const response = await this.documents("GET", {
-        ...params, select: "path,fields,update_time", order: "path.asc", limit: String(size),
+        ...params, select: this.selection(fieldPaths), order: "path.asc", limit: String(size),
         ...(cursor ? { path: "gt." + path + "/" + cursor } : {})
       });
       const page = await response.json();
@@ -146,7 +167,76 @@ export class SupabaseAppStore {
     if (rows.length > limit && limit === 5000) {
       throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     }
-    return rows.slice(0, limit).map(row => asDocument(row, fieldPaths));
+    return rows.slice(0, limit).map(row => this.projected(row, fieldPaths));
+  }
+
+  selection(fields) {
+    if (!fields) return "path,fields,update_time";
+    if (fields.some(field => !part.test(field))) throw new Error("Invalid field projection.");
+    return ["path", "update_time", ...fields.map(field => field + ":fields->" + field)].join(",");
+  }
+
+  projected(row, fields) {
+    if (!fields) return asDocument(row);
+    const projected = Object.fromEntries(fields.filter(field => row[field] != null).map(field => [field, row[field]]));
+    return asDocument({ ...row, fields: projected });
+  }
+
+  identity(uid) {
+    return firebaseIdentity(this.env, uid, this.fetcher);
+  }
+
+  async findUser(uid) {
+    const rows = await this.query("users", { filters: [{ field: "uid", value: uid }], limit: 2 });
+    if (rows.length > 1) throw new Error("Duplicate Firebase UID requires administrator review");
+    return rows[0] || null;
+  }
+
+  async activate(profileId, profile, uid, updates, role, authEmail) {
+    await this.begin();
+    try {
+      if (await this.findUser(uid)) throw conflict();
+      await this.commit([
+        { operation: "update", path: "users/" + profileId, updateTime: profile.updateTime, data: updates },
+        { operation: "set", path: "_accountAccess/" + uid, data: { profileId, role, authEmail, active: true } }
+      ]);
+    } finally { await this.rollback(); }
+  }
+
+  async quizPage(context, { limit = 21, after, upper, ids } = {}) {
+    if (ids && !ids.length) return [];
+    const fields = ["id", "title", "sectionId", "assignmentScope", "teacherProfileId", "teacherUid", "type",
+      "gradingMode", "availability", "availableAt", "createdAt", "schemaVersion", "questionCount"];
+    const createdAt = "fields->createdAt->>stringValue";
+    const cursor = after || upper;
+    const response = await this.documents("GET", {
+      ...this.filter("generatedQuizzes", ["teacherProfileId", "teacherUid"].map(field => ({ field, value: context[field] }))),
+      select: this.selection(fields),
+      ...(ids ? { path: "in.(" + ids.map(id => "generatedQuizzes/" + id).join(",") + ")", order: "path.desc", limit: String(ids.length) } : {
+        "fields->sectionId->>stringValue": "in.(" + quoted(context.sectionId) + ',"")',
+        "fields->availability->>stringValue": "in.(now,scheduled)",
+        [createdAt]: "not.is.null",
+        order: createdAt + ".desc,path.desc", limit: String(limit),
+        ...(cursor ? { or: "(" + createdAt + ".lt." + quoted(cursor[0]) + ",and(" + createdAt + ".eq." +
+          quoted(cursor[0]) + ",path." + (after ? "lt" : "lte") + ".generatedQuizzes/" + cursor[1] + "))" } : {})
+      })
+    });
+    return (await response.json()).map(row => this.projected(row, fields));
+  }
+
+  async reviewPage(actor, quizId, sectionId, after) {
+    const fields = ["context", "quizId", "status", "submittedAt"];
+    const submittedAt = "fields->submittedAt->>timestampValue";
+    const context = { teacherUid: actor.uid, teacherProfileId: actor.id, ...(sectionId ? { sectionId } : {}) };
+    const boundary = after && quoted(sortableTimestamp(after[0]));
+    const response = await this.documents("GET", {
+      collection_path: "like.users/*/generated_quiz_attempts", select: this.selection(fields),
+      fields: "cs." + JSON.stringify(encodeFields({ context, quizId, status: "pending-review" })),
+      [submittedAt]: "not.is.null", order: submittedAt + ".asc,path.asc", limit: "21",
+      ...(after ? { or: "(" + submittedAt + ".gt." + boundary + ",and(" + submittedAt +
+        ".eq." + boundary + ",path.gt." + after[1] + "))" } : {})
+    });
+    return (await response.json()).map(row => ({ ...this.projected(row, fields), path: row.path }));
   }
 
   async recentScans(path, direction, limit, fieldPaths) {
@@ -185,23 +275,25 @@ export class SupabaseAppStore {
   }
 
   async commit(writes) {
-    if (!this.revision) throw new Error("Begin an application transaction before saving.");
+    if (!this.revision) await this.begin();
+    const revision = this.revision;
+    this.revision = null;
     if (writes.some(write => !["set", "update", "delete"].includes(write.operation))) {
       throw new Error("Invalid application write.");
     }
     const existing = await this.rawDocuments(writes.map(write => write.path));
-    const timestamp = new Date().toISOString();
+    const timestamp = sortableTimestamp(new Date().toISOString());
     const changes = writes.map(write => {
-      const row = existing.get(write.path);
+      const path = supabaseDocumentPath(write.path);
+      const row = existing.get(path);
       if (row?.update_time !== write.updateTime || (!row && write.operation !== "set")) throw conflict();
       return {
-        path: write.path, previous: row?.update_time || null,
+        path, previous: row?.update_time || null,
         fields: write.operation === "delete" ? null : updateFields(write, row?.fields, timestamp)
       };
     });
     await this.request("rpc/imars_commit_app_documents", "POST", {}, {
-      dataset: this.dataset, expected_revision: this.revision, changes
+      dataset: this.dataset, expected_revision: revision, changes
     });
-    this.revision = null;
   }
 }

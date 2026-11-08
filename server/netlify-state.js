@@ -1,5 +1,6 @@
 import { WebLoginState } from "../workers/web-auth-worker.js";
 import { databaseQuotaFailure } from "./firestore-admin.js";
+import { dashboardRefreshInterval, dashboardScope } from "./dashboard-summary.js";
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const copy = value => value === undefined ? undefined : structuredClone(value);
@@ -90,11 +91,10 @@ export class NetlifyState {
     if (!name.startsWith("dashboard:") || name !== "dashboard:" + body.uid || !Array.isArray(body.sections) || body.sections.length > 500 ||
         body.sections.some(section => typeof section.id !== "string" || typeof section.name !== "string")) return json({ error: "Invalid dashboard." }, 400);
     const id = await hash(name), projection = await this.store.get("dashboard-view/" + id, { type: "json", consistency: "strong" });
-    const signature = sections => JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
     const config = projection?.config, summary = projection?.summary;
-    const sameScope = config?.id === body.id && config.uid === body.uid && config.scope === signature(body.sections);
+    const sameScope = config?.id === body.id && config.uid === body.uid && config.scope === dashboardScope(body.sections, this.env);
     const ready = sameScope && summary?.scope === config.scope;
-    const interval = Math.max(300_000, (summary?.total || 0) * 12 / 6_000 * 86_400_000);
+    const interval = dashboardRefreshInterval(summary, this.env);
     if (!sameScope || (!body.warmOnly && ready && this.now() - summary.reconciledAt >= interval && !projection.pending)) {
       return this.transact(name, async actor => json(await actor.dashboard.configure(body)));
     }

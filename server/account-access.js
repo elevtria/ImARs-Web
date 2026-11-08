@@ -1,4 +1,5 @@
-import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
+import { serviceAccount } from "./firestore-admin.js";
+import { appStore } from "./supabase-app-store.js";
 import { stateCall, resolveStaff, settings, readJson } from "./web-auth.js";
 import { authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
@@ -53,7 +54,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
   try {
-    if (!store) { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); store = new FirestoreAdmin(env, fetcher); }
+    if (!store) { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); store = appStore(env, fetcher); }
     const body = await readJson(request);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw fail("Invalid request.", 400);
     const ip = request.headers.get("CF-Connecting-IP");

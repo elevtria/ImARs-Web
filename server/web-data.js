@@ -1,5 +1,5 @@
-import { FirestoreAdmin, databaseQuotaFailure } from "./firestore-admin.js";
-import { SupabaseAppStore } from "./supabase-app-store.js";
+import { databaseQuotaFailure } from "./firestore-admin.js";
+import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
@@ -430,15 +430,16 @@ async function teacherTopicOverview(scope) {
   }) })) };
 }
 
-export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff,
+export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
   settingsFetcher = fetch } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
-  const supabaseSettings = env.IMARS_SUPABASE_WEB_SETTINGS === "true";
+  const supabaseSettings = !supabaseWebData(env) && env.IMARS_SUPABASE_WEB_SETTINGS === "true";
   let transaction;
   const settingsStore = () => supabaseSettings ? new SupabaseAppStore(env, settingsFetcher) : store;
   try {
+    store ??= appStore(env, settingsFetcher);
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
       return respond(await readSchoolYear(settingsStore()));
     }

@@ -1,4 +1,5 @@
 import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
+import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
 import { quizAssignmentScope, quizAssignedToSection } from "../js/quiz-limits.js";
@@ -45,13 +46,14 @@ async function ownedSection(actor, store, id) {
   const section = (await store.get("classes/" + id))?.data;
   if (!activeProfile(section) || section.teacherId !== actor.id) throw fail("FORBIDDEN");
 }
-export async function quizReview({ request, env }, { store = new QuizReviewStore(env), authenticate = requireStaff, now = Date.now } = {}) {
+export async function quizReview({ request, env }, { store, authenticate = requireStaff, now = Date.now } = {}) {
   const respond = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
   let transaction = false;
   try {
     if (env.STUDENT_QUIZZES_ENABLED !== "true") throw fail("BACKEND_NOT_CONFIGURED", 503);
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
+    store ??= supabaseWebData(env) ? appStore(env) : new QuizReviewStore(env);
     const initialActor = await authenticate(request, env, store);
     const body = await readJson(request, 65536);
     if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade"].includes(body.action) ||
