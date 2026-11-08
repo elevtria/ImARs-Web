@@ -2,6 +2,7 @@
 .manual-page .manual-hero h1 { font-size: clamp(30px, 3vw, 40px); font-weight: 800; line-height: 1.15; }
 .manual-page .manual-hero p,
 .manual-page .manual-sheet-heading p { font-size: 14px; line-height: 1.55; }
+.manual-page .manual-hero { margin: 0; }
 .manual-page .manual-sheet-heading h2 { font-size: 22px; font-weight: 800; line-height: 1.3; }
 .manual-page .manual-feature-card h3 { font-size: 22px; font-weight: 800; line-height: 1.25; }
 .manual-page .manual-step-card h3,
@@ -10,14 +11,16 @@
 .manual-page .manual-step-card p,
 .manual-page .manual-tool-card p,
 .manual-page .manual-checklist,
-.manual-page .manual-note { font-size: 13px; line-height: 1.6; }
+.manual-page .manual-note { font-size: 14px; line-height: 1.6; }
 .manual-page .manual-step-card p,
 .manual-page .manual-tool-card p,
 .manual-page .manual-checklist { color: #586b80; }
 .manual-page .manual-step-card .manual-step-kicker,
-.manual-page .manual-tool-card .manual-step-kicker { color: #4d7698; font-size: 10px; letter-spacing: .06em; }
-.manual-page .manual-section-chip { font-size: 10px; letter-spacing: .06em; }
-.manual-page .manual-link { font-size: 12px; line-height: 1.45; }
+.manual-page .manual-tool-card .manual-step-kicker { color: #4d7698; font-size: 11px; letter-spacing: .04em; }
+.manual-page .manual-feature-kicker { font-size: 11px; letter-spacing: .04em; }
+.manual-page .manual-section-chip { font-size: 12px; letter-spacing: .03em; }
+.manual-page .manual-link { font-size: 13px; line-height: 1.45; }
+.manual-page .manual-sheet-footer { font-size: 10px; letter-spacing: .04em; }
 
 @media print {
   .manual-page .manual-feature-card p,
