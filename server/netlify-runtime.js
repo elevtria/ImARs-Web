@@ -2,7 +2,7 @@ import { getStore } from "@netlify/blobs";
 import { NetlifyState } from "./netlify-state.js";
 
 const keys = ["FIREBASE_SERVICE_ACCOUNT_JSON", "GEMINI_API_KEY", "WEB_SESSION_SECRET", "WEB_MAINTENANCE_KEY", "WEB_STAFF_ACCOUNTS",
-  "STUDENT_QUIZ_CURSOR_SECRET", "NETLIFY_BACKGROUND_SECRET", "URL", "NETLIFY_BACKUP_ENABLED"];
+  "STUDENT_QUIZ_CURSOR_SECRET", "STUDENT_SCHEDULE_ENABLED", "NETLIFY_BACKGROUND_SECRET", "URL", "NETLIFY_BACKUP_ENABLED"];
 // A deployment's identity-status cache must survive per-request env wrappers.
 // Profile roles, active status and section ownership are still checked live.
 const staffIdentityCacheKey = {};
