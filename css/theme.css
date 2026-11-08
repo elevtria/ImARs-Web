@@ -14,7 +14,9 @@
 .teacher-notifications[hidden], .notification-panel[hidden], .notification-badge[hidden] { display: none; }
 .notification-toggle { position: relative; }
 .notification-badge { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 4px; border: 2px solid var(--surface, white); border-radius: 12px; background: #bc2842; color: white; font: 700 10px/15px system-ui; }
-.notification-panel { position: absolute; z-index: 60; top: calc(100% + 12px); right: 0; width: min(380px, calc(100vw - 32px)); color: var(--ink, #2c3a4f); background: var(--surface, #fff); border: 1px solid var(--line, #d8e1ec); border-radius: 16px; box-shadow: 0 16px 48px #0003; overflow: hidden; text-align: left; }
+/* Dropdowns need a solid surface; the page's --surface is translucent in light mode. */
+.notification-panel { position: absolute; z-index: 60; top: calc(100% + 12px); right: 0; width: min(380px, calc(100vw - 32px)); color: var(--ink, #2c3a4f); background: #fff; border: 1px solid var(--line, #d8e1ec); border-radius: 16px; box-shadow: 0 16px 48px #0003; overflow: hidden; text-align: left; }
+[data-theme="dark"] .notification-panel { background: #1b2738; }
 .notification-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 16px 0; }
 .notification-header h2 { margin: 0; font-size: 16px; }
 .notification-mark { border: 0; background: transparent; color: inherit; font-size: 12px; cursor: pointer; padding: 6px 0; }

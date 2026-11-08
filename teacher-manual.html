@@ -44,7 +44,6 @@
     </header>
 
     <main class="content manual-page" id="manual" inert data-auth-shell>
-      <section class="manual-sheet manual-sheet-setup" aria-labelledby="setupHeading" data-auth-shell>
         <div class="manual-cover">
           <div class="manual-cover-main">
             <section class="hero manual-hero" data-auth-shell>
@@ -69,23 +68,15 @@
           </div>
         </div>
 
-        <nav class="manual-section-nav" aria-label="Teacher Manual sections">
-          <a class="manual-section-nav-card" href="#setupHeading">
+      <div class="manual-section-nav" aria-label="Teacher Manual sections">
+        <details class="manual-dropdown" id="manualSetup">
+          <summary class="manual-section-nav-card">
             <span class="manual-section-nav-number">01 · GET READY</span>
             <span class="manual-section-nav-copy"><strong>Set up your classroom</strong><small>Sign in, check your class, and import your student roster.</small></span>
             <span class="manual-section-nav-arrow" aria-hidden="true">›</span>
-          </a>
-          <a class="manual-section-nav-card" href="#prepareHeading">
-            <span class="manual-section-nav-number">02 · PREPARE</span>
-            <span class="manual-section-nav-copy"><strong>Plan lessons and prepare activities</strong><small>Manage lesson access, review quizzes, and download classroom markers.</small></span>
-            <span class="manual-section-nav-arrow" aria-hidden="true">›</span>
-          </a>
-          <a class="manual-section-nav-card" href="#syncHeading">
-            <span class="manual-section-nav-number">03 · SYNC &amp; REVIEW</span>
-            <span class="manual-section-nav-copy"><strong>Sync offline results with a Grade QR code</strong><small>Use the student’s results QR code, then review the saved records.</small></span>
-            <span class="manual-section-nav-arrow" aria-hidden="true">›</span>
-          </a>
-        </nav>
+          </summary>
+
+      <section class="manual-sheet manual-sheet-setup" aria-labelledby="setupHeading" data-auth-shell>
 
         <div class="manual-sheet-heading">
           <div><h2 id="setupHeading">Set up your classroom</h2><p>Sign in, check your class, and import your student roster.</p></div>
@@ -130,7 +121,14 @@
         </div>
         <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · CLASS SETUP</span><span>01 <i aria-hidden="true"></i> 03</span></div>
       </section>
+        </details>
 
+        <details class="manual-dropdown" id="manualPrepare">
+          <summary class="manual-section-nav-card">
+            <span class="manual-section-nav-number">02 · PREPARE</span>
+            <span class="manual-section-nav-copy"><strong>Plan lessons and prepare activities</strong><small>Manage lesson access, review quizzes, and download classroom markers.</small></span>
+            <span class="manual-section-nav-arrow" aria-hidden="true">›</span>
+          </summary>
       <section class="manual-sheet manual-sheet-teach" aria-labelledby="prepareHeading" data-auth-shell>
         <div class="manual-sheet-heading manual-sheet-heading-light">
           <div><h2 id="prepareHeading">Plan lessons and prepare activities</h2><p>Manage lesson access, review quizzes, and download classroom markers.</p></div>
@@ -180,7 +178,14 @@
         <div class="manual-note"><b>Before going offline</b><span>Sign in and download markers on each device while connected. Roster imports, quiz generation, and saving results still need internet access.</span></div>
         <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · LESSON PREPARATION</span><span>02 <i aria-hidden="true"></i> 03</span></div>
       </section>
+        </details>
 
+        <details class="manual-dropdown" id="manualSync">
+          <summary class="manual-section-nav-card">
+            <span class="manual-section-nav-number">03 · SYNC &amp; REVIEW</span>
+            <span class="manual-section-nav-copy"><strong>Sync offline results with a Grade QR code</strong><small>Use the student’s results QR code, then review the saved records.</small></span>
+            <span class="manual-section-nav-arrow" aria-hidden="true">›</span>
+          </summary>
       <section class="manual-sheet manual-sheet-teach" aria-labelledby="syncHeading" data-auth-shell>
         <div class="manual-sheet-heading manual-sheet-heading-light">
           <div><h2 id="syncHeading">Sync offline results with a Grade QR code</h2><p>Use the student’s results QR code, then review the saved records.</p></div>
@@ -234,6 +239,8 @@
         </div>
         <div class="manual-sheet-footer"><span>ImARs TEACHER GUIDE · OFFLINE RESULTS &amp; REPORTS</span><span>03 <i aria-hidden="true"></i> 03</span></div>
       </section>
+        </details>
+      </div>
     </main>
   </div>
 

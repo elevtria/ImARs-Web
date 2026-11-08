@@ -58,7 +58,7 @@ export function initTeacherNotifications(app, auth) {
   }
   function receive(next, complete = true) {
     items = next; paint();
-    status.textContent = complete ? items.length ? "Latest completed tests · Checks every 5 minutes" : "No completed tests yet." : "Checking student test completions…";
+    status.textContent = complete ? items.length ? "Latest completed tests" : "No completed tests yet." : "Checking student test completions…";
   }
   function close() {
     panel.hidden = true; bell.setAttribute("aria-expanded", "false");
