@@ -4,7 +4,7 @@ import { generateKeyPairSync } from "node:crypto";
 import test from "node:test";
 import { decision, emptyState, passwordFailed, verifiedSuccess, resetAfterApproval, cooldowns } from "../server/web-lockout.js";
 import { WebLoginState, default as privateWorker } from "../workers/web-auth-worker.js";
-import { authApi, protectWebsite, signSession, webSession, staffProfile } from "../server/web-auth.js";
+import { authApi, protectWebsite, resolveStaff, signSession, webSession, staffProfile } from "../server/web-auth.js";
 import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } from "../server/web-session.js";
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
@@ -15,6 +15,19 @@ const accounts = [
   { id: "TEACH1001", uid: "teacher-b", email: "other@example.test", role: "teacher" },
   { id: "ADMIN1000", uid: "admin-a", email: "admin@example.test", role: "admin" }
 ];
+
+test("admin aliases only resolve an unambiguous approved account", async () => {
+  const env = { WEB_DATA_ENABLED: "true" };
+  const database = { get: async () => ({ data: { role: "admin", uid: "unapproved", email: "unapproved@example.test" } }) };
+  const approved = accounts[2];
+  assert.equal(await resolveStaff(env, " Admin1 ", accounts, database), approved);
+  assert.equal(await resolveStaff(env, approved.email, accounts, database), approved);
+  assert.equal(await resolveStaff(env, "ADMIN9999", accounts, database), undefined);
+  const another = { id: "ADMIN2000", role: "admin", uid: "admin-b", email: "second@example.test" };
+  assert.equal(await resolveStaff(env, "admin", [...accounts, another], database), undefined);
+  const explicitId = { ...another, id: "ADMIN1" };
+  assert.equal(await resolveStaff(env, "admin1", [...accounts, explicitId], database), explicitId);
+});
 
 test("live staff profile and Auth status checks overlap, and either failed check still denies access",async()=>{
   let releaseProfile,releaseIdentity,identityStarted=false;

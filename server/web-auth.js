@@ -1,5 +1,6 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
-import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { appStore } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const cookieName = "__Host-imars-web";
@@ -61,37 +62,14 @@ export async function signSession(env, account, session, host, teacherSession) {
   return `${value}.${base64(new Uint8Array(signature))}`;
 }
 
-export async function resolveStaff(env, identifier, accounts = settings(env), store = new FirestoreAdmin(env)) {
-  const clean = identifier.trim();
-  const initial = accounts.find(item =>
-    item.id.toLowerCase() === clean.toLowerCase() ||
-    item.email.toLowerCase() === clean.toLowerCase()
-  );
-  const id = clean.toUpperCase();
-
-  if (dataEnabled(env) && /^ADMIN[A-Z0-9_-]{0,32}$/.test(id)) {
-    try {
-      const profile = await store.get("users/" + id);
-      if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
-        const firestoreEmail = String(profile.data.providedEmail || profile.data.email || profile.data.authEmail || initial?.email || "").trim();
-        if (firestoreEmail) {
-          return {
-            id,
-            uid: String(profile.data.uid),
-            role: "admin",
-            email: firestoreEmail
-          };
-        }
-      }
-    } catch {
-      // Fall back to WEB_STAFF_ACCOUNTS if Firestore lookup fails
-    }
-    if (initial) return initial;
-    // Also fallback to the primary admin entry in WEB_STAFF_ACCOUNTS if only one admin exists
-    const singleAdmin = accounts.filter(a => a.role === "admin");
-    if (singleAdmin.length === 1 && (id === "ADMIN" || id === "ADMIN1")) return singleAdmin[0];
+export async function resolveStaff(env, identifier, accounts = settings(env), store = appStore(env)) {
+  const clean = identifier.trim().toLowerCase();
+  const initial = accounts.find(item => item.id.toLowerCase() === clean || (item.role === "admin" && item.email.toLowerCase() === clean));
+  if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1")) {
+    const administrators = accounts.filter(item => item.role === "admin");
+    if (administrators.length === 1) return administrators[0];
   }
-
+  const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
   const privateRecord = await stateCall(env, "staff-roster", "roster-get", { id });
   if (!privateRecord.ok) throw new Error("Staff invitations unavailable");
@@ -132,7 +110,7 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
     if (!checked.ok) throw new Error("Login state unavailable");
     const account = await resolveStaff(env, payload.id, accounts, store);
     if (!account || account.uid !== payload.uid || account.role !== payload.role) return null;
-    if (!await checkTeacherSession(env, store || new FirestoreAdmin(env), account, "web", payload.teacherSession)) return null;
+    if (!await checkTeacherSession(env, store || appStore(env), account, "web", payload.teacherSession)) return null;
     return { account, ...checked.result, credentials, teacherSession: payload.teacherSession };
   } catch (error) { throw new Error("Login state unavailable", { cause: error }); }
 }
@@ -142,9 +120,14 @@ export async function webSession(request, env, now = Date.now(), store) {
 }
 
 const identities = new WeakMap();
+// Share the middleware's verified session only inside this exact Request.
+// Roles and active status are still checked from the current staff profile.
 const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
+  // The approved account supplies both IDs. Its live profile and Auth status
+  // can be read independently; neither result grants access on its own.
   const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
   if (!cache) { cache = new Map(); identities.set(key, cache); }
@@ -172,7 +155,7 @@ export async function staffProfile(account, store, now = Date.now()) {
   return { ...account, profile, row };
 }
 
-export async function requireStaff(request, env, store = new FirestoreAdmin(env)) {
+export async function requireStaff(request, env, store = appStore(env)) {
   if (!dataEnabled(env) || !enabled(env)) throw Object.assign(new Error("Website account setup is incomplete."), { status: 503 });
   const origin = request.headers.get("Origin");
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get("Sec-Fetch-Site") === "cross-site") {
@@ -216,6 +199,8 @@ export async function readJson(request, maximum = 8192) {
 
 async function renewSession(env, checked) {
   if (checked.previous || checked.timing.serverNow < checked.timing.renewAt) return checked;
+  // Rotate only after upstream checks succeed. An outage must not consume a
+  // valid cookie before the browser can receive its replacement.
   const renewed = await stateCall(env, `account:${checked.account.uid}`, "session", { ...checked.credentials, rotate: true });
   if (renewed.status === 401) return null;
   if (!renewed.ok) throw new Error("Login state unavailable");
@@ -263,10 +248,11 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
         if (!rate.ok) return json(rate.result, rate.status, { "Retry-After": "60" });
       }
       const identifier = body.identifier.trim().toLowerCase();
-      const database = store || (dataEnabled(env) ? new FirestoreAdmin(env) : undefined);
-      const account = await resolveStaff(env, identifier, accounts, database);
+      const account = await resolveStaff(env, identifier, accounts, store);
       let attempt;
       if (!account || account.role !== body.portal) {
+        // Keep unknown IDs and wrong-portal submissions on the same error sequence,
+        // without changing a real account's counter or storing the submitted ID.
         const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`${body.portal}:${identifier}`));
         attempt = await stateCall(env, `invalid-login:${base64(new Uint8Array(digest))}`, "invalid-login", {});
         if (attempt.ok) throw new Error("An invalid login cannot authenticate");
@@ -274,18 +260,18 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
         attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
       }
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
-      const approved = dataEnabled(env) ? await staffProfile(account, database, now) : null;
+      const approved = dataEnabled(env) ? await staffProfile(account, store || appStore(env), now) : null;
       if (approved?.role === "teacher" && env.TEACHER_SESSION_SYNC_ENABLED !== "true") {
         const revoked = await stateCall(env, `account:${approved.uid}`, "mobile-revoke", {});
         if (!revoked.ok) throw new Error("Mobile session update failed");
       }
-      const teacherSession = approved?.role === "teacher" ? await openTeacherSession(env, database, approved, "web") : undefined;
+      const teacherSession = approved?.role === "teacher" ? await openTeacherSession(env, store || appStore(env), approved, "web") : undefined;
       const token = await signSession(env, account, attempt.result.session, new URL(request.url).host, teacherSession);
       return json(approved ? { user: publicUser(approved) } : { email: account.email }, 200, { "Set-Cookie": cookie(token) });
     }
     if (action === "identity") {
       if (!dataEnabled(env)) return json({ error: "Website account setup is incomplete." }, 503);
-      const database = store || new FirestoreAdmin(env);
+      const database = store || appStore(env);
       const checked = await inspectSession(request, env, { now, store: database });
       if (!checked) return json({ error: "Please sign in to the website." }, 401);
       const user = await staffProfile(checked.account, database, now);
@@ -296,7 +282,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       const checked = await inspectSession(request, env, { now, active: body.active, store });
       if (!checked) return json({ error: "Your website session expired. Please sign in again." }, 401);
       if (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== checked.account.uid) return json({ error: "Your sign-in changed. Please sign in again." }, 401);
-      if (dataEnabled(env)) await staffProfile(checked.account, store || new FirestoreAdmin(env), now);
+      if (dataEnabled(env)) await staffProfile(checked.account, store || appStore(env), now);
       const renewed = await renewSession(env, checked);
       if (!renewed) return json({ error: "Your website session expired. Please sign in again." }, 401);
       return json(body.timing === "relative" ? publicTiming(renewed.timing) : renewed.timing, 200, await renewalHeaders(request, env, renewed));
@@ -315,7 +301,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     }
     if (action === "unlock") {
       const owner = await maintenance(request, env);
-      const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || new FirestoreAdmin(env)) : await webSession(request, env, now);
+      const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || appStore(env)) : await webSession(request, env, now);
       if (!owner && caller?.role !== "admin") return json({ error: "Administrator or maintenance access is required." }, 403);
       const target = await resolveStaff(env, String(body.identifier || "").trim(), accounts, store);
       if (!target || (!owner && target.role !== "teacher")) return json({ error: "An administrator can unlock teachers. Maintenance must restore an administrator." }, 403);
@@ -325,6 +311,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     }
     return json({ error: "Not found." }, 404);
   } catch (error) {
+    // Never log or echo passwords, cookies, upstream tokens, or server secrets.
     if (databaseQuotaFailure(error)) return json({ error: "Sign-in is temporarily unavailable because the data service usage limit was reached. Please try again later.", code: "DATABASE_QUOTA_EXCEEDED" }, 503, { "Retry-After": "60" });
     if (![400, 401, 403, 413].includes(error.status)) logAuthFailure("api:" + action, error);
     return [400, 401, 403, 413].includes(error.status) ? json({ error: error.message }, error.status)
@@ -345,7 +332,7 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
-  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/")) return context.next();
+  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;
@@ -365,6 +352,9 @@ export async function protectWebsite(context, now = Date.now()) {
         for (const [name, value] of Object.entries(await renewalHeaders(request, env, renewed))) protectedResponse.headers.set(name, value);
       } catch (error) { logAuthFailure("portal-renewal", error); }
     }
+    // These HTML files are static shells. The browser hides private content
+    // on page exit and verifies the visit again before revealing a restored view.
+    // Leave API responses and responses carrying a replacement cookie no-store.
     const staticHtml = response.status === 200 && protectedResponse.headers.get("Content-Type")?.includes("text/html");
     if (request.method === "GET" && staticPortalShells.has(path) && (staticHtml || response.status === 304) && !protectedResponse.headers.has("Set-Cookie")) {
       protectedResponse.headers.set("Cache-Control", "private, no-cache");
