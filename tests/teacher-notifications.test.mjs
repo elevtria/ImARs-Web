@@ -6,7 +6,7 @@ import vm from "node:vm";
 const source = readFileSync(new URL("../js/teacher-notifications.js", import.meta.url), "utf8")
   .replace(/^import .*;\r?\n/gm, "").replace("export function", "function");
 const item = { id: "S1:term_01:lesson_02:pre", name: "Ana <script>", section: "A", termId: "term_01", lessonId: "lesson_02", kind: "pre" };
-function setup({ enabled = true, blocked = false } = {}) {
+function setup({ enabled = true, ready = true, blocked = false } = {}) {
   const nodes = [], storage = new Map(), timers = new Map(); let listener, fallback;
   function node(tag) {
     const el = { tag, children: [], events: {}, attributes: {}, hidden: false,
@@ -23,7 +23,7 @@ function setup({ enabled = true, blocked = false } = {}) {
   const context = { document, window, console,
     localStorage: { getItem: key => { if (blocked) throw Error(); return storage.get(key) || null; }, setItem: (key, value) => { if (blocked) throw Error(); storage.set(key, value); } },
     onAuthStateChanged: (_, callback) => { listener = callback; },
-    getDashboardSummary: async () => ({ enabled, ready: true, summary: { notifications: [item] } }),
+    getDashboardSummary: async () => ({ enabled, ready, summary: { notifications: [item] } }),
     watchVisibleData: () => () => {},
     reportNotifications: () => [item],
     createTeacherReport: options => (fallback = { async open() { options.render({ sections: [], complete: true }); }, stop() { this.stopped = true; } }),
@@ -32,7 +32,7 @@ function setup({ enabled = true, blocked = false } = {}) {
   vm.runInNewContext(source + "\ninitTeacherNotifications({}, auth);", vm.createContext({ ...context, auth }));
   const find = className => nodes.find(el => el.className === className);
   const settle = async () => { await new Promise(resolve => setImmediate(resolve)); };
-  return { auth, document, window, storage, find, settle, get fallback() { return fallback; },
+  return { auth, document, window, storage, find, settle, timers, get fallback() { return fallback; },
     async signIn(user = auth.currentUser) { auth.currentUser = user; listener(user); await settle(); } };
 }
 
@@ -62,9 +62,21 @@ test("clicking a completion marks it read; Escape and outside clicks close the m
 });
 test("legacy report fallback works with blocked storage and stops when the account changes", async () => {
   const f = setup({ enabled: false, blocked: true }); await f.signIn();
+  assert.equal(f.fallback, undefined, "a closed bell never scans the full report");
+  f.find("theme-toggle notification-toggle").events.click(); await f.settle();
   const report = f.fallback;
   assert.equal(f.find("notification-badge").textContent, "1");
   f.find("notification-mark").events.click(); assert.equal(f.find("notification-badge").hidden, true);
   await f.signIn(null); assert.equal(report.stopped, true); assert.equal(f.find("teacher-notifications").hidden, true);
   assert.equal(f.find("notification-list").children.length, 0);
+});
+
+test("a pending notification summary only retries while the bell is open", async () => {
+  const f = setup({ ready: false }); await f.signIn();
+  assert.equal(f.timers.size, 0);
+  const bell = f.find("theme-toggle notification-toggle");
+  bell.events.click(); await f.settle();
+  assert.equal(f.timers.size, 1);
+  bell.events.click();
+  assert.equal(f.timers.size, 0);
 });

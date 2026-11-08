@@ -60,10 +60,16 @@ export function initTeacherNotifications(app, auth) {
     items = next; paint();
     status.textContent = complete ? items.length ? "Latest completed tests · Checks every 5 minutes" : "No completed tests yet." : "Checking student test completions…";
   }
-  function close() { panel.hidden = true; bell.setAttribute("aria-expanded", "false"); }
+  function close() {
+    panel.hidden = true; bell.setAttribute("aria-expanded", "false");
+    clearTimeout(retryTimer);
+    report?.stop();
+    report = null;
+  }
   bell.addEventListener("click", () => {
-    panel.hidden = !panel.hidden; bell.setAttribute("aria-expanded", String(!panel.hidden));
-    if (!panel.hidden) void refresh();
+    if (!panel.hidden) { close(); return; }
+    panel.hidden = false; bell.setAttribute("aria-expanded", "true");
+    void refresh();
   });
   mark.addEventListener("click", () => { for (const item of items) read.add(item.id); save(); paint(); });
   document.addEventListener("click", event => { if (!host.contains(event.target)) close(); });
@@ -82,16 +88,17 @@ export function initTeacherNotifications(app, auth) {
       if (owner !== uid) return;
       if (result.enabled && (!result.ready || !Array.isArray(result.summary?.notifications))) {
         status.textContent = "Preparing test notifications…";
-        clearTimeout(retryTimer); retryTimer = setTimeout(() => void refresh(), 30_000);
+        if (!panel.hidden) { clearTimeout(retryTimer); retryTimer = setTimeout(() => void refresh(), 30_000); }
         return;
       }
       if (result.enabled) {
         receive(result.summary.notifications);
-        if (result.pending) { clearTimeout(retryTimer); retryTimer = setTimeout(() => void refresh(), 30_000); }
+        if (result.pending && !panel.hidden) { clearTimeout(retryTimer); retryTimer = setTimeout(() => void refresh(), 30_000); }
         return;
       }
       // Older deployments use the same paged, teacher-scoped report cache as
       // the dashboard. No student reads or writes bypass the existing gateway.
+      if (panel.hidden) return;
       report = createTeacherReport({ app,
         render: data => { if (owner === uid) receive(reportNotifications(data.sections), data.complete); },
         failed: () => { if (owner === uid) status.textContent = "Could not update notifications. Retrying automatically."; }
@@ -105,7 +112,7 @@ export function initTeacherNotifications(app, auth) {
     } finally { if (owner === uid) busy = false; }
   }
   onAuthStateChanged(auth, user => {
-    stopUpdates?.(); report?.stop(); report = null; clearTimeout(retryTimer); close();
+    stopUpdates?.(); close();
     owner = user?.role === "teacher" ? user.uid : null;
     items = []; read = new Set(); busy = false; host.hidden = !owner;
     if (!owner) { paint(); return; }
@@ -114,5 +121,5 @@ export function initTeacherNotifications(app, auth) {
     stopUpdates = watchVisibleData(app, user, refresh, 300_000);
     void refresh();
   });
-  window.addEventListener("pagehide", () => { clearTimeout(retryTimer); stopUpdates?.(); report?.stop(); });
+  window.addEventListener("pagehide", () => { stopUpdates?.(); close(); });
 }
