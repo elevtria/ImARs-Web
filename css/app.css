@@ -1166,21 +1166,23 @@ label[for="activityTermFilter"] .select-wrap { width:120px; }
 .activity-result-score.is-empty { color: #718198; background: #eef1f7; }
 .activity-result-time { color: #416f98; }
 .activity-record-empty { color: var(--muted); font-size: 13px; }
+.question-heatmap { --heatmap-low: #0f766e; --heatmap-moderate: #b45309; --heatmap-high: #b91c1c; }
 .question-heatmap .activity-record-filters { justify-content: flex-start; margin: 16px 0; }
 .question-heatmap label { display: grid; gap: 6px; color: #41658b; font-size: 13px; font-weight: 600; }
 .question-heatmap select { min-width: 140px; max-width: 100%; padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-radius: 12px; background-color: #fff; color: var(--ink); font: inherit; }
 .question-heatmap-rows { margin-top: 18px; }
 .question-heatmap-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr); gap: 20px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
 .question-heatmap-question { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
-.question-heatmap-track { height: 14px; background: #e4eaf1; border-radius: 8px; overflow: hidden; }
+.question-heatmap-track { height: 14px; background: var(--ice, #e4eaf1); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .question-heatmap-track i { display: block; height: 100%; border-radius: inherit; }
-.question-heatmap-result span { display: block; margin-top: 5px; color: #526b84; font-size: 12px; }
-.heatmap-low { background: #20b9d2; }
-.heatmap-moderate { background: #efac18; }
-.heatmap-high { background: #d64747; }
-.question-heatmap-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 20px; color: #526b84; font-size: 12px; }
+.question-heatmap-result span { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+.question-heatmap .heatmap-low { background: var(--heatmap-low); }
+.question-heatmap .heatmap-moderate { background: var(--heatmap-moderate); }
+.question-heatmap .heatmap-high { background: var(--heatmap-high); }
+.question-heatmap-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 20px; color: var(--muted); font-size: 12px; }
 .question-heatmap-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .question-heatmap-legend i { width: 12px; height: 12px; border-radius: 3px; }
+@media screen { [data-theme="dark"] .question-heatmap { --heatmap-low: #2dd4bf; --heatmap-moderate: #fbbf24; --heatmap-high: #fb7185; } }
 @media (max-width: 640px) { .question-heatmap-row { grid-template-columns: 1fr; gap: 8px; } .question-heatmap label, .question-heatmap select { width: 100%; } }
 
 .students {
