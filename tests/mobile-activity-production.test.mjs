@@ -1,0 +1,70 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mobileApi } from "../server/mobile-api.js";
+import { webData } from "../server/web-data.js";
+import { fixture } from "./fixtures/web-data.js";
+import { activityStorageDataset, MobileActivityStore } from "../server/mobile-activity-store.js";
+
+const project = { IMARS_SUPABASE_URL: "https://test.supabase.co", SUPABASE_SECRET_KEY: "sb_secret_test" };
+const production = { MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" };
+const staging = { MOBILE_ACTIVITY_STAGING_ENABLED: "true" };
+
+test("production activity routes reject ambiguous or missing deployment settings", async () => {
+  const url = "https://example.test/api/mobile/v1/activity-results";
+  for (const env of [{}, { MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true" }, { ...production, ...staging }]) {
+    assert.equal(activityStorageDataset(env), null);
+    const request = new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const response = await mobileApi({ request, env: { ...env, MOBILE_API_ENABLED: "true" } });
+    assert.equal(response.status, 404);
+  }
+});
+
+for (const [mode, settings] of [["staging", staging], ["production", production]]) {
+  test(`${mode} activity reads and writes use the isolated dataset`, async () => {
+    const resources = [];
+    const store = new MobileActivityStore({ ...project, ...settings }, async (url, options) => {
+      resources.push(url.pathname);
+      return Response.json(options.method === "GET" ? [] : null);
+    });
+    await store.run("uid", "states-of-matter");
+    await store.receipt("uid", "activity-start", "request");
+    await store.studentResults({ uid: "uid", profileId: "student", classCode: "class" }, {});
+    await store.staffResults({ sectionId: "class", limit: 1 });
+    assert.equal(await store.commit("uid", "activity-start", "request", "digest", "states-of-matter", null, null, {}), null);
+    assert.deepEqual(resources, [
+      `/rest/v1/imars_mobile_${mode}_runs`, `/rest/v1/imars_mobile_${mode}_receipts`,
+      `/rest/v1/imars_mobile_${mode}_runs`, `/rest/v1/imars_mobile_${mode}_runs`, `/rest/v1/rpc/imars_mobile_${mode}_commit`
+    ]);
+  });
+}
+
+test("production web report projects only the selected roster's activity grades alongside lesson scores", async () => {
+  const app = fixture();
+  const cookie = await app.login();
+  const profile = [...app.data.entries()].find(([, row]) => row.role === "student" && row.classCode === "A");
+  assert.ok(profile);
+  const studentId = profile[0].split("/").at(-1);
+  const path = profile[0] + "/test_results/term_01/lessons/lesson_01";
+  app.data.set(path, { preTestScore: 4, isPreTestCompleted: true, activityTotalQuestions: 5 });
+  let reads = 0;
+  const activityFetcher = async url => {
+    reads++;
+    assert.equal(url.pathname, "/rest/v1/imars_mobile_production_runs");
+    assert.equal(url.searchParams.get("section_id"), "eq.A");
+    assert.equal(url.searchParams.get("term_id"), "in.(term_01)");
+    assert.ok(url.searchParams.get("student_id").slice(4, -1).split(",").includes(studentId));
+    return Response.json([{ studentId, termId: "term_01", lessonId: "lesson_01", score: 80, maximum: 100 }]);
+  };
+  const env = { ...app.env, ...project, ...production, MOBILE_API_ENABLED: "true" };
+  const request = app.request("/api/web-data", { action: "teacher-report-page", termId: "term_01",
+    sectionId: "A", includeCurriculum: false }, cookie);
+  const response = await webData({ request, env }, { store: app.store, activityFetcher });
+  assert.equal(response.status, 200);
+  const report = await response.json();
+  const fields = report.students.find(row => row.document.id === studentId).lessons.find(row => row.id === "lesson_01").data;
+  assert.equal(fields.preTestScore, 4);
+  assert.equal(fields.activityScore, 80);
+  assert.equal(fields.activityTotalQuestions, 100);
+  assert.equal(app.data.get(path).activityTotalQuestions, 5);
+  assert.equal(reads, 1);
+});

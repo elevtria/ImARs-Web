@@ -73,7 +73,7 @@ test("ignores invalid saved themes", () => {
 });
 test("every page loads the shared theme early and styles after page styles", () => {
   const root = new URL("../", import.meta.url);
-  for (const name of readdirSync(root).filter(name => name.endsWith(".html"))) {
+  for (const name of readdirSync(root).filter(name => name.endsWith(".html") && !name.startsWith("_"))) {
     const html = readFileSync(new URL(name, root), "utf8");
     assert.ok(html.indexOf('src="js/theme.js"') < html.indexOf('rel="stylesheet"'), name);
     assert.equal((html.match(/src="js\/theme.js"/g) || []).length, 1, name);

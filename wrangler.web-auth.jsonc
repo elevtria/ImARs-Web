@@ -8,7 +8,7 @@
   "vars": {
     "IMARS_SUPABASE_WEB_DATA": "true",
     "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
-    "IMARS_SUPABASE_APP_DATASET_ID": "f6c5b9bf-7864-4755-803b-8cc31c63bd06"
+    "IMARS_SUPABASE_APP_DATASET_ID": "a176e0fd-0b7e-4840-99c5-413452160b6a"
   },
   "triggers": { "crons": ["0 */6 * * *"] },
   "durable_objects": {
