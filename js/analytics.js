@@ -24,6 +24,7 @@ const questionHeatmapScope = document.getElementById("questionHeatmapScope");
 const topicCompletionScope = document.getElementById("topicCompletionScope");
 const openActivities = new Set();
 const activityPages = new Map();
+const studentsPerPage = 25;
 let activitySection = "", activityRequest = "", activityData;
 
 let dynamicRows = [];
@@ -267,12 +268,12 @@ function renderActivityReport(data, section) {
   activityData = data;
   const records = buildStudentActivityRecords([data.curriculumSnap], [section], termLabels, [data.termId]);
   studentActivityBody.removeAttribute("aria-busy");
-  renderStudentActivities(records);
+  renderStudentActivities(records, data.complete === false);
   if (data.complete !== false) renderTopics(records);
   updateHeatmap();
 }
 
-function renderStudentActivities(records) {
+function renderStudentActivities(records, partial) {
   if (!studentActivityBody) return;
   if (!records.length) {
     studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
@@ -283,8 +284,10 @@ function renderStudentActivities(records) {
     const key = record.key;
     const open = openActivities.has(key);
     const detailId = `studentActivityDetail${index}`;
-    const page = Math.min(activityPages.get(key) || 0, Math.max(0, Math.ceil(record.learners.length / 25) - 1));
-    const learnerRows = (open ? record.learners.slice(page * 25, (page + 1) * 25) : []).map(learner => {
+    const total = record.learners.length;
+    const page = Math.min(activityPages.get(key) || 0, Math.max(0, Math.ceil(total / studentsPerPage) - 1));
+    const start = page * studentsPerPage, end = Math.min(start + studentsPerPage, total);
+    const learnerRows = (open ? record.learners.slice(start, end) : []).map(learner => {
       const initials = learner.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase();
       const rawCell = result => `<td><span class="activity-result-score${result === null ? " is-empty" : ""}">${result === null ? "—" : `${result.score}/${result.total}`}</span></td>`;
       const activity = learner.score === null ? null : { score: learner.rawScore, total: learner.totalScore };
@@ -295,9 +298,9 @@ function renderStudentActivities(records) {
       <td>${escapeHtml(record.section)}</td><td>${record.averageMinutes === null ? "—" : `${record.averageMinutes} min`}</td><td>${record.learnerCount}</td>
       <td><span class="activity-record-completed">${record.completedCount}/${record.learnerCount} completed</span></td>
     </tr><tr class="activity-record-detail" id="${detailId}" ${open ? "" : "hidden"}><td colspan="5">
-      <div class="activity-record-detail-head"><div><strong>Topic Student Results</strong><small>${escapeHtml(record.title)} · ${record.learners.length} learner records shown</small></div></div>
-      ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Activity score</th><th scope="col">Recorded time</th></tr></thead><tbody>${learnerRows}</tbody></table></div><p class="activity-record-empty">Scores show earned points / total points for this topic. A dash means no completed score is recorded.</p>` : '<p class="activity-record-empty">No student results recorded for this topic yet.</p>'}
-      ${open && record.learners.length > 25 ? `<div class="student-detail-navigation"><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page - 1}" ${page === 0 ? "disabled" : ""}>Previous page</button><span>Page ${page + 1}</span><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page + 1}" ${(page + 1) * 25 >= record.learners.length ? "disabled" : ""}>Next page</button></div>` : ""}
+      <div class="activity-record-detail-head"><div><strong>Topic Student Results</strong><small>${escapeHtml(record.title)} · ${studentPageLabel(start, end, total, partial)}</small></div></div>
+      ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Activity score</th><th scope="col">Recorded time</th></tr></thead><tbody>${learnerRows}</tbody></table></div><p class="activity-record-empty">Scores show earned points / total points for this topic. A dash means a score or time is missing.</p>` : '<p class="activity-record-empty">No students to show for this section.</p>'}
+      ${open && total > studentsPerPage ? `<div class="student-detail-navigation"><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page - 1}" ${page === 0 ? "disabled" : ""}>Previous page</button><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page + 1}" ${end >= total ? "disabled" : ""}>Next page</button></div>` : ""}
     </td></tr>`;
   }).join("");
   revealContent("analytics-activities");
@@ -310,25 +313,30 @@ function renderStudentActivities(records) {
       button.setAttribute("aria-expanded", String(open));
       detail.hidden = !open;
       if (open) openActivities.add(key); else openActivities.delete(key);
-      renderStudentActivities(records);
+      renderStudentActivities(records, partial);
     });
   });
   studentActivityBody.querySelectorAll(".activity-result-page").forEach(button => button.addEventListener("click", () => {
     activityPages.set(records[Number(button.dataset.record)].key, Math.max(0, Number(button.dataset.page)));
-    renderStudentActivities(records);
+    renderStudentActivities(records, partial);
   }));
+}
+
+function studentPageLabel(start, end, total, partial) {
+  return total ? `Showing ${start + 1}–${end} of ${total} students${partial ? " loaded" : ""}` : "0 students";
 }
 
 // Filtering logic for students
 const filterStudents = () => {
   const queryText = (search?.value || "").trim().toLowerCase();
   const matches = dynamicRows.filter(row => row.name.includes(queryText));
-  const maximum = Math.max(0, Math.ceil(matches.length / 25) - 1);
+  const maximum = Math.max(0, Math.ceil(matches.length / studentsPerPage) - 1);
   tablePage = Math.min(tablePage, maximum);
-  studentGrid.innerHTML = matches.slice(tablePage * 25, (tablePage + 1) * 25).map(row => row.html).join("");
+  const start = tablePage * studentsPerPage, end = Math.min(start + studentsPerPage, matches.length);
+  studentGrid.innerHTML = matches.slice(start, end).map(row => row.html).join("");
   if (!matches.length) { empty.hidden = false; studentGrid.appendChild(empty); }
   if (studentCount) studentCount.textContent = lastReport ? lastReport.total ?? "—" : matches.length;
-  document.getElementById("analyticsPageStatus").textContent = `Page ${tablePage + 1} · ${matches.length} results loaded`;
+  document.getElementById("analyticsPageStatus").textContent = studentPageLabel(start, end, matches.length, lastReport?.complete === false);
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
   document.getElementById("analyticsNext").disabled = tablePage >= maximum;
 };
@@ -456,32 +464,30 @@ const report = createTeacherReport({ app,
             });
           }
 
-          if (testCount > 0 || activityCount > 0) {
-            const avgPre = testCount ? Math.round(studentPreSum / testCount) : null;
-            const avgPost = testCount ? Math.round(studentPostSum / testCount) : null;
-            const avgActivity = activityCount ? Math.round(studentActivitySum / activityCount) : null;
-            const improvement = testCount ? avgPost - avgPre : null;
+          const avgPre = testCount ? Math.round(studentPreSum / testCount) : null;
+          const avgPost = testCount ? Math.round(studentPostSum / testCount) : null;
+          const avgActivity = activityCount ? Math.round(studentActivitySum / activityCount) : null;
+          const improvement = testCount ? avgPost - avgPre : null;
 
-            if (testCount) {
-              totalClassPrePercentageSum += avgPre;
-              totalClassPostPercentageSum += avgPost;
-              totalStudentTestsCount++;
-            }
-
-            const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
-            const impSign = improvement > 0 ? "+" : "";
-
-            const html = `<tr class="student-row">
-              <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
-              <td>Grade 6 – ${escapeHtml(sectionName)}</td>
-              <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
-              <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
-              <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
-              <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
-            </tr>`;
-
-            dynamicRows.push({ name: sName.toLowerCase(), html });
+          if (testCount) {
+            totalClassPrePercentageSum += avgPre;
+            totalClassPostPercentageSum += avgPost;
+            totalStudentTestsCount++;
           }
+
+          const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
+          const impSign = improvement > 0 ? "+" : "";
+
+          const html = `<tr class="student-row">
+            <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
+            <td>Grade 6 – ${escapeHtml(sectionName)}</td>
+            <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
+            <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
+            <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
+            <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
+          </tr>`;
+
+          dynamicRows.push({ name: sName.toLowerCase(), html });
         }
       }
 

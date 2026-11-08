@@ -8,7 +8,7 @@
   // protection or change Firebase rules.
   "env": {
     "production": {
-      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true", "STUDENT_QUIZZES_ENABLED": "true", "TEACHER_MOBILE_SESSIONS_ENABLED": "true", "DASHBOARD_SUMMARIES_ENABLED": "true", "TEACHER_SESSION_SYNC_ENABLED": "true" },
+      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true", "STUDENT_QUIZZES_ENABLED": "true", "STUDENT_SCHEDULE_ENABLED": "true", "TEACHER_MOBILE_SESSIONS_ENABLED": "true", "DASHBOARD_SUMMARIES_ENABLED": "true", "TEACHER_SESSION_SYNC_ENABLED": "true" },
       "durable_objects": {
         "bindings": [{
           "name": "WEB_LOGIN_STATE",
@@ -19,7 +19,15 @@
     },
     // Preview uses a separate private Worker and needs its own saved secrets.
     "preview": {
-      "vars": { "WEB_LOGIN_ENABLED": "true", "WEB_DATA_ENABLED": "true" },
+      "vars": {
+        "WEB_LOGIN_ENABLED": "true",
+        "WEB_DATA_ENABLED": "true",
+        "MOBILE_API_ENABLED": "true",
+        "MOBILE_ACTIVITY_STAGING_ENABLED": "true",
+        "TEACHER_SESSION_SYNC_ENABLED": "true",
+        "IMARS_MOBILE_DATASET_EPOCH": "mobile-staging-v1",
+        "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co"
+      },
       "durable_objects": {
         "bindings": [{
           "name": "WEB_LOGIN_STATE",

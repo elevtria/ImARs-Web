@@ -59,6 +59,50 @@ function fixture() {
   } };
 }
 
+test("mobile schedule reads one term for the verified student's section", async () => {
+  const app = fixture();
+  app.env.ACCOUNT_ACCESS_ENABLED = "false";
+  app.env.STUDENT_SCHEDULE_ENABLED = "true";
+  app.set({ uid: "student-a", email: "student@example.test" });
+  app.records.set("classes/A", { teacherId: "TEACH1000" });
+  app.records.set("terms/term_02/lessons/lesson_01", {
+    isLocked: false, answerKey: "private", lessonOrder: 1, title: "Food Webs",
+    sectionSchedules: {
+      A: { isLocked: true, scheduledDate: "2099-01-02", activityDeadlineUtc: "2099-01-02T09:00:00Z" },
+      B: { isLocked: false, scheduledDate: "2099-03-04" }
+    }
+  });
+  app.records.set("terms/term_02/lessons/lesson_02", { isLocked: false });
+  app.store.identity = async uid => ({ localId: uid, email: uid === "student-a" ? "student@example.test" : "teacher@example.test", emailVerified: true });
+  let reads = 0;
+  app.store.getAll = async (paths, { fieldPaths }) => {
+    reads++;
+    assert.deepEqual(paths, [1, 2, 3, 4].map(index => "terms/term_02/lessons/lesson_0" + index));
+    assert.ok(!fieldPaths.includes("answerKey"));
+    return new Map(await Promise.all(paths.map(async path => [path, await app.store.get(path)])));
+  };
+  const time = Math.floor(Date.now() / 1000);
+  const token = [
+    { alg: "RS256", kid: "fixture" },
+    { aud: "imars-db-a733b", iss: "https://securetoken.google.com/imars-db-a733b",
+      sub: "student-a", exp: time + 600, iat: time - 1, auth_time: time - 1, email_verified: true }
+  ].map(part => Buffer.from(JSON.stringify(part)).toString("base64url")).join(".") + ".fixture";
+  const headers = { Authorization: "Bearer " + token };
+  assert.equal((await app.call("learning-schedule", { termId: "term_02" }, { auth: false })).status, 401);
+  assert.equal((await app.call("learning-schedule", { termId: "term_02", sectionId: "B" }, { headers })).status, 400);
+  const response = await app.call("learning-schedule", { termId: "term_02" }, { headers });
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.sectionId, "A");
+  assert.deepEqual(data.lessons, [
+    { lessonId: "lesson_01", isLocked: true, scheduledDate: "2099-01-02", activityDeadlineUtc: "2099-01-02T09:00:00Z", available: false, lessonOrder: 1, title: "Food Webs" },
+    { lessonId: "lesson_02", isLocked: false, scheduledDate: "", activityDeadlineUtc: "", available: true, lessonOrder: 0, title: "" }
+  ]);
+  assert.equal(reads, 1);
+  app.env.STUDENT_SCHEDULE_ENABLED = "false";
+  assert.equal((await app.call("learning-schedule", { termId: "term_02" }, { headers })).status, 409);
+});
+
 test("school ID lookup reveals only the login email after password verification, without returning upstream tokens", async () => {
   const app = fixture();
   const response = await app.call("login", { identifier: "TEACH1000", password: "correct" });

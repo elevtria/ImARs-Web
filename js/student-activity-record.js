@@ -39,14 +39,12 @@ export function buildStudentActivityRecords(curriculum, sections, termLabels, te
         const gradeLabel = grade ? (/^grade\b/i.test(String(grade)) ? String(grade) : `Grade ${grade}`) : "";
         const learners = students.map(({ studentDoc, results }) => {
           const result = results.find(entry => entry.termId === termId)?.lessonsSnap.docs.find(item => item.id === lesson.id)?.data();
-          if (!result) return null;
           const student = studentDoc.data();
           const score = activityPercent(result);
           const preTest = testRawScore(result, "pre");
           const postTest = testRawScore(result, "post");
           const minutes = activityMinutes(result);
-          const completed = result.isLessonCompleted === true || result.isARCompleted === true || result.completed === true;
-          if (!completed && score === null && preTest === null && postTest === null && minutes === null) return null;
+          const completed = result?.isLessonCompleted === true || result?.isARCompleted === true || result?.completed === true;
           return {
             name: student.displayName || student.fullName || "Student",
             score,
@@ -57,7 +55,7 @@ export function buildStudentActivityRecords(curriculum, sections, termLabels, te
             minutes,
             completed
           };
-        }).filter(Boolean);
+        });
         const completedCount = learners.filter(learner => learner.completed).length;
         const times = learners.map(learner => learner.minutes).filter(value => value !== null);
         const scored = learners.map(learner => learner.score).filter(value => value !== null);

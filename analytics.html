@@ -122,6 +122,11 @@
             </tbody>
           </table>
         </div>
+        <div class="student-detail-navigation" aria-label="Student performance pages">
+          <button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button>
+          <span id="analyticsPageStatus" role="status"></span>
+          <button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button>
+        </div>
         <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
       </section>
 
@@ -146,7 +151,6 @@
         </div>
       </section>
 
-<div class="student-detail-navigation" aria-label="Student performance pages" data-await-content="analytics-students"><button type="button" class="ghost-btn" id="analyticsPrevious" disabled>Previous page</button><span id="analyticsPageStatus" role="status"></span><button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button></div>
       <section class="card section question-heatmap" aria-labelledby="questionHeatmapHeading" data-auth-shell>
         <div class="section-head"><div><h2 id="questionHeatmapHeading" data-public-label>Post-test Question Heatmap</h2><p class="scheduler-progress-copy">See which questions learners answered incorrectly.</p></div></div>
         <div class="activity-record-filters">

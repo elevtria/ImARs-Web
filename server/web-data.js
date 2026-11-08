@@ -2,6 +2,7 @@ import { FirestoreAdmin, databaseQuotaFailure } from "./firestore-admin.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
+import { activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -368,7 +369,34 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   return { ...page, counts };
 }
 
-async function teacherReportPage(scope, body) {
+async function reportActivityGrades(env, students, termIds, fetcher) {
+  const store = new MobileActivityStore(env, fetcher);
+  const bySection = new Map();
+  for (const row of students) {
+    if (!bySection.has(row.classId)) bySection.set(row.classId, []);
+    bySection.get(row.classId).push(row.document.id);
+  }
+  const requests = [];
+  for (const [sectionId, studentIds] of bySection) {
+    for (let offset = 0; offset < studentIds.length; offset += 20)
+      requests.push([sectionId, studentIds.slice(offset, offset + 20)]);
+  }
+  const grades = new Map();
+  for (let offset = 0; offset < requests.length; offset += 4) {
+    await Promise.all(requests.slice(offset, offset + 4).map(async ([sectionId, studentIds]) => {
+      for (const row of await store.gradesForRoster(sectionId, termIds, studentIds)) {
+        if (!studentIds.includes(row.studentId) || !termIds.includes(row.termId) || !lesson(row.lessonId) ||
+            row.maximum !== 100 || !Number.isInteger(row.score) || row.score < 0 || row.score > row.maximum) {
+          throw new Error("Unexpected activity grade in teacher report.");
+        }
+        grades.set([sectionId, row.studentId, row.termId, row.lessonId].join("/"), row);
+      }
+    }));
+  }
+  return grades;
+}
+
+async function teacherReportPage(scope, body, env, fetcher) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
   if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
@@ -395,9 +423,15 @@ async function teacherReportPage(scope, body) {
     for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100), heatmap ? { fieldPaths: heatmapFields } : undefined));
     for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
   }
+  const activityGrades = !heatmap && page.students.length && env.MOBILE_API_ENABLED === "true" &&
+    activityStorageDataset(env) === "production"
+    ? await reportActivityGrades(env, page.students, termIds, fetcher) : null;
   const students = page.students.map(row => {
     const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
+      const grade = activityGrades?.get([row.classId, row.document.id, termId, id].join("/"));
+      if (grade) return [output(path, { data: { ...(record?.wire || record?.data),
+        activityScore: grade.score, activityTotalQuestions: grade.maximum, activityTotalPoints: grade.maximum } })];
       return record ? [output(path, heatmap ? { data: pick(record.wire || record.data, heatmapFields) } : record)] : [];
     }) }));
     return { ...row, ...(heatmap ? { document: { ...row.document, data: {} } } : {}), ...(body.allTerms === true ? { termResults: results } : { lessons: results[0].lessons }) };
@@ -428,7 +462,7 @@ async function teacherTopicOverview(scope) {
   }) })) };
 }
 
-export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff } = {}) {
+export async function webData({ request, env, waitUntil }, { store = new FirestoreAdmin(env), authenticate = requireStaff, activityFetcher = fetch } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -458,7 +492,7 @@ export async function webData({ request, env, waitUntil }, { store = new Firesto
       return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
     }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
-    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body));
+    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {
       const profile = body.profile;

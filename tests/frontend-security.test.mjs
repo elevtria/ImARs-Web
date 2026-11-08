@@ -294,6 +294,29 @@ test("an activity-only section request keeps other analytics unchanged and stude
   dropdown.value = "foreign"; await dropdown.events.change(); assert.equal(app.requests.length, 2);
 });
 
+test("both Analytics tables include the full roster when only 24 students have results", async () => {
+  const data = activityReportData(["A"], { count: 30 });
+  for (const student of data.sections[0].students.slice(24)) student.results = [];
+  const app = page("analytics.js", data);
+  vm.runInContext('openActivities.add("term_01|lesson_01|A")', app.context);
+  await app.render();
+
+  const overall = app.element("#studentGrid tbody");
+  assert.match(overall.html(), /Learner A 24<\/th>[\s\S]*?<td>—<\/td>/);
+  assert.equal(app.element("analyticsPageStatus").textContent, "Showing 1–25 of 30 students");
+  app.element("analyticsNext").events.click();
+  assert.match(overall.html(), /Learner A 29<\/th>/);
+  assert.equal(app.element("analyticsPageStatus").textContent, "Showing 26–30 of 30 students");
+
+  const topic = app.element("studentActivityBody");
+  assert.match(topic.html(), /Showing 1–25 of 30 students/);
+  assert.match(topic.html(), /Learner A 24<\/th>[\s\S]*?activity-result-score is-empty">—/);
+  vm.runInContext('activityPages.set("term_01|lesson_01|A", 1); openActivityReport()', app.context);
+  assert.match(topic.html(), /Showing 26–30 of 30 students/);
+  assert.match(topic.html(), /Learner A 29<\/th>/);
+  assert.equal(app.requests.length, 1, "paging the roster reuses the loaded report");
+});
+
 test("activity dropdown handles empty and removed assignments without retaining another section's results", async () => {
   const data = activityReportData(), app = page("analytics.js", data); await app.render();
   const dropdown = app.element("activitySectionFilter"); dropdown.value = "B"; await dropdown.events.change();

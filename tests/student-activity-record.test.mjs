@@ -14,12 +14,16 @@ test("activity records use lesson results without inventing missing scores or ti
   const [record] = buildStudentActivityRecords(curriculum, sections, { term_01: "Term 1" });
   assert.equal(record.section, "Grade 8 – Malinao");
   assert.equal(record.learnerCount, 3);
-  assert.equal(record.learners.length, 2);
+  assert.equal(record.learners.length, 3);
   assert.equal(record.completedCount, 2);
   assert.equal(record.averageScore, 80);
   assert.equal(record.averageMinutes, 34);
   assert.equal(record.learners[1].score, null);
   assert.equal(record.learners[1].minutes, null);
+  assert.deepEqual(record.learners[2], {
+    name: "No Result", score: null, preTest: null, postTest: null,
+    rawScore: null, totalScore: null, minutes: null, completed: false
+  });
 });
 
 test("activity time falls back to device seconds", () => {

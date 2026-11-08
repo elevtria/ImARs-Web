@@ -1,7 +1,8 @@
 import { FirestoreAdmin, serviceAccount } from "./firestore-admin.js";
-import { stateCall, resolveStaff, settings } from "./web-auth.js";
+import { stateCall, resolveStaff, settings, readJson } from "./web-auth.js";
 import { authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
+import { schoolTodayISO, sectionSchedule, topicAvailability, validateActivityDeadlineUtc } from "../js/topic-availability.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
@@ -38,28 +39,58 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
   const teacherSessions = env.TEACHER_MOBILE_SESSIONS_ENABLED === "true" || enabled;
   const mobileAction = ["teacher-session-login", "mobile-session"].includes(action);
   const progressAction = action === "progress-synced" && env.DASHBOARD_SUMMARIES_ENABLED === "true";
+  const studentSchedule = env.STUDENT_SCHEDULE_ENABLED === "true";
+  const scheduleAction = action === "learning-schedule" && studentSchedule;
   if (action === "config" && request.method === "GET") {
-    if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}), ...(teacherSessions && env.TEACHER_SESSION_SYNC_ENABLED === "true" ? { teacherSessionSync: true } : {}) });
-    try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true }); }
+    const capabilities = studentSchedule ? { studentSchedule: true } : {};
+    if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}), ...(teacherSessions && env.TEACHER_SESSION_SYNC_ENABLED === "true" ? { teacherSessionSync: true } : {}), ...capabilities });
+    try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true, ...capabilities }); }
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
-  if (!enabled && !(teacherSessions && mobileAction) && !progressAction) return json({ error: "Account access is not enabled." }, 409);
+  if (action === "learning-schedule" && !studentSchedule) return json({ error: "Student schedules are not enabled." }, 409);
+  if (!enabled && !(teacherSessions && mobileAction) && !progressAction && !scheduleAction) return json({ error: "Account access is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
   try {
     if (!store) { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); store = new FirestoreAdmin(env, fetcher); }
-    if (Number(request.headers.get("Content-Length") || 0) > 8192) return json({ error: "Request too large." }, 413);
-    const text = await request.text();
-    if (new TextEncoder().encode(text).length > 8192) return json({ error: "Request too large." }, 413);
-    let body;
-    try { body = JSON.parse(text); } catch { throw fail("Invalid request.", 400); }
+    const body = await readJson(request);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw fail("Invalid request.", 400);
     const ip = request.headers.get("CF-Connecting-IP");
     if (rate) await rate();
-    else if (ip && action !== "mobile-session" && !progressAction) {
+    else if (ip && action !== "mobile-session" && !progressAction && !scheduleAction) {
       const limited = await stateCall(env, "account-access-ip:" + ip, "rate");
       if (!limited.ok) return json({ error: "Too many requests. Please wait a minute." }, limited.status === 429 ? 429 : 503);
+    }
+
+    if (scheduleAction) {
+      if (Object.keys(body).length !== 1 || typeof body.termId !== "string" || !/^term_0[1-3]$/.test(body.termId)) {
+        throw fail("Choose a valid term.", 400);
+      }
+      const identity = await authenticateStudent(request, env, store, { fetcher });
+      const limited = await stateCall(env, "student-schedule:" + identity.uid, "rate");
+      if (!limited.ok) throw fail("Please wait before checking the schedule again.", limited.status === 429 ? 429 : 503);
+      const { context } = await studentContext(identity, env, store);
+      const paths = [1, 2, 3, 4].map(index => "terms/" + body.termId + "/lessons/lesson_0" + index);
+      const records = await store.getAll(paths, {
+        fieldPaths: ["sectionSchedules", "isLocked", "scheduledDate", "activityDeadlineUtc", "lessonOrder", "title"]
+      });
+      const now = new Date(), schoolDate = schoolTodayISO(now);
+      const lessons = paths.flatMap(path => {
+        const lesson = records.get(path)?.data;
+        if (!lesson) return [];
+        const schedule = sectionSchedule(lesson, context.sectionId);
+        const own = lesson.sectionSchedules && Object.hasOwn(lesson.sectionSchedules, context.sectionId)
+          ? lesson.sectionSchedules[context.sectionId] : lesson;
+        let activityDeadlineUtc = "";
+        try { activityDeadlineUtc = validateActivityDeadlineUtc(own?.activityDeadlineUtc ?? "", schedule.scheduledDate); }
+        catch { /* A malformed legacy deadline must not mark an activity missed. */ }
+        const available = !topicAvailability({ locked: schedule.isLocked, date: schedule.scheduledDate }, schoolDate).locked;
+        return [{ lessonId: path.split("/").at(-1), ...schedule, activityDeadlineUtc, available,
+          lessonOrder: Number.isInteger(lesson.lessonOrder) ? lesson.lessonOrder : 0,
+          title: typeof lesson.title === "string" ? lesson.title : "" }];
+      });
+      return json({ termId: body.termId, sectionId: context.sectionId, serverTimeUtc: now.toISOString(), schoolDate, lessons });
     }
 
     if (progressAction) {
@@ -182,7 +213,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
     }
     return json({ error: "Not found." }, 404);
   } catch (error) {
-    const status = [400, 401, 403, 409, 429].includes(error.status) ? error.status : 503;
+    const status = [400, 401, 403, 409, 413, 429].includes(error.status) ? error.status : 503;
     return json({ error: status === 503 ? "Account access is temporarily unavailable. Please retry or contact maintenance." : error.message }, status);
   }
 }
