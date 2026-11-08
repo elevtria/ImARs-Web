@@ -461,6 +461,8 @@ td {
   padding: 22px 20px 18px;
 }
 
+a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
+
 .brand-mark {
   width: 46px;
   height: 46px;
