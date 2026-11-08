@@ -3,6 +3,7 @@
 .manual-page .manual-hero p,
 .manual-page .manual-sheet-heading p { font-size: 14px; line-height: 1.55; }
 .manual-page .manual-hero { margin: 0; }
+.manual-page .manual-sheet-heading { justify-content: space-between; }
 .manual-page .manual-sheet-heading h2 { font-size: 22px; font-weight: 800; line-height: 1.3; }
 .manual-page .manual-feature-card h3 { font-size: 22px; font-weight: 800; line-height: 1.25; }
 .manual-page .manual-step-card h3,
