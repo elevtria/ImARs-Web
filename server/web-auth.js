@@ -62,30 +62,6 @@ export async function signSession(env, account, session, host, teacherSession) {
   return `${value}.${base64(new Uint8Array(signature))}`;
 }
 
-async function resolveAdminProfile(env, adminAccount, store) {
-  const candidates = [...new Set([adminAccount?.id, "ADMIN1", "ADMIN"].filter(Boolean))];
-  for (const candidateId of candidates) {
-    try {
-      const profile = await store?.get?.("users/" + candidateId);
-      if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
-        return { id: candidateId, profile };
-      }
-    } catch {}
-  }
-  if (env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const firestore = new FirestoreAdmin(env);
-    for (const candidateId of candidates) {
-      try {
-        const profile = await firestore.get("users/" + candidateId);
-        if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
-          return { id: candidateId, profile };
-        }
-      } catch {}
-    }
-  }
-  return null;
-}
-
 export async function resolveStaff(env, identifier, accounts = settings(env), store = appStore(env)) {
   const clean = identifier.trim().toLowerCase();
   let initial = accounts.find(item => item.id.toLowerCase() === clean || (item.role === "admin" && item.email.toLowerCase() === clean));
@@ -93,19 +69,21 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
     const administrators = accounts.filter(item => item.role === "admin");
     if (administrators.length === 1) initial = administrators[0];
   }
-  if (initial?.role === "admin" && dataEnabled(env)) {
-    const resolved = await resolveAdminProfile(env, initial, store);
-    if (resolved?.profile?.data) {
-      const data = resolved.profile.data;
-      const liveEmail = String(data.email || data.providedEmail || initial.email || "").trim();
-      return {
-        ...initial,
-        id: resolved.id || initial.id,
-        uid: String(data.uid).trim(),
-        email: liveEmail || initial.email
-      };
+  if (initial?.role === "admin" && dataEnabled(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const fbStore = new FirestoreAdmin(env);
+      const fbProfile = (await fbStore.get("users/" + initial.id)) || (initial.id !== "ADMIN1" ? await fbStore.get("users/ADMIN1") : null);
+      if (fbProfile?.data && String(fbProfile.data.role || "").toLowerCase() === "admin" && fbProfile.data.uid) {
+        const liveEmail = String(fbProfile.data.email || fbProfile.data.providedEmail || initial.email || "").trim();
+        return {
+          ...initial,
+          uid: String(fbProfile.data.uid).trim(),
+          email: liveEmail || initial.email
+        };
+      }
+    } catch {
+      // Ignore if Firestore lookup is not used in unit tests
     }
-    return initial;
   }
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
@@ -158,9 +136,14 @@ export async function webSession(request, env, now = Date.now(), store) {
 }
 
 const identities = new WeakMap();
+// Share the middleware's verified session only inside this exact Request.
+// Roles and active status are still checked from the current staff profile.
 const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
-  let pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  // The approved account supplies both IDs. Its live profile and Auth status
+  // can be read independently; neither result grants access on its own.
+  const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
   if (!cache) { cache = new Map(); identities.set(key, cache); }
@@ -171,15 +154,18 @@ export async function staffProfile(account, store, now = Date.now()) {
     if (cache.size >= 1000) cache.delete(cache.keys().next().value);
     cache.set(account.uid, identity);
   }
-  let result = await pendingProfile;
-  if (result.error && account.role === "admin" && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    result = await new FirestoreAdmin(store.env).get("users/" + account.id).then(row => ({ row }), error => ({ error }));
-  }
+  const result = await pendingProfile;
   if (result.error) throw result.error;
   let row = result.row, profile = row?.data;
   if (account.role === "admin" && (!profile || profile.uid !== account.uid) && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    const fbRow = await new FirestoreAdmin(store.env).get("users/" + account.id).catch(() => null);
-    if (fbRow?.data) { row = fbRow; profile = fbRow.data; }
+    try {
+      const fbStore = new FirestoreAdmin(store.env);
+      const fbRow = (await fbStore.get("users/" + account.id)) || (account.id !== "ADMIN1" ? await fbStore.get("users/ADMIN1") : null);
+      if (fbRow?.data && fbRow.data.uid === account.uid) {
+        row = fbRow;
+        profile = fbRow.data;
+      }
+    } catch {}
   }
   if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
       profile.active === false || ["inactive", "disabled"].includes(String(profile.status || "").toLowerCase())) {
