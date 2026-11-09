@@ -30,7 +30,6 @@ function renderQuiz(quiz, section, index, user, signal) {
     <thead><tr><th scope="col">Student</th><th scope="col">Score or status</th><th scope="col">Submitted</th><th scope="col">Review</th></tr></thead><tbody></tbody></table></div>
     <p class="activity-record-empty">Scores show earned points / total points for this quiz.</p>
     <p class="activity-record-empty" role="status"></p>
-    <button type="button" class="ghost-btn quiz-page-retry" hidden>Retry</button>
     <div class="student-detail-navigation" role="group" aria-label="Student quiz result pages">
       <button type="button" class="ghost-btn quiz-page-previous" disabled>Previous page</button>
       <button type="button" class="ghost-btn quiz-page-next" disabled>Next page</button>
@@ -40,13 +39,11 @@ function renderQuiz(quiz, section, index, user, signal) {
   const message = details.querySelector("[role=status]");
   const previous = details.querySelector(".quiz-page-previous");
   const next = details.querySelector(".quiz-page-next");
-  const retry = details.querySelector(".quiz-page-retry");
   const cursors = [""];
-  let pageIndex = 0, nextCursor = "", loaded = false, loading = false, retryPage;
+  let pageIndex = 0, nextCursor = "", loaded = false, loading = false;
   async function loadResults(index = pageIndex, cursor = cursors[index]) {
     if (loading) return;
     loading = previous.disabled = next.disabled = true;
-    retry.hidden = true;
     message.textContent = "Loading student results…";
     try {
       const page = await requestQuizReview(user.uid, { action: "section-results", quizId: quiz.id, sectionId: section.id, cursor }, signal);
@@ -93,8 +90,6 @@ function renderQuiz(quiz, section, index, user, signal) {
     } catch (error) {
       if (signal.aborted) return;
       message.textContent = error.message;
-      retryPage = () => loadResults(index, cursor);
-      retry.hidden = false;
     } finally {
       loading = false;
       previous.disabled = pageIndex === 0;
@@ -108,7 +103,6 @@ function renderQuiz(quiz, section, index, user, signal) {
   });
   previous.addEventListener("click", () => void loadResults(pageIndex - 1));
   next.addEventListener("click", () => void loadResults(pageIndex + 1, nextCursor));
-  retry.addEventListener("click", () => void retryPage());
   row.dataset.quizId = quiz.id;
 }
 

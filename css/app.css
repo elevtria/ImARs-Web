@@ -1161,7 +1161,6 @@ label[for="activityTermFilter"] .select-wrap { width:120px; }
 .teacher-quiz-table > thead th:first-child { width: 34%; }
 #teacherQuizStatus:empty { display: none; }
 #teacherQuizRefresh { margin-bottom: 12px; }
-.quiz-page-retry[hidden] { display: none; }
 .activity-record-results { min-width: 720px; }
 .activity-record-results thead th { background: #dceaf7; color: #365f85; border-bottom-color: #b9cfe3; }
 .activity-record-results tbody tr:nth-child(even) { background: #f4f9fd; }
