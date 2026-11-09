@@ -74,6 +74,11 @@ function resultFor(row) {
 }
 const rosterFilters = sectionId => [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }];
 const rosterMember = (actor, student) => activeProfile(student.data) && (!student.data.teacherId || student.data.teacherId === actor.id);
+const studentNameFields = ["displayName", "fullName", "name", "firstName", "lastName"];
+function studentName(profile) {
+  return [profile?.displayName, profile?.fullName, profile?.name, [profile?.firstName, profile?.lastName].filter(Boolean).join(" ")]
+    .find(value => typeof value === "string" && value.trim())?.trim();
+}
 
 async function summarizeScores(actor, store, sectionId, students, studentId = null) {
   const latest = new Map(), totals = new Map();
@@ -132,13 +137,13 @@ async function sectionResults(actor, store, quiz, body, now) {
   const limit = 10;
   const roster = await store.query("users", {
     filters: rosterFilters(body.sectionId),
-    after: body.cursor, limit: limit + 1, fieldPaths: ["active", "status", "teacherId", "displayName", "fullName"]
+    after: body.cursor, limit: limit + 1, fieldPaths: ["active", "status", "teacherId", ...studentNameFields]
   });
   const items = await Promise.all(roster.slice(0, limit)
     .filter(student => rosterMember(actor, student))
     .map(async ({ id, data }) => {
       const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
-      return { studentId: id, name: data.displayName || data.fullName || id,
+      return { studentId: id, name: studentName(data) || id,
         ...(latest ? resultFor(latest) : { status: "not-submitted" }) };
     }));
   return { items, nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
@@ -176,15 +181,14 @@ export async function quizReview({ request, env }, { store, authenticate = requi
         if (!sections.has(id)) sections.set(id, ownedSection(actor, store, id).then(() => true, error => { if (error.status === 403) return false; throw error; }));
         if (await sections.get(id)) items.push({ studentId: row.data.context.studentId, sectionId: id, attemptId: row.path.split("/").at(-1), submittedAtUtc: row.data.submittedAt, revision: row.updateTime });
       }
-      const profiles = new Map();
-      await Promise.all(items.map(async item => {
-        if (!validPart(item.studentId)) return;
-        if (!profiles.has(item.studentId)) profiles.set(item.studentId, store.get("users/" + item.studentId));
-        const profile = (await profiles.get(item.studentId))?.data;
+      const paths = [...new Set(items.map(item => item.studentId).filter(validPart))].map(id => "users/" + id);
+      const profiles = paths.length ? await store.getAll(paths, { fieldPaths: ["role", "classCode", "teacherId", ...studentNameFields] }) : new Map();
+      for (const item of items) {
+        const profile = profiles.get("users/" + item.studentId)?.data;
         if (profile?.role === "student" && profile.classCode === item.sectionId && (!profile.teacherId || profile.teacherId === actor.id)) {
-          item.name = profile.displayName || profile.fullName || item.studentId;
+          item.name = studentName(profile);
         }
-      }));
+      }
       return respond({ items, nextCursor: rows.length > 20 ? await sign(env, { uid: actor.uid, id: actor.id, quizId: body.quizId, sectionId, exp: now() + 3600_000, after: [rows[19].data.submittedAt, rows[19].path] }) : "" });
     }
     if (!validPart(body.studentId) || !/^[a-f0-9]{32}$/.test(body.attemptId)) throw fail("INVALID_REQUEST", 400);

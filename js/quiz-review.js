@@ -40,32 +40,50 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
   const option = (label, value = "") => { const item = element("option", label); item.value = value; return item; };
   section.append(option("All sections")); quiz.append(option("Choose a quiz"));
   section.disabled = quiz.disabled = true;
-  const content = element("div"), next = element("button", "Load more", "btn-ghost"); next.type = "button"; next.hidden = true;
+  const content = element("div"), navigation = element("div", undefined, "student-detail-navigation");
+  const previous = element("button", "Previous page", "ghost-btn"), next = element("button", "Next page", "ghost-btn");
+  previous.type = next.type = "button";
+  previous.disabled = next.disabled = true;
+  navigation.hidden = true;
+  navigation.setAttribute("role", "group");
+  navigation.setAttribute("aria-label", "Submission pages");
+  navigation.append(previous, next);
   dialog.append(header, filters, status, content);
-  if (!resultsQuiz) dialog.append(next);
+  if (!resultsQuiz) dialog.append(navigation);
   dialog.addEventListener("cancel", event => { event.preventDefault(); closeQuizReview(); }); document.body.append(dialog); dialog.showModal();
-  let busy = false, cursor = "";
+  const cursors = [""];
+  let busy = false, pageIndex = 0, nextCursor = "";
   let availableQuizzes = [];
   const sections = new Map();
   async function api(body) {
     return requestQuizReview(uid, { ...body, quizId: quiz.value, sectionId: section.value }, signal);
   }
-  async function load() {
+  async function load(index = pageIndex, cursor = cursors[index]) {
     if (busy || !quiz.value) return;
-    busy = true; next.disabled = section.disabled = quiz.disabled = true;
+    busy = true; previous.disabled = next.disabled = section.disabled = quiz.disabled = true;
     setLoadingState(status, true, "Loading submissions");
     try {
-      const page = await api({ action: "list", cursor }); cursor = page.nextCursor;
-      next.textContent = "Load more";
+      const page = await api({ action: "list", cursor });
+      pageIndex = index;
+      cursors[index] = cursor;
+      nextCursor = page.nextCursor;
+      content.replaceChildren();
       for (const row of page.items) {
         const button = element("button", undefined, "quiz-review-submission"); button.type = "button";
         button.append(element("strong", row.name || row.studentId), element("span", "Pending review", "quiz-review-pending"));
         button.addEventListener("click", () => show(row, button)); content.append(button);
       }
-      status.textContent = content.children.length ? "Select a submission to review." : "No answers are waiting for review.";
-      next.hidden = !cursor;
-    } catch (error) { if (error.name !== "AbortError") { status.textContent = error.message; next.textContent = "Retry"; next.hidden = false; } }
-    finally { busy = false; next.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
+      status.textContent = content.children.length ? `Page ${index + 1} · Select a student to review.`
+        : nextCursor || index ? "No pending submissions on this page." : "No answers are waiting for review.";
+      navigation.hidden = false;
+    } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
+    finally {
+      busy = false;
+      previous.disabled = pageIndex === 0;
+      next.disabled = !nextCursor;
+      section.disabled = quiz.disabled = false;
+      setLoadingState(status, false);
+    }
   }
   async function show(row, button, updateScore) {
     if (busy) return; busy = true; section.disabled = quiz.disabled = true;
@@ -104,7 +122,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       const cancel = element("button", resultsQuiz ? "Back to results" : "Back to submissions", "btn-ghost"); cancel.type = "button";
       const back = () => {
         if (submission) { closeQuizReview(); return; }
-        form.remove(); content.hidden = false; filters.hidden = false; next.hidden = !cursor;
+        form.remove(); content.hidden = false; filters.hidden = false; navigation.hidden = Boolean(resultsQuiz);
       };
       cancel.addEventListener("click", () => {
         back();
@@ -114,7 +132,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       if (!grading) {
         if (attempt.feedback) form.append(element("p", "Feedback: " + attempt.feedback));
         form.append(cancel);
-        content.hidden = filters.hidden = next.hidden = true;
+        content.hidden = filters.hidden = navigation.hidden = true;
         dialog.append(form);
         status.textContent = "Quiz score: " + quizScoreLabel(attempt);
         return;
@@ -141,13 +159,15 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
       });
-      content.hidden = filters.hidden = next.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
+      content.hidden = filters.hidden = navigation.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
     finally { busy = false; section.disabled = quiz.disabled = false; if (button) button.disabled = false; setLoadingState(status, false); }
   }
   function resetList() {
-    cursor = "";
-    content.replaceChildren(); next.hidden = true; next.textContent = "Load more";
+    cursors.length = 1;
+    pageIndex = 0;
+    nextCursor = "";
+    content.replaceChildren(); navigation.hidden = true;
     status.textContent = "Choose a quiz to view pending submissions.";
   }
   function filterQuizzes() {
@@ -188,7 +208,8 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
   }
   section.addEventListener("change", filterQuizzes);
   quiz.addEventListener("change", reload);
-  next.addEventListener("click", load);
+  previous.addEventListener("click", () => void load(pageIndex - 1));
+  next.addEventListener("click", () => void load(pageIndex + 1, nextCursor));
   setLoadingState(status, true, "Loading sections and quizzes");
   try {
     const db = getFirestore();

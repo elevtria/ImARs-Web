@@ -68,6 +68,8 @@ test("all-section quiz reviews retain current class ownership checks", async () 
 test("submission filters and cursors cannot cross sections", async () => {
   const f = await setup("essay", { assignmentScope: "all", sectionId: "" });
   f.put("classes/C", { teacherId: "TEACH1" });
+  f.put("users/S1", { role: "student", classCode: "A", displayName: " ", firstName: "Test", lastName: "Student" });
+  f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await f.store.get(path)])));
   let reads = 0;
   f.store.reviewPage = async (_actor, _quiz, sectionId) => {
     reads++;
@@ -81,6 +83,7 @@ test("submission filters and cursors cannot cross sections", async () => {
   assert.equal(response.status, 200);
   const page = await response.json();
   assert.equal(page.items.length, 20);
+  assert.equal(page.items[0].name, "Test Student");
   assert.ok(page.nextCursor);
   assert.equal((await f.callReview({ action: "list", sectionId: "C", cursor: page.nextCursor })).status, 400);
   assert.equal((await f.callReview({ action: "open", sectionId: "C" })).status, 403);
