@@ -2142,7 +2142,6 @@ label {
 #closeStudentRecord { display:grid; place-items:center; width:36px; height:36px; border:1px solid var(--line); border-radius:50%; background:#fff; color:var(--ink); font-size:25px; line-height:1; }
 #studentRecordContent .record { margin:0; background:#fff; }
 .student-detail-navigation { display:flex; justify-content:space-between; gap:14px; margin-top:22px; }
-.student-detail-navigation[hidden] { display:none; }
 .student-detail-navigation button:disabled { opacity:.4; cursor:default; }
 .open-student-record:focus-visible,#studentRecordDialog button:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
 @media(max-width:600px) { .student-record-list .record { flex-wrap:wrap; padding:14px; } .student-record-list .record-head { width:100%; flex:auto; gap:8px; } .student-record-list .overall { font-size:11px; } #studentRecordDialog { padding:18px; } #studentRecordContent .record .stats { grid-template-columns:1fr 1fr; } }
@@ -2199,8 +2198,6 @@ label {
 .quiz-results-dialog .quiz-status:empty { display: none; }
 .quiz-review-header { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
 .quiz-review-header h2 { margin: 0; font-size: 1.3rem; }
-.quiz-review-submission { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; text-align: left; margin: 10px 0; padding: 14px; border: 1px solid #d5e3e6; border-radius: 12px; background: #f3fafb; color: inherit; cursor: pointer; }
-.quiz-review-pending { color: #a12835; }
 .quiz-review-form fieldset { margin: 18px 0; padding: 16px; border: 1px solid #d5e3e6; border-radius: 12px; min-width: 0; }
 .quiz-review-form p, .quiz-review-form legend { white-space: pre-wrap; overflow-wrap: anywhere; }
 .quiz-review-form legend { font-weight: 700; }
@@ -2212,7 +2209,6 @@ label {
 .quiz-review-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; margin: 16px 0; }
 .quiz-review-filters[hidden] { display: none; }
 .quiz-review-filters label { display: grid; gap: 6px; }
-.quiz-review-filters label[hidden] { display: none; }
 .quiz-review-filters select { min-width: 0; width: 100%; padding: 10px; border: 1px solid #a8bdc1; border-radius: 8px; background: #fff; }
 .quiz-review-dialog .quiz-status { margin: 12px 0; color: #40586d; }
 .quiz-review-form fieldset p { white-space: pre-wrap; overflow-wrap: anywhere; }

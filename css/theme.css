@@ -167,9 +167,8 @@
   [data-theme="dark"] body .activity-result-score.is-empty { background: #223249; color: var(--muted); }
   [data-theme="dark"] body .teacher-quiz-results .activity-result-score.is-pending { background: #482732; color: #ffadb8; }
   [data-theme="dark"] body .teacher-quiz-results .activity-result-score.is-completed { background: #1d3b32; color: #9ce7c2; }
-  [data-theme="dark"] body .quiz-review-pending { color: #ffadb8; }
-  [data-theme="dark"] body :is(.quiz-review-form details, .quiz-review-submission) {
-    background: #223249; color: var(--ink); border-color: var(--line);
+  [data-theme="dark"] body .quiz-review-form details {
+    background: #223249; color: var(--ink);
   }
   [data-theme="dark"] body :is(.quiz-review-form label, .quiz-review-dialog .quiz-status) { color: var(--muted); }
   [data-theme="dark"] body .quiz-review-form fieldset { border-color: var(--line); }
