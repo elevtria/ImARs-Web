@@ -1,4 +1,4 @@
-import { databaseQuotaFailure } from "./firestore-admin.js";
+import { databaseQuotaFailure, FirestoreAdmin } from "./firestore-admin.js";
 import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
@@ -372,15 +372,22 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   return { ...page, counts };
 }
 
-async function reportActivityGrades(env, appData, students, termIds, fetcher) {
+async function reportActivityGrades(env, appData, students, termIds, fetcher, legacyFetcher) {
   const grades = new Map();
+  let activitySyncPending = false;
   if (appData.activityResultsForRoster) {
     const roster = new Map(students.map(row => [row.document.id, row]));
     const groups = [];
     for (let offset = 0; offset < students.length; offset += 25) {
       groups.push(students.slice(offset, offset + 25).map(row => row.document.id));
     }
-    for (const results of await Promise.all(groups.map(ids => appData.activityResultsForRoster(ids)))) {
+    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? new FirestoreAdmin(env, legacyFetcher) : null;
+    const [saved, current] = await Promise.all([
+      Promise.all(groups.map(ids => appData.activityResultsForRoster(ids))),
+      legacy ? Promise.allSettled(groups.map(ids => legacy.activityResultsForRoster(ids))) : []
+    ]);
+    activitySyncPending = current.some(result => result.status === "rejected");
+    for (const results of [...current.flatMap(result => result.status === "fulfilled" ? [result.value] : []), ...saved]) {
       for (const { studentId, data } of results) {
         const student = roster.get(studentId), activity = activities.get(data.activityId);
         const completedAt = typeof data.completedAtUtc === "string" ? Date.parse(data.completedAtUtc) : NaN;
@@ -396,7 +403,7 @@ async function reportActivityGrades(env, appData, students, termIds, fetcher) {
       }
     }
   }
-  if (env.MOBILE_API_ENABLED !== "true" || activityStorageDataset(env) !== "production") return grades;
+  if (env.MOBILE_API_ENABLED !== "true" || activityStorageDataset(env) !== "production") return { grades, activitySyncPending };
 
   const store = new MobileActivityStore(env, fetcher);
   const bySection = new Map();
@@ -420,10 +427,10 @@ async function reportActivityGrades(env, appData, students, termIds, fetcher) {
       }
     }));
   }
-  return grades;
+  return { grades, activitySyncPending };
 }
 
-async function teacherReportPage(scope, body, env, fetcher) {
+async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
   if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
@@ -445,7 +452,7 @@ async function teacherReportPage(scope, body, env, fetcher) {
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const gradeRequest = !heatmap && page.students.length
-    ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher).then(value => ({ value }), error => ({ error }))
+    ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))
     : null;
   const records = new Map();
   for (let offset = 0; offset < paths.length; offset += 400) {
@@ -455,7 +462,7 @@ async function teacherReportPage(scope, body, env, fetcher) {
   }
   const gradeResult = await gradeRequest;
   if (gradeResult?.error) throw gradeResult.error;
-  const activityGrades = gradeResult?.value;
+  const { grades: activityGrades, activitySyncPending } = gradeResult?.value || {};
   const students = page.students.map(row => {
     const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
@@ -471,7 +478,8 @@ async function teacherReportPage(scope, body, env, fetcher) {
   const curriculum = curriculumResult?.value;
   const counts = pendingCounts ? await pendingCounts : null;
   if (counts?.error) throw counts.error;
-  return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
+  return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId,
+    ...(activitySyncPending ? { activitySyncPending } : {}) };
 }
 
 async function teacherTopicOverview(scope) {
@@ -493,7 +501,7 @@ async function teacherTopicOverview(scope) {
 }
 
 export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
-  settingsFetcher = fetch, activityFetcher = fetch } = {}) {
+  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -538,7 +546,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if (actor.role !== "admin") throw fail();
       return respond(await loadAdminReports(store));
     }
-    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher));
+    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {
       const profile = body.profile;

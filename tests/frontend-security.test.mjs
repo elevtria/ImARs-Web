@@ -350,7 +350,7 @@ test("the shared term and activity section drive completion rates without anothe
   assert.match(topics.html(), /100%.*Topic for term_01/s);
   await app.termButtons[1].events.click();
   assert.match(topics.html(), /50%.*Topic for term_02/s);
-  assert.match(app.element("studentActivityBody").html(), /1\/2 completed/);
+  assert.match(app.element("studentActivityBody").html(), /1\/2 submitted/);
   assert.equal(app.element("questionHeatmapScope").textContent, "Term 2 · Section A");
   await app.termButtons[1].events.click();
   assert.equal(app.requests.length, 2, "the current term must not start a duplicate report");

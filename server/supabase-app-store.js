@@ -1,4 +1,5 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
+import { legacyActivityFields } from "./mobile-activity-store.js";
 
 const id = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const part = /^[A-Za-z0-9_-]{1,128}$/;
@@ -120,7 +121,7 @@ export class SupabaseAppStore {
       throw new Error("Invalid activity roster.");
     }
     const collections = studentIds.map(id => "users/" + id + "/activity_results");
-    const fields = ["activityId", "classCode", "uid", "status", "score", "maximum", "completedAtUtc"];
+    const fields = legacyActivityFields;
     const select = this.selection(fields);
     const results = [];
     let after;

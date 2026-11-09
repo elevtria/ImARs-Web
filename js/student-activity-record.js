@@ -67,6 +67,7 @@ export function buildStudentActivityRecords(curriculum, sections, termLabels, te
           learnerCount: students.length,
           learners,
           completedCount,
+          submittedCount: scored.length,
           averageMinutes: times.length ? Math.round(times.reduce((sum, value) => sum + value, 0) / times.length) : null,
           averageScore: scored.length ? Math.round(scored.reduce((sum, value) => sum + value, 0) / scored.length) : null
         });

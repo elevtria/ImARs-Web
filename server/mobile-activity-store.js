@@ -12,6 +12,8 @@ export const activities = new Map([
   ["constellation", "Constellations", 3, 4]
 ].map(([activityId, title, term, lesson]) => [activityId, { activityId, title, termId: "term_0" + term, lessonId: "lesson_0" + lesson }]));
 
+export const legacyActivityFields = ["activityId", "classCode", "uid", "status", "score", "maximum", "completedAtUtc"];
+
 const reportFields = [
   "activityId", "termId", "lessonId", "title", "runId", "studentId", "classCode", "deviceId", "status",
   "startedAtUtc", "completedAtUtc", "updatedAtUtc", "checkpointRevision", "score", "maximum",

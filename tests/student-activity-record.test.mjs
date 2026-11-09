@@ -16,6 +16,7 @@ test("activity records use lesson results without inventing missing scores or ti
   assert.equal(record.learnerCount, 3);
   assert.equal(record.learners.length, 3);
   assert.equal(record.completedCount, 2);
+  assert.equal(record.submittedCount, 1, "an AR lesson completion alone does not count as a submitted activity");
   assert.equal(record.averageScore, 80);
   assert.equal(record.averageMinutes, 34);
   assert.equal(record.learners[1].score, null);
@@ -52,6 +53,7 @@ test("topic results keep raw tests, activity and time scoped to the selected les
   assert.deepEqual(record.learners[1].preTest, { score: 2, total: 5 });
   assert.equal(record.learners[1].postTest, null); assert.equal(record.learners[1].score, null); assert.equal(record.learners[1].minutes, null);
   assert.equal(record.completedCount, 0, "a recorded test does not invent AR lesson completion");
+  assert.equal(record.submittedCount, 1, "a submitted activity can exist without AR lesson completion");
 });
 
 test("uncompleted/default test zeros stay missing and valid legacy post-test heatmaps retain raw scores", () => {
