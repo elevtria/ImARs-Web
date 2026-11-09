@@ -1,14 +1,12 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getFirestore } from "./firebase-data.js";
-import { loadAdminReports } from "./admin-report-data.js";
+import { getAdminReport } from "./firebase-data.js";
 import { showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
 
 // --- DRAWER UI LOGIC ---
 const menuButton = document.getElementById("adminMenuButton");
@@ -137,12 +135,12 @@ function renderDashboard(report) {
 }
 
 onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "login.html"; return; }
+  if (!user) { window.location.href = "admin-login.html"; return; }
   initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Admin Dashboard");
   try {
     await showAdminView({ app, user, page: "reports",
-      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      load: () => timing.data(getAdminReport),
       render: report => timing.render(() => renderDashboard(report)),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });

@@ -1,12 +1,15 @@
-import { collection, query, where } from "./firebase-data.js";
+const lessonIds = ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
+const teacherFields = ["schoolId", "fullName", "name", "displayName", "section", "sections", "subject", "providedEmail", "email", "joined", "createdAt", "active", "status"];
+const studentFields = ["teacherId", "adviserId", "teacher", "section", "gradeSection", "sectionName", "className"];
+const resultFields = ["isPreTestCompleted", "preTestTotalQuestions", "preTestScore", "isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "arTimeMinutes"];
 
 // The three admin reports use the same Term 1 results. Keep their existing
 // averages, name preferences, section fallbacks, and teacher attribution.
 export function summarizeAdminReports(teacherDocs, students) {
   const teachers = new Map(teacherDocs.map(({ id, data }) => {
     let joined = data.joined || "Recently";
-    if (typeof data.createdAt?.toDate === "function") {
-      joined = data.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    if (data.createdAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.createdAt.value))) {
+      joined = new Date(data.createdAt.value).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
     }
     return [id, {
       id, schoolId: data.schoolId || id,
@@ -68,17 +71,24 @@ export function summarizeAdminReports(teacherDocs, students) {
   };
 }
 
-export async function loadAdminReports(db, read) {
-  const [teacherSnap, studentSnap] = await Promise.all([
-    read(query(collection(db, "users"), where("role", "==", "teacher"))),
-    read(query(collection(db, "users"), where("role", "==", "student")))
-  ]);
-  // The shared Firestore read pool limits concurrency to eight. Promise.all
-  // preserves student order even when individual requests finish out of order.
-  const students = await Promise.all(studentSnap.docs.map(async student => {
-    const lessons = await read(collection(db, "users", student.id, "test_results", "term_01", "lessons"));
-    return { data: student.data(), lessons: lessons.docs.map(lesson => lesson.data()) };
-  }));
-  // Cache only explicit display fields and aggregates, never raw user profiles.
-  return summarizeAdminReports(teacherSnap.docs.map(teacher => ({ id: teacher.id, data: teacher.data() })), students);
+export async function loadAdminReports(store) {
+  const roster = (role, fieldPaths) => store.query("users", { filters: [{ field: "role", op: "==", value: role }], fieldPaths });
+  const [teachers, students] = await Promise.all([roster("teacher", teacherFields), roster("student", studentFields)]);
+  const results = [];
+  for (let offset = 0; offset < students.length; offset += 100) {
+    const groups = [];
+    for (let start = offset; start < Math.min(offset + 100, students.length); start += 25) {
+      groups.push(students.slice(start, start + 25));
+    }
+    const batches = await Promise.all(groups.map(async group => {
+      const paths = group.map(student => lessonIds.map(id => `users/${student.id}/test_results/term_01/lessons/${id}`));
+      const records = await store.getAll(paths.flat(), { fieldPaths: resultFields });
+      return group.map((student, index) => ({
+        data: student.data,
+        lessons: paths[index].map(path => records.get(path)?.data).filter(Boolean)
+      }));
+    }));
+    for (const batch of batches) results.push(...batch);
+  }
+  return summarizeAdminReports(teachers.map(row => ({ id: row.id, data: row.wire || row.data })), results);
 }

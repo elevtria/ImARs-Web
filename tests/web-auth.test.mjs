@@ -79,7 +79,7 @@ test("security headers also cover redirects from protected routes", async () => 
   const response = await onRequest({ request: new Request("https://imars.example.test/admin-dashboard"), env: app.env,
     next: async () => { throw new Error("An unauthenticated request must not open the page"); } });
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get("Location"), "/login?reason=web-session");
+  assert.equal(response.headers.get("Location"), "/admin-login?reason=web-session");
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
 });
 

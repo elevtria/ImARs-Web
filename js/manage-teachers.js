@@ -1,4 +1,3 @@
-import { loadAdminReports } from "./admin-report-data.js";
 import { showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { webProtectionEnabled } from "./web-login.js";
@@ -7,7 +6,7 @@ import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
 import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 import { 
-  getFirestore, 
+  getFirestore, getAdminReport,
   collection, 
   query, 
   where, 
@@ -156,13 +155,13 @@ const addTeacherButton = document.getElementById("addTeacherButton");
 if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
   adminReady = false;
-  if (!user) { window.location.href = "login.html"; return; }
+  if (!user) { window.location.href = "admin-login.html"; return; }
   initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Manage Teachers");
   try {
     await showAdminView({ app, user, page: "reports",
       verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
-      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      load: () => timing.data(getAdminReport),
       render: report => timing.render(() => { teachers = report.teachers; render(); }),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });

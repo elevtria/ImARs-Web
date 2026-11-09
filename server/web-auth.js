@@ -354,14 +354,15 @@ export async function protectWebsite(context, now = Date.now()) {
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
   if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);
-      return new Response(null, { status: 302, headers: { Location: "/login?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
+      const loginPath = adminOnly ? "/admin-login" : "/login";
+      return new Response(null, { status: 302, headers: { Location: loginPath + "?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
     }
-    const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
     if (!path.startsWith("/api/") && account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
     requestSessions.set(request, { env, account });
     const response = await context.next();

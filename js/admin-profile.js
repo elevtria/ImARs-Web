@@ -126,7 +126,7 @@ let joinedText = "Admin since recently";
 onAuthStateChanged(auth, async user => {
   activeAdminDocId = null;
   if (editProfileButton) editProfileButton.disabled = true;
-  if (!user) { window.location.href = "login.html"; return; }
+  if (!user) { window.location.href = "admin-login.html"; return; }
   initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Admin Profile");
   try {
@@ -208,6 +208,6 @@ if (logoutButton) {
     } catch (err) {
       console.error("Sign out error:", err);
     }
-    window.location.href = "login.html";
+    window.location.href = "admin-login.html";
   });
 }

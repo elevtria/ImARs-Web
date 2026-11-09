@@ -77,7 +77,8 @@ function denyAccess(auth, state, reason = "web-session") {
   auth.currentUser = null;
   clearVisit();
   document.querySelector("main")?.replaceChildren();
-  window.location.replace(`/login?reason=${reason}`);
+  const loginPath = portalRole() === "admin" ? "/admin-login" : "/login";
+  window.location.replace(`${loginPath}?reason=${reason}`);
 }
 async function identity(auth, state) {
   const saved = visit();

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { createViewCache, encodeView, decodeView } from "../js/view-cache.js";
+import { summarizeAdminReports } from "../server/admin-report-data.js";
 
 const stripImports = source => source.replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
 const source = file => stripImports(readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8"));
@@ -12,9 +13,6 @@ const refs = {
   collection: (_, ...parts) => ({ path: parts.join("/") }),
   query: (ref, ...filters) => ({ ...ref, filters }), where: (field, op, value) => ({ field, op, value }), limit: count => ({ count })
 };
-const reportContext = vm.createContext({ ...refs, Map, Date, Promise });
-vm.runInContext(source("admin-report-data.js"), reportContext);
-const { summarizeAdminReports, loadAdminReports } = reportContext;
 
 test("admin summaries preserve score rounding, heatmap fallback, attribution, sections, and AR time", () => {
   const teachers = [{ id: "T1", data: { fullName: "First Teacher", displayName: "Teacher One", sections: ["A", "B"], email: "one@example.test", password: "never-cache" } },
@@ -34,25 +32,6 @@ test("admin summaries preserve score rounding, heatmap fallback, attribution, se
   assert.equal(JSON.stringify(result).includes("never-cache"), false);
   const empty = summarizeAdminReports([], []);
   assert.equal(empty.pre, 0); assert.equal(empty.post, 0); assert.equal(empty.hours, "0m");
-});
-
-test("admin report reads overlap without changing student order, and failed reports are not partial successes", async () => {
-  const pending = [], calls = [];
-  const read = ref => { calls.push(ref); return new Promise((resolve, reject) => pending.push({ resolve, reject })); };
-  const report = loadAdminReports({}, read);
-  assert.equal(calls.length, 2, "teacher and student requests must start together");
-  pending[0].resolve(snapshot([doc("T1", { name: "Teacher" })]));
-  pending[1].resolve(snapshot([doc("S1", { section: "First" }), doc("S2", { section: "Second" })]));
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(calls.length, 4, "both students must start before either finishes");
-  pending[3].resolve(snapshot([])); pending[2].resolve(snapshot([]));
-  const result = await report;
-  assert.deepEqual(Array.from(result.sections, section => section.name), ["First", "Second"]);
-  assert.ok(calls.slice(2).every(ref => ref.path.endsWith("/test_results/term_01/lessons")));
-  await assert.rejects(loadAdminReports({}, async ref => {
-    if (ref.path !== "users") throw new Error("unavailable");
-    return snapshot(ref.filters[0].value === "teacher" ? [] : [doc("S1", {})]);
-  }), /unavailable/);
 });
 
 function storage() {
@@ -97,7 +76,7 @@ test("revoked admin access clears saved views and redirects; it never falls back
   const app = adminHarness(); await app.display();
   app.setReader(async () => snapshot([doc("TEACH1", { uid: "admin-a", role: "teacher" })]));
   await app.display({ load: async () => { assert.fail("denied users must not read admin reports"); } });
-  assert.equal(app.signouts, 1); assert.equal(app.context.window.location.href, "login.html");
+  assert.equal(app.signouts, 1); assert.equal(app.context.window.location.href, "admin-login.html");
   assert.equal(app.cache.get("admin-a", "admin:reports"), null); assert.equal(app.main.cleared, true);
 });
 

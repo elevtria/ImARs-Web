@@ -51,7 +51,7 @@ export async function showAdminView({ app, user, page, load = async () => null, 
     if (auth.currentUser?.uid !== user.uid) return;
     if (error.adminRoleDenied) {
       teacherViewCache().invalidate();
-      try { await signOut(auth); } finally { window.location.href = "login.html"; }
+      try { await signOut(auth); } finally { window.location.href = "admin-login.html"; }
       return;
     }
     let status = document.getElementById("viewDataStatus");

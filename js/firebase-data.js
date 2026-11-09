@@ -196,6 +196,7 @@ export function writeBatch() {
   return batch;
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
+export const getAdminReport = () => request({ action: "admin-report" });
 export const getTeacherTopicOverview = () => request({ action: "teacher-topic-overview" });
 export function getDashboardSummary() {
   const uid = visitUser();

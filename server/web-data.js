@@ -4,6 +4,7 @@ import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
 import { activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
+import { loadAdminReports } from "./admin-report-data.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -506,6 +507,10 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
     }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
+    if (body.action === "admin-report") {
+      if (actor.role !== "admin") throw fail();
+      return respond(await loadAdminReports(store));
+    }
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {

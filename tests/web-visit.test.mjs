@@ -138,7 +138,9 @@ test("mismatched UIDs, expired visits, external history and cross-portal navigat
     const app = page({ saved: grant(), referrer: "https://imars.example.test/index", ...options });
     app.observe(); await flush();
     assert.deepEqual(app.deliveries, []); assert.equal(app.body.pending, true);
-    assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
+    const redirect = new URL(app.location.redirect, "https://imars.example.test");
+    assert.equal(redirect.pathname, options.path === "/admin-dashboard" ? "/admin-login" : "/login");
+    assert.match(redirect.searchParams.get("reason"), /^(web-session|access-denied|access-unavailable)$/);
   }
 });
 
