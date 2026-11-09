@@ -4,18 +4,35 @@ import { collection, getDocs, getFirestore, query, where } from "./firebase-data
 import { quizAssignedToSection, quizAssignmentScope, writtenQuestion } from "./quiz-limits.js";
 
 let dialog, controller, generation = 0;
-function closeQuizReview() {
+export function closeQuizReview() {
   generation++; controller?.abort(); controller = null;
   dialog?.close(); dialog?.remove(); dialog = null;
 }
 window.addEventListener("pagehide", closeQuizReview);
 const element = (tag, text, className) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; if (className) item.className = className; return item; };
-async function openQuizReview(user) {
+export async function requestQuizReview(uid, body, signal) {
+  const response = await fetch("/api/quiz-review/action", { method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) });
+  if (!response.headers.get("Content-Type")?.includes("application/json")) throw new Error("Please sign in again.");
+  const result = await response.json();
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("imars-session-ended"));
+    throw new Error(result.error || "Could not load quiz results.");
+  }
+  signal.throwIfAborted();
+  return result;
+}
+export function quizScoreLabel(row) {
+  if (row.status === "not-submitted") return "Not submitted";
+  if (row.status === "pending-review") return "Pending review";
+  return row.score == null || row.maximum == null ? "Score unavailable" : `${row.score}/${row.maximum}`;
+}
+export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection) {
   closeQuizReview(); const current = generation; controller = new AbortController();
   const uid = user.uid;
   const signal = controller.signal;
   dialog = element("dialog", undefined, "quiz-review-dialog"); dialog.setAttribute("aria-labelledby", "quizReviewTitle");
-  const heading = element("h2", "Quiz Submissions"); heading.id = "quizReviewTitle";
+  const heading = element("h2", resultsQuiz ? `Results for ${resultsQuiz.title}` : "Quiz Submissions"); heading.id = "quizReviewTitle";
   const close = element("button", "Close", "btn-ghost"); close.type = "button"; close.addEventListener("click", closeQuizReview);
   const header = element("div", undefined, "quiz-review-header"); header.append(heading, close);
   const status = element("p", "", "quiz-status"); status.setAttribute("role", "status");
@@ -32,29 +49,35 @@ async function openQuizReview(user) {
   let availableQuizzes = [];
   const sections = new Map();
   async function api(body) {
-    const response = await fetch("/api/quiz-review/action", { method: "POST", credentials: "same-origin", cache: "no-store",
-      headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify({ ...body, quizId: quiz.value, sectionId: section.value }), signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) });
-    if (!response.headers.get("Content-Type")?.includes("application/json")) throw new Error("Please sign in again.");
-    const result = await response.json();
-    if (!response.ok) {
-      if (response.status === 401) window.dispatchEvent(new Event("imars-session-ended"));
-      if ([401, 403].includes(response.status)) closeQuizReview();
-      throw new Error(result.error || "Could not load quiz reviews.");
-    }
-    if (current !== generation) throw new DOMException("Canceled", "AbortError"); return result;
+    return requestQuizReview(uid, { ...body, quizId: quiz.value, sectionId: section.value }, signal);
   }
   async function load() {
-    if (busy || !quiz.value) return;
+    if (busy || !quiz.value || (resultsQuiz && !section.value)) return;
     busy = true; next.disabled = section.disabled = quiz.disabled = true;
-    setLoadingState(status, true, "Loading submissions");
+    setLoadingState(status, true, resultsQuiz ? "Loading quiz results" : "Loading submissions");
     try {
-      const page = await api({ action: "list", cursor }); cursor = page.nextCursor;
+      const page = await api({ action: resultsQuiz ? "section-results" : "list", cursor }); cursor = page.nextCursor;
       next.textContent = "Load more";
       for (const row of page.items) {
+        if (resultsQuiz) {
+          const line = element("div", undefined, "teacher-quiz-score");
+          const date = row.submittedAtUtc ? new Date(row.submittedAtUtc).toLocaleString() : "";
+          line.append(element("strong", row.name), element("span", [quizScoreLabel(row), date].filter(Boolean).join(" · ")));
+          if (row.status === "pending-review") {
+            const button = element("button", "Review answers", "ghost-btn"); button.type = "button";
+            button.setAttribute("aria-label", `Review answers for ${row.name}`);
+            button.addEventListener("click", () => show(row, button)); line.append(button);
+          }
+          content.append(line);
+          continue;
+        }
         const button = element("button", [row.studentId, sections.get(row.sectionId), new Date(row.submittedAtUtc).toLocaleString()].filter(Boolean).join(" · "), "quiz-review-submission"); button.type = "button";
         button.addEventListener("click", () => show(row, button)); content.append(button);
       }
-      status.textContent = content.children.length ? "Select a submission to review." : "No answers are waiting for review."; next.hidden = !cursor;
+      status.textContent = resultsQuiz
+        ? content.children.length ? "Showing each student's latest submission." : cursor ? "Load more to see the rest of the section." : "No active students in this section."
+        : content.children.length ? "Select a submission to review." : "No answers are waiting for review.";
+      next.hidden = !cursor;
     } catch (error) { if (error.name !== "AbortError") { status.textContent = error.message; next.textContent = "Retry"; next.hidden = false; } }
     finally { busy = false; next.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
   }
@@ -64,12 +87,13 @@ async function openQuizReview(user) {
     try {
       const attempt = await api({ action: "open", studentId: row.studentId, attemptId: row.attemptId });
       if (attempt.status !== "pending-review") {
-        button.remove();
+        if (resultsQuiz) { resetList(); busy = false; await load(); }
+        else button.remove();
         status.textContent = "This submission has already been graded.";
         return;
       }
       const form = element("form", undefined, "quiz-review-form"), scores = [];
-      form.append(element("h3", "Student " + row.studentId));
+      form.append(element("h3", row.name || "Student " + row.studentId));
       for (const [index, q] of attempt.questions.entries()) {
         const answer = attempt.answers.find(a => a.questionId === q.id), field = element("fieldset");
         field.append(element("legend", (index + 1) + ". " + q.text));
@@ -83,9 +107,9 @@ async function openQuizReview(user) {
         scoreLabel.append(input); field.append(scoreLabel); scores.push({ questionId: q.id, input }); form.append(field);
       }
       const feedbackLabel = element("label", "Feedback "), feedback = element("textarea"); feedback.maxLength = 4000; feedbackLabel.append(feedback); form.append(feedbackLabel);
-      const save = element("button", "Save review", "primary-btn"), cancel = element("button", "Back to submissions", "btn-ghost"); save.type = "submit"; cancel.type = "button";
+      const save = element("button", "Save review", "primary-btn"), cancel = element("button", resultsQuiz ? "Back to results" : "Back to submissions", "btn-ghost"); save.type = "submit"; cancel.type = "button";
       const back = () => { form.remove(); content.hidden = false; filters.hidden = false; next.hidden = !cursor; };
-      cancel.addEventListener("click", () => { back(); status.textContent = "Select a submission to review."; }); form.append(save, cancel);
+      cancel.addEventListener("click", () => { back(); status.textContent = resultsQuiz ? "Showing each student's latest submission." : "Select a submission to review."; }); form.append(save, cancel);
       form.addEventListener("submit", async event => {
         event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = true;
         save.setAttribute("aria-busy", "true"); status.textContent = "";
@@ -93,6 +117,9 @@ async function openQuizReview(user) {
           const result = await api({ action: "grade", studentId: row.studentId, attemptId: row.attemptId, revision: attempt.revision,
             scores: scores.map(item => ({ questionId: item.questionId, score: Number(item.input.value) })), feedback: feedback.value });
           if (!result.persisted) throw new Error("Review was not confirmed. Please retry.");
+          if (resultsQuiz) button.previousElementSibling.textContent = [
+            quizScoreLabel({ ...result, status: "reviewed" }), new Date(row.submittedAtUtc).toLocaleString()
+          ].join(" · ");
           button.remove(); back(); status.textContent = "Grade saved: " + result.score + "/" + result.maximum + ".";
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
@@ -104,7 +131,7 @@ async function openQuizReview(user) {
   function resetList() {
     cursor = "";
     content.replaceChildren(); next.hidden = true; next.textContent = "Load more";
-    status.textContent = "Choose a quiz to view pending submissions.";
+    status.textContent = resultsQuiz ? "Choose a section to view results." : "Choose a quiz to view pending submissions.";
   }
   function filterQuizzes() {
     const choices = availableQuizzes.filter(item => !section.value || quizAssignedToSection(item, section.value));
@@ -113,9 +140,21 @@ async function openQuizReview(user) {
     resetList();
     if (!choices.length) status.textContent = "No assigned written quizzes for this section.";
   }
-  section.addEventListener("change", filterQuizzes);
-  quiz.addEventListener("change", () => { resetList(); void load(); });
+  const reload = () => { resetList(); void load(); };
+  section.addEventListener("change", resultsQuiz ? reload : filterQuizzes);
+  quiz.addEventListener("change", reload);
   next.addEventListener("click", load);
+  if (resultsQuiz) {
+    quizLabel.hidden = true;
+    quiz.replaceChildren(option(resultsQuiz.title, resultsQuiz.id));
+    const choices = quizSections.filter(item => quizAssignedToSection(resultsQuiz, item.id));
+    section.replaceChildren(...choices.map(item => option(item.name, item.id)));
+    if (choices.some(item => item.id === selectedSection)) section.value = selectedSection;
+    section.disabled = !choices.length;
+    if (choices.length) await load();
+    else status.textContent = "There are no assigned sections to show.";
+    return;
+  }
   setLoadingState(status, true, "Loading sections and quizzes");
   try {
     const db = getFirestore();

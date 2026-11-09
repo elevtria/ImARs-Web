@@ -70,3 +70,37 @@ test("submission filters and cursors cannot cross sections", async () => {
   assert.equal((await f.callReview({ action: "list", sectionId: "B" })).status, 403);
   assert.equal(reads, 1);
 });
+
+test("quiz scores distinguish pending, auto-graded, reviewed and missing submissions within the teacher's sections", async () => {
+  const f = await setup();
+  const submittedAt = "2026-10-29T00:00:00Z";
+  f.put("users/S3", { role: "student", classCode: "A", displayName: "Student Three" });
+  f.put("users/S4", { role: "student", classCode: "A", active: false });
+  f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await f.store.get(path)])));
+  f.store.scorePage = async (actor, studentId, sectionId, { quizId }) => {
+    assert.equal(actor.uid, "teacher-a");
+    assert.equal(sectionId, "A");
+    if (studentId !== "S1") return [];
+    const essay = { path: f.path, data: { ...f.data.get(f.path), submittedAt } };
+    return quizId ? [essay] : [essay, { path: f.path, data: {
+      quizId: "automatic", status: "graded", submittedAt, receipt: { score: 0, maximum: 1 }
+    } }];
+  };
+  const history = await (await f.callReview({ action: "student-scores" })).json();
+  assert.deepEqual(history.items.map(({ type, status, score, maximum }) => [type, status, score, maximum]),
+    [["essay", "pending-review", null, null], [undefined, "graded", 0, 1]]);
+  assert.doesNotMatch(JSON.stringify(history), /PRIVATE|Student essay/);
+  const section = () => f.callReview({ action: "section-results", sectionId: "A" });
+  assert.deepEqual((await (await section()).json()).items.map(({ studentId, status }) => [studentId, status]),
+    [["S1", "pending-review"], ["S3", "not-submitted"]]);
+  const opened = await (await f.callReview({ action: "open" })).json();
+  assert.equal((await f.callReview({ action: "grade", revision: opened.revision,
+    scores: [{ questionId: "q-original", score: 3 }], feedback: "Private comment" })).status, 200);
+  const reviewed = (await (await section()).json()).items[0];
+  assert.equal(reviewed.status, "reviewed");
+  assert.equal(reviewed.score, 3);
+  assert.equal(reviewed.maximum, 4);
+  assert.equal(Object.hasOwn(reviewed, "feedback"), false);
+  assert.equal((await f.callReview({ action: "section-results", sectionId: "B" })).status, 403);
+  assert.equal((await f.callReview({ action: "student-scores", studentId: "S2" })).status, 403);
+});

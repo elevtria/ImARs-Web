@@ -37,6 +37,25 @@
       { "fieldPath": "submittedAt", "order": "ASCENDING" },
       { "fieldPath": "__name__", "order": "ASCENDING" }
     ]
+  }, {
+    "collectionGroup": "generated_quiz_attempts", "queryScope": "COLLECTION",
+    "fields": [
+      { "fieldPath": "context.teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "context.teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "context.sectionId", "order": "ASCENDING" },
+      { "fieldPath": "submittedAt", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ]
+  }, {
+    "collectionGroup": "generated_quiz_attempts", "queryScope": "COLLECTION",
+    "fields": [
+      { "fieldPath": "context.teacherUid", "order": "ASCENDING" },
+      { "fieldPath": "context.teacherProfileId", "order": "ASCENDING" },
+      { "fieldPath": "context.sectionId", "order": "ASCENDING" },
+      { "fieldPath": "quizId", "order": "ASCENDING" },
+      { "fieldPath": "submittedAt", "order": "DESCENDING" },
+      { "fieldPath": "__name__", "order": "DESCENDING" }
+    ]
   }],
   "fieldOverrides": []
 }

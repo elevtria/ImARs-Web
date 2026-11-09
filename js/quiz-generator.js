@@ -1,5 +1,6 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
+import { closeQuizReview, openQuizReview } from "./quiz-review.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "./firebase-data.js";
 import { requestQuiz } from "./quiz-request.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -484,6 +485,8 @@ const firestore = getFirestore(firebaseApp);
     libraryList.hidden = quizzes.length === 0;
     libraryList.innerHTML = quizzes.map((quiz) => {
       const status = currentAvailability(quiz);
+      const resultsButton = status === "now" && teacherSections.some(section => quizAssignedToSection(quiz, section.id))
+        ? `<button type="button" data-results-quiz="${escapeHtml(quiz.id)}">View results</button>` : "";
       const statusLabel = status === "now" ? "Available" : status === "scheduled" ? "Scheduled · locked" : "Draft · locked";
       const statusClass = status === "now" ? "available" : status === "scheduled" ? "scheduled" : "";
       const availability = status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
@@ -505,7 +508,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions"><button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -654,6 +657,7 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    closeQuizReview();
     editRequest++;
     editingQuiz = null;
     editorQuestions = [];
@@ -794,6 +798,12 @@ const firestore = getFirestore(firebaseApp);
     renderLibrary();
   });
   libraryList.addEventListener("click", async (event) => {
+    const results = event.target.closest("[data-results-quiz]");
+    if (results) {
+      const quiz = loadQuizzes().find(item => item.id === results.dataset.resultsQuiz);
+      if (quiz && auth.currentUser) void openQuizReview(auth.currentUser, quiz, teacherSections, librarySectionFilter.value);
+      return;
+    }
     const schedule = event.target.closest("[data-schedule-quiz]");
     if (schedule && !scheduleBusy) {
       expandedScheduleQuizId = expandedScheduleQuizId === schedule.dataset.scheduleQuiz ? null : schedule.dataset.scheduleQuiz;

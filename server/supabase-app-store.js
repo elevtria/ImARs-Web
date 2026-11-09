@@ -263,6 +263,22 @@ export class SupabaseAppStore {
     return (await response.json()).map(row => this.projected(row, fields));
   }
 
+  async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
+    const fields = ["quizId", "snapshotId", "status", "submittedAt", "receipt", "review"];
+    const submittedAt = "fields->submittedAt->>timestampValue";
+    const context = { teacherUid: actor.uid, teacherProfileId: actor.id, sectionId };
+    const boundary = after && quoted(sortableTimestamp(after[0]));
+    const response = await this.documents("GET", {
+      collection_path: `eq.users/${studentId}/generated_quiz_attempts`,
+      select: this.selection(fields),
+      fields: "cs." + JSON.stringify(encodeFields({ context, ...(quizId ? { quizId } : {}) })),
+      [submittedAt]: "not.is.null", order: submittedAt + ".desc,path.desc", limit: String(limit),
+      ...(after ? { or: "(" + submittedAt + ".lt." + boundary + ",and(" + submittedAt +
+        ".eq." + boundary + ",path.lt." + after[1] + "))" } : {})
+    });
+    return (await response.json()).map(row => ({ ...this.projected(row, fields), path: row.path }));
+  }
+
   async reviewPage(actor, quizId, sectionId, after) {
     const fields = ["context", "quizId", "status", "submittedAt"];
     const submittedAt = "fields->submittedAt->>timestampValue";

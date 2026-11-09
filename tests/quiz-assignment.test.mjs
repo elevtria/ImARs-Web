@@ -23,7 +23,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   const choice = new Element(), availability = new Element(); choice.value = "multiple-choice"; availability.value = "draft";
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
-  let authenticated, requested;
+  let authenticated, requested, results;
   const context = {
     console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
     initializeApp:()=>({}), getAuth:()=>({currentUser:{uid:"teacher-a"}}), getFirestore:()=>({}),
@@ -35,6 +35,7 @@ test("generation, review, unassigned draft and all-section release use the actua
     onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, showTeacherView:async ({load,render,painted})=>{render(await load());painted();},
     requestQuiz:async payload=>{requested=payload;return [{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}];},
     extractOfficeText:async()=>"Water freezes.", localStorage:{setItem(){}},
+    closeQuizReview() {}, openQuizReview: (...args) => { results = args; },
     window:{scrollTo(){},confirm:()=>true},
     document:{getElementById:element,querySelectorAll:()=>[],querySelector:selector=>selector.includes("questionType") ? choice : availability}
   };
@@ -55,6 +56,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("generateQuiz").disabled,true);
   assert.equal(saves[0].assignmentScope,"unassigned"); assert.equal(saves[0].sectionId,""); assert.equal(saves[0].availability,"draft");
   assert.match(element("quizLibraryList").innerHTML,/All my sections/);
+  assert.doesNotMatch(element("quizLibraryList").innerHTML,/View results/);
   const form = new Element(); form.dataset.scheduleForm=saves[0].id;
   form.elements={sectionId:{value:"*"},availability:{value:"now"},availableAt:{value:""}};
   element("quizLibraryList").listeners.submit({preventDefault(){},target:{closest:()=>form}});
@@ -65,4 +67,9 @@ test("generation, review, unassigned draft and all-section release use the actua
     element("librarySectionFilter").value=section; element("librarySectionFilter").listeners.change();
     assert.match(element("quizLibraryList").innerHTML,/Water|water/);
   }
+  assert.match(element("quizLibraryList").innerHTML,/View results/);
+  await element("quizLibraryList").listeners.click({ target: { closest: selector =>
+    selector === "[data-results-quiz]" ? { dataset: { resultsQuiz: saves[0].id } } : null } });
+  assert.equal(results[1].id, saves[0].id);
+  assert.equal(results[3], "C");
 });

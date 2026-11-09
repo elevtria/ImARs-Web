@@ -150,7 +150,7 @@ async function dispatch(context) {
     if (!Number.isSafeInteger(length) || length <= 0 || length > 1_000_000) return unavailable();
     const body = await request.clone().json();
     if (path === "/api/quiz-review/action") {
-      return ["list", "open"].includes(body?.action) ? quizReview(context) : unavailable();
+      return ["list", "open", "student-scores", "section-results"].includes(body?.action) ? quizReview(context) : unavailable();
     }
     if (!allowedData.has(body?.action)) return unavailable();
     const isRoster = body.action === "student-page";

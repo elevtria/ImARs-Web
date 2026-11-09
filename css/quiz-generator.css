@@ -152,7 +152,7 @@
 .quiz-status-badge { padding: 5px 9px; border-radius: 99px; color: #6d7a8c; background: #edf1f6; font-size: 9px; font-weight: 800; }
 .quiz-status-badge.available { color: #20805c; background: #e7f7ef; }
 .quiz-status-badge.scheduled { color: #8b6d28; background: #fff4d1; }
-.quiz-library-actions { display: flex; gap: 7px; }
+.quiz-library-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .quiz-library-actions button { min-height: 34px; padding: 0 11px; border: 1px solid rgba(129,162,193,.26); border-radius: 9px; color: #58758f; background: #f7f9fc; font-size: 10px; font-weight: 700; }
 .quiz-library-actions button.delete { color: #a96d6d; }
 .quiz-library-actions button[data-schedule-quiz] { border-color: #8aaed0; color: #275b86; background: #eaf3fb; }

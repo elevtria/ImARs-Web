@@ -2199,5 +2199,13 @@ label {
 .quiz-review-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; margin: 16px 0; }
 .quiz-review-filters[hidden] { display: none; }
 .quiz-review-filters label { display: grid; gap: 6px; }
+.quiz-review-filters label[hidden] { display: none; }
 .quiz-review-filters select { min-width: 0; width: 100%; padding: 10px; border: 1px solid #a8bdc1; border-radius: 8px; background: #fff; }
 .quiz-review-dialog .quiz-status { margin: 12px 0; color: #40586d; }
+.student-quiz-scores { margin: 14px 0; }
+.student-quiz-scores h3 { margin: 0 0 4px; }
+.student-quiz-scores p { margin: 4px 0; }
+.student-quiz-scores ul { list-style: none; margin: 8px 0; padding: 0; }
+.teacher-quiz-score { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 0; border-bottom: 1px solid #d5e3e6; }
+.teacher-quiz-score strong { flex: 1 1 180px; overflow-wrap: anywhere; }
+.quiz-review-form fieldset p { white-space: pre-wrap; overflow-wrap: anywhere; }

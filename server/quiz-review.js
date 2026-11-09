@@ -10,6 +10,24 @@ const from64 = value => Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_
 const key = env => crypto.subtle.importKey("raw", bytes("quiz-review:v1:" + env.WEB_SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 const only = (body, keys) => body && typeof body === "object" && !Array.isArray(body) && Object.keys(body).every(name => keys.includes(name));
 export class QuizReviewStore extends FirestoreAdmin {
+  async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
+    const filters = [["context.teacherUid", actor.uid], ["context.teacherProfileId", actor.id],
+      ["context.sectionId", sectionId], ...(quizId ? [["quizId", quizId]] : [])]
+      .map(([fieldPath, stringValue]) => ({ fieldFilter: { field: { fieldPath }, op: "EQUAL", value: { stringValue } } }));
+    const rows = await this.request(`documents/users/${studentId}:runQuery`, { method: "POST", body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: "generated_quiz_attempts" }],
+        select: { fields: ["quizId", "snapshotId", "status", "submittedAt", "receipt.score", "receipt.maximum", "review.score", "review.maximum"].map(fieldPath => ({ fieldPath })) },
+        where: { compositeFilter: { op: "AND", filters } },
+        orderBy: ["submittedAt", "__name__"].map(fieldPath => ({ field: { fieldPath }, direction: "DESCENDING" })),
+        ...(after ? { startAt: { before: false, values: [{ timestampValue: after[0] }, { referenceValue: this.name(after[1]) }] } } : {}),
+        limit
+      }
+    }) });
+    return rows.filter(row => row.document).map(({ document }) => ({
+      path: document.name.split("/documents/")[1], data: decodeFields(document.fields)
+    }));
+  }
   async reviewPage(actor, quizId, sectionId, after) {
     const conditions = [["context.teacherUid", actor.uid], ["context.teacherProfileId", actor.id], ...(sectionId ? [["context.sectionId", sectionId]] : []), ["quizId", quizId], ["status", "pending-review"]].map(([fieldPath, stringValue]) => ({ fieldFilter: { field: { fieldPath }, op: "EQUAL", value: { stringValue } } }));
     const rows = await this.request("documents:runQuery", { method: "POST", body: JSON.stringify({ structuredQuery: {
@@ -46,6 +64,52 @@ async function ownedSection(actor, store, id) {
   const section = (await store.get("classes/" + id))?.data;
   if (!activeProfile(section) || section.teacherId !== actor.id) throw fail("FORBIDDEN");
 }
+function resultFor(row) {
+  const { status, submittedAt, receipt, review } = row.data;
+  const grade = status === "reviewed" ? review : status === "graded" ? receipt : null;
+  return { attemptId: row.path.split("/").at(-1), status, submittedAtUtc: submittedAt,
+    score: grade?.score ?? null, maximum: grade?.maximum ?? null };
+}
+async function studentScores(actor, store, body, env, now) {
+  if (!validPart(body.studentId)) throw fail("INVALID_REQUEST", 400);
+  const student = (await store.get("users/" + body.studentId))?.data;
+  if (student?.role !== "student" || (student.teacherId && student.teacherId !== actor.id)) throw fail("FORBIDDEN");
+  await ownedSection(actor, store, student.classCode);
+  const scope = "student:" + body.studentId;
+  const after = await cursor(env, actor, scope, student.classCode, body.cursor, now);
+  const rows = await store.scorePage(actor, body.studentId, student.classCode, { after });
+  const page = rows.slice(0, 20);
+  const paths = [...new Set(page.map(row => row.data.snapshotId).filter(validPart))]
+    .map(id => "generatedQuizRevisions/" + id);
+  const snapshots = paths.length ? await store.getAll(paths, { fieldPaths: ["title", "type"] }) : new Map();
+  const last = page.at(-1);
+  return {
+    items: page.map(row => {
+      const snapshot = snapshots.get("generatedQuizRevisions/" + row.data.snapshotId)?.data;
+      return { ...resultFor(row), quizId: row.data.quizId, title: snapshot?.title || "Teacher quiz", type: snapshot?.type };
+    }),
+    nextCursor: rows.length > 20 ? await sign(env, { uid: actor.uid, id: actor.id, quizId: scope,
+      sectionId: student.classCode, exp: now + 3600_000, after: [last.data.submittedAt, last.path] }) : ""
+  };
+}
+async function sectionResults(actor, store, quiz, body, now) {
+  if (!validPart(body.sectionId) || (body.cursor && !validPart(body.cursor))) throw fail("INVALID_REQUEST", 400);
+  const available = quiz.availability === "now" || (quiz.availability === "scheduled" && Date.parse(quiz.availableAt) <= now);
+  if (!available) throw fail("FORBIDDEN");
+  const limit = 10;
+  const roster = await store.query("users", {
+    filters: [{ field: "role", value: "student" }, { field: "classCode", value: body.sectionId }],
+    after: body.cursor, limit: limit + 1, fieldPaths: ["active", "status", "teacherId", "displayName", "fullName"]
+  });
+  const items = await Promise.all(roster.slice(0, limit)
+    .filter(student => activeProfile(student.data) && (!student.data.teacherId || student.data.teacherId === actor.id))
+    .map(async ({ id, data }) => {
+      const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
+      return { studentId: id, name: data.displayName || data.fullName || id,
+        ...(latest ? resultFor(latest) : { status: "not-submitted" }) };
+    }));
+  return { items, nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
+}
 export async function quizReview({ request, env }, { store, authenticate = requireStaff, now = Date.now } = {}) {
   const respond = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
   let transaction = false;
@@ -56,16 +120,19 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     store ??= supabaseWebData(env) ? appStore(env) : new QuizReviewStore(env);
     const initialActor = await authenticate(request, env, store);
     const body = await readJson(request, 65536);
-    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade"].includes(body.action) ||
+    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade", "student-scores", "section-results"].includes(body.action) ||
         (body.sectionId !== undefined && body.sectionId !== "" && !validPart(body.sectionId))) throw fail("INVALID_REQUEST", 400);
     if (body.action === "grade") { await store.begin(); transaction = true; }
     const actor = transaction ? await authenticate(request, env, store) : initialActor;
+    if (actor.role !== "teacher") throw fail("FORBIDDEN");
+    if (body.action === "student-scores") return respond(await studentScores(actor, store, body, env, now()));
     const q = await ownedQuiz(actor, store, body.quizId);
     const sectionId = body.sectionId || q.sectionId || "";
     if (body.sectionId && body.sectionId !== q.sectionId) {
       if (!quizAssignedToSection(q, body.sectionId)) throw fail("FORBIDDEN");
       await ownedSection(actor, store, body.sectionId);
     }
+    if (body.action === "section-results") return respond(await sectionResults(actor, store, q, body, now()));
     if (body.action === "list") {
       const rows = await store.reviewPage(actor, body.quizId, sectionId, await cursor(env, actor, body.quizId, sectionId, body.cursor, now()));
       const sections = new Map(sectionId ? [[sectionId, Promise.resolve(true)]] : []), items = [];
