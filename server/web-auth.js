@@ -64,10 +64,27 @@ export async function signSession(env, account, session, host, teacherSession) {
 
 export async function resolveStaff(env, identifier, accounts = settings(env), store = appStore(env)) {
   const clean = identifier.trim().toLowerCase();
-  const initial = accounts.find(item => item.id.toLowerCase() === clean || (item.role === "admin" && item.email.toLowerCase() === clean));
+  let initial = accounts.find(item => item.id.toLowerCase() === clean || (item.role === "admin" && item.email.toLowerCase() === clean));
   if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1")) {
     const administrators = accounts.filter(item => item.role === "admin");
-    if (administrators.length === 1) return administrators[0];
+    if (administrators.length === 1) initial = administrators[0];
+  }
+  if (initial?.role === "admin" && dataEnabled(env) && store && typeof store.get === "function") {
+    try {
+      const profile = (await store.get("users/" + initial.id)) || (initial.id !== "ADMIN1" ? await store.get("users/ADMIN1") : null);
+      if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
+        const liveEmail = String(profile.data.email || profile.data.providedEmail || initial.email || "").trim();
+        return {
+          ...initial,
+          id: profile.id || initial.id,
+          uid: String(profile.data.uid).trim(),
+          email: liveEmail || initial.email
+        };
+      }
+    } catch {
+      // Fall back to WEB_STAFF_ACCOUNTS entry if store read fails
+    }
+    return initial;
   }
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
