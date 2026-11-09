@@ -51,7 +51,7 @@ function reuseVisitedPage(event, auth, state) {
   const navigation = window.navigation;
   if (!navigation?.currentEntry || !auth.currentUser || state.denied || state.suspended || !state.visitId || visit()?.tabId !== state.visitId ||
       event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-  const link = event.target.closest?.(".side-nav a[href], .admin-side-nav a[href]");
+  const link = event.target.closest?.(".side-nav a[href]");
   if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
   try {
     const current = navigation.currentEntry;

@@ -36,7 +36,7 @@ test("pending card layouts stay in place while unpopulated values and controls w
   assert.match(css, /\[data-await-content\]\[hidden\] \{ display: none/);
   assert.ok(!/\[data-await-content\]:not\(\[data-content-ready\]\)[^{]*\{[^}]*display:\s*none/.test(css), "waiting for data must not collapse card layouts");
   assert.ok(!css.includes(".topbar") && !css.includes("#drawer"));
-  for (const file of ["index.html", "analytics.html", "topic-scheduler.html", "student-records.html", "admin-dashboard.html", "admin-profile.html", "manage-teachers.html", "school-analytics.html"]) {
+  for (const file of ["index.html", "analytics.html", "topic-scheduler.html", "student-records.html", "admin-dashboard.html", "manage-teachers.html", "school-analytics.html"]) {
     const html = readFileSync(new URL("../" + file, import.meta.url), "utf8");
     assert.match(html, /data-await-content=/, file);
     assert.ok(!/<(?:header|aside)\b[^>]*data-await-content/.test(html), file + " navigation must stay visible");

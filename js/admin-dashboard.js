@@ -3,32 +3,9 @@ import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getAdminReport } from "./firebase-data.js";
 import { showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
-import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
-
-// --- DRAWER UI LOGIC ---
-const menuButton = document.getElementById("adminMenuButton");
-const drawer = document.getElementById("adminNavigation");
-const closeButton = document.getElementById("adminDrawerClose");
-
-function setDrawerOpen(open) {
-  drawer.classList.toggle("open", open);
-  drawer.setAttribute("aria-hidden", String(!open));
-  menuButton.setAttribute("aria-expanded", String(open));
-}
-
-if (menuButton) menuButton.addEventListener("click", () => setDrawerOpen(!drawer.classList.contains("open")));
-if (closeButton) closeButton.addEventListener("click", () => setDrawerOpen(false));
-if (drawer) {
-  drawer.addEventListener("click", (event) => {
-    if (event.target === drawer) setDrawerOpen(false);
-  });
-}
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setDrawerOpen(false);
-});
 
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
@@ -136,10 +113,9 @@ function renderDashboard(report) {
 
 onAuthStateChanged(auth, async user => {
   if (!user) { window.location.href = "admin-login.html"; return; }
-  initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Admin Dashboard");
   try {
-    await showAdminView({ app, user, page: "reports",
+    await showAdminView({ app, user,
       load: () => timing.data(getAdminReport),
       render: report => timing.render(() => renderDashboard(report)),
       painted: cacheHit => timing.finish("loaded", { cacheHit })

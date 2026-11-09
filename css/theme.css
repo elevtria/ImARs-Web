@@ -50,7 +50,7 @@
     background: radial-gradient(ellipse at 10% 0%, #24395280, transparent 55%), #101824;
   }
   [data-theme="dark"] :is(.topbar, .admin-topbar) { background: #101824e8; border-color: var(--line); }
-  [data-theme="dark"] :is(#drawer .drawer-panel, .admin-drawer-panel) { background: #152031; border-color: var(--line); }
+  [data-theme="dark"] #drawer .drawer-panel { background: #152031; border-color: var(--line); }
   [data-theme="dark"] body :is(.card, .card.section, .term-card, .panel, .metric-card, .profile-card,
     .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
     .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
@@ -91,7 +91,7 @@
     .archive-section-hint, .action p, .login-card small, .login-card h1 + p, .login-page label,
     .login-field > .field-icon, #adminModalDescription, .quiz-field-label, .quiz-help-text,
     .manual-tool-card p, .manual-checklist, .manual-sheet-footer, .record .student small) { color: var(--muted); }
-  [data-theme="dark"] body :is(.icon-btn, .menu-button, .drawer-close, .help-btn, .help-button,
+  [data-theme="dark"] body :is(.icon-btn, .menu-button, .help-btn, .help-button,
     .ghost-btn, .btn-ghost, .nav-close, .profile-dialog-close, .dialog-close, .profile-cancel-button,
     .cancel-button, #closeStudentRecord, #closeAdminModalBtn, #cancelAdminModalBtn, #cancelArchiveStudent,
     .open-student-record, .archive-student-btn, .unarchive-student-btn, .student-detail-navigation button) {
@@ -99,7 +99,7 @@
   }
   [data-theme="dark"] body :is(.sy-chip, .admin-year, .summary-icon, .action-icon, .section-chip,
     .quiz-library-count, .quiz-view-tab span, .student-status-switch span, .teacher-count) { background: #2b4059; color: #d5e7ff; }
-  [data-theme="dark"] body :is(.side-user, .admin-side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
+  [data-theme="dark"] body :is(.side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
   [data-theme="dark"] body :is(td, th, .scan-row, .file-row, .profile-info-grid > div, .analytics-card-footer) { border-color: var(--line); }
   [data-theme="dark"] body :is(.table-wrap, .table-scroll) tbody tr:nth-child(even) { background: #22324966; }
   [data-theme="dark"] body :is(.action, .record, .stat-link, .quiz-dropzone):hover { background: #2b4059; }

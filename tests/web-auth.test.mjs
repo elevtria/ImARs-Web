@@ -121,6 +121,16 @@ test("both sign-in pages stay public with security headers while protected HTML 
   }
 });
 
+test("old admin profile bookmarks lead signed-in admins to the overview", async () => {
+  const app = fixture();
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  const response = await app.page("/admin-profile.html", admin);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "/admin-dashboard");
+  assert.equal((await app.page("/admin-profile", teacher)).status, 403);
+});
+
 function fixture() {
   let time = Date.now(), verifications = 0, outage = false, wrongUid = false;
   const stores = new Map(), actors = new Map();

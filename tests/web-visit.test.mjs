@@ -188,7 +188,7 @@ test("the teacher and admin sidebars reuse verified entries from this visit and 
   const tabId = "imars-web:fixture-tab";
   for (const { role, current, previous, next } of [
     { role: "teacher", current: "/topic-scheduler", previous: "/", next: "/student-records" },
-    { role: "admin", current: "/admin-profile", previous: "/admin-dashboard", next: "/manage-teachers" }
+    { role: "admin", current: "/school-analytics", previous: "/admin-dashboard", next: "/manage-teachers" }
   ]) {
     const opened = [], entry = (index, path, visit) => ({ index, key: String(index), url: origin + path, getState: () => ({ imarsVisit: visit }) });
     const currentEntry = entry(1, current);

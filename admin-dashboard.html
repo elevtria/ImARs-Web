@@ -9,18 +9,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/admin-dashboard.css" />
   <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body data-auth-pending>
+<body class="admin-portal" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
-  <header class="admin-topbar">
+  <div class="app">
+  <header class="admin-topbar topbar">
     <div class="admin-topbar-inner">
       <div class="admin-topbar-left">
-        <button class="menu-button" id="adminMenuButton" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="adminNavigation">
+        <button class="menu-button" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
         <span class="current-page">Overview</span>
@@ -38,22 +40,6 @@
       </div>
     </div>
   </header>
-
-  <aside class="admin-drawer" id="adminNavigation" aria-hidden="true">
-    <div class="admin-drawer-panel" role="navigation" aria-label="Admin portal">
-      <div class="admin-drawer-heading">
-        <a class="drawer-brand" href="admin-dashboard.html" aria-label="Admin dashboard"><img class="admin-brand-mark" src="assets/imars-logo.png" alt="" /><div><strong>ImARs</strong><small>School Admin</small></div></a>
-        <button class="drawer-close" id="adminDrawerClose" type="button" aria-label="Close navigation">×</button>
-      </div>
-      <nav class="admin-side-nav">
-        <a class="admin-nav-link active" href="admin-dashboard.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
-        <a class="admin-nav-link" href="manage-teachers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
-        <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
-        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
-      </nav>
-      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
-    </div>
-  </aside>
 
   <main class="dashboard-content" inert data-auth-shell>
     <section class="page-intro hero" data-auth-shell>
@@ -137,9 +123,34 @@
       </div>
     </section>
   </main>
+  </div>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Admin portal">
+      <a class="brand" href="admin-dashboard.html" aria-label="Admin dashboard">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="" />
+        <div><strong>ImARs</strong><small>School Admin</small></div>
+      </a>
+      <nav class="side-nav">
+        <a class="nav-item active" href="admin-dashboard.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="nav-item" href="manage-teachers.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">A</div>
+        <div class="user-meta"><strong>Admin</strong><small>School Administrator</small></div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options" aria-expanded="false" aria-controls="accountMenu">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden><a href="admin-login.html">Log out</a></div>
+        </div>
+      </div>
+    </div>
+  </aside>
 
   <button class="help-button" type="button" aria-label="Help">?</button>
   <script type="module" src="js/admin-dashboard.js"></script>
+  <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

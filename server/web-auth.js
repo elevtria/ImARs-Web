@@ -13,7 +13,7 @@ export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const reusableShells = new WeakSet();
 export const isReusablePortalShell = response => reusableShells.has(response);
 const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
-  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"]);
+  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
@@ -364,6 +364,7 @@ export async function protectWebsite(context, now = Date.now()) {
       return new Response(null, { status: 302, headers: { Location: loginPath + "?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
     }
     if (!path.startsWith("/api/") && account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
+    if (path === "/admin-profile") return new Response(null, { status: 302, headers: { Location: "/admin-dashboard", "Cache-Control": "no-store" } });
     requestSessions.set(request, { env, account });
     const response = await context.next();
     const protectedResponse = new Response(response.body, response);

@@ -4,46 +4,11 @@ import { webProtectionEnabled } from "./web-login.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
-import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
-import { 
-  getFirestore, getAdminReport,
-  collection, 
-  query, 
-  where, 
-  getDocsWithLoading as getDocs,
-  doc, 
-  updateDoc, 
-  deleteDoc, 
-  createTeacher,
-  serverTimestamp 
-} from "./firebase-data.js";
+import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// Drawer Navigation Logic
-const menuButton = document.getElementById("adminMenuButton");
-const drawer = document.getElementById("adminNavigation");
-const closeButton = document.getElementById("adminDrawerClose");
-
-function setDrawerOpen(open) {
-  if (!drawer || !menuButton) return;
-  drawer.classList.toggle("open", open);
-  drawer.setAttribute("aria-hidden", String(!open));
-  menuButton.setAttribute("aria-expanded", String(open));
-}
-
-if (menuButton) menuButton.addEventListener("click", () => setDrawerOpen(!drawer.classList.contains("open")));
-if (closeButton) closeButton.addEventListener("click", () => setDrawerOpen(false));
-if (drawer) {
-  drawer.addEventListener("click", (event) => {
-    if (event.target === drawer) setDrawerOpen(false);
-  });
-}
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setDrawerOpen(false);
-});
 
 // UI Elements
 const list = document.getElementById("teacherList");
@@ -156,10 +121,9 @@ if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
   adminReady = false;
   if (!user) { window.location.href = "admin-login.html"; return; }
-  initAdminIdleTimeout(auth);
   const timing = createPagePerformance("Manage Teachers");
   try {
-    await showAdminView({ app, user, page: "reports",
+    await showAdminView({ app, user,
       verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
       load: () => timing.data(getAdminReport),
       render: report => timing.render(() => { teachers = report.teachers; render(); }),

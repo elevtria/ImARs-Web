@@ -1,4 +1,4 @@
-body[data-auth-pending] :is(main, main *, .side-user, .side-user *, .admin-side-user, .admin-side-user *, .modal, .modal *, dialog, dialog *) { visibility: hidden !important; }
+body[data-auth-pending] :is(main, main *, .side-user, .side-user *, .modal, .modal *, dialog, dialog *) { visibility: hidden !important; }
 body[data-auth-pending] :is(main[data-auth-shell], main [data-auth-shell]) { visibility: visible !important; }
 /* This marker is reserved for fixed public labels, never account data. */
 body[data-auth-pending] main [data-public-label] { visibility: visible !important; }
@@ -2021,7 +2021,7 @@ label {
 #drawer .nav-collapse { display:grid; place-items:center; flex:0 0 28px; height:28px; margin-left:auto; padding:0; border:1px solid var(--line); border-radius:7px; background:transparent; color:var(--ink); }
 #drawer .nav-collapse svg { width:16px; height:16px; }
 #drawer .nav-collapse:hover { transform:none; background:var(--mist); }
-#drawer .nav-close { position:absolute; top:20px; right:-44px; width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); }
+#drawer .nav-close { position:absolute; top:23px; right:16px; width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--ink); }
 #drawer .nav-close svg { width:16px; height:16px; }
 #drawer .nav-item[aria-current="page"] { font-weight:600; }
 #drawer.is-compact .drawer-panel { width:82px; }
