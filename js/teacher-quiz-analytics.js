@@ -7,7 +7,7 @@ import { escapeHtml } from "./teacher-view.js";
 const filter = document.getElementById("teacherQuizSection");
 const body = document.getElementById("teacherQuizBody");
 const status = document.getElementById("teacherQuizStatus");
-const retry = document.getElementById("teacherQuizRetry");
+const refresh = document.getElementById("teacherQuizRefresh");
 const auth = getAuth(), db = getFirestore();
 let sections = [], quizzes = [], pageRequest;
 
@@ -28,21 +28,36 @@ function renderQuiz(quiz, section, index, user, signal) {
   details.innerHTML = `<td colspan="5"><div class="activity-record-detail-head"><div><strong>Student quiz results</strong><small>Latest submission per student</small></div></div>
     <div class="activity-record-results-wrap" hidden><table class="performance-table activity-record-results">
     <thead><tr><th scope="col">Student</th><th scope="col">Score or status</th><th scope="col">Submitted</th><th scope="col">Review</th></tr></thead><tbody></tbody></table></div>
-    <p class="activity-record-empty" role="status"></p><button type="button" class="ghost-btn" hidden>Load more</button></td>`;
+    <p class="activity-record-empty">Scores show earned points / total points for this quiz.</p>
+    <p class="activity-record-empty" role="status"></p>
+    <button type="button" class="ghost-btn quiz-page-retry" hidden>Retry</button>
+    <div class="student-detail-navigation" role="group" aria-label="Student quiz result pages">
+      <button type="button" class="ghost-btn quiz-page-previous" disabled>Previous page</button>
+      <button type="button" class="ghost-btn quiz-page-next" disabled>Next page</button>
+    </div></td>`;
   const toggle = row.querySelector("button");
   const results = details.querySelector("tbody"), wrap = details.querySelector(".activity-record-results-wrap");
-  const message = details.querySelector("[role=status]"), more = details.querySelector("button");
-  let cursor = "", loaded = false;
-  async function loadResults() {
-    if (more.disabled) return;
-    more.disabled = true;
+  const message = details.querySelector("[role=status]");
+  const previous = details.querySelector(".quiz-page-previous");
+  const next = details.querySelector(".quiz-page-next");
+  const retry = details.querySelector(".quiz-page-retry");
+  const cursors = [""];
+  let pageIndex = 0, nextCursor = "", loaded = false, loading = false, retryPage;
+  async function loadResults(index = pageIndex, cursor = cursors[index]) {
+    if (loading) return;
+    loading = previous.disabled = next.disabled = true;
+    retry.hidden = true;
     message.textContent = "Loading student results…";
     try {
       const page = await requestQuizReview(user.uid, { action: "section-results", quizId: quiz.id, sectionId: section.id, cursor }, signal);
+      results.replaceChildren();
       for (const student of page.items) {
         const line = results.insertRow();
         const date = student.submittedAtUtc ? new Date(student.submittedAtUtc).toLocaleString() : "—";
-        line.innerHTML = `<th scope="row">${escapeHtml(student.name)}</th><td>${escapeHtml(quizScoreLabel(student))}</td><td>${escapeHtml(date)}</td><td></td>`;
+        const initials = student.name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase();
+        const missing = student.score == null ? " is-empty" : "";
+        line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span>${escapeHtml(student.name)}</th>
+          <td><span class="activity-result-score${missing}">${escapeHtml(quizScoreLabel(student))}</span></td><td>${escapeHtml(date)}</td><td></td>`;
         if (student.status !== "pending-review") continue;
         const review = document.createElement("button");
         review.type = "button";
@@ -54,13 +69,13 @@ function renderQuiz(quiz, section, index, user, signal) {
           onReviewed(grade) {
             if (signal.aborted) return;
             if (grade) {
-              line.cells[1].textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+              const score = line.cells[1].firstElementChild;
+              score.textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+              score.classList.remove("is-empty");
               review.remove();
               toggle.focus();
               message.textContent = "Grade saved.";
             } else {
-              cursor = "";
-              results.replaceChildren();
               void loadResults();
             }
             void loadSummary(user, section, signal);
@@ -69,29 +84,35 @@ function renderQuiz(quiz, section, index, user, signal) {
         line.cells[3].append(review);
       }
       loaded = true;
-      cursor = page.nextCursor;
+      pageIndex = index;
+      cursors[index] = cursor;
+      nextCursor = page.nextCursor;
       wrap.hidden = results.rows.length === 0;
-      more.hidden = !cursor;
-      more.textContent = "Load more";
-      message.textContent = results.rows.length ? "" : cursor ? "Load more to see the rest of the section." : "No active students in this section.";
+      message.textContent = results.rows.length ? `Page ${index + 1}`
+        : nextCursor ? "No active students on this page." : "No more active students in this section.";
     } catch (error) {
       if (signal.aborted) return;
       message.textContent = error.message;
-      more.textContent = "Retry";
-      more.hidden = false;
-    } finally { more.disabled = false; }
+      retryPage = () => loadResults(index, cursor);
+      retry.hidden = false;
+    } finally {
+      loading = false;
+      previous.disabled = pageIndex === 0;
+      next.disabled = !nextCursor;
+    }
   }
   toggle.addEventListener("click", () => {
     details.hidden = !details.hidden;
     toggle.setAttribute("aria-expanded", String(!details.hidden));
     if (!details.hidden && !loaded) void loadResults();
   });
-  more.addEventListener("click", loadResults);
+  previous.addEventListener("click", () => void loadResults(pageIndex - 1));
+  next.addEventListener("click", () => void loadResults(pageIndex + 1, nextCursor));
+  retry.addEventListener("click", () => void retryPage());
   row.dataset.quizId = quiz.id;
 }
 
 async function loadSummary(user, section, signal) {
-  retry.hidden = true;
   status.textContent = "Loading quiz totals…";
   try {
     const summary = await requestQuizReview(user.uid, { action: "section-summary", sectionId: section.id }, signal);
@@ -106,7 +127,6 @@ async function loadSummary(user, section, signal) {
   } catch (error) {
     if (signal.aborted) return;
     status.textContent = error.message;
-    retry.hidden = false;
   }
 }
 
@@ -116,7 +136,6 @@ function renderSection() {
   const { signal } = pageRequest;
   const user = auth.currentUser, section = sections.find(item => item.id === filter.value);
   body.replaceChildren();
-  retry.hidden = true;
   const now = Date.now();
   const available = section ? quizzes.filter(quiz => quizAssignedToSection(quiz, section.id)
     && (quiz.availability === "now" || (quiz.availability === "scheduled" && Date.parse(quiz.availableAt) <= now))) : [];
@@ -128,21 +147,23 @@ function renderSection() {
     return;
   }
   available.forEach((quiz, index) => renderQuiz(quiz, section, index, user, signal));
-  void loadSummary(user, section, signal);
+  return loadSummary(user, section, signal);
 }
 
 let loadGeneration = 0;
+let sectionOwner, selectedSection = "";
 async function loadChoices(user) {
   const generation = ++loadGeneration;
   closeQuizReview();
   pageRequest?.abort();
-  const previousSection = filter.value;
+  selectedSection = sectionOwner === user?.uid ? filter.value || selectedSection : "";
+  sectionOwner = user?.uid;
   filter.replaceChildren(new Option("Select a section", ""));
   filter.disabled = true;
   body.replaceChildren();
   sections = [];
   quizzes = [];
-  retry.hidden = true;
+  refresh.disabled = true;
   status.textContent = "";
   if (user?.role !== "teacher") return;
   status.textContent = "Loading sections and quizzes…";
@@ -162,21 +183,18 @@ async function loadChoices(user) {
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
     if (sections.length) {
       filter.replaceChildren(...sections.map(section => new Option(section.name, section.id)));
-      if (sections.some(section => section.id === previousSection)) filter.value = previousSection;
+      if (sections.some(section => section.id === selectedSection)) filter.value = selectedSection;
       filter.disabled = false;
     }
-    renderSection();
+    await renderSection();
   } catch (error) {
     if (generation !== loadGeneration) return;
     status.textContent = error.message || "Could not load quizzes.";
-    retry.hidden = false;
+  } finally {
+    if (generation === loadGeneration) refresh.disabled = false;
   }
 }
 filter.addEventListener("change", renderSection);
-retry.addEventListener("click", () => {
-  const section = sections.find(item => item.id === filter.value);
-  if (section) void loadSummary(auth.currentUser, section, pageRequest.signal);
-  else void loadChoices(auth.currentUser);
-});
+refresh.addEventListener("click", () => void loadChoices(auth.currentUser));
 onAuthStateChanged(auth, loadChoices);
 window.addEventListener("pagehide", () => { loadGeneration++; pageRequest?.abort(); });
