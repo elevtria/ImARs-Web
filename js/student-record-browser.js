@@ -23,7 +23,7 @@ function showScoreTiles(studentId, stats) {
     const { signal } = scoreRequest;
     scoreKey = key;
     const template = document.createElement("template");
-    template.innerHTML = '<div class="stat"><span>Quiz Score <small>All-time</small></span><b class="c-cyan">…</b></div><div class="stat"><span>Activity Score</span><b class="c-green">…</b></div>';
+    template.innerHTML = '<div class="stat"><span>Quiz Score</span><b class="c-cyan">…</b></div><div class="stat"><span>Activity Score</span><b class="c-green">…</b></div>';
     scoreTiles = Array.from(template.content.children);
     const load = async (tile, request) => {
       const value = tile.querySelector("b");

@@ -1267,7 +1267,6 @@ label[for="activityTermFilter"] .select-wrap { width:120px; }
   margin-bottom: 16px;
 }
 .record .record-score-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.record-score-grid .stat small { display: inline-block; color: var(--muted); }
 
 .record .stat {
   background: rgba(191, 200, 226, 0.45);
