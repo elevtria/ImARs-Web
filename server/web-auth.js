@@ -1,5 +1,5 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
-import { serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
+import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
 import { appStore } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
@@ -62,27 +62,48 @@ export async function signSession(env, account, session, host, teacherSession) {
   return `${value}.${base64(new Uint8Array(signature))}`;
 }
 
+async function resolveAdminProfile(env, adminAccount, store) {
+  const candidates = [...new Set([adminAccount?.id, "ADMIN1", "ADMIN"].filter(Boolean))];
+  for (const candidateId of candidates) {
+    try {
+      const profile = await store?.get?.("users/" + candidateId);
+      if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
+        return { id: candidateId, profile };
+      }
+    } catch {}
+  }
+  if (env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const firestore = new FirestoreAdmin(env);
+    for (const candidateId of candidates) {
+      try {
+        const profile = await firestore.get("users/" + candidateId);
+        if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
+          return { id: candidateId, profile };
+        }
+      } catch {}
+    }
+  }
+  return null;
+}
+
 export async function resolveStaff(env, identifier, accounts = settings(env), store = appStore(env)) {
   const clean = identifier.trim().toLowerCase();
   let initial = accounts.find(item => item.id.toLowerCase() === clean || (item.role === "admin" && item.email.toLowerCase() === clean));
-  if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1")) {
+  if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1" || clean === "admin@imars.edu")) {
     const administrators = accounts.filter(item => item.role === "admin");
     if (administrators.length === 1) initial = administrators[0];
   }
-  if (initial?.role === "admin" && dataEnabled(env) && store && typeof store.get === "function") {
-    try {
-      const profile = (await store.get("users/" + initial.id)) || (initial.id !== "ADMIN1" ? await store.get("users/ADMIN1") : null);
-      if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
-        const liveEmail = String(profile.data.email || profile.data.providedEmail || initial.email || "").trim();
-        return {
-          ...initial,
-          id: profile.id || initial.id,
-          uid: String(profile.data.uid).trim(),
-          email: liveEmail || initial.email
-        };
-      }
-    } catch {
-      // Fall back to WEB_STAFF_ACCOUNTS entry if store read fails
+  if (initial?.role === "admin" && dataEnabled(env)) {
+    const resolved = await resolveAdminProfile(env, initial, store);
+    if (resolved?.profile?.data) {
+      const data = resolved.profile.data;
+      const liveEmail = String(data.email || data.providedEmail || initial.email || "").trim();
+      return {
+        ...initial,
+        id: resolved.id || initial.id,
+        uid: String(data.uid).trim(),
+        email: liveEmail || initial.email
+      };
     }
     return initial;
   }
@@ -137,14 +158,9 @@ export async function webSession(request, env, now = Date.now(), store) {
 }
 
 const identities = new WeakMap();
-// Share the middleware's verified session only inside this exact Request.
-// Roles and active status are still checked from the current staff profile.
 const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
-  // The approved account supplies both IDs. Its live profile and Auth status
-  // can be read independently; neither result grants access on its own.
-  const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
-  // Cache only Auth account status briefly; database role/active checks remain live.
+  let pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
   if (!cache) { cache = new Map(); identities.set(key, cache); }
@@ -155,9 +171,16 @@ export async function staffProfile(account, store, now = Date.now()) {
     if (cache.size >= 1000) cache.delete(cache.keys().next().value);
     cache.set(account.uid, identity);
   }
-  const result = await pendingProfile;
+  let result = await pendingProfile;
+  if (result.error && account.role === "admin" && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    result = await new FirestoreAdmin(store.env).get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  }
   if (result.error) throw result.error;
-  const row = result.row, profile = row?.data;
+  let row = result.row, profile = row?.data;
+  if (account.role === "admin" && (!profile || profile.uid !== account.uid) && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const fbRow = await new FirestoreAdmin(store.env).get("users/" + account.id).catch(() => null);
+    if (fbRow?.data) { row = fbRow; profile = fbRow.data; }
+  }
   if (!profile || profile.uid !== account.uid || String(profile.role || "").toLowerCase() !== account.role ||
       profile.active === false || ["inactive", "disabled"].includes(String(profile.status || "").toLowerCase())) {
     throw Object.assign(new Error("This account no longer has website access."), { status: 403 });
@@ -216,8 +239,6 @@ export async function readJson(request, maximum = 8192) {
 
 async function renewSession(env, checked) {
   if (checked.previous || checked.timing.serverNow < checked.timing.renewAt) return checked;
-  // Rotate only after upstream checks succeed. An outage must not consume a
-  // valid cookie before the browser can receive its replacement.
   const renewed = await stateCall(env, `account:${checked.account.uid}`, "session", { ...checked.credentials, rotate: true });
   if (renewed.status === 401) return null;
   if (!renewed.ok) throw new Error("Login state unavailable");
@@ -268,8 +289,6 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       const account = await resolveStaff(env, identifier, accounts, store);
       let attempt;
       if (!account || account.role !== body.portal) {
-        // Keep unknown IDs and wrong-portal submissions on the same error sequence,
-        // without changing a real account's counter or storing the submitted ID.
         const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`${body.portal}:${identifier}`));
         attempt = await stateCall(env, `invalid-login:${base64(new Uint8Array(digest))}`, "invalid-login", {});
         if (attempt.ok) throw new Error("An invalid login cannot authenticate");
@@ -328,7 +347,6 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     }
     return json({ error: "Not found." }, 404);
   } catch (error) {
-    // Never log or echo passwords, cookies, upstream tokens, or server secrets.
     if (databaseQuotaFailure(error)) return json({ error: "Sign-in is temporarily unavailable because the data service usage limit was reached. Please try again later.", code: "DATABASE_QUOTA_EXCEEDED" }, 503, { "Retry-After": "60" });
     if (![400, 401, 403, 413].includes(error.status)) logAuthFailure("api:" + action, error);
     return [400, 401, 403, 413].includes(error.status) ? json({ error: error.message }, error.status)
@@ -369,9 +387,6 @@ export async function protectWebsite(context, now = Date.now()) {
         for (const [name, value] of Object.entries(await renewalHeaders(request, env, renewed))) protectedResponse.headers.set(name, value);
       } catch (error) { logAuthFailure("portal-renewal", error); }
     }
-    // These HTML files are static shells. The browser hides private content
-    // on page exit and verifies the visit again before revealing a restored view.
-    // Leave API responses and responses carrying a replacement cookie no-store.
     const staticHtml = response.status === 200 && protectedResponse.headers.get("Content-Type")?.includes("text/html");
     if (request.method === "GET" && staticPortalShells.has(path) && (staticHtml || response.status === 304) && !protectedResponse.headers.has("Set-Cookie")) {
       protectedResponse.headers.set("Cache-Control", "private, no-cache");
