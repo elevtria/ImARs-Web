@@ -115,6 +115,27 @@ export class SupabaseAppStore {
     }
   }
 
+  async activityResultsForRoster(studentIds) {
+    if (!studentIds.length || studentIds.length > 25 || !studentIds.every(id => part.test(id))) {
+      throw new Error("Invalid activity roster.");
+    }
+    const collections = studentIds.map(id => "users/" + id + "/activity_results");
+    const fields = ["activityId", "classCode", "uid", "status", "score", "maximum", "completedAtUtc"];
+    const select = this.selection(fields);
+    const results = [];
+    let after;
+    for (;;) {
+      const response = await this.documents("GET", {
+        collection_path: "in.(" + collections.join(",") + ")", select, order: "path.asc", limit: "250",
+        ...(after ? { path: "gt." + after } : {})
+      });
+      const rows = await response.json();
+      results.push(...rows.map(row => ({ studentId: row.path.split("/")[1], data: this.projected(row, fields).data })));
+      if (rows.length < 250) return results;
+      after = rows.at(-1).path;
+    }
+  }
+
   async rawDocuments(paths, fieldPaths) {
     if (!paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     for (const path of paths) validatePath(path, true);

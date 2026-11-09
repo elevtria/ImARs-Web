@@ -68,3 +68,31 @@ test("production web report projects only the selected roster's activity grades 
   assert.equal(app.data.get(path).activityTotalQuestions, 5);
   assert.equal(reads, 1);
 });
+
+test("teacher report reads copied mobile grades without enabling mobile writes", async () => {
+  const app = fixture(), cookie = await app.login();
+  const studentId = "0026271000";
+  const result = { activityId: "food-web", score: 50, maximum: 100, completedAtUtc: "2026-11-01T12:00:00Z" };
+  let reads = 0;
+  app.store.activityResultsForRoster = async ids => {
+    reads++;
+    assert.deepEqual(ids, [studentId]);
+    return [
+      { studentId, data: result },
+      { studentId, data: { ...result, score: 0, completedAtUtc: "2026-11-02T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, status: "in_progress", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, classCode: "B", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, uid: "other-user", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId: "0026271001", data: result }
+    ];
+  };
+  const body = { action: "teacher-report-page", termId: "term_02", sectionId: "A", includeCurriculum: false };
+  const response = await app.call(body, cookie);
+  assert.equal(response.status, 200);
+  const { students } = await response.json();
+  assert.equal(students.length, 1);
+  assert.equal(students[0].lessons[0].id, "lesson_01");
+  assert.deepEqual(students[0].lessons[0].data, { activityScore: 0, activityTotalQuestions: 100, activityTotalPoints: 100 });
+  assert.equal((await app.call({ ...body, heatmapLesson: "lesson_01" }, cookie)).status, 200);
+  assert.equal(reads, 1, "the post-test heatmap does not query activity scores");
+});

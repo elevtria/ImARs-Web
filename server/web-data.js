@@ -3,7 +3,7 @@ import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-stor
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
-import { activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
+import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
@@ -372,7 +372,32 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   return { ...page, counts };
 }
 
-async function reportActivityGrades(env, students, termIds, fetcher) {
+async function reportActivityGrades(env, appData, students, termIds, fetcher) {
+  const grades = new Map();
+  if (appData.activityResultsForRoster) {
+    const roster = new Map(students.map(row => [row.document.id, row]));
+    const groups = [];
+    for (let offset = 0; offset < students.length; offset += 25) {
+      groups.push(students.slice(offset, offset + 25).map(row => row.document.id));
+    }
+    for (const results of await Promise.all(groups.map(ids => appData.activityResultsForRoster(ids)))) {
+      for (const { studentId, data } of results) {
+        const student = roster.get(studentId), activity = activities.get(data.activityId);
+        const completedAt = typeof data.completedAtUtc === "string" ? Date.parse(data.completedAtUtc) : NaN;
+        if (!student || !activity || !termIds.includes(activity.termId) || !Number.isFinite(completedAt) ||
+            (data.status && data.status !== "completed") || (data.classCode && data.classCode !== student.classId) ||
+            (data.uid && data.uid !== student.document.data.uid) ||
+            !Number.isSafeInteger(data.score) || !Number.isSafeInteger(data.maximum) ||
+            data.maximum <= 0 || data.score < 0 || data.score > data.maximum) continue;
+        const key = [student.classId, studentId, activity.termId, activity.lessonId].join("/");
+        if (!grades.has(key) || grades.get(key).completedAt < completedAt) {
+          grades.set(key, { score: data.score, maximum: data.maximum, completedAt });
+        }
+      }
+    }
+  }
+  if (env.MOBILE_API_ENABLED !== "true" || activityStorageDataset(env) !== "production") return grades;
+
   const store = new MobileActivityStore(env, fetcher);
   const bySection = new Map();
   for (const row of students) {
@@ -384,7 +409,6 @@ async function reportActivityGrades(env, students, termIds, fetcher) {
     for (let offset = 0; offset < studentIds.length; offset += 20)
       requests.push([sectionId, studentIds.slice(offset, offset + 20)]);
   }
-  const grades = new Map();
   for (let offset = 0; offset < requests.length; offset += 4) {
     await Promise.all(requests.slice(offset, offset + 4).map(async ([sectionId, studentIds]) => {
       for (const row of await store.gradesForRoster(sectionId, termIds, studentIds)) {
@@ -420,15 +444,18 @@ async function teacherReportPage(scope, body, env, fetcher) {
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
+  const gradeRequest = !heatmap && page.students.length
+    ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher).then(value => ({ value }), error => ({ error }))
+    : null;
   const records = new Map();
   for (let offset = 0; offset < paths.length; offset += 400) {
     const batches = [];
     for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100), heatmap ? { fieldPaths: heatmapFields } : undefined));
     for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
   }
-  const activityGrades = !heatmap && page.students.length && env.MOBILE_API_ENABLED === "true" &&
-    activityStorageDataset(env) === "production"
-    ? await reportActivityGrades(env, page.students, termIds, fetcher) : null;
+  const gradeResult = await gradeRequest;
+  if (gradeResult?.error) throw gradeResult.error;
+  const activityGrades = gradeResult?.value;
   const students = page.students.map(row => {
     const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
