@@ -2,7 +2,7 @@ import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
-import { QUIZ_TYPES, quizAssignmentScope, quizAssignedToSection } from "../js/quiz-limits.js";
+import { QUIZ_TYPES, quizAssignmentScope, quizAssignedToSection, quizReviewPoints } from "../js/quiz-limits.js";
 
 const bytes = value => new TextEncoder().encode(value);
 const b64 = value => btoa(String.fromCharCode(...value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -200,12 +200,13 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (body.action === "open") return respond({ studentId: body.studentId, revision: attempt.updateTime, type: snapshot.type, title: snapshot.title,
       questions: snapshot.questions, answers: a.answers, ...resultFor({ path, data: a }),
       ...(a.status === "reviewed" ? { scores: a.review?.scores, feedback: a.review?.feedback } : {}) });
-    if (!["essay", "identification-explanation", "modified-true-false"].includes(snapshot.type)) throw fail("FORBIDDEN");
-    if (body.revision !== attempt.updateTime || a.status !== "pending-review") throw fail("REVISION_CHANGED", 409, "This submission was already reviewed or changed. Reopen it.");
+    if (body.revision !== attempt.updateTime || !["pending-review", "reviewed", "graded"].includes(a.status)) {
+      throw fail("REVISION_CHANGED", 409, "This submission changed. Reopen it before saving.");
+    }
     if (!Array.isArray(body.scores) || body.scores.length !== snapshot.questions.length || new Set(body.scores.map(item => item?.questionId)).size !== body.scores.length || typeof body.feedback !== "string" || body.feedback.length > 4000) throw fail("INVALID_REVIEW", 400);
     let score = 0, maximum = 0;
     const scores = snapshot.questions.map(question => {
-      const item = body.scores.find(item => item.questionId === question.id), points = question.points || 1;
+      const item = body.scores.find(item => item.questionId === question.id), points = quizReviewPoints(snapshot.type, question);
       if (!only(item, ["questionId", "score"]) || !Number.isInteger(item.score) || item.score < 0 || item.score > points) throw fail("INVALID_REVIEW", 400);
       score += item.score; maximum += points; return { questionId: question.id, score: item.score };
     });

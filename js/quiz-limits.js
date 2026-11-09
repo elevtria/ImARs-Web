@@ -11,6 +11,7 @@ export const QUIZ_TYPES = Object.freeze({
 });
 export const questionTypeLabel = type => Object.hasOwn(QUIZ_TYPES, type) ? QUIZ_TYPES[type] : "Unknown question type";
 export const writtenQuestion = type => ["essay", "identification-explanation"].includes(type);
+export const quizReviewPoints = (type, question) => ["multiple-choice", "true-false"].includes(type) ? 1 : question.points || 1;
 
 export function quizAssignmentScope(quiz) {
   const scope = quiz?.assignmentScope ?? "section";

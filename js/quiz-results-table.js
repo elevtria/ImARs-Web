@@ -10,7 +10,8 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
   const element = document.createElement("div");
   element.innerHTML = `<div class="activity-record-detail-head"><div><strong>Student quiz results</strong><small>Latest submission per student</small></div></div>
     <div class="activity-record-results-wrap" hidden><table class="performance-table activity-record-results teacher-quiz-results">
-    <thead><tr><th scope="col">Student</th>${compact ? '<th scope="col">Status</th>' : '<th scope="col">Score or status</th><th scope="col">Submitted</th><th scope="col">Review</th>'}</tr></thead><tbody></tbody></table></div>
+    <thead><tr><th scope="col">Student</th>${compact ? "" : '<th scope="col">Score</th>'}<th scope="col">Status</th>
+    ${compact ? "" : '<th scope="col">Submitted</th><th scope="col">Review</th>'}</tr></thead><tbody></tbody></table></div>
     ${compact ? "" : '<p class="activity-record-empty">Scores show earned points / total points for this quiz.</p>'}
     <p class="activity-record-empty" role="status"></p>
     <div class="student-detail-navigation" role="group" aria-label="Student quiz result pages">
@@ -34,10 +35,12 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         const line = results.insertRow();
         const date = student.submittedAtUtc ? new Date(student.submittedAtUtc).toLocaleString() : "—";
         const initials = student.name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase();
-        const badge = student.status === "pending-review" ? "is-pending" : student.score == null ? "is-empty" : "is-completed";
-        const label = compact && badge === "is-completed" ? "Completed" : quizScoreLabel(student);
+        const completed = student.status === "graded" || student.status === "reviewed";
+        const badge = completed ? "is-completed" : student.status === "pending-review" ? "is-pending" : "is-empty";
+        const label = completed ? "Completed" : quizScoreLabel(student);
         line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span>${escapeHtml(student.name)}</span></th>
-          <td><span class="activity-result-score ${badge}">${escapeHtml(label)}</span></td>
+          ${compact ? "" : `<td class="quiz-result-points">${escapeHtml(completed ? quizScoreLabel(student) : "—")}</td>`}
+          <td><span class="activity-result-score quiz-result-status ${badge}">${escapeHtml(label)}</span></td>
           ${compact ? "" : `<td>${escapeHtml(date)}</td><td></td>`}`;
         if (!student.attemptId) continue;
         const review = document.createElement("button");
@@ -47,9 +50,11 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         review.setAttribute("aria-label", `Review answers for ${student.name}`);
         review.addEventListener("click", () => reviewAnswers(student, review, grade => {
           if (signal.aborted || !line.isConnected) return;
-          const score = line.cells[1].firstElementChild;
-          score.textContent = compact ? "Completed" : quizScoreLabel({ ...grade, status: "reviewed" });
-          score.classList.replace("is-pending", "is-completed");
+          const status = line.querySelector(".quiz-result-status");
+          status.textContent = "Completed";
+          status.classList.remove("is-pending", "is-empty");
+          status.classList.add("is-completed");
+          if (!compact) line.querySelector(".quiz-result-points").textContent = quizScoreLabel({ ...grade, status: "reviewed" });
           review.focus();
           message.textContent = "Grade saved.";
         }));

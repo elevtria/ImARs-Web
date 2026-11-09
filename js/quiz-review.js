@@ -1,5 +1,5 @@
 import { setLoadingState } from "./loading.js";
-import { quizAssignedToSection } from "./quiz-limits.js";
+import { quizAssignedToSection, quizReviewPoints } from "./quiz-limits.js";
 import { createQuizResultsTable, quizScoreLabel } from "./quiz-results-table.js";
 
 let dialog, controller;
@@ -46,18 +46,20 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
   async function api(body) {
     return requestQuizReview(uid, { ...body, quizId: resultsQuiz.id, sectionId: section.value }, signal);
   }
-  async function show(row, button, updateScore) {
+  async function show(row, button, updateScore, previousForm) {
     if (busy) return; busy = true; section.disabled = true;
     if (button) button.disabled = true;
     setLoadingState(status, true, "Loading student answers");
     try {
       const attempt = await api({ action: "open", studentId: row.studentId, attemptId: row.attemptId });
-      const grading = attempt.status === "pending-review";
+      const grading = Boolean(previousForm) || attempt.status === "pending-review";
       const form = element("form", undefined, "quiz-review-form"), scores = [];
       form.append(element("h3", row.name || "Student " + row.studentId));
       const awarded = new Map(attempt.scores?.map(item => [item.questionId, item.score]));
       for (const [index, q] of attempt.questions.entries()) {
         const answer = attempt.answers.find(a => a.questionId === q.id), field = element("fieldset");
+        const points = quizReviewPoints(attempt.type, q);
+        const score = attempt.status === "graded" ? Number(answer.optionIndex === q.correctIndex) : awarded.get(q.id);
         field.append(element("legend", (index + 1) + ". " + q.text));
         const written = answer.optionIndex >= 0 ? q.options[answer.optionIndex] : answer.value;
         field.append(element("p", "Student answer: " + written));
@@ -66,12 +68,11 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
         const guide = element("details"), label = element("summary", "Teacher answer guide"); guide.append(label, element("p", q.answer || (q.correctIndex >= 0 ? q.options[q.correctIndex] : "")));
         if (q.rubric || q.explanation || q.correction) guide.append(element("p", q.rubric || q.explanation || q.correction)); field.append(guide);
         if (grading) {
-          const scoreLabel = element("label", "Score (0–" + (q.points || 1) + ") "), input = element("input"); input.type = "number"; input.min = "0"; input.max = String(q.points || 1); input.step = "1"; input.required = true;
+          const scoreLabel = element("label", `Score (0–${points}) `), input = element("input"); input.type = "number"; input.min = "0"; input.max = String(points); input.step = "1"; input.required = true;
+          if (score != null) input.value = String(score);
           scoreLabel.append(input); field.append(scoreLabel); scores.push({ questionId: q.id, input });
-        } else if (attempt.status === "graded") {
-          field.append(element("p", "Score: " + (answer.optionIndex === q.correctIndex ? "1/1" : "0/1")));
-        } else if (awarded.has(q.id)) {
-          field.append(element("p", `Score: ${awarded.get(q.id)}/${q.points || 1}`));
+        } else if (score != null) {
+          field.append(element("p", `Score: ${score}/${points}`));
         }
         form.append(field);
       }
@@ -87,13 +88,16 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       });
       if (!grading) {
         if (attempt.feedback) form.append(element("p", "Feedback: " + attempt.feedback));
-        form.append(cancel);
+        const edit = element("button", "Edit review", "primary-btn"); edit.type = "button";
+        edit.addEventListener("click", () => void show(row, button, updateScore, form));
+        form.append(edit, cancel);
         content.hidden = filters.hidden = true;
         dialog.append(form);
         status.textContent = "Quiz score: " + quizScoreLabel(attempt);
         return;
       }
       const feedbackLabel = element("label", "Feedback "), feedback = element("textarea"); feedback.maxLength = 4000; feedbackLabel.append(feedback); form.append(feedbackLabel);
+      feedback.value = attempt.feedback || "";
       const save = element("button", "Save review", "primary-btn"); save.type = "submit";
       form.append(save, cancel);
       form.addEventListener("submit", async event => {
@@ -114,7 +118,11 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
       });
-      content.hidden = filters.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
+      content.hidden = filters.hidden = true;
+      if (previousForm) previousForm.replaceWith(form);
+      else dialog.append(form);
+      status.textContent = "Review each answer and save the scores.";
+      if (previousForm) scores[0]?.input.focus();
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
     finally { busy = false; section.disabled = false; if (button) button.disabled = false; setLoadingState(status, false); }
   }
