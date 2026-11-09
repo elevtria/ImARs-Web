@@ -16,25 +16,21 @@
   <link rel="stylesheet" href="css/floating-cubes.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="admin-portal" data-auth-pending>
+<body class="admin-portal admin-overview" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
-  <header class="admin-topbar topbar">
-    <div class="admin-topbar-inner">
-      <div class="admin-topbar-left">
-        <button class="menu-button" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <span class="current-page">Overview</span>
+        <span class="page-title">Overview</span>
       </div>
-      <div class="admin-topbar-right">
-        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
-          <span class="notification-dot" aria-hidden="true"></span>
-        </button>
+      <div class="topbar-right">
         <div class="school-year-control">
           <label for="schoolYearSelect">School year for all teachers</label>
-          <select class="admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <select class="sy-chip admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
           <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
         </div>
       </div>
@@ -45,50 +41,58 @@
     <section class="page-intro hero" data-auth-shell>
       <div>
         <h1 data-auth-shell>Admin Overview</h1>
-        <p>School-wide performance · AR Learning Platform · <span data-school-year>SY 2026–27</span></p>
+        <p>School-wide performance across all three terms</p>
       </div>
     </section>
 
-<section class="metric-grid" aria-label="School summary" data-loading-path="users" data-loading-label="Loading school summary…" data-auth-shell data-await-content="admin-report">
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label purple">Total Teachers</span>
-        <strong class="metric-value" id="totalTeachersVal">0</strong>
-        <span class="metric-note" id="totalTeachersNote">0 registered</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label cyan">Total Students</span>
-        <strong class="metric-value" id="totalStudentsVal">0</strong>
-        <span class="metric-note" id="totalStudentsNote">Across all sections</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label green">School Avg Post-Test</span>
-        <strong class="metric-value" id="schoolAvgPostVal">0%</strong>
-        <span class="metric-note" id="schoolAvgPreNote">Up from 0% pre-test</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label pink">Total AR Hours</span>
-        <strong class="metric-value" id="totalArHoursVal">0h</strong>
-        <span class="metric-note">All teachers combined</span>
-      </article>
+    <section class="stats" aria-label="School summary" data-auth-shell data-await-content="admin-report">
+      <a class="card stat stat-link" href="manage-teachers.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
+        <div class="label" data-public-label>Teachers</div>
+        <div class="value" id="totalTeachersVal">—</div>
+        <div class="hint">Registered teachers</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span>
+        <div class="label" data-public-label>Students</div>
+        <div class="value" id="totalStudentsVal">—</div>
+        <div class="hint">Active across all sections</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
+        <div class="label" data-public-label>Avg Post-Test</div>
+        <div class="value" id="schoolAvgPostVal">—</div>
+        <div class="hint" id="schoolAvgPreNote">Completed tests</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></span>
+        <div class="label" data-public-label>Total AR Time</div>
+        <div class="value" id="totalArHoursVal">—</div>
+        <div class="hint">Across all sections</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
     </section>
 
     <section class="panel learning-panel" aria-labelledby="learningTitle" data-auth-shell data-await-content="admin-report">
       <h2 id="learningTitle" data-public-label>School-Wide Learning Gain</h2>
       <div class="learning-content">
         <div class="learning-ring" id="learningRing" role="img" aria-label="School average post-test score">
-          <div class="ring-center"><strong id="ringPostScore">0%</strong><span>school avg</span></div>
+          <div class="ring-center"><strong id="ringPostScore">—</strong><span>school avg</span></div>
         </div>
         <div class="learning-metrics">
           <div class="learning-row">
-            <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan" id="meterPreVal">0%</strong></div>
+            <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan" id="meterPreVal">—</strong></div>
             <div class="meter"><i class="pre-meter" id="meterPreBar" style="width:0%"></i></div>
           </div>
           <div class="learning-row">
-            <div class="learning-meta"><span>School Post-Test Average</span><strong class="green" id="meterPostVal">0%</strong></div>
+            <div class="learning-meta"><span>School Post-Test Average</span><strong class="green" id="meterPostVal">—</strong></div>
             <div class="meter"><i class="post-meter" id="meterPostBar" style="width:0%"></i></div>
           </div>
           <div class="learning-row">
-            <div class="learning-meta"><span>Average Improvement</span><strong class="purple" id="meterGainVal">0%</strong></div>
+            <div class="learning-meta"><span>Change in Average</span><strong class="purple" id="meterGainVal">—</strong></div>
             <div class="meter"><i class="gain-meter" id="meterGainBar" style="width:0%"></i></div>
           </div>
         </div>
@@ -98,7 +102,7 @@
     <section class="panel teacher-panel" aria-labelledby="teacherTitle" data-auth-shell data-await-content="admin-report">
       <div class="panel-heading">
         <h2 id="teacherTitle" data-public-label>Teacher Performance Snapshot</h2>
-        <span class="teacher-count" id="tableTeacherCount">0 teachers</span>
+        <span class="teacher-count" id="tableTeacherCount"></span>
       </div>
       <div class="table-scroll">
         <table>
@@ -108,7 +112,7 @@
               <th scope="col">Students</th>
               <th scope="col">Avg Pre</th>
               <th scope="col">Avg Post</th>
-              <th scope="col">AR Hours</th>
+              <th scope="col">AR Time</th>
               <th scope="col">Gain</th>
             </tr>
           </thead>

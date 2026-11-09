@@ -1,4 +1,4 @@
-import { showAdminView } from "./admin-view.js";
+import { formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { webProtectionEnabled } from "./web-login.js";
 import { initializeApp } from "./firebase-auth.js";
@@ -83,8 +83,8 @@ function render() {
         </div>
         <div class="teacher-stats" aria-label="${escapeHtml(teacher.name)} performance">
           <div class="teacher-stat"><small>Students</small><strong>${teacher.students}</strong></div>
-          <div class="teacher-stat"><small>Pre-Test</small><strong>${teacher.pre}%</strong></div>
-          <div class="teacher-stat"><small>Post-Test</small><strong>${teacher.post}%</strong></div>
+          <div class="teacher-stat"><small>Pre-Test</small><strong>${formatAdminPercent(teacher.pre)}</strong></div>
+          <div class="teacher-stat"><small>Post-Test</small><strong>${formatAdminPercent(teacher.post)}</strong></div>
           <div class="teacher-stat"><small>AR hrs</small><strong>${teacher.hours}</strong></div>
           <div class="teacher-actions">
             ${webLocksEnabled ? `<button class="record-action activate" type="button" ${adminReady ? "" : "disabled"} data-unlock-web-id="${escapeHtml(teacher.schoolId || teacher.id)}" aria-label="Unlock web login for ${escapeHtml(teacher.name)}" title="Unlock web login"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 8 0m-5 8v2"/></svg></button>` : ""}
@@ -101,11 +101,11 @@ function render() {
       </div>
       <div class="teacher-progress">
         <div class="teacher-progress-item">
-          <div class="progress-label"><span>Avg Pre-Test</span><strong>${teacher.pre}%</strong></div>
+          <div class="progress-label"><span>Avg Pre-Test</span><strong>${formatAdminPercent(teacher.pre)}</strong></div>
           <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.pre))}%"></i></div>
         </div>
         <div class="teacher-progress-item post">
-          <div class="progress-label"><span>Avg Post-Test</span><strong>${teacher.post}%</strong></div>
+          <div class="progress-label"><span>Avg Post-Test</span><strong>${formatAdminPercent(teacher.post)}</strong></div>
           <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.post))}%"></i></div>
         </div>
       </div>
@@ -235,9 +235,9 @@ if (form) {
         joined: "Just now",
         sections,
         students: 0,
-        pre: 0,
-        post: 0,
-        hours: "0m",
+        pre: null,
+        post: null,
+        hours: "0 min",
         active: true
       });
 

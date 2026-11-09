@@ -1,11 +1,23 @@
-const lessonIds = ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
-const teacherFields = ["schoolId", "fullName", "name", "displayName", "section", "sections", "subject", "providedEmail", "email", "joined", "createdAt", "active", "status"];
-const studentFields = ["teacherId", "adviserId", "teacher", "section", "gradeSection", "sectionName", "className"];
-const resultFields = ["isPreTestCompleted", "preTestTotalQuestions", "preTestScore", "isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "arTimeMinutes"];
+import { assessmentPoints, lessonPaths } from "./dashboard-summary.js";
 
-// The three admin reports use the same Term 1 results. Keep their existing
-// averages, name preferences, section fallbacks, and teacher attribution.
-export function summarizeAdminReports(teacherDocs, students) {
+const teacherFields = ["schoolId", "fullName", "name", "displayName", "section", "sections", "subject", "providedEmail", "email", "joined", "createdAt", "active", "status"];
+const studentFields = ["teacherId", "adviserId", "teacher", "classCode", "section", "gradeSection", "sectionName", "className", "active", "status"];
+const resultFields = ["isPreTestCompleted", "preTestTotalQuestions", "preTestScore", "isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "arTimeMinutes", "arNavigationTimeMinutes"];
+
+function averages({ prePctSum, preCount, postPctSum, postCount }) {
+  const pre = preCount ? Math.round(prePctSum / preCount) : null;
+  const post = postCount ? Math.round(postPctSum / postCount) : null;
+  return { pre, post, gain: pre === null || post === null ? null : post - pre };
+}
+
+function duration(minutes) {
+  const rounded = Math.round(minutes);
+  const hours = Math.floor(rounded / 60), rest = rounded % 60;
+  return hours ? (rest ? `${hours} h ${rest} min` : `${hours} h`) : `${rest} min`;
+}
+
+export function summarizeAdminReports(teacherDocs, students, classes = []) {
+  const sectionsById = new Map(classes.map(row => [row.id, row.data]));
   const teachers = new Map(teacherDocs.map(({ id, data }) => {
     let joined = data.joined || "Recently";
     if (data.createdAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.createdAt.value))) {
@@ -26,69 +38,66 @@ export function summarizeAdminReports(teacherDocs, students) {
   const sections = new Map();
   let prePctSum = 0, preCount = 0, postPctSum = 0, postCount = 0, arMinutes = 0;
   for (const { data, lessons } of students) {
-    const assigned = data.teacherId || data.adviserId || data.teacher;
-    const teacher = teachers.get(assigned) || teachers.values().next().value;
+    const classData = sectionsById.get(data.classCode);
+    const assigned = classData?.teacherId || data.teacherId || data.adviserId || data.teacher;
+    const teacher = teachers.get(assigned);
     if (teacher) teacher.students++;
-    let sectionName = data.section || data.gradeSection || data.sectionName || data.className;
+    let sectionName = classData?.SectionName || classData?.sectionName || data.section || data.gradeSection || data.sectionName || data.className;
     if (!sectionName && teacher?.analyticsSections !== "General Science" && teacher?.analyticsSections) {
       sectionName = teacher.analyticsSections.split(",")[0].trim();
     }
-    sectionName ||= "Grade 6 – Section A";
+    sectionName ||= "Unassigned";
     if (!sections.has(sectionName)) sections.set(sectionName, { name: sectionName, students: 0, prePctSum: 0, preCount: 0, postPctSum: 0, postCount: 0 });
     const section = sections.get(sectionName);
     section.students++;
     for (const result of lessons) {
-      if (result.isPreTestCompleted && result.preTestTotalQuestions > 0) {
-        const percentage = result.preTestScore / result.preTestTotalQuestions * 100;
-        prePctSum += percentage; preCount++;
-        section.prePctSum += percentage; section.preCount++;
-        if (teacher) { teacher.prePctSum += percentage; teacher.preCount++; }
+      const pre = assessmentPoints(result, "pre", 100);
+      const post = assessmentPoints(result, "post", 100);
+      if (pre !== null) {
+        prePctSum += pre; preCount++;
+        section.prePctSum += pre; section.preCount++;
+        if (teacher) { teacher.prePctSum += pre; teacher.preCount++; }
       }
-      if (result.isPostTestCompleted && result.postTestTotalQuestions > 0) {
-        const score = result.postTestScore !== undefined ? result.postTestScore : (result.postTestHeatmap ? result.postTestHeatmap.filter(Boolean).length : 0);
-        const percentage = score / result.postTestTotalQuestions * 100;
-        postPctSum += percentage; postCount++;
-        section.postPctSum += percentage; section.postCount++;
-        if (teacher) { teacher.postPctSum += percentage; teacher.postCount++; }
+      if (post !== null) {
+        postPctSum += post; postCount++;
+        section.postPctSum += post; section.postCount++;
+        if (teacher) { teacher.postPctSum += post; teacher.postCount++; }
       }
-      if (result.arTimeMinutes) {
-        arMinutes += result.arTimeMinutes;
-        if (teacher) teacher.arMinutes += result.arTimeMinutes;
-      }
+      const minutes = [result.arTimeMinutes, result.arNavigationTimeMinutes].find(value => Number.isFinite(value) && value > 0) || 0;
+      arMinutes += minutes;
+      if (teacher) teacher.arMinutes += minutes;
     }
   }
-  const pre = preCount ? Math.round(prePctSum / preCount) : 0;
-  const post = postCount ? Math.round(postPctSum / postCount) : 0;
   return {
-    totalStudents: students.length, pre, post, gain: Math.max(0, post - pre),
-    hours: arMinutes >= 60 ? `${Math.round(arMinutes / 60)}h` : `${arMinutes}m`,
-    teachers: [...teachers.values()].map(teacher => ({ ...teacher,
-      pre: teacher.preCount ? Math.round(teacher.prePctSum / teacher.preCount) : 0,
-      post: teacher.postCount ? Math.round(teacher.postPctSum / teacher.postCount) : 0,
-      hours: teacher.arMinutes >= 60 ? `${Math.round(teacher.arMinutes / 60)}h` : `${teacher.arMinutes}m`
-    })),
-    sections: [...sections.values()]
+    totalStudents: students.length, ...averages({ prePctSum, preCount, postPctSum, postCount }), hours: duration(arMinutes),
+    teachers: [...teachers.values()].map(teacher => ({ ...teacher, ...averages(teacher), hours: duration(teacher.arMinutes) })),
+    sections: [...sections.values()].map(section => ({ ...section, ...averages(section) }))
   };
 }
 
 export async function loadAdminReports(store) {
   const roster = (role, fieldPaths) => store.query("users", { filters: [{ field: "role", op: "==", value: role }], fieldPaths });
-  const [teachers, students] = await Promise.all([roster("teacher", teacherFields), roster("student", studentFields)]);
-  const results = [];
-  for (let offset = 0; offset < students.length; offset += 100) {
-    const groups = [];
-    for (let start = offset; start < Math.min(offset + 100, students.length); start += 25) {
-      groups.push(students.slice(start, start + 25));
+  const [teachers, rosterRows, classes, rows] = await Promise.all([
+    roster("teacher", teacherFields), roster("student", studentFields),
+    store.query("classes", { fieldPaths: ["SectionName", "sectionName", "teacherId"] }),
+    store.adminLessonResults?.(resultFields)
+  ]);
+  const students = new Map(rosterRows.filter(({ data }) => data.active !== false &&
+    !["inactive", "disabled", "deleted", "archived"].includes(String(data.status || "").toLowerCase()))
+    .map(({ id, data }) => [id, { data, lessons: [] }]));
+  if (rows) {
+    for (const row of rows) students.get(row.path.split("/")[1])?.lessons.push(row.data);
+  } else {
+    const paths = [...students.keys()].flatMap(lessonPaths);
+    for (let offset = 0; offset < paths.length; offset += 400) {
+      const batches = [];
+      for (let start = offset; start < Math.min(offset + 400, paths.length); start += 100) {
+        batches.push(store.getAll(paths.slice(start, start + 100), { fieldPaths: resultFields }));
+      }
+      for (const batch of await Promise.all(batches)) {
+        for (const [path, row] of batch) if (row) students.get(path.split("/")[1]).lessons.push(row.data);
+      }
     }
-    const batches = await Promise.all(groups.map(async group => {
-      const paths = group.map(student => lessonIds.map(id => `users/${student.id}/test_results/term_01/lessons/${id}`));
-      const records = await store.getAll(paths.flat(), { fieldPaths: resultFields });
-      return group.map((student, index) => ({
-        data: student.data,
-        lessons: paths[index].map(path => records.get(path)?.data).filter(Boolean)
-      }));
-    }));
-    for (const batch of batches) results.push(...batch);
   }
-  return summarizeAdminReports(teachers.map(row => ({ id: row.id, data: row.wire || row.data })), results);
+  return summarizeAdminReports(teachers.map(row => ({ id: row.id, data: row.wire || row.data })), [...students.values()], classes);
 }

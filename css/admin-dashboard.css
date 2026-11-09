@@ -22,52 +22,6 @@ body { min-height: 100vh; margin: 0; color: var(--admin-ink); background: var(--
 button, a { font: inherit; }
 button { cursor: pointer; }
 
-.admin-topbar {
-  position: sticky;
-  z-index: 20;
-  top: 0;
-  border-bottom: 1px solid rgba(164, 184, 217, .45);
-  background: rgba(226, 227, 231, .78);
-  backdrop-filter: blur(16px);
-}
-.admin-topbar-inner {
-  display: flex;
-  max-width: 1180px;
-  height: 72px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin: 0 auto;
-  padding: 0 28px;
-}
-.admin-topbar-left { display: flex; align-items: center; gap: 14px; }
-.menu-button {
-  display: grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  padding: 0;
-  color: #4d6278;
-  border: none;
-  border-radius: 12px;
-  background: transparent;
-}
-.menu-button:hover { background: rgba(191, 200, 226, .55); }
-.menu-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
-.current-page { color: #5b6e84; font-size: 17px; font-weight: 600; }
-.admin-topbar-right { display: flex; align-items: center; gap: 14px; }
-.admin-notification { position: relative; }
-.admin-notification .notification-dot { position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border: 2px solid #fff; border-radius: 50%; background: #feb705; }
-.admin-year {
-  margin-left: auto;
-  padding: 8px 14px;
-  border-radius: 999px;
-  color: #3f5c78;
-  background: #bfc8e2;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
 .school-year-control { position: relative; }
 .school-year-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 select.admin-year { min-height: 38px; padding-right: 10px; border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -78,27 +32,9 @@ select.admin-year:disabled { opacity: .7; cursor: wait; }
 
 .dashboard-content { width: min(1180px, 100%); margin: 0 auto; padding: 34px 22px 68px; }
 .page-intro { margin: 0 0 22px; }
-.page-intro h1 { margin: 0; font-size: clamp(25px, 2.4vw, 32px); font-weight: 700; letter-spacing: -.035em; }
-.page-intro p { margin: 5px 0 0; color: #647a99; font-size: 14px; }
 
-.metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.metric-card, .panel {
-  border: 1px solid var(--admin-line);
-  border-radius: 17px;
-  background: var(--admin-card);
-  box-shadow: 0 1px 2px rgba(21, 43, 75, .06), 0 7px 18px rgba(21, 43, 75, .025);
-}
-.metric-card { min-height: 122px; padding: 18px 20px 16px; }
-.metric-label { display: block; margin-bottom: 5px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.purple { color: var(--admin-purple); }
-.cyan { color: var(--admin-cyan); }
-.green { color: var(--admin-green); }
-.pink { color: var(--admin-pink); }
-.metric-value { display: block; font-size: 30px; line-height: 1.15; font-weight: 700; letter-spacing: -.045em; }
-.metric-note { display: block; margin-top: 5px; color: var(--admin-muted); font-size: 12px; }
-
-.panel { margin-top: 14px; padding: 20px 22px 21px; }
-.panel h2 { margin: 0; font-size: 17px; line-height: 1.4; font-weight: 700; }
+.panel { margin-top: 14px; padding: 20px 22px 21px; border: 1px solid var(--admin-line); border-radius: 17px; background: var(--admin-card); }
+.panel h2 { margin: 0; padding-left: 10px; border-left: 4px solid var(--steel); font-size: 17px; line-height: 1.4; font-weight: 700; }
 .learning-content { display: flex; min-height: 310px; align-items: center; justify-content: center; gap: clamp(38px, 12vw, 130px); padding: 20px 10px 5px; }
 .learning-ring {
   display: grid;
@@ -107,7 +43,7 @@ select.admin-year:disabled { opacity: .7; cursor: wait; }
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  background: conic-gradient(var(--admin-purple) 0 85%, #e4eaf3 85% 100%);
+  background: var(--chart-track, #e2e8f0);
   transform: rotate(0deg);
 }
 .ring-center { display: flex; width: 110px; height: 110px; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #fff; }
@@ -131,7 +67,7 @@ th { padding: 11px 10px; color: #8796ad; font-size: 11px; font-weight: 600; }
 th:first-child, td:first-child { width: 48%; text-align: left; }
 td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-size: 13px; }
 .teacher-cell { display: flex; min-width: 310px; align-items: center; gap: 11px; }
-.teacher-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: var(--admin-purple); font-size: 11px; font-weight: 700; }
+.teacher-avatar { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #172b49; background: var(--ice); font-size: 11px; font-weight: 700; }
 .teacher-cell strong, .teacher-cell small { display: block; }
 .teacher-cell strong { color: var(--admin-ink); font-size: 13px; font-weight: 600; }
 .teacher-cell small { margin-top: 3px; color: var(--admin-muted); font-size: 11px; }
@@ -141,13 +77,7 @@ td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-siz
 
 
 @media (max-width: 640px) {
-  .admin-topbar-inner { height: 64px; padding: 0 14px; }
   .dashboard-content { padding: 27px 14px 54px; }
-  .metric-grid { gap: 10px; }
-  .metric-card { min-height: 106px; padding: 14px 13px; }
-  .metric-label { font-size: 10px; letter-spacing: .06em; }
-  .metric-value { font-size: 25px; }
-  .metric-note { font-size: 11px; }
   .panel { padding: 17px 14px; }
   .learning-content { min-height: 0; flex-direction: column; gap: 25px; padding: 24px 3px 10px; }
   .learning-ring { width: 132px; height: 132px; }

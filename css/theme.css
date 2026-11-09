@@ -58,7 +58,7 @@
     .manual-sheet, .manual-step-card, .manual-tool-card, .quiz-generation-card) {
     background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); color: var(--ink);
   }
-  [data-theme="dark"] body :is(.hero, .intro, .teacher-dashboard .stats .stat-link) {
+  [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {
     background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
   }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,

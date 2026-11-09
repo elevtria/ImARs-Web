@@ -14,17 +14,18 @@ test("admin summaries preserve score rounding, heatmap fallback, attribution, se
     isPostTestCompleted: true, postTestHeatmap: [true, true, false], postTestTotalQuestions: 3, arTimeMinutes: 40 };
   const result = summarizeAdminReports(teachers, [
     { data: { teacherId: "T2", section: "C" }, lessons: [lesson] },
-    { data: {}, lessons: [lesson, { ...lesson, preTestScore: 2, postTestScore: 3, arTimeMinutes: 5 }] },
+    { data: { classCode: "A" }, lessons: [lesson, { ...lesson, preTestScore: 2, postTestScore: 3, arTimeMinutes: 5.2 }] },
     { data: { adviserId: "T1", gradeSection: "B" }, lessons: [{ ...lesson, isPreTestCompleted: false, isPostTestCompleted: false, arTimeMinutes: 0 }] }
-  ]);
-  assert.equal(result.totalStudents, 3); assert.equal(result.pre, 44); assert.equal(result.post, 78); assert.equal(result.gain, 34); assert.equal(result.hours, "1h");
+  ], [{ id: "A", data: { SectionName: "A", teacherId: "T1" } }]);
+  assert.equal(result.totalStudents, 3); assert.equal(result.pre, 44); assert.equal(result.post, 78); assert.equal(result.gain, 34); assert.equal(result.hours, "1 h 25 min");
   assert.equal(result.teachers[0].name, "First Teacher"); assert.equal(result.teachers[0].analyticsName, "Teacher One");
-  assert.equal(result.teachers[0].students, 2); assert.equal(result.teachers[0].pre, 50); assert.equal(result.teachers[0].post, 83); assert.equal(result.teachers[0].hours, "45m");
+  assert.equal(result.teachers[0].students, 2); assert.equal(result.teachers[0].pre, 50); assert.equal(result.teachers[0].post, 83); assert.equal(result.teachers[0].hours, "45 min");
   assert.equal(result.teachers[1].active, false); assert.equal(result.teachers[1].students, 1);
   assert.deepEqual(Array.from(result.sections, section => section.name), ["C", "A", "B"]);
   assert.equal(JSON.stringify(result).includes("never-cache"), false);
   const empty = summarizeAdminReports([], []);
-  assert.equal(empty.pre, 0); assert.equal(empty.post, 0); assert.equal(empty.hours, "0m");
+  assert.equal(empty.pre, null); assert.equal(empty.post, null); assert.equal(empty.gain, null); assert.equal(empty.hours, "0 min");
+  assert.equal(result.sections.find(section => section.name === "B").gain, null);
 });
 
 function storage() {
@@ -76,7 +77,7 @@ test("an identity without the admin role cannot display or fetch a saved admin r
     render: () => assert.fail("denied users must not see saved admin reports") });
   assert.equal(app.signouts, 1);
   assert.equal(app.context.window.location.href, "admin-login.html");
-  assert.equal(app.cache.get("admin-a", "admin:reports"), null);
+  assert.equal(app.cache.get("admin-a", "admin:reports-v2"), null);
   assert.equal(app.main.cleared, true);
 });
 

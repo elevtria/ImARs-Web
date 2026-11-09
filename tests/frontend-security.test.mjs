@@ -12,6 +12,7 @@ import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailabilit
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
 const escapeHtml = vm.runInNewContext(source("teacher-view.js") + "\nescapeHtml;");
+const adminFormatting = vm.runInNewContext(source("admin-view.js") + "\n({ formatAdminPercent, formatAdminGain });");
 const attack = '<img src=x onerror="alert(1)"> & \' " <svg/onload=alert(2)>';
 const record = (id, data) => ({ id, exists: () => true, data: () => data });
 const snapshot = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback) });
@@ -42,7 +43,7 @@ function page(file, report, resolveReport) {
   let authChanged, requested, controllerIndex = 0;
   const requests = [], controllers = [], revealed = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,

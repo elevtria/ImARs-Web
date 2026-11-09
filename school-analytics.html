@@ -20,22 +20,18 @@
 <body class="admin-portal" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
-  <header class="admin-topbar topbar">
-    <div class="admin-topbar-inner">
-      <div class="admin-topbar-left">
-        <button class="menu-button" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <span class="current-page">School Analytics</span>
+        <span class="page-title">School Analytics</span>
       </div>
-      <div class="admin-topbar-right">
-        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
-          <span class="notification-dot" aria-hidden="true"></span>
-        </button>
+      <div class="topbar-right">
         <div class="school-year-control">
           <label for="schoolYearSelect">School year for all teachers</label>
-          <select class="admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <select class="sy-chip admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
           <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
         </div>
       </div>
@@ -43,7 +39,7 @@
   </header>
 
   <main class="dashboard-content analytics-content" inert data-auth-shell>
-    <section class="analytics-heading" data-auth-shell>
+    <section class="analytics-heading hero" data-auth-shell>
       <div>
         <h1 data-auth-shell>School Analytics</h1>
         <p>Overall performance across all teachers and sections</p>

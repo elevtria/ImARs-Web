@@ -15,7 +15,7 @@ test("the admin report batches school results and returns aggregates only to adm
   for (let index = 0; index < 24; index++) {
     app.data.set("users/STUDENT" + index, { role: "student", teacherId: "TEACH1000", fullName: "Private student name" });
   }
-  app.data.set("users/STUDENT0/test_results/term_01/lessons/lesson_01", {
+  app.data.set("users/STUDENT0/test_results/term_03/lessons/lesson_01", {
     isPostTestCompleted: true, postTestTotalQuestions: 10, postTestScore: 8, arTimeMinutes: 12
   });
   const getAll = app.store.getAll.bind(app.store), batches = [];
@@ -29,9 +29,10 @@ test("the admin report batches school results and returns aggregates only to adm
   const report = await response.json();
   assert.equal(report.totalStudents, 26);
   assert.equal(report.post, 80);
-  assert.equal(report.hours, "12m");
+  assert.equal(report.hours, "12 min");
+  assert.equal(report.gain, null);
   assert.doesNotMatch(JSON.stringify(report), /Private student name|STUDENT0|must-never-leave-server|postTestScore/);
-  assert.deepEqual(batches.map(paths => paths.length), [100, 4]);
+  assert.deepEqual(batches.map(paths => paths.length), [100, 100, 100, 12]);
   app.store.getAll = async () => { throw new Error("Data unavailable"); };
   assert.equal((await app.call(request, admin)).status, 503);
 });

@@ -98,6 +98,23 @@ export class SupabaseAppStore {
     }));
   }
 
+  async adminLessonResults(fieldPaths) {
+    const pattern = "^users/[A-Za-z0-9_-]+/test_results/term_0[1-3]/lessons/lesson_0[1-4]$";
+    const select = this.selection(fieldPaths);
+    const rows = [];
+    let after;
+    for (;;) {
+      const response = await this.documents("GET", {
+        path: "match." + pattern, select, order: "path.asc", limit: "500",
+        ...(after ? { and: "(path.gt." + after + ")" } : {})
+      });
+      const page = await response.json();
+      rows.push(...page.map(row => ({ path: row.path, ...this.projected(row, fieldPaths) })));
+      if (page.length < 500) return rows;
+      after = page.at(-1).path;
+    }
+  }
+
   async rawDocuments(paths, fieldPaths) {
     if (!paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     for (const path of paths) validatePath(path, true);

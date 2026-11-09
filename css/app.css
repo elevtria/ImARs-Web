@@ -2059,18 +2059,18 @@ label {
 @media(prefers-reduced-motion:reduce) { .stats .stat-link { transition:none; } }
 
 /* Dashboard accents vary by purpose within the existing blue and gold palette. */
-.teacher-dashboard .hero { padding:22px 24px; border-left:4px solid var(--gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
-.teacher-dashboard .stats .stat-link { --card-accent:var(--steel); padding-right:80px; border-top:3px solid var(--card-accent); background:linear-gradient(125deg,#fff,#bfc8e224); }
-.teacher-dashboard .stats .stat-link:nth-child(2) { --card-accent:var(--sky); background:linear-gradient(125deg,#fff,#a4b8d926); }
-.teacher-dashboard .stats .stat-link:nth-child(3) { --card-accent:var(--gold); background:linear-gradient(125deg,#fff,#feb7050d); }
-.teacher-dashboard .stats .stat-link:nth-child(4) { --card-accent:var(--ink); background:linear-gradient(125deg,#fff,#81a2c126); }
-.teacher-dashboard .stat .label { color:var(--ink); letter-spacing:.065em; }
-.teacher-dashboard .stat .value { color:var(--ink); }
-.teacher-dashboard .stat .hint { text-align:left; }
+:is(.teacher-dashboard,.admin-overview) .hero { padding:22px 24px; border-left:4px solid var(--gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link { --card-accent:var(--steel); padding-right:80px; border-top:3px solid var(--card-accent); background:linear-gradient(125deg,#fff,#bfc8e224); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(2) { --card-accent:var(--sky); background:linear-gradient(125deg,#fff,#a4b8d926); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(3) { --card-accent:var(--gold); background:linear-gradient(125deg,#fff,#feb7050d); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(4) { --card-accent:var(--ink); background:linear-gradient(125deg,#fff,#81a2c126); }
+:is(.teacher-dashboard,.admin-overview) .stat .label { color:var(--ink); letter-spacing:.065em; }
+:is(.teacher-dashboard,.admin-overview) .stat .value { color:var(--ink); }
+:is(.teacher-dashboard,.admin-overview) .stat .hint { text-align:left; }
 .summary-icon { position:absolute; top:22px; right:24px; width:40px; height:40px; display:grid; place-items:center; background:#bfc8e233; color:#476781; border-radius:12px; }
 .summary-icon svg { width:23px; height:23px; }
-.teacher-dashboard .stat-link:nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
-.teacher-dashboard .stat-link-arrow { top:auto; bottom:18px; right:30px; color:#476781; font-size:19px; }
+:is(.teacher-dashboard,.admin-overview) .stat-link:nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
+:is(.teacher-dashboard,.admin-overview) .stat-link-arrow { top:auto; bottom:18px; right:30px; color:#476781; font-size:19px; }
 .teacher-dashboard .section-head h2 { display:flex; align-items:center; gap:10px; }
 .teacher-dashboard .section-head h2::before { content:''; width:5px; height:20px; border-radius:4px; background:var(--steel); flex-shrink:0; }
 .teacher-dashboard .section:has(.actions) .section-head h2::before { background:var(--gold); }
@@ -2084,7 +2084,7 @@ label {
 .teacher-dashboard .action:focus-visible { outline:3px solid var(--steel); outline-offset:3px; }
 .teacher-dashboard .table-wrap thead { background:#bfc8e233; }
 .teacher-dashboard .table-wrap tbody tr:nth-child(even) { background:#bfc8e214; }
-@media(max-width:640px) { .teacher-dashboard .actions { grid-template-columns:1fr; } .teacher-dashboard .hero { padding:18px; } }
+@media(max-width:640px) { .teacher-dashboard .actions { grid-template-columns:1fr; } :is(.teacher-dashboard,.admin-overview) .hero { padding:18px; } }
 
 /* Keep the sidebar and dashboard moving together as the menu expands. */
 @media (min-width:1000px) and (prefers-reduced-motion:no-preference) {

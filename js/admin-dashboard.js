@@ -1,7 +1,7 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getAdminReport } from "./firebase-data.js";
-import { showAdminView } from "./admin-view.js";
+import { formatAdminGain, formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 
 const app = initializeApp();
@@ -20,12 +20,10 @@ function getInitials(name) {
 function renderDashboard(report) {
     const totalTeachers = report.teachers.length;
     const teacherValEl = document.getElementById("totalTeachersVal");
-    const teacherNoteEl = document.getElementById("totalTeachersNote");
     const tableTeacherCountEl = document.getElementById("tableTeacherCount");
 
     if (teacherValEl) teacherValEl.textContent = totalTeachers;
-    if (teacherNoteEl) teacherNoteEl.textContent = `${totalTeachers} registered`;
-    if (tableTeacherCountEl) tableTeacherCountEl.textContent = `${totalTeachers} teachers`;
+    if (tableTeacherCountEl) tableTeacherCountEl.textContent = `${totalTeachers} ${totalTeachers === 1 ? "teacher" : "teachers"}`;
 
     const teachersMap = new Map(report.teachers.map(teacher => [teacher.id, { ...teacher, initials: getInitials(teacher.name), studentCount: teacher.students }]));
     const totalStudents = report.totalStudents;
@@ -39,8 +37,8 @@ function renderDashboard(report) {
     const schoolAvgPreNoteEl = document.getElementById("schoolAvgPreNote");
     const totalArHoursEl = document.getElementById("totalArHoursVal");
 
-    if (schoolAvgPostEl) schoolAvgPostEl.textContent = `${avgPostPct}%`;
-    if (schoolAvgPreNoteEl) schoolAvgPreNoteEl.textContent = `Up from ${avgPrePct}% pre-test`;
+    if (schoolAvgPostEl) schoolAvgPostEl.textContent = formatAdminPercent(avgPostPct);
+    if (schoolAvgPreNoteEl) schoolAvgPreNoteEl.textContent = avgPrePct === null ? "Completed tests" : `Pre-test average: ${formatAdminPercent(avgPrePct)}`;
     if (totalArHoursEl) totalArHoursEl.textContent = totalArHours;
 
     const ringPostEl = document.getElementById("ringPostScore");
@@ -52,18 +50,19 @@ function renderDashboard(report) {
     const meterPostBar = document.getElementById("meterPostBar");
     const meterGainBar = document.getElementById("meterGainBar");
 
-    if (ringPostEl) ringPostEl.textContent = `${avgPostPct}%`;
-    if (meterPreVal) meterPreVal.textContent = `${avgPrePct}%`;
-    if (meterPostVal) meterPostVal.textContent = `${avgPostPct}%`;
-    if (meterGainVal) meterGainVal.textContent = `${gainPct}%`;
+    if (ringPostEl) ringPostEl.textContent = formatAdminPercent(avgPostPct);
+    if (meterPreVal) meterPreVal.textContent = formatAdminPercent(avgPrePct);
+    if (meterPostVal) meterPostVal.textContent = formatAdminPercent(avgPostPct);
+    if (meterGainVal) meterGainVal.textContent = formatAdminGain(gainPct);
 
-    if (meterPreBar) meterPreBar.style.width = `${avgPrePct}%`;
-    if (meterPostBar) meterPostBar.style.width = `${avgPostPct}%`;
-    if (meterGainBar) meterGainBar.style.width = `${gainPct}%`;
+    if (meterPreBar) meterPreBar.style.width = `${avgPrePct ?? 0}%`;
+    if (meterPostBar) meterPostBar.style.width = `${avgPostPct ?? 0}%`;
+    if (meterGainBar) meterGainBar.style.width = `${Math.abs(gainPct ?? 0)}%`;
 
     const ringEl = document.getElementById("learningRing");
     if (ringEl) {
-      ringEl.style.background = `conic-gradient(#6c5ce7 ${avgPostPct}%, var(--chart-track, #e2e8f0) 0%)`;
+      ringEl.setAttribute("aria-label", avgPostPct === null ? "No completed post-tests" : `School average post-test score: ${avgPostPct}%`);
+      ringEl.style.background = `conic-gradient(var(--steel) ${avgPostPct ?? 0}%, var(--chart-track, #e2e8f0) 0%)`;
     }
 
     // 5. Populate Teacher Performance Snapshot Table
@@ -78,15 +77,6 @@ function renderDashboard(report) {
 
       const rows = document.createDocumentFragment();
       teachersMap.forEach((teacher) => {
-        const tAvgPre = teacher.preCount > 0 ? Math.round(teacher.prePctSum / teacher.preCount) : 0;
-        const tAvgPost = teacher.postCount > 0 ? Math.round(teacher.postPctSum / teacher.postCount) : 0;
-        const tGain = tAvgPost - tAvgPre;
-        const gainSign = tGain >= 0 ? `+${tGain}%` : `${tGain}%`;
-
-        const tHours = teacher.arMinutes >= 60 
-          ? `${Math.round(teacher.arMinutes / 60)}h` 
-          : `${teacher.arMinutes}m`;
-
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>
@@ -99,10 +89,10 @@ function renderDashboard(report) {
             </div>
           </td>
           <td>${teacher.studentCount}</td>
-          <td>${tAvgPre}%</td>
-          <td class="post-score">${tAvgPost}%</td>
-          <td>${tHours}</td>
-          <td><span class="gain-chip">${gainSign}</span></td>
+          <td>${formatAdminPercent(teacher.pre)}</td>
+          <td class="post-score">${formatAdminPercent(teacher.post)}</td>
+          <td>${escapeHtml(teacher.hours)}</td>
+          <td><span class="gain-chip">${formatAdminGain(teacher.gain)}</span></td>
         `;
         rows.appendChild(row);
       });
