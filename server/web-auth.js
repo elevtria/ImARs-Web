@@ -65,31 +65,32 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   const clean = identifier.trim();
   const initial = accounts.find(item =>
     item.id.toLowerCase() === clean.toLowerCase() ||
-    item.email.toLowerCase() === clean.toLowerCase()
+    (item.role === "admin" && item.email.toLowerCase() === clean.toLowerCase())
   );
   const id = clean.toUpperCase();
 
-  if (dataEnabled(env) && /^ADMIN[A-Z0-9_-]{0,32}$/.test(id)) {
+  // If signing in as an admin (by ID like ADMIN1 or by email like admin@imars.edu),
+  // sync the live UID and email from Firestore users/{adminId} so a recreated Firebase
+  // Auth UID never mismatches the older encrypted WEB_STAFF_ACCOUNTS secret.
+  if (dataEnabled(env) && (initial?.role === "admin" || /^ADMIN[A-Z0-9_-]{0,32}$/.test(id))) {
+    const candidateId = initial?.id || (/^ADMIN[A-Z0-9_-]{0,32}$/.test(id) ? id : "ADMIN1");
     try {
-      const profile = await store.get("users/" + id);
+      const profile = await store.get("users/" + candidateId);
       if (profile?.data && String(profile.data.role || "").toLowerCase() === "admin" && profile.data.uid) {
-        const firestoreEmail = String(profile.data.providedEmail || profile.data.email || profile.data.authEmail || initial?.email || "").trim();
-        if (firestoreEmail) {
+        const liveEmail = String(profile.data.email || profile.data.providedEmail || initial?.email || "").trim();
+        if (liveEmail) {
           return {
-            id,
-            uid: String(profile.data.uid),
+            id: candidateId,
+            uid: String(profile.data.uid).trim(),
             role: "admin",
-            email: firestoreEmail
+            email: liveEmail
           };
         }
       }
     } catch {
-      // Fall back to WEB_STAFF_ACCOUNTS if Firestore lookup fails
+      // Fall back to initial if Firestore read fails
     }
-    if (initial) return initial;
-    // Also fallback to the primary admin entry in WEB_STAFF_ACCOUNTS if only one admin exists
-    const singleAdmin = accounts.filter(a => a.role === "admin");
-    if (singleAdmin.length === 1 && (id === "ADMIN" || id === "ADMIN1")) return singleAdmin[0];
+    return initial;
   }
 
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
@@ -127,12 +128,13 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
   if (!payload) return null;
   const credentials = { family: payload.family, sid: payload.sid, version: payload.version };
   try {
+    const database = store || new FirestoreAdmin(env);
     const checked = await stateCall(env, `account:${payload.uid}`, "session", { ...credentials, active });
     if (checked.status === 401) return null;
     if (!checked.ok) throw new Error("Login state unavailable");
-    const account = await resolveStaff(env, payload.id, accounts, store);
+    const account = await resolveStaff(env, payload.id, accounts, database);
     if (!account || account.uid !== payload.uid || account.role !== payload.role) return null;
-    if (!await checkTeacherSession(env, store || new FirestoreAdmin(env), account, "web", payload.teacherSession)) return null;
+    if (!await checkTeacherSession(env, database, account, "web", payload.teacherSession)) return null;
     return { account, ...checked.result, credentials, teacherSession: payload.teacherSession };
   } catch (error) { throw new Error("Login state unavailable", { cause: error }); }
 }
