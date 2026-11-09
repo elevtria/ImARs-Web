@@ -5,7 +5,9 @@ import { fixture, quiz } from "./fixtures/student-quizzes.js";
 
 async function setup(type = "essay", assignment = {}) {
   const f = fixture(); f.put("generatedQuizzes/quiz1", quiz("quiz1", type, assignment)); const { request } = await f.begin(), body = f.submission(request);
-  Object.assign(body.answers[0], type === "modified-true-false" ? { optionIndex: 1, correction: "Student correction" } : type === "identification-explanation" ? { optionIndex: -1, value: "Student identification", explanation: "Student explanation" } : { optionIndex: -1, value: "Student essay" });
+  if (!["multiple-choice", "true-false"].includes(type)) {
+    Object.assign(body.answers[0], type === "modified-true-false" ? { optionIndex: 1, correction: "Student correction" } : type === "identification-explanation" ? { optionIndex: -1, value: "Student identification", explanation: "Student explanation" } : { optionIndex: -1, value: "Student essay" });
+  }
   assert.equal((await f.call("submit", body)).status, 200);
   const path = "users/S1/generated_quiz_attempts/" + request.attemptId;
   const call = (input, actor = { id: "TEACH1", uid: "teacher-a", role: "teacher" }) => quizReview({ env: f.env, request: new Request("https://imars.test/api/quiz-review/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quizId: "quiz1", studentId: "S1", attemptId: request.attemptId, ...input }) }) }, { store: f.store, authenticate: async () => actor });
@@ -17,8 +19,23 @@ for (const type of ["essay", "identification-explanation", "modified-true-false"
   const opened = await (await f.callReview({ action: "open" })).json(); assert.equal(opened.questions[0].id, "q-original"); assert.equal(opened.answers[0].questionId, "q-original");
   const response = await f.callReview({ action: "grade", revision: opened.revision, scores: [{ questionId: "q-original", score: 1 }], feedback: "Reviewed" }); assert.equal(response.status, 200); assert.equal((await response.json()).persisted, true);
   const after = f.data.get(f.path); assert.equal(after.status, "reviewed"); assert.equal(after.review.reviewerUid, "teacher-a"); assert.deepEqual(after.answers, before.answers); assert.deepEqual(after.receipt, before.receipt);
+  const reopened = await (await f.callReview({ action: "open" })).json();
+  assert.equal(reopened.score, 1);
+  assert.equal(reopened.feedback, "Reviewed");
+  assert.deepEqual(reopened.scores, [{ questionId: "q-original", score: 1 }]);
   assert.equal((await f.callReview({ action: "grade", revision: opened.revision, scores: [{ questionId: "q-original", score: 1 }], feedback: "Again" })).status, 409);
   assert.deepEqual(await (await f.call("submit", f.body)).json(), before.receipt);
+});
+test("auto-graded submissions can be reopened but cannot be manually graded", async () => {
+  const f = await setup("multiple-choice");
+  const response = await f.callReview({ action: "open" });
+  assert.equal(response.status, 200);
+  const attempt = await response.json();
+  assert.equal(attempt.score, 1);
+  assert.equal(attempt.maximum, 1);
+  assert.equal(attempt.answers[0].optionIndex, attempt.questions[0].correctIndex);
+  assert.equal((await f.callReview({ action: "grade", revision: attempt.revision, scores: [{ questionId: "q-original", score: 0 }], feedback: "" })).status, 403);
+  assert.equal((await f.callReview({ action: "open" }, { id: "TEACH2", uid: "teacher-b", role: "teacher" })).status, 403);
 });
 test("teacher review denies another teacher, a student, moved class and invalid scores", async () => {
   const f = await setup();

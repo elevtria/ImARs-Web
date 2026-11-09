@@ -2,7 +2,7 @@ import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
-import { quizAssignmentScope, quizAssignedToSection } from "../js/quiz-limits.js";
+import { QUIZ_TYPES, quizAssignmentScope, quizAssignedToSection } from "../js/quiz-limits.js";
 
 const bytes = value => new TextEncoder().encode(value);
 const b64 = value => btoa(String.fromCharCode(...value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -176,6 +176,15 @@ export async function quizReview({ request, env }, { store, authenticate = requi
         if (!sections.has(id)) sections.set(id, ownedSection(actor, store, id).then(() => true, error => { if (error.status === 403) return false; throw error; }));
         if (await sections.get(id)) items.push({ studentId: row.data.context.studentId, sectionId: id, attemptId: row.path.split("/").at(-1), submittedAtUtc: row.data.submittedAt, revision: row.updateTime });
       }
+      const profiles = new Map();
+      await Promise.all(items.map(async item => {
+        if (!validPart(item.studentId)) return;
+        if (!profiles.has(item.studentId)) profiles.set(item.studentId, store.get("users/" + item.studentId));
+        const profile = (await profiles.get(item.studentId))?.data;
+        if (profile?.role === "student" && profile.classCode === item.sectionId && (!profile.teacherId || profile.teacherId === actor.id)) {
+          item.name = profile.displayName || profile.fullName || item.studentId;
+        }
+      }));
       return respond({ items, nextCursor: rows.length > 20 ? await sign(env, { uid: actor.uid, id: actor.id, quizId: body.quizId, sectionId, exp: now() + 3600_000, after: [rows[19].data.submittedAt, rows[19].path] }) : "" });
     }
     if (!validPart(body.studentId) || !/^[a-f0-9]{32}$/.test(body.attemptId)) throw fail("INVALID_REQUEST", 400);
@@ -183,8 +192,11 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (!a || a.quizId !== body.quizId || a.context?.teacherUid !== actor.uid || a.context?.teacherProfileId !== actor.id || !quizAssignedToSection(q, a.context?.sectionId) || (sectionId && a.context.sectionId !== sectionId) || !validPart(a.snapshotId) || !a.receipt) throw fail("FORBIDDEN");
     if (!sectionId) await ownedSection(actor, store, a.context.sectionId);
     const snapshot = (await store.get("generatedQuizRevisions/" + a.snapshotId))?.data;
-    if (!snapshot || snapshot.quizId !== body.quizId || snapshot.revision !== a.revision || !["essay", "identification-explanation", "modified-true-false"].includes(snapshot.type)) throw fail("FORBIDDEN");
-    if (body.action === "open") return respond({ studentId: body.studentId, attemptId: body.attemptId, revision: attempt.updateTime, type: snapshot.type, title: snapshot.title, questions: snapshot.questions, answers: a.answers, status: a.status });
+    if (!snapshot || snapshot.quizId !== body.quizId || snapshot.revision !== a.revision || !Object.hasOwn(QUIZ_TYPES, snapshot.type)) throw fail("FORBIDDEN");
+    if (body.action === "open") return respond({ studentId: body.studentId, revision: attempt.updateTime, type: snapshot.type, title: snapshot.title,
+      questions: snapshot.questions, answers: a.answers, ...resultFor({ path, data: a }),
+      ...(a.status === "reviewed" ? { scores: a.review?.scores, feedback: a.review?.feedback } : {}) });
+    if (!["essay", "identification-explanation", "modified-true-false"].includes(snapshot.type)) throw fail("FORBIDDEN");
     if (body.revision !== attempt.updateTime || a.status !== "pending-review") throw fail("REVISION_CHANGED", 409, "This submission was already reviewed or changed. Reopen it.");
     if (!Array.isArray(body.scores) || body.scores.length !== snapshot.questions.length || new Set(body.scores.map(item => item?.questionId)).size !== body.scores.length || typeof body.feedback !== "string" || body.feedback.length > 4000) throw fail("INVALID_REVIEW", 400);
     let score = 0, maximum = 0;

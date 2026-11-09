@@ -1,7 +1,8 @@
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { collection, getDocs, getFirestore, query, where } from "./firebase-data.js";
 import { questionTypeLabel, quizAssignedToSection } from "./quiz-limits.js";
-import { closeQuizReview, openQuizReview, quizScoreLabel, requestQuizReview } from "./quiz-review.js";
+import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
+import { createQuizResultsTable } from "./quiz-results-table.js";
 import { escapeHtml } from "./teacher-view.js";
 
 const filter = document.getElementById("teacherQuizSection");
@@ -25,84 +26,29 @@ function renderQuiz(quiz, section, index, user, signal) {
     <span class="activity-record-chevron" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
     <span>${escapeHtml(quiz.title || "Teacher quiz")}<small>${escapeHtml(questionTypeLabel(quiz.type))}</small></span></button></th>
     <td>${escapeHtml(section.label)}</td><td>—</td><td>—</td><td><span class="activity-record-completed">—</span></td>`;
-  details.innerHTML = `<td colspan="5"><div class="activity-record-detail-head"><div><strong>Student quiz results</strong><small>Latest submission per student</small></div></div>
-    <div class="activity-record-results-wrap" hidden><table class="performance-table activity-record-results">
-    <thead><tr><th scope="col">Student</th><th scope="col">Score or status</th><th scope="col">Submitted</th><th scope="col">Review</th></tr></thead><tbody></tbody></table></div>
-    <p class="activity-record-empty">Scores show earned points / total points for this quiz.</p>
-    <p class="activity-record-empty" role="status"></p>
-    <div class="student-detail-navigation" role="group" aria-label="Student quiz result pages">
-      <button type="button" class="ghost-btn quiz-page-previous" disabled>Previous page</button>
-      <button type="button" class="ghost-btn quiz-page-next" disabled>Next page</button>
-    </div></td>`;
-  const toggle = row.querySelector("button");
-  const results = details.querySelector("tbody"), wrap = details.querySelector(".activity-record-results-wrap");
-  const message = details.querySelector("[role=status]");
-  const previous = details.querySelector(".quiz-page-previous");
-  const next = details.querySelector(".quiz-page-next");
-  const cursors = [""];
-  let pageIndex = 0, nextCursor = "", loaded = false, loading = false;
-  async function loadResults(index = pageIndex, cursor = cursors[index]) {
-    if (loading) return;
-    loading = previous.disabled = next.disabled = true;
-    message.textContent = "Loading student results…";
-    try {
-      const page = await requestQuizReview(user.uid, { action: "section-results", quizId: quiz.id, sectionId: section.id, cursor }, signal);
-      results.replaceChildren();
-      for (const student of page.items) {
-        const line = results.insertRow();
-        const date = student.submittedAtUtc ? new Date(student.submittedAtUtc).toLocaleString() : "—";
-        const initials = student.name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase();
-        const missing = student.score == null ? " is-empty" : "";
-        line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span>${escapeHtml(student.name)}</th>
-          <td><span class="activity-result-score${missing}">${escapeHtml(quizScoreLabel(student))}</span></td><td>${escapeHtml(date)}</td><td></td>`;
-        if (student.status !== "pending-review") continue;
-        const review = document.createElement("button");
-        review.type = "button";
-        review.className = "ghost-btn";
-        review.textContent = "Review answers";
-        review.setAttribute("aria-label", `Review answers for ${student.name}`);
-        review.addEventListener("click", () => void openQuizReview(user, quiz, [section], section.id, {
-          submission: student,
-          onReviewed(grade) {
-            if (signal.aborted) return;
-            if (grade) {
-              const score = line.cells[1].firstElementChild;
-              score.textContent = quizScoreLabel({ ...grade, status: "reviewed" });
-              score.classList.remove("is-empty");
-              review.remove();
-              toggle.focus();
-              message.textContent = "Grade saved.";
-            } else {
-              void loadResults();
-            }
-            void loadSummary(user, section, signal);
-          }
-        }));
-        line.cells[3].append(review);
-      }
-      loaded = true;
-      pageIndex = index;
-      cursors[index] = cursor;
-      nextCursor = page.nextCursor;
-      wrap.hidden = results.rows.length === 0;
-      message.textContent = results.rows.length ? `Page ${index + 1}`
-        : nextCursor ? "No active students on this page." : "No more active students in this section.";
-    } catch (error) {
-      if (signal.aborted) return;
-      message.textContent = error.message;
-    } finally {
-      loading = false;
-      previous.disabled = pageIndex === 0;
-      next.disabled = !nextCursor;
+  const table = createQuizResultsTable({
+    signal,
+    fetchPage: cursor => requestQuizReview(user.uid, { action: "section-results", quizId: quiz.id, sectionId: section.id, cursor }, signal),
+    reviewAnswers(student, _button, updateScore) {
+      void openQuizReview(user, quiz, [section], section.id, {
+        submission: student,
+        onReviewed(grade) {
+          if (signal.aborted) return;
+          updateScore(grade);
+          void loadSummary(user, section, signal);
+        }
+      });
     }
-  }
+  });
+  const cell = details.insertCell();
+  cell.colSpan = 5;
+  cell.append(table.element);
+  const toggle = row.querySelector("button");
   toggle.addEventListener("click", () => {
     details.hidden = !details.hidden;
     toggle.setAttribute("aria-expanded", String(!details.hidden));
-    if (!details.hidden && !loaded) void loadResults();
+    if (!details.hidden) table.load();
   });
-  previous.addEventListener("click", () => void loadResults(pageIndex - 1));
-  next.addEventListener("click", () => void loadResults(pageIndex + 1, nextCursor));
   row.dataset.quizId = quiz.id;
 }
 
