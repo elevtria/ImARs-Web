@@ -27,7 +27,7 @@ export function quizScoreLabel(row) {
   if (row.status === "pending-review") return "Pending review";
   return row.score == null || row.maximum == null ? "Score unavailable" : `${row.score}/${row.maximum}`;
 }
-export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection) {
+export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection, { submission, onReviewed } = {}) {
   closeQuizReview(); const current = generation; controller = new AbortController();
   const uid = user.uid;
   const signal = controller.signal;
@@ -82,11 +82,17 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
     finally { busy = false; next.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
   }
   async function show(row, button) {
-    if (busy) return; busy = true; button.disabled = section.disabled = quiz.disabled = true;
+    if (busy) return; busy = true; section.disabled = quiz.disabled = true;
+    if (button) button.disabled = true;
     setLoadingState(status, true, "Loading student answers");
     try {
       const attempt = await api({ action: "open", studentId: row.studentId, attemptId: row.attemptId });
       if (attempt.status !== "pending-review") {
+        if (submission) {
+          closeQuizReview();
+          onReviewed?.();
+          return;
+        }
         if (resultsQuiz) { resetList(); busy = false; await load(); }
         else button.remove();
         status.textContent = "This submission has already been graded.";
@@ -108,7 +114,10 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       }
       const feedbackLabel = element("label", "Feedback "), feedback = element("textarea"); feedback.maxLength = 4000; feedbackLabel.append(feedback); form.append(feedbackLabel);
       const save = element("button", "Save review", "primary-btn"), cancel = element("button", resultsQuiz ? "Back to results" : "Back to submissions", "btn-ghost"); save.type = "submit"; cancel.type = "button";
-      const back = () => { form.remove(); content.hidden = false; filters.hidden = false; next.hidden = !cursor; };
+      const back = () => {
+        if (submission) { closeQuizReview(); return; }
+        form.remove(); content.hidden = false; filters.hidden = false; next.hidden = !cursor;
+      };
       cancel.addEventListener("click", () => { back(); status.textContent = resultsQuiz ? "Showing each student's latest submission." : "Select a submission to review."; }); form.append(save, cancel);
       form.addEventListener("submit", async event => {
         event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = true;
@@ -117,6 +126,11 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
           const result = await api({ action: "grade", studentId: row.studentId, attemptId: row.attemptId, revision: attempt.revision,
             scores: scores.map(item => ({ questionId: item.questionId, score: Number(item.input.value) })), feedback: feedback.value });
           if (!result.persisted) throw new Error("Review was not confirmed. Please retry.");
+          if (submission) {
+            closeQuizReview();
+            onReviewed?.(result);
+            return;
+          }
           if (resultsQuiz) button.previousElementSibling.textContent = [
             quizScoreLabel({ ...result, status: "reviewed" }), new Date(row.submittedAtUtc).toLocaleString()
           ].join(" · ");
@@ -126,7 +140,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       });
       content.hidden = filters.hidden = next.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
-    finally { busy = false; button.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
+    finally { busy = false; section.disabled = quiz.disabled = false; if (button) button.disabled = false; setLoadingState(status, false); }
   }
   function resetList() {
     cursor = "";
@@ -151,7 +165,10 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
     section.replaceChildren(...choices.map(item => option(item.name, item.id)));
     if (choices.some(item => item.id === selectedSection)) section.value = selectedSection;
     section.disabled = !choices.length;
-    if (choices.length) await load();
+    if (submission && section.value) {
+      filters.hidden = true;
+      await show(submission);
+    } else if (choices.length) await load();
     else status.textContent = "There are no assigned sections to show.";
     return;
   }

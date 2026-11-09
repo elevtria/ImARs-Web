@@ -1,7 +1,7 @@
 // Browse the currently rendered, filtered records without changing data or calculations.
 import { getAuth } from "./firebase-auth.js";
-import { questionTypeLabel } from "./quiz-limits.js";
-import { quizScoreLabel, requestQuizReview } from "./quiz-review.js";
+import { requestQuizReview } from "./quiz-review.js";
+import { webRequest } from "./web-login.js";
 
 const list = document.getElementById("recordsContainer");
 const dialog = document.getElementById("studentRecordDialog");
@@ -10,69 +10,44 @@ const previous = document.getElementById("previousStudentRecord");
 const next = document.getElementById("nextStudentRecord");
 let selectedId;
 let opener;
-let scoreSection, scoreController;
-function studentQuizScores(studentId) {
-  scoreController?.abort();
-  const controller = new AbortController();
-  scoreController = controller;
-  const auth = getAuth(), user = auth.currentUser;
-  const section = document.createElement("section");
-  section.className = "student-quiz-scores";
-  const heading = document.createElement("h3");
-  heading.textContent = "Teacher Quizzes";
-  const scope = document.createElement("p");
-  scope.textContent = "Latest submission per quiz · All terms";
-  const status = document.createElement("p");
-  status.setAttribute("role", "status");
-  const results = document.createElement("ul");
-  const nextPage = document.createElement("button");
-  nextPage.type = "button";
-  nextPage.className = "ghost-btn";
-  nextPage.hidden = true;
-  section.append(heading, scope, status, results, nextPage);
-  const seen = new Set();
-  let cursor = "";
-  async function loadScores() {
-    if (user?.role !== "teacher") { section.hidden = true; return; }
-    nextPage.disabled = true;
-    status.textContent = "Loading quiz scores…";
-    try {
-      const page = await requestQuizReview(user.uid, { action: "student-scores", studentId, cursor }, controller.signal);
-      if (auth.currentUser?.uid !== user.uid) return;
-      for (const row of page.items) {
-        if (seen.has(row.quizId)) continue;
-        seen.add(row.quizId);
-        const item = document.createElement("li");
-        item.className = "teacher-quiz-score";
-        const title = document.createElement("strong"), detail = document.createElement("span");
-        title.textContent = row.title;
-        detail.textContent = [row.type && questionTypeLabel(row.type), quizScoreLabel(row),
-          new Date(row.submittedAtUtc).toLocaleDateString()].filter(Boolean).join(" · ");
-        item.append(title, detail);
-        results.append(item);
+let scoreRequest, scoreKey, scoreTiles;
+
+function showScoreTiles(studentId, stats) {
+  const termId = document.getElementById("recordsTerm").value || "term_01";
+  const user = getAuth().currentUser;
+  if (user?.role !== "teacher" || !stats) return;
+  const key = `${user.uid}:${studentId}:${termId}`;
+  if (scoreKey !== key) {
+    scoreRequest?.abort();
+    scoreRequest = new AbortController();
+    const { signal } = scoreRequest;
+    scoreKey = key;
+    const template = document.createElement("template");
+    template.innerHTML = '<div class="stat"><span>Quiz Score <small>All-time</small></span><b class="c-cyan">…</b></div><div class="stat"><span>Activity Score</span><b class="c-green">…</b></div>';
+    scoreTiles = Array.from(template.content.children);
+    const load = async (tile, request) => {
+      const value = tile.querySelector("b");
+      try {
+        const { average } = await request;
+        if (!signal.aborted) value.textContent = average == null ? "—" : `${average}%`;
+      } catch {
+        if (!signal.aborted) {
+          value.textContent = "—";
+          tile.title = "Score could not load. Reopen the record to retry.";
+        }
       }
-      cursor = page.nextCursor;
-      status.textContent = seen.size ? "" : "No teacher quiz submissions yet.";
-      nextPage.hidden = !cursor;
-      nextPage.textContent = "Load more";
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      status.textContent = error.message;
-      nextPage.textContent = "Retry";
-      nextPage.hidden = false;
-    } finally {
-      nextPage.disabled = false;
-    }
+    };
+    void load(scoreTiles[0], requestQuizReview(user.uid, { action: "student-average", studentId }, signal));
+    void load(scoreTiles[1], webRequest("/api/web-data", { action: "student-activity-average", studentId, termId },
+      { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) }));
   }
-  nextPage.addEventListener("click", loadScores);
-  void loadScores();
-  return section;
+  stats.classList.add("record-score-grid");
+  stats.append(...scoreTiles);
 }
 const rows = () => Array.from(list.querySelectorAll(".record")).filter(row => !row.classList.contains("hidden"));
 const id = row => row.dataset.studentId;
 function showRecord(row) {
   if (!row) return;
-  if (!scoreSection || selectedId !== id(row)) scoreSection = studentQuizScores(id(row));
   selectedId = id(row);
   list.dispatchEvent(new CustomEvent("student-record-open", { detail: { studentId: selectedId } }));
   row = rows().find(candidate => id(candidate) === selectedId) || row;
@@ -81,7 +56,7 @@ function showRecord(row) {
   const detail = row.cloneNode(true);
   detail.className = "record student-record-detail";
   detail.querySelector(".open-student-record")?.remove();
-  detail.querySelector(".stats")?.after(scoreSection);
+  showScoreTiles(selectedId, detail.querySelector(".stats"));
   content.replaceChildren(detail);
   document.getElementById("studentRecordPosition").textContent = `${index + 1} of ${current.length} students`;
   previous.disabled = index === 0;
@@ -126,11 +101,11 @@ next.addEventListener("click", () => step(1));
 document.getElementById("closeStudentRecord").addEventListener("click", () => dialog.close());
 dialog.addEventListener("close", () => {
   if (dialog.open) return;
-  scoreController?.abort();
-  scoreSection = null;
+  scoreRequest?.abort();
+  scoreKey = null;
   if (opener?.isConnected) opener.focus();
 });
-window.addEventListener("pagehide", () => scoreController?.abort());
+window.addEventListener("pagehide", () => { if (dialog.open) dialog.close(); });
 dialog.addEventListener("click", event => {
   if (event.target !== dialog) return;
   const rect = dialog.getBoundingClientRect();

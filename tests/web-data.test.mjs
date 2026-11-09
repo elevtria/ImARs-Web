@@ -9,6 +9,19 @@ import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
 
+test("student activity averages use only the selected term and include a real zero", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("users/ACTIVITY", { role: "student", classCode: "A", teacherId: "TEACH1000" });
+  const base = "users/ACTIVITY/test_results/";
+  app.data.set(base + "term_02/lessons/lesson_01", { activityScore: 3, activityTotalPoints: 4 });
+  app.data.set(base + "term_02/lessons/lesson_02", { activityScore: 0, activityTotalQuestions: 5 });
+  app.data.set(base + "term_01/lessons/lesson_01", { activityScore: 100, activityTotalPoints: 100 });
+  const input = { action: "student-activity-average", studentId: "ACTIVITY", termId: "term_02" };
+  assert.deepEqual(await (await app.call(input, cookie)).json(), { average: 38 });
+  assert.deepEqual(await (await app.call({ ...input, termId: "term_03" }, cookie)).json(), { average: null });
+  assert.equal((await app.call({ ...input, studentId: "0026271001" }, cookie)).status, 403);
+});
+
 test("the admin report batches school results and returns aggregates only to admins", async () => {
   const app = fixture();
   const [admin, teacher] = await Promise.all([app.login("ADMIN1000", "admin"), app.login()]);

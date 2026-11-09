@@ -128,7 +128,7 @@ const mime = {
 };
 const allowedAuth = new Set(["config", "login", "identity", "session", "logout"]);
 const allowedData = new Set([
-  "student-page", "dashboard-summary", "teacher-report-page", "teacher-topic-overview",
+  "student-page", "student-activity-average", "dashboard-summary", "teacher-report-page", "teacher-topic-overview",
   "get", "query", "reads"
 ]);
 const allowedPages = new Set([
@@ -150,7 +150,7 @@ async function dispatch(context) {
     if (!Number.isSafeInteger(length) || length <= 0 || length > 1_000_000) return unavailable();
     const body = await request.clone().json();
     if (path === "/api/quiz-review/action") {
-      return ["list", "open", "student-scores", "section-results"].includes(body?.action) ? quizReview(context) : unavailable();
+      return ["list", "open", "student-average", "section-results", "section-summary"].includes(body?.action) ? quizReview(context) : unavailable();
     }
     if (!allowedData.has(body?.action)) return unavailable();
     const isRoster = body.action === "student-page";

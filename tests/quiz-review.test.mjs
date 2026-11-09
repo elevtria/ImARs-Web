@@ -76,20 +76,21 @@ test("quiz scores distinguish pending, auto-graded, reviewed and missing submiss
   const submittedAt = "2026-10-29T00:00:00Z";
   f.put("users/S3", { role: "student", classCode: "A", displayName: "Student Three" });
   f.put("users/S4", { role: "student", classCode: "A", active: false });
-  f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await f.store.get(path)])));
   f.store.scorePage = async (actor, studentId, sectionId, { quizId }) => {
     assert.equal(actor.uid, "teacher-a");
     assert.equal(sectionId, "A");
-    if (studentId !== "S1") return [];
+    if (studentId && studentId !== "S1") return [];
     const essay = { path: f.path, data: { ...f.data.get(f.path), submittedAt } };
     return quizId ? [essay] : [essay, { path: f.path, data: {
       quizId: "automatic", status: "graded", submittedAt, receipt: { score: 0, maximum: 1 }
+    } }, { path: f.path, data: {
+      quizId: "automatic", status: "graded", submittedAt: "2026-10-28T00:00:00Z", receipt: { score: 1, maximum: 1 }
     } }];
   };
-  const history = await (await f.callReview({ action: "student-scores" })).json();
-  assert.deepEqual(history.items.map(({ type, status, score, maximum }) => [type, status, score, maximum]),
-    [["essay", "pending-review", null, null], [undefined, "graded", 0, 1]]);
-  assert.doesNotMatch(JSON.stringify(history), /PRIVATE|Student essay/);
+  const summary = await (await f.callReview({ action: "section-summary", sectionId: "A" })).json();
+  assert.deepEqual(summary, { learners: 2, items: [
+    { quizId: "quiz1", submitted: 1, average: null }, { quizId: "automatic", submitted: 1, average: 0 }
+  ] });
   const section = () => f.callReview({ action: "section-results", sectionId: "A" });
   assert.deepEqual((await (await section()).json()).items.map(({ studentId, status }) => [studentId, status]),
     [["S1", "pending-review"], ["S3", "not-submitted"]]);
@@ -101,6 +102,8 @@ test("quiz scores distinguish pending, auto-graded, reviewed and missing submiss
   assert.equal(reviewed.score, 3);
   assert.equal(reviewed.maximum, 4);
   assert.equal(Object.hasOwn(reviewed, "feedback"), false);
+  assert.deepEqual(await (await f.callReview({ action: "student-average" })).json(), { average: 38 });
+  assert.equal((await f.callReview({ action: "section-summary", sectionId: "B" })).status, 403);
   assert.equal((await f.callReview({ action: "section-results", sectionId: "B" })).status, 403);
-  assert.equal((await f.callReview({ action: "student-scores", studentId: "S2" })).status, 403);
+  assert.equal((await f.callReview({ action: "student-average", studentId: "S2" })).status, 403);
 });

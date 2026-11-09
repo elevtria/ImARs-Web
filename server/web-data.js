@@ -5,6 +5,7 @@ import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
+import { activityPercent } from "../js/activity-score.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -482,6 +483,25 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
     ...(activitySyncPending ? { activitySyncPending } : {}) };
 }
 
+async function studentActivityAverage(scope, body, env, fetcher, legacyFetcher) {
+  if (scope.actor.role !== "teacher") throw fail();
+  if (!part(body.studentId) || !term(body.termId)) throw fail("Choose a student and term.", 400);
+  const student = await scope.student(body.studentId);
+  const section = student.data.classCode;
+  const ids = ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
+  const base = `users/${body.studentId}/test_results/${body.termId}/lessons/`;
+  const [lessons, { grades }] = await Promise.all([
+    scope.store.getAll(ids.map(id => base + id)),
+    reportActivityGrades(env, scope.store, [{ classId: section, document: { id: body.studentId, data: student.data } }],
+      [body.termId], fetcher, legacyFetcher)
+  ]);
+  const scores = ids.map(id => {
+    const grade = grades.get([section, body.studentId, body.termId, id].join("/"));
+    return grade ? grade.score / grade.maximum * 100 : activityPercent(lessons.get(base + id)?.data);
+  }).filter(score => score !== null);
+  return { average: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null };
+}
+
 async function teacherTopicOverview(scope) {
   if (scope.actor.role !== "teacher") throw fail();
   const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
@@ -542,6 +562,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
     }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
+    if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "admin-report") {
       if (actor.role !== "admin") throw fail();
       return respond(await loadAdminReports(store));

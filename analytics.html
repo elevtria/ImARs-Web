@@ -152,6 +152,29 @@
         </div>
       </section>
 
+      <section class="section student-activity-section" aria-labelledby="teacherQuizHeading" data-auth-shell>
+        <div class="section-head performance-head">
+          <h2 id="teacherQuizHeading" data-public-label>Teacher Quiz Results</h2>
+          <div class="activity-record-filters">
+            <label class="activity-section-filter" for="teacherQuizSection">
+              <span>Section</span>
+              <span class="select-wrap">
+                <select id="teacherQuizSection" aria-controls="teacherQuizBody" disabled><option value="">Select a section</option></select>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              </span>
+            </label>
+          </div>
+        </div>
+        <p id="teacherQuizStatus" class="view-data-status" role="status"></p>
+        <button id="teacherQuizRetry" class="ghost-btn" type="button" hidden>Retry</button>
+        <div class="performance-table-wrap">
+          <table class="performance-table activity-record-table teacher-quiz-table">
+            <thead><tr><th scope="col">Quiz</th><th scope="col">Section</th><th scope="col">Average score</th><th scope="col">Learners</th><th scope="col">Quiz submissions</th></tr></thead>
+            <tbody id="teacherQuizBody"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="card section question-heatmap" aria-labelledby="questionHeatmapHeading" data-auth-shell>
         <div class="section-head"><div><h2 id="questionHeatmapHeading" data-public-label>Post-test Question Heatmap</h2><p class="scheduler-progress-copy">See which questions learners answered incorrectly.</p></div></div>
         <div class="activity-record-filters">
@@ -250,6 +273,7 @@
   <script src="js/ui.js"></script>
   <!-- Updated to type="module" -->
   <script type="module" src="js/analytics.js"></script>
+  <script type="module" src="js/teacher-quiz-analytics.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>

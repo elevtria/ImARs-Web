@@ -264,12 +264,12 @@ export class SupabaseAppStore {
   }
 
   async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
-    const fields = ["quizId", "snapshotId", "status", "submittedAt", "receipt", "review"];
+    const fields = ["quizId", "status", "submittedAt", "receipt", "review"];
     const submittedAt = "fields->submittedAt->>timestampValue";
     const context = { teacherUid: actor.uid, teacherProfileId: actor.id, sectionId };
     const boundary = after && quoted(sortableTimestamp(after[0]));
     const response = await this.documents("GET", {
-      collection_path: `eq.users/${studentId}/generated_quiz_attempts`,
+      collection_path: studentId ? `eq.users/${studentId}/generated_quiz_attempts` : "like.users/*/generated_quiz_attempts",
       select: this.selection(fields),
       fields: "cs." + JSON.stringify(encodeFields({ context, ...(quizId ? { quizId } : {}) })),
       [submittedAt]: "not.is.null", order: submittedAt + ".desc,path.desc", limit: String(limit),
