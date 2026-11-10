@@ -23,6 +23,7 @@ test("all-section quizzes stay scoped to the current teacher and refresh removes
     assert.equal(response.status, 200);
     const page = await response.json(); pages.push(page);
     assert.ok(page.items.some(item => item.id === "shared"));
+    assert.equal(page.items.some(item => item.id === "quiz1"), uid === "student-a");
     assert.equal(page.items.some(item => item.id === "draft"), false);
     assert.ok(page.items.every(item => item.sectionId === (uid === "student-a" ? "A" : "C")));
     assert.equal((await f.call("start", { quizId: "shared", revision: f.versions.get("generatedQuizzes/shared"), attemptId: "a".repeat(32) }, { uid })).status, 200);
@@ -97,7 +98,25 @@ test("drafts and foreign assignments are hidden; scheduled content opens only at
   const page = await (await f.call("list", { limit: 20, cursor: "" })).json(); assert.deepEqual(page.items.map(q => q.id), ["quiz1"]);
   f.put("generatedQuizzes/scheduled", quiz("scheduled", "multiple-choice", { availability: "scheduled", availableAt: new Date(NOW + 1000).toISOString() }));
   const request = { quizId: "scheduled", revision: f.versions.get("generatedQuizzes/scheduled"), attemptId: "b".repeat(32) };
-  assert.equal((await f.call("start", request)).status, 403); f.setNow(NOW + 1000); assert.equal((await f.call("start", request)).status, 200); f.setNow(NOW + 1_000_000); assert.equal((await f.call("access", request)).status, 200);
+  const list = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.equal(list.items.find(item => item.id === "scheduled").availability, "scheduled");
+  assert.doesNotMatch(JSON.stringify(list), /"questions"|correctIndex/);
+  const locked = await f.call("start", request);
+  assert.equal(locked.status, 403);
+  assert.equal((await locked.json()).code, "NOT_RELEASED");
+  f.setNow(NOW + 1000);
+  const refreshed = await (await f.call("list", { limit: 20, cursor: list.pageCursor })).json();
+  const released = refreshed.items.find(item => item.id === "scheduled");
+  assert.equal(released.availability, "now");
+  assert.equal(released.availableAt, new Date(NOW + 1000).toISOString());
+  assert.equal(released.revision, request.revision);
+  const opened = await f.call("start", request);
+  assert.equal(opened.status, 200);
+  const [question] = (await opened.json()).questions;
+  assert.deepEqual(Object.keys(question).sort(), ["id", "options", "points", "text"]);
+  assert.equal(question.options.length, 4);
+  f.setNow(NOW + 1_000_000);
+  assert.equal((await f.call("access", request)).status, 200);
 });
 for (const type of ["multiple-choice", "true-false", "essay", "identification-explanation", "modified-true-false"]) test(type + " preserves IDs, strips guides, validates answers and persists the right grading status", async () => {
   const f = fixture(); f.put("generatedQuizzes/quiz1", quiz("quiz1", type)); const { request, opened } = await f.begin();

@@ -230,13 +230,18 @@ class Scope {
       if (row) await this.quiz(p[1]);
       const releaseOnly = input.operation === "update" && names(["section", "sectionId", "assignmentScope", "availability", "availableAt"]);
       const release = releaseOnly ? data : null;
-      if (releaseOnly) data = { ...previous, ...release };
+      if (releaseOnly) {
+        if (Object.keys(release).length !== 5) throw fail("Choose a section and release option.", 400);
+        data = { id: p[1], demo: false, ...previous, ...release };
+      }
       const assignment = quizAssignmentScope(data);
       if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
       if (assignment === "section") await this.ownsClass(data.sectionId);
-      if (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
-          data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) || !text(data.sourceFile, 240) ||
-          !Object.hasOwn(QUIZ_TYPES, data.type) || !["Easy", "Medium", "Hard"].includes(data.difficulty) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
+      if (assignment === "all" && !(await this.assignedClasses()).length) throw fail("You have no assigned sections for this quiz.", 400);
+      if (!releaseOnly && (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
+          !text(data.sourceFile, 240) || !["Easy", "Medium", "Hard"].includes(data.difficulty))) throw fail("Invalid quiz details.", 400);
+      if (data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) ||
+          !Object.hasOwn(QUIZ_TYPES, data.type) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
           (data.schemaVersion !== undefined && data.schemaVersion !== 2) ||
           (data.gradingMode !== undefined && data.gradingMode !== (writtenQuestion(data.type) || data.type === "modified-true-false" ? "teacher-review" : "automatic")) ||
           !Array.isArray(data.questions) || data.questions.length < 1 || data.questions.length > 50 || new Set(data.questions.map(q => q?.id)).size !== data.questions.length) throw fail("Invalid quiz details.", 400);
@@ -244,8 +249,11 @@ class Scope {
       if (data.questions.some(question => !object(question) || !fields(question, ["id", "text", "options", "correctIndex", ...answerFields]) || !part(question.id) ||
           (writtenQuestion(data.type) && (!Array.isArray(question.options) || question.options.length !== 0 || question.correctIndex !== -1)) || !normalizeQuizQuestion(question, data.type))) throw fail("Check the quiz questions and answer guides.", 400);
       if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
-      if (data.availability === "scheduled" ? !Number.isFinite(Date.parse(data.availableAt)) || Date.parse(data.availableAt) <= Date.now() : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
-      return { ...input, data: { ...(release || data), questionCount: data.questions.length, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
+      const now = Date.now();
+      const releaseAt = typeof data.availableAt === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(data.availableAt) ? Date.parse(data.availableAt) : NaN;
+      if (data.availability === "scheduled" ? !Number.isFinite(releaseAt) || releaseAt <= now : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
+      return { ...input, data: { ...(release || data), id: p[1], availableAt: data.availability === "scheduled" ? new Date(releaseAt).toISOString() : "",
+        questionCount: data.questions.length, createdAt: previous?.createdAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
   }

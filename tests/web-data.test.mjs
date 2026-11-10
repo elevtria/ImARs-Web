@@ -432,6 +432,29 @@ test("quiz releases can change between assigned sections while preserving questi
   assert.deepEqual(app.data.get("generatedQuizzes/section-release"), saved);
 });
 
+test("the scheduler can reassign a legacy quiz without rewriting its content", async () => {
+  const app = fixture(), cookie = await app.login();
+  const path = "generatedQuizzes/legacy-quiz";
+  const questions = [{ id: "q1", text: "Water?", options: ["A", "B", "C", "D"], correctIndex: 0 }];
+  app.data.set(path, { title: "Legacy quiz", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A",
+    section: "Section A", type: "multiple-choice", questions, availability: "draft", legacyNote: "Keep this" });
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
+  const saveRelease = data => app.call({ action: "commit", writes: [{ operation: "update", path, data }] }, cookie);
+  const scheduled = { section: "Section C", sectionId: "C", assignmentScope: "section", availability: "scheduled", availableAt: "2099-10-20T09:30:00+08:00" };
+  assert.equal((await saveRelease({ ...scheduled, availableAt: "2099-10-20" })).status, 400);
+  assert.equal((await saveRelease({ ...scheduled, sectionId: "B" })).status, 403);
+  assert.equal((await saveRelease(scheduled)).status, 200);
+  assert.equal(app.data.get(path).availableAt, "2099-10-20T01:30:00.000Z");
+  assert.equal(app.data.get(path).sectionId, "C");
+  assert.equal((await saveRelease({ section: "All my sections", sectionId: "", assignmentScope: "all", availability: "now", availableAt: "" })).status, 200);
+  const saved = app.data.get(path);
+  assert.equal(saved.id, "legacy-quiz");
+  assert.equal(saved.questionCount, 1);
+  assert.equal(saved.assignmentScope, "all");
+  assert.equal(saved.legacyNote, "Keep this");
+  assert.deepEqual(saved.questions, questions);
+});
+
 test("unassigned quiz drafts can be saved and released to all owned sections without exposing other teachers' quizzes", async () => {
   const app = fixture(), cookie = await app.login();
   const quiz = { id: "assignment", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", assignmentScope: "unassigned", sectionId: "", section: "Not assigned", title: "Water", sourceFile: "water.pdf", type: "multiple-choice", difficulty: "Easy", questions: [{ id: "q1", text: "Water?", options: ["A", "B", "C", "D"], correctIndex: 0 }], availability: "draft", availableAt: "", demo: false };

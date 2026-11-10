@@ -95,6 +95,16 @@ test("generation, review, unassigned draft and all-section release use the actua
     selector === "[data-results-quiz]" ? { dataset: { resultsQuiz: saves[0].id } } : null } });
   assert.equal(results[1].id, saves[0].id);
   assert.equal(results[3], "C");
+  await element("quizLibraryList").listeners.click({ target: { closest: selector =>
+    selector === "[data-schedule-quiz]" ? { dataset: { scheduleQuiz: saves[0].id } } : null } });
+  assert.match(element("quizLibraryList").innerHTML, /name="sectionId"/);
+  form.elements={sectionId:{value:"A"},availability:{value:"scheduled"},availableAt:{value:"2099-10-20T09:30"}};
+  element("quizLibraryList").listeners.submit({preventDefault(){},target:{closest:()=>form}});
+  await new Promise(setImmediate);
+  assert.equal(saves.at(-1).sectionId, "A");
+  assert.equal(saves.at(-1).availableAt, new Date("2099-10-20T09:30").toISOString());
+  assert.equal(element("librarySectionFilter").value, "A");
+  assert.match(element("quizLibraryList").innerHTML, /Scheduled · locked/);
   const deleteClick = { target: { closest: selector =>
     selector === "[data-delete-quiz]" ? { dataset: { deleteQuiz: saves[0].id } } : null } };
   await element("quizLibraryList").listeners.click(deleteClick);

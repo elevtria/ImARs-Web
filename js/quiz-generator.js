@@ -103,7 +103,10 @@ const firestore = getFirestore(firebaseApp);
         load: async () => {
           const snapshot = await getDocs(query(collection(firestore, "generatedQuizzes"), where("teacherUid", "==", user.uid)));
           return quizSummaries(snapshot.docs.map(row => ({ ...row.data(), id: row.id })));
-        }, render: quizzes => { saveQuizzes(quizzes); renderLibrary(); }, painted: () => revealContent("quiz-library") });
+        }, render: quizzes => {
+          saveQuizzes(quizzes);
+          if (!expandedScheduleQuizId) renderLibrary();
+        }, painted: () => revealContent("quiz-library") });
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
@@ -511,7 +514,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(quiz.section)}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Assign / schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -553,7 +556,10 @@ const firestore = getFirestore(firebaseApp);
       const uid = auth.currentUser?.uid;
       await updateDoc(reference, updated);
       if (auth.currentUser?.uid !== uid) return;
-      saveQuizzes(loadQuizzes().map(item => item.id === id ? { ...item, ...updated } : item));
+      const quizzes = loadQuizzes();
+      const currentQuiz = quizzes.find(item => item.id === id) || quiz;
+      saveQuizzes([...quizzes.filter(item => item.id !== id), { ...currentQuiz, ...updated }]);
+      if (librarySectionFilter.value && !quizAssignedToSection(updated, librarySectionFilter.value)) librarySectionFilter.value = updated.sectionId;
       expandedScheduleQuizId = null;
       saved = true;
       showStatus(libraryStatus, `Release saved for ${quiz.title} · ${assignmentLabel(updated)}.`, false);
@@ -665,6 +671,7 @@ const firestore = getFirestore(firebaseApp);
     closeQuizReview();
     editRequest++;
     editingQuiz = null;
+    expandedScheduleQuizId = null;
     editorQuestions = [];
     generatedQuestions = [];
     librarySectionFilter.value = "";

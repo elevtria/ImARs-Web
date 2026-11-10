@@ -32,15 +32,16 @@ async function readCursor(env, value, context, now) {
     return payload;
   } catch { throw fail("CURSOR_INVALID", 400, "Reopen teacher quizzes to refresh the list."); }
 }
-function summary(row, scope) {
+function summary(row, scope, now) {
   const q = row.data, context = scope.context;
   if (q.id !== row.id || !validPart(row.id) || !text(q.title, 500) || !text(row.updateTime, 128) ||
       !quizAssignedToSection(q, context.sectionId) || !["teacherProfileId", "teacherUid"].every(key => q[key] === context[key]) || !Object.hasOwn(QUIZ_TYPES, q.type) ||
       !["now", "scheduled"].includes(q.availability) || (q.availability === "scheduled" && !date(q.availableAt)) || !date(q.createdAt) ||
       !Number.isInteger(q.questionCount) || q.questionCount < 1 || q.questionCount > 50 ||
       (review(q.type) && (q.schemaVersion !== 2 || q.gradingMode !== "teacher-review"))) throw fail("QUIZ_METADATA_INVALID", 503, "This quiz needs teacher maintenance.");
+  const availability = q.availability === "scheduled" && Date.parse(q.availableAt) <= now ? "now" : q.availability;
   return { id: row.id, title: q.title, sectionId: context.sectionId, teacherProfileId: q.teacherProfileId, teacherUid: q.teacherUid,
-    type: q.type, gradingMode: review(q.type) ? "teacher-review" : "automatic", availability: q.availability, availableAt: q.availableAt || "",
+    type: q.type, gradingMode: review(q.type) ? "teacher-review" : "automatic", availability, availableAt: q.availableAt || "",
     createdAt: q.createdAt, schemaVersion: q.schemaVersion || 1, questionCount: q.questionCount, teacherName: scope.teacherName, revision: row.updateTime };
 }
 async function quizResults(store, context, ids) {
@@ -79,12 +80,12 @@ async function list(body, scope, store, env, now) {
     const byId = new Map(rows.map(row => [row.id, row]));
     const items = cursor.ids.flatMap(id => {
       const row = byId.get(id);
-      return row && quizAssignedToSection(row.data, context.sectionId) && ["now", "scheduled"].includes(row.data.availability) ? [summary(row, scope)] : [];
+      return row && quizAssignedToSection(row.data, context.sectionId) && ["now", "scheduled"].includes(row.data.availability) ? [summary(row, scope, now)] : [];
     });
     return { items: await attachQuizResults(items, store, context), pageCursor: body.cursor, nextCursor: cursor.next };
   }
   const rows = await store.quizPage(context, { limit: body.limit + 1, after: cursor?.after, upper: cursor?.upper });
-  const items = rows.slice(0, body.limit).map(row => summary(row, scope));
+  const items = rows.slice(0, body.limit).map(row => summary(row, scope, now));
   const tuple = item => [item.createdAt, item.id];
   const nextCursor = rows.length > body.limit ? await signCursor(env, { ...common, kind: "next", after: tuple(items.at(-1)), upper: cursor?.upper || tuple(items[0]) }) : "";
   const pageCursor = await signCursor(env, { ...common, kind: "page", ids: items.map(item => item.id), next: nextCursor });
@@ -99,7 +100,7 @@ async function quizFor(body, scope, store, now, submit = false) {
   if (!q || !quizAssignedToSection(q, scope.context.sectionId) || !["teacherProfileId", "teacherUid"].every(key => q[key] === scope.context[key]) || q.availability === "draft") throw fail("QUIZ_UNAVAILABLE");
   if (!["now", "scheduled"].includes(q.availability) || (q.availability === "scheduled" && (!date(q.availableAt) || Date.parse(q.availableAt) > now))) throw fail("NOT_RELEASED");
   if (row.updateTime !== body.revision) throw fail("REVISION_CHANGED", 409, "Your teacher updated this quiz. Reopen it to continue.");
-  const safe = summary({ ...row, id }, scope);
+  const safe = summary({ ...row, id }, scope, now);
   if (!Array.isArray(q.questions) || q.questions.length !== safe.questionCount || new Set(q.questions.map(item => item?.id)).size !== q.questions.length ||
       q.questions.some(item => !validPart(item?.id) || !normalizeQuizQuestion(item, q.type))) throw fail("QUIZ_METADATA_INVALID", 503);
   return { q, safe };
