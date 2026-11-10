@@ -5,6 +5,7 @@ import { encodeView, decodeView, reuseTeacherReport } from "./view-cache.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
+import { confirmAction } from "./confirm-action.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -518,8 +519,9 @@ let archiveTarget;
 let archiveSectionTargets = null;
 let archiveSectionCode = null;
 document.getElementById("cancelArchiveStudent").addEventListener("click", () => {
-  if (!archiveSave.disabled) archiveModal.classList.remove("open");
+  if (!archiveSave.disabled) archiveModal.close();
 });
+archiveModal.addEventListener("cancel", event => { if (archiveSave.disabled) event.preventDefault(); });
 recordsContainer.addEventListener("click", event => {
   const button = event.target.closest(".archive-student-btn");
   if (!button) return;
@@ -531,7 +533,7 @@ recordsContainer.addEventListener("click", event => {
   resetArchiveReason();
   archiveError.textContent = "";
   document.getElementById("archiveStudentName").textContent = archiveTarget.name;
-  archiveModal.classList.add("open");
+  archiveModal.showModal();
   archiveForm.querySelector('input[name="archiveReasonChoice"]')?.focus();
 });
 archiveSectionButton.addEventListener("click", () => {
@@ -547,12 +549,12 @@ archiveSectionButton.addEventListener("click", () => {
   archiveSave.textContent = "Archive " + total + " students";
   resetArchiveReason();
   archiveError.textContent = "";
-  archiveModal.classList.add("open");
+  archiveModal.showModal();
   archiveForm.querySelector('input[name="archiveReasonChoice"]')?.focus();
 });
 archiveForm.addEventListener("submit", async event => {
   event.preventDefault();
-  if (archiveSave.disabled || (!archiveTarget && !archiveSectionCode) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
+  if (!archiveModal.open || archiveSave.disabled || (!archiveTarget && !archiveSectionCode) || !["graduated", "dropped-out"].includes(archiveReason.value)) return;
   archiveSave.disabled = true;
   archiveSave.setAttribute("aria-busy", "true");
   archiveError.textContent = "";
@@ -582,7 +584,7 @@ archiveForm.addEventListener("submit", async event => {
       await updateDoc(doc(db, "users", archiveTarget.id), data);
       updateStudentRows([archiveTarget.id], data);
     }
-    archiveModal.classList.remove("open");
+    archiveModal.close();
   } catch (error) {
     console.error("Error archiving student:", error);
     archiveError.textContent = savedCount ? savedCount + " students archived. Retry to finish the remaining students." : "Could not archive the selected students. Please try again.";
@@ -601,7 +603,13 @@ recordsContainer.addEventListener("click", async event => {
   const message = restore
     ? "Return " + button.dataset.name + " to the Active students list?"
     : "Delete the archived student profile for " + button.dataset.name + "? This cannot be undone. Existing lesson results and their sign-in account are not erased.";
-  if (!window.confirm(message)) return;
+  const uid = auth.currentUser?.uid;
+  if (!uid || !await confirmAction({
+    title: restore ? "Unarchive student?" : "Delete student profile?",
+    message,
+    confirmLabel: restore ? "Unarchive student" : "Delete profile",
+    destructive: !restore
+  }) || auth.currentUser?.uid !== uid) return;
   button.disabled = true;
   try {
     const reference = doc(db, "users", button.dataset.id);

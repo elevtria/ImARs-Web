@@ -7,6 +7,7 @@ import { setLoadingState, revealContent } from "./loading.js";
 import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
 import { showTeacherView } from "./teacher-view.js";
+import { confirmAction } from "./confirm-action.js";
 
 const firebaseApp = initializeApp();
 const auth = getAuth(firebaseApp);
@@ -17,6 +18,7 @@ const firestore = getFirestore(firebaseApp);
   const generateButton = document.getElementById("generateQuiz");
   const dropzone = document.getElementById("quizDropzone");
   const selectedFileRow = document.getElementById("selectedFileRow");
+  const fileError = document.getElementById("quizFileError");
   const setupStatus = document.getElementById("setupStatus");
   const editorStatus = document.getElementById("editorStatus");
   const suggestionList = document.getElementById("suggestionsList");
@@ -174,22 +176,16 @@ const firestore = getFirestore(firebaseApp);
   function handleFile(file) {
     if (!file || generating) return;
     const extension = fileExtension(file);
-    const supported = ["pdf", "docx", "ppt", "pptx"];
-    if (!supported.includes(extension)) {
+    const error = ["pdf", "docx", "ppt", "pptx"].includes(extension)
+      ? quizFileSizeError(file.size) : "Please select a PDF, DOCX, PPT, or PPTX file.";
+    fileError.textContent = error;
+    fileInput.setAttribute("aria-invalid", String(Boolean(error)));
+    showStatus(setupStatus, "", false);
+    if (error) {
       selectedFile = null;
       updateGenerateButton();
       selectedFileRow.hidden = true;
       fileInput.value = "";
-      showStatus(setupStatus, "Please select a PDF, DOCX, PPT, or PPTX file.", true);
-      return;
-    }
-    const sizeError = quizFileSizeError(file.size);
-    if (sizeError) {
-      selectedFile = null;
-      updateGenerateButton();
-      selectedFileRow.hidden = true;
-      fileInput.value = "";
-      showStatus(setupStatus, sizeError, true);
       return;
     }
     selectedFile = file;
@@ -197,7 +193,6 @@ const firestore = getFirestore(firebaseApp);
     document.getElementById("selectedFileName").textContent = file.name;
     document.getElementById("fileTypeBadge").textContent = extension.toUpperCase();
     selectedFileRow.hidden = false;
-    showStatus(setupStatus, "", false);
     const titleInput = document.getElementById("quizTitle");
     if (!titleInput.value.trim()) titleInput.value = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
   }
@@ -226,19 +221,27 @@ const firestore = getFirestore(firebaseApp);
     }
     const button = generateButton;
     const loadingOverlay = document.getElementById("quizGenerationOverlay");
+    const loadingStatus = document.getElementById("quizGenerationStatus");
+    const loadingHint = document.getElementById("quizGenerationHint");
+    const file = selectedFile;
     generating = true;
     updateGenerateButton();
     button.setAttribute("aria-busy", "true");
+    loadingStatus.textContent = "Preparing your file…";
+    loadingHint.textContent = "Larger files and more questions can take longer.";
     loadingOverlay.hidden = false;
-    loadingOverlay.setAttribute("aria-busy", "true");
+    const slowMessage = setTimeout(() => {
+      loadingHint.textContent = "This is taking longer than usual. Keep this page open while ImARs finishes.";
+    }, 15000);
     showStatus(setupStatus, "", false);
     try {
-      const material = await prepareMaterial(selectedFile);
+      const material = await prepareMaterial(file);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
+      loadingStatus.textContent = material.pdfFile ? "Uploading your PDF and generating questions…" : "Generating your quiz…";
       const questions = await requestQuiz({
         ...material,
-        fileName: selectedFile.name,
+        fileName: file.name,
         questionCount: Number(document.getElementById("questionCount").value),
         difficulty,
         questionType: document.querySelector("input[name='questionType']:checked").value
@@ -258,8 +261,8 @@ const firestore = getFirestore(firebaseApp);
     } catch (generationError) {
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
+      clearTimeout(slowMessage);
       loadingOverlay.hidden = true;
-      loadingOverlay.setAttribute("aria-busy", "false");
       generating = false;
       updateGenerateButton();
       button.setAttribute("aria-busy", "false");
@@ -620,6 +623,8 @@ const firestore = getFirestore(firebaseApp);
 
   function resetNewQuiz() {
     selectedFile = null;
+    fileError.textContent = "";
+    fileInput.setAttribute("aria-invalid", "false");
     updateGenerateButton();
     generatedQuestions = [];
     editorQuestions = [];
@@ -682,6 +687,8 @@ const firestore = getFirestore(firebaseApp);
     selectedFile = null;
     updateGenerateButton();
     fileInput.value = "";
+    fileError.textContent = "";
+    fileInput.setAttribute("aria-invalid", "false");
     selectedFileRow.hidden = true;
     showStatus(setupStatus, "", false);
   });
@@ -731,8 +738,8 @@ const firestore = getFirestore(firebaseApp);
     renderSuggestions();
   });
   document.getElementById("acceptAll").addEventListener("click", () => enterEditor(true));
-  document.getElementById("discardAll").addEventListener("click", () => {
-    if (!window.confirm("Discard all suggested questions and start over?")) return;
+  document.getElementById("discardAll").addEventListener("click", async () => {
+    if (!await confirmAction({ title: "Discard all suggested questions?", message: "You’ll return to quiz setup and lose these suggestions.", confirmLabel: "Discard questions" })) return;
     generatedQuestions = [];
     setStep("setup");
   });
@@ -816,7 +823,13 @@ const firestore = getFirestore(firebaseApp);
     if (edit) editQuiz(edit.dataset.editQuiz);
     if (remove) {
       const id = remove.dataset.deleteQuiz;
-      if (!window.confirm("Delete this quiz from your library?")) return;
+      const quiz = loadQuizzes().find(item => item.id === id);
+      const uid = auth.currentUser?.uid;
+      if (!quiz || !uid || !await confirmAction({
+        title: "Delete quiz?",
+        message: `Delete “${quiz.title}” from your library? This cannot be undone.`,
+        confirmLabel: "Delete quiz"
+      }) || auth.currentUser?.uid !== uid) return;
       try {
         await deleteDoc(doc(firestore, "generatedQuizzes", id));
         saveQuizzes(loadQuizzes().filter((quiz) => quiz.id !== id));

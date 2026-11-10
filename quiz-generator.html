@@ -69,7 +69,7 @@
             <div class="quiz-upload-column">
               <label class="quiz-field-label" for="quizFile">Learning material</label>
               <label class="quiz-dropzone" id="quizDropzone" for="quizFile" tabindex="0">
-                <input id="quizFile" type="file" aria-describedby="quizUploadLimits quizContentLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
+                <input id="quizFile" type="file" aria-describedby="quizUploadLimits quizFileError quizContentLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
                 <span class="quiz-upload-icon" aria-hidden="true">
                   <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
                 </span>
@@ -77,6 +77,7 @@
                 <small id="quizUploadLimits">PDF, DOCX, or PPTX · Maximum 50 MB per file</small>
                 <small>Save older PPT files as PPTX or PDF first.</small>
               </label>
+              <p class="quiz-file-error" id="quizFileError" role="alert"></p>
               <div class="quiz-file-selected" id="selectedFileRow" hidden>
                 <span class="quiz-file-type" id="fileTypeBadge">PDF</span>
                 <span class="quiz-file-name" id="selectedFileName"></span>
@@ -123,7 +124,6 @@
             <button class="primary-btn quiz-primary" id="generateQuiz" type="button" disabled><span>Generate quiz</span></button>
           </div>
           <p class="quiz-status" id="setupStatus" role="status" aria-live="polite"></p>
-          <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false"><span class="section-data-loading" role="status" aria-label="Generating quiz"></span></div>
         </section>
 
         <section class="quiz-step-pane" id="reviewStep" hidden data-auth-shell>
@@ -180,6 +180,15 @@
         <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
       </section>
     </main>
+  </div>
+
+  <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden>
+    <div class="quiz-generation-card" role="status" aria-live="polite" aria-atomic="true">
+      <img src="assets/imars-logo.png" alt="ImARs" width="56" height="56" />
+      <span class="section-data-loading" aria-hidden="true"></span>
+      <strong id="quizGenerationStatus"></strong>
+      <p id="quizGenerationHint"></p>
+    </div>
   </div>
 
   <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>

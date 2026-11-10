@@ -5,6 +5,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
 import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
+import { confirmAction } from "./confirm-action.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -142,7 +143,8 @@ if (list) {
     const unlock = event.target.closest("[data-unlock-web-id]");
     if (unlock) {
       const identifier = unlock.dataset.unlockWebId;
-      if (!window.confirm(`Restore web login for ${identifier}? This clears their failed-attempt history. Mobile access is unchanged.`)) return;
+      const uid = auth.currentUser.uid;
+      if (!await confirmAction({ title: "Restore web login?", message: `Clear the failed-attempt history for ${identifier}.`, confirmLabel: "Restore login", destructive: false }) || auth.currentUser?.uid !== uid) return;
       unlock.disabled = true;
       try {
         await webRequest("/api/web-auth/unlock", { identifier });
@@ -159,6 +161,9 @@ if (list) {
       if (!teacher) return;
 
       const nextStatus = !teacher.active;
+      const uid = auth.currentUser.uid;
+      if (!nextStatus && !await confirmAction({ title: "Deactivate teacher?", message: `Deactivate ${teacher.name}’s staff profile?`, confirmLabel: "Deactivate teacher" })) return;
+      if (auth.currentUser?.uid !== uid) return;
       try {
         await updateDoc(doc(db, "users", teacherId), {
           active: nextStatus,
@@ -180,15 +185,15 @@ if (list) {
       const teacher = teachers.find((t) => t.id === teacherId);
       if (!teacher) return;
 
-      if (window.confirm(`Are you sure you want to remove ${teacher.name}?`)) {
-        try {
-          await deleteDoc(doc(db, "users", teacherId));
-          teachers = teachers.filter((t) => t.id !== teacherId);
-          render();
-        } catch (err) {
-          console.error("Failed to delete teacher:", err);
-          alert("Error deleting teacher.");
-        }
+      const uid = auth.currentUser.uid;
+      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name}’s staff profile? This cannot be undone.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
+      try {
+        await deleteDoc(doc(db, "users", teacherId));
+        teachers = teachers.filter((t) => t.id !== teacherId);
+        render();
+      } catch (err) {
+        console.error("Failed to delete teacher:", err);
+        alert("Error deleting teacher.");
       }
     }
   });

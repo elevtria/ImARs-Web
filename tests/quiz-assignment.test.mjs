@@ -23,30 +23,53 @@ test("generation, review, unassigned draft and all-section release use the actua
   const choice = new Element(), availability = new Element(); choice.value = "multiple-choice"; availability.value = "draft";
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
-  let authenticated, requested, results;
+  let authenticated, requested, results, showSlowMessage, finishGeneration, confirmDelete = false;
   const context = {
     console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
+    setTimeout: callback => { showSlowMessage = callback; return 1; },
+    clearTimeout: () => { showSlowMessage = null; },
     initializeApp:()=>({}), getAuth:()=>({currentUser:{uid:"teacher-a"}}), getFirestore:()=>({}),
     collection:(_db,path)=>path, query:(path)=>path, where:()=>null, doc:(_db,_collection,id)=>id,
     getDocs:async path=>path==="users" ? docs([["TEACH1",{role:"teacher"}]]) : path==="classes" ? docs([["A",{SectionName:"Section A"}],["C",{SectionName:"Section C"}]]) : docs([...quizzes]),
     getDoc:async id=>({exists:()=>quizzes.has(id),data:()=>quizzes.get(id)}),
     setDoc:async (id,data)=>{quizzes.set(id,structuredClone(data));saves.push(structuredClone(data));},
-    updateDoc:async (id,data)=>{assert.ok(!Object.hasOwn(data,"questions"));const updated={...quizzes.get(id),...data};quizzes.set(id,updated);saves.push(updated);}, deleteDoc:async()=>{},
+    updateDoc:async (id,data)=>{assert.ok(!Object.hasOwn(data,"questions"));const updated={...quizzes.get(id),...data};quizzes.set(id,updated);saves.push(updated);}, deleteDoc:async id => { quizzes.delete(id); },
+    confirmAction: async options => { assert.equal(options.title, "Delete quiz?"); return confirmDelete; },
     onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, showTeacherView:async ({load,render,painted})=>{render(await load());painted();},
-    requestQuiz:async payload=>{requested=payload;return [{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}];},
+    requestQuiz: payload => {
+      requested = payload;
+      return new Promise(resolve => { finishGeneration = resolve; });
+    },
     extractOfficeText:async()=>"Water freezes.", localStorage:{setItem(){}},
     closeQuizReview() {}, openQuizReview: (...args) => { results = args; },
     window:{scrollTo(){},confirm:()=>true},
     document:{getElementById:element,querySelectorAll:()=>[],querySelector:selector=>selector.includes("questionType") ? choice : availability}
   };
   vm.runInNewContext(readFileSync(new URL("../js/quiz-generator.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm,""),context);
-  await authenticated({uid:"teacher-a"});
+  const loadingTeacher = authenticated({uid:"teacher-a"});
   assert.equal(element("generateQuiz").disabled,true);
+  element("quizFile").files = [{ name: "oversized.pdf", size: 50_600_000 }];
+  element("quizFile").listeners.change();
+  await loadingTeacher;
+  assert.match(element("quizFileError").textContent, /exceeds the 50 MB limit/);
+  assert.equal(element("generateQuiz").disabled, true);
+  assert.equal(requested, undefined);
   const file = Object.assign(new Blob(["PDF fixture"]),{name:"water.pdf"});
   element("quizFile").files=[file]; element("quizFile").listeners.change();
+  assert.equal(element("quizFileError").textContent, "");
   assert.equal(element("generateQuiz").disabled,false);
   element("questionCount").value="1";
-  await element("generateQuiz").listeners.click();
+  const generation = element("generateQuiz").listeners.click();
+  assert.equal(element("quizGenerationOverlay").hidden, false);
+  assert.match(element("quizGenerationStatus").textContent, /Preparing/);
+  await new Promise(setImmediate);
+  assert.match(element("quizGenerationStatus").textContent, /Uploading your PDF/);
+  showSlowMessage();
+  assert.match(element("quizGenerationHint").textContent, /taking longer/);
+  finishGeneration([{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}]);
+  await generation;
+  assert.equal(element("quizGenerationOverlay").hidden, true);
+  assert.equal(showSlowMessage, null);
   assert.equal(requested.sectionId,undefined);
   assert.equal(element("reviewStep").hidden,false);
   element("acceptAll").listeners.click();
@@ -72,4 +95,11 @@ test("generation, review, unassigned draft and all-section release use the actua
     selector === "[data-results-quiz]" ? { dataset: { resultsQuiz: saves[0].id } } : null } });
   assert.equal(results[1].id, saves[0].id);
   assert.equal(results[3], "C");
+  const deleteClick = { target: { closest: selector =>
+    selector === "[data-delete-quiz]" ? { dataset: { deleteQuiz: saves[0].id } } : null } };
+  await element("quizLibraryList").listeners.click(deleteClick);
+  assert.equal(quizzes.has(saves[0].id), true);
+  confirmDelete = true;
+  await element("quizLibraryList").listeners.click(deleteClick);
+  assert.equal(quizzes.has(saves[0].id), false);
 });

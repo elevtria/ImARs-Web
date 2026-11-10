@@ -57,5 +57,5 @@ export function normalizeQuizQuestion(question, type) {
 
 export function quizFileSizeError(size) {
   if (!Number.isSafeInteger(size) || size < 1) return "This file is empty or could not be read.";
-  return size > MAX_QUIZ_FILE_BYTES ? "Please choose a file of 50 MB or less." : "";
+  return size > MAX_QUIZ_FILE_BYTES ? "This file exceeds the 50 MB limit. Choose a smaller file." : "";
 }

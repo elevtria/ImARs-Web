@@ -32,6 +32,8 @@ class Element {
   remove() { this.parent.children.splice(this.parent.children.indexOf(this),1); }
   querySelector(k) { return this.buttons?.[k] || null; } querySelectorAll(k) { return k === ".record" ? this.children.filter(c=>c.className === "record") : []; }
   focus() {} addEventListener(k,fn) { (this.listeners[k] ||= []).push(fn); }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
   async emit(k,event={}) { for(const fn of this.listeners[k] || []) await fn({preventDefault(){},stopPropagation(){},...event}); }
 }
 function harness(size=3) {
@@ -59,7 +61,8 @@ function harness(size=3) {
     updateDoc:async(ref,data)=>{if(denied)throw Error("Denied");writes.push({ref,data});Object.assign(profiles.get(ref.id),data);cache.invalidate();},
     deleteDoc:async ref=>{if(denied)throw Error("Denied");writes.push({ref,deleted:true});profiles.delete(ref.id);cache.invalidate();},
     writeBatch:()=>{const group=[];return {update(ref,data){group.push({ref,data});},async commit(){if(denied||++batches===failBatch)throw Error("Denied");for(const item of group){writes.push(item);Object.assign(profiles.get(item.ref.id),item.data);}cache.invalidate();}};},
-    window:{innerHeight:800,confirm:()=>confirmation,alert:v=>alerts.push(v),location:{reload(){assert.fail("data changes must not reload the page");}}},
+    confirmAction: async () => confirmation,
+    window:{innerHeight:800,alert:v=>alerts.push(v),location:{reload(){assert.fail("data changes must not reload the page");}}},
     document:{getElementById:id=>ids[id],createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element("fragment")}
   });
   vm.runInContext(source,context);
@@ -137,12 +140,20 @@ test("archived profiles retain restore and delete confirmations; cancelled and d
   app.setConfirm(false);await app.click(".unarchive-student-btn",button);assert.equal(app.writes.length,0);
   app.setConfirm(true);await app.click(".unarchive-student-btn",button);assert.equal(app.ids.activeStudentsCount.textContent,3);assert.equal(app.ids.archivedStudentsCount.textContent,0);
   const other=harness();await other.load();await other.ids.archivedStudentsTab.emit("click");await flush();
+  other.setConfirm(false);
+  await other.click(".remove-student-btn",other.ids.recordsContainer.children[0].querySelector(".remove-student-btn"));assert.equal(other.profiles.has("S0001"),true);
+  other.setConfirm(true);
   await other.click(".remove-student-btn",other.ids.recordsContainer.children[0].querySelector(".remove-student-btn"));assert.equal(other.profiles.has("S0001"),false);
   const denied=harness();await denied.load();denied.deny();await denied.archive("S0000");assert.equal(denied.writes.length,0);assert.equal(denied.ids.activeStudentsCount.textContent,2);
   assert.match(denied.ids.archiveStudentError.textContent,/Could not archive/);
 });
 test("section archive covers other pages and retries only the remaining students after partial failure",async()=>{
   const app=harness(130);await app.load();app.ids.sectionFilter.value="A";await app.ids.sectionFilter.emit("change");await app.ids.archiveSectionBtn.emit("click");
+  assert.equal(app.ids.archiveStudentModal.open, true);
+  await app.ids.cancelArchiveStudent.emit("click");
+  await app.ids.archiveStudentForm.emit("submit");
+  assert.equal(app.writes.length, 0);
+  await app.ids.archiveSectionBtn.emit("click");
   assert.match(app.ids.archiveStudentName.textContent,/130 active students/);app.ids.archiveReason.value="dropped-out";app.failBatch(2);await app.ids.archiveStudentForm.emit("submit");
   assert.equal(app.writes.length,100);assert.equal(app.ids.activeStudentsCount.textContent,30);assert.match(app.ids.archiveStudentError.textContent,/100 students archived/);
   await app.ids.archiveStudentForm.emit("submit");assert.equal(app.writes.length,130);assert.equal(new Set(app.writes.map(r=>r.ref.id)).size,130);assert.equal(app.resultReads.length,0);

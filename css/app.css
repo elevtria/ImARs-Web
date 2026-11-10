@@ -596,6 +596,14 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 
 .modal-card h3 { margin-bottom: 8px; }
 .modal-card p { color: #5b6e84; margin-bottom: 16px; }
+.confirm-panel { width: min(460px, calc(100% - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 0; border-radius: 20px; background: transparent; box-shadow: 0 24px 70px #2c3a4f40; }
+.confirm-panel::backdrop { background: #2c3a4f70; }
+.confirm-panel .modal-card { width: 100%; }
+.confirm-panel h3 { color: var(--ink); font-size: 20px; font-weight: 750; }
+.confirm-panel .modal-actions { justify-content: flex-end; flex-wrap: wrap; }
+.confirm-panel .modal-actions > button { flex: 0 1 auto; }
+.confirm-panel .confirm-danger { background: #a52e38; color: #fff; }
+.confirm-panel .confirm-danger:hover { background: #86232c; }
 
 .qr-box {
   height: 180px;
@@ -2171,7 +2179,6 @@ label {
 @media(max-width:480px) { .archive-section-btn { margin-left:0; display:flex; } }
 
 /* Archive confirmation uses clear choices instead of a native dropdown. */
-#archiveStudentModal { padding:24px; background:#2c3a4f70; backdrop-filter:blur(4px); }
 #archiveStudentForm { width:min(460px,100%); max-height:calc(100svh - 48px); overflow-y:auto; padding:30px; border-radius:24px; border:1px solid #fff; box-shadow:0 24px 70px #2c3a4f26; background:#fff; }
 #archiveStudentForm h3 { font-size:23px; letter-spacing:-.6px; color:var(--ink); }
 #archiveStudentForm #archiveStudentName { display:inline-block; padding:7px 12px; margin:12px 0 0; border-radius:9px; background:#bfc8e230; color:#476781; font-size:13px; font-weight:600; }
