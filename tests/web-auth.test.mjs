@@ -159,6 +159,30 @@ test("old admin profile bookmarks lead signed-in admins to the overview", async 
   assert.equal((await app.page("/admin-profile", teacher)).status, 403);
 });
 
+test("hosted index canonicalization keeps a signed-in teacher on the dashboard", async () => {
+  const app = fixture();
+  const cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
+  // Static hosts canonicalize /index.html to /. That second request must
+  // verify the session and serve the dashboard instead of returning to welcome.
+  const canonical = await protectWebsite({ env: app.env,
+    request: new Request("https://imars.example.test/index.html", { headers: { Cookie: cookie } }),
+    next: async () => new Response(null, { status: 308, headers: { Location: "/" } }) });
+  assert.equal(canonical.headers.get("Location"), "/");
+  const dashboard = await app.page("/", cookie);
+  assert.equal(dashboard.status, 200);
+  assert.equal(await dashboard.text(), "portal-page");
+  assert.equal(dashboard.headers.get("Location"), null);
+  assert.equal((await app.page("/admin-dashboard", cookie)).status, 403);
+});
+
+test("an invalid session cookie cannot turn the public entry into a dashboard", async () => {
+  const app = fixture();
+  const response = await app.page("/", "__Host-imars-web=invalid");
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "/welcome");
+  assert.match(response.headers.get("Set-Cookie"), /Max-Age=0/);
+});
+
 function fixture() {
   let time = Date.now(), verifications = 0, outage = false, wrongUid = false;
   const stores = new Map(), actors = new Map();

@@ -364,7 +364,9 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
-  if (path === "") return new Response(null, { status: 302, headers: { Location: "/welcome", "Cache-Control": "no-store" } });
+  const home = path === "";
+  const hasSessionCookie = request.headers.get("Cookie")?.split(/;\s*/).some(value => value.startsWith(`${cookieName}=`));
+  if (home && !hasSessionCookie) return new Response(null, { status: 302, headers: { Location: "/welcome", "Cache-Control": "no-store" } });
   if (path === "/welcome" || path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
   if (!enabled(env) && !dataEnabled(env)) return context.next();
   const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
@@ -373,6 +375,7 @@ export async function protectWebsite(context, now = Date.now()) {
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);
+      if (home) return new Response(null, { status: 302, headers: { Location: "/welcome", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
       const loginPath = adminOnly ? "/admin-login" : "/login";
       return new Response(null, { status: 302, headers: { Location: loginPath + "?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
     }
