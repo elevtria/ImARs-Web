@@ -10,7 +10,7 @@
   ::view-transition-new(portal-background),::view-transition-new(portal-navigation),::view-transition-new(portal-header) { animation:none; }
 }
 @media screen {
-:root { --portal-ink:#2c3a4f; --portal-muted:#596b7e; --portal-line:#a4b8d94d; --portal-blue:#81a2c1; --portal-gold:#feb705; }
+:root { --portal-ink:#163858; --portal-muted:#526f8a; --portal-line:#b4d5ee; --portal-blue:#247bce; --portal-gold:#feb705; }
 #drawer .drawer-panel, #drawer .side-nav { scrollbar-width:none; -ms-overflow-style:none; }
 #drawer .drawer-panel::-webkit-scrollbar, #drawer .side-nav::-webkit-scrollbar { display:none; width:0; height:0; }
 body:not(.login-page) :is(.hero,.intro) { padding:22px 24px; border-left:4px solid var(--portal-gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }

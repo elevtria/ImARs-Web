@@ -13,21 +13,28 @@
   <script src="js/tailwind.config.js"></script>
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/login.css" />
+  <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/experience.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="login-page min-h-screen bg-mist text-slate-900 font-sans grid place-items-center p-6">
+<body class="login-page login-scene admin-login-scene">
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
+  <header class="experience-header">
+    <a class="experience-brand" href="welcome.html" aria-label="ImARs home"><img src="assets/imars-logo.png" alt="" width="48" height="48" /><span>ImARs<small>SCIENCE IN A NEW DIMENSION</small></span></a>
+    <div class="experience-actions topbar-right"><a class="experience-text-link" href="welcome.html"><span aria-hidden="true">←</span> Back to explore</a></div>
+  </header>
+  <div class="signin-layout">
   <main class="login-card w-full max-w-[440px] bg-white rounded-3xl p-8">
     <div class="flex items-center gap-3 mb-6">
       <img class="brand-mark login-brand-mark" src="assets/imars-logo.png" alt="ImARs logo" />
       <div>
         <strong class="block text-lg font-extrabold">ImARs</strong>
-        <small class="block mt-0.5 text-slate-400 text-[13px]">Administrator Portal</small>
+        <small class="block mt-0.5 text-indigo-400 text-[13px] font-semibold">Administrator Portal</small>
       </div>
     </div>
 
-    <h1 class="text-[28px] tracking-tight font-extrabold mb-1.5">Admin sign-in</h1>
-    <p class="text-slate-500 text-[15px] mb-6">Log in to continue to the school dashboard.</p>
+    <h1 class="text-[28px] tracking-tight font-extrabold mb-1.5">Welcome back</h1>
+    <p class="text-slate-500 text-[15px] mb-6">Sign in to manage your school and teacher accounts.</p>
     
     <form id="adminLoginForm" autocomplete="on">
       <div class="mb-3.5">
@@ -57,9 +64,11 @@
     </form>
 
     <div class="mt-6 text-center">
-      <a href="login.html" class="text-sm font-semibold text-indigo-700 hover:underline">← Back to teacher sign-in</a>
+      <a href="login.html" class="signin-admin">← Return to Teacher Login</a>
     </div>
   </main>
+    <aside class="signin-story" aria-labelledby="admin-story-title"><p class="experience-eyebrow">THE ADMINISTRATOR PORTAL</p><h2 id="admin-story-title">Support your teachers.<br /><span>Inspire discovery.</span></h2><p>Manage teacher accounts and follow school progress. Help your classrooms make the most of every science lesson.</p><div class="signin-science"><img src="assets/showcase/heart.webp" alt="3D heart from the ImARs app" width="160" height="190" /><p>Science you can<br />see differently.<small>Explore. Understand. Discover.</small></p></div></aside>
+  </div>
 
   <script type="module" src="js/admin-login.js"></script>
 </body>

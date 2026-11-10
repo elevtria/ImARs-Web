@@ -354,7 +354,6 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
 
 export async function protectWebsite(context, now = Date.now()) {
   const { request, env } = context;
-  if (!enabled(env) && !dataEnabled(env)) return context.next();
   const url = new URL(request.url);
   let path;
   try {
@@ -365,7 +364,9 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
-  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  if (path === "") return new Response(null, { status: 302, headers: { Location: "/welcome", "Cache-Control": "no-store" } });
+  if (path === "/welcome" || path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  if (!enabled(env) && !dataEnabled(env)) return context.next();
   const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });

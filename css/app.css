@@ -6,16 +6,16 @@ body[data-auth-pending] main { pointer-events: none; }
 body[data-auth-pending][data-history-hidden] :is(main, main *) { visibility: hidden !important; }
 
 :root {
-  --mist: #e2e3e7;
-  --ice: #bfc8e2;
-  --sky: #a4b8d9;
-  --steel: #81a2c1;
+  --mist: #e9f5ff;
+  --ice: #c8e6fb;
+  --sky: #9dc7e7;
+  --steel: #247bce;
   --gold: #feb705;
-  --ink: #2c3a4f;
-  --muted: #6d7a8c;
-  --surface: rgba(255, 255, 255, 0.62);
-  --line: rgba(164, 184, 217, 0.45);
-  --shadow: 0 10px 30px rgba(129, 162, 193, 0.16);
+  --ink: #163858;
+  --muted: #526f8a;
+  --surface: #ffffff;
+  --line: #b4d5ee;
+  --shadow: 0 10px 30px rgba(40, 119, 189, 0.12);
   --radius: 22px;
 }
 
@@ -29,9 +29,9 @@ html, body {
 
 body {
   background:
-    radial-gradient(900px 420px at 10% -10%, rgba(164, 184, 217, 0.7), transparent 60%),
-    radial-gradient(700px 380px at 100% 0%, rgba(191, 200, 226, 0.85), transparent 55%),
-    radial-gradient(600px 300px at 80% 100%, rgba(129, 162, 193, 0.28), transparent 50%),
+    radial-gradient(900px 420px at 10% -10%, #a8d7fc99, transparent 60%),
+    radial-gradient(700px 380px at 100% 0%, #cceaffb3, transparent 55%),
+    radial-gradient(600px 300px at 80% 100%, #b8ddf54d, transparent 50%),
     var(--mist);
 }
 
@@ -93,7 +93,7 @@ a { text-decoration: none; color: inherit; }
   position: sticky;
   top: 0;
   z-index: 20;
-  background: rgba(226, 227, 231, 0.78);
+  background: rgba(233, 245, 255, 0.94);
   backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
 }
