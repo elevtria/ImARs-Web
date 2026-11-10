@@ -64,7 +64,7 @@ select.admin-year:disabled { opacity: .7; cursor: wait; }
 .table-scroll { width: 100%; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: right; white-space: nowrap; }
 th { padding: 11px 10px; color: #8796ad; font-size: 11px; font-weight: 600; }
-.teacher-panel th:not(:first-child) { text-align: right; }
+.teacher-panel :is(th, td):not(:first-child) { text-align: center; }
 th:first-child, td:first-child { width: 48%; text-align: left; }
 td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-size: 13px; }
 .teacher-cell { display: flex; min-width: 310px; align-items: center; gap: 11px; }
