@@ -264,4 +264,4 @@
 /* Crossfade the whole page when the theme changes. */
 :root.theme-switching { view-transition-name: root; }
 :root.theme-switching :is(.login-cubes, #drawer .side-nav, body:has(#drawer) .topbar) { view-transition-name: none; }
-:root.theme-switching::view-transition-group(root) { animation-duration: 220ms; }
+:root.theme-switching::view-transition-group(root) { animation-duration: 650ms; }
