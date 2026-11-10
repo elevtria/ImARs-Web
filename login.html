@@ -17,10 +17,18 @@
   <script src="js/tailwind.config.js"></script>
   <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/login.css" />
+  <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/experience.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="login-page min-h-screen bg-mist text-slate-900 font-sans grid place-items-center p-6">
+<body class="login-page login-scene">
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
+  <header class="experience-header">
+    <a class="experience-brand" href="welcome.html" aria-label="ImARs home"><img src="assets/imars-logo.png" alt="" width="48" height="48" /><span>ImARs<small>SCIENCE IN A NEW DIMENSION</small></span></a>
+    <div class="experience-actions topbar-right"><a class="experience-text-link" href="welcome.html"><span aria-hidden="true">←</span> Back to explore</a></div>
+  </header>
+  <div class="signin-layout">
+    <aside class="signin-story" aria-labelledby="signin-story-title"><p class="experience-eyebrow">THE TEACHER PORTAL</p><h2 id="signin-story-title">A little curiosity.<br /><span>A world of possibility.</span></h2><p>Bring your lessons, activities, and student progress together. Your next science lesson starts here.</p><div class="signin-science"><img src="assets/showcase/heart.webp" alt="3D heart from the ImARs app" width="160" height="190" /><p>Science you can<br />see differently.<small>Explore. Understand. Discover.</small></p></div></aside>
   <main class="login-card w-full max-w-[440px] bg-white rounded-3xl shadow-[0_8px_24px_rgba(28,20,60,0.05)] p-8">
     <div class="flex items-center justify-between gap-3 mb-6">
       <div class="flex items-center gap-3">
@@ -71,7 +79,9 @@
 
     <p class="mt-4 text-center text-slate-400 text-[13px]">Sign in to your account</p>
     <span class="mt-4 block w-full text-center text-steel font-bold text-[13px]" data-school-year>SY 2026–27</span>
+    <a class="signin-admin" href="admin-login.html">Administrator sign in <span aria-hidden="true">↗</span></a>
   </main>
+  </div>
 
   <script type="module" src="js/login.js"></script>
   <script type="module" src="js/school-year.js"></script>

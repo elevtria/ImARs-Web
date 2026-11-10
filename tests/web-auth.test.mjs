@@ -99,10 +99,25 @@ test("both sign-in pages stay public with security headers while protected HTML 
       next: async () => { throw new Error("A private portal requires a session"); } });
     assert.equal(denied.status, 302);
   }
-  for (const path of ["/login", "/login.html", "/admin-login", "/admin-login.html"]) {
+  for (const path of ["/welcome", "/welcome.html", "/login", "/login.html", "/admin-login", "/admin-login.html"]) {
     const response = await onRequest({ request: new Request("https://imars.example.test" + path), env: app.env,
       next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
-    assert.equal(response.status, 200); assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+    assert.equal(response.status, 200);
+    const policy = response.headers.get("Content-Security-Policy");
+    assert.equal(policy, path.startsWith("/welcome") ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:") : CONTENT_SECURITY_POLICY);
+    assert.ok(!policy.includes("'unsafe-eval'"));
+  }
+});
+
+test("the public entry opens the showcase without exposing the protected dashboard", async () => {
+  const app = fixture();
+  const root = await protectWebsite({ request: new Request("https://imars.example.test/"), env: app.env,
+    next: async () => { throw Error("The dashboard shell must not be returned"); } });
+  assert.equal(root.status, 302); assert.equal(root.headers.get("Location"), "/welcome");
+  for (const path of ["/index", "/index.html", "/student-records"]) {
+    const response = await protectWebsite({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => { throw Error("Private data requires authentication"); } });
+    assert.equal(response.status, 302); assert.match(response.headers.get("Location"), /^\/login/);
   }
 });
 
