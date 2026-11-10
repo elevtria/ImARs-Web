@@ -13,8 +13,8 @@ body.login-scene { display: flex; flex-direction: column; min-height: 100svh; pa
 /* A decorative model display with a short heading and no enclosing card. */
 .signin-model-scene { margin: 0; min-width: 0; text-align: left; container-type: inline-size; }
 .signin-model-stage { position: relative; isolation: isolate; height: clamp(360px, calc(100svh - 340px), 600px); width: 100%; pointer-events: none; user-select: none; }
-.signin-model-stage::before { content: ""; position: absolute; z-index: -1; width: 78%; aspect-ratio: 1; max-height: 94%; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px solid #2277bd38; border-radius: 50%; box-shadow: 0 0 0 34px #ffffff12, 0 0 0 35px #2277bd12; background: radial-gradient(circle, #e3f7ff55, transparent 68%); }
-.signin-model-stage::after { content: "+"; position: absolute; top: 21%; right: 9%; color: var(--experience-blue); font-size: 27px; font-weight: 400; line-height: 1; }
+.signin-model-stage::before { content: ""; position: absolute; z-index: -1; width: 74%; height: 78%; left: 50%; top: 54%; transform: translate(-50%, -50%); border: 1px solid #2277bd38; border-radius: 50%; box-shadow: 0 0 0 22px #ffffff12, 0 0 0 23px #2277bd12; background: radial-gradient(circle, #e3f7ff55, transparent 68%); }
+.signin-model-stage::after { content: "+"; position: absolute; top: 27%; right: 13%; color: var(--experience-blue); font-size: 27px; font-weight: 400; line-height: 1; }
 .showcase-model { display: block; position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; clip-path: inset(2px); transition: opacity 400ms ease; --poster-color: transparent; }
 .showcase-model.is-current { opacity: 1; }
 .signin-model-scene figcaption { position: relative; z-index: 1; margin: 0 0 0 5%; color: var(--experience-navy); font-size: clamp(20px, 5cqw, 36px); line-height: 1.15; letter-spacing: -1px; font-weight: 800; white-space: nowrap; }
@@ -80,5 +80,5 @@ body.login-scene { display: flex; flex-direction: column; min-height: 100svh; pa
 @media (prefers-reduced-motion: reduce) { .showcase-model { transition: none; } }
 @media screen {
   [data-theme="dark"] .login-scene { --experience-blue: #83c6ff; --experience-navy: #e4f1ff; --experience-muted: #bbd4ec; background: radial-gradient(ellipse at 12% 5%, #1b599a 0, transparent 55%), linear-gradient(125deg, #123a69, #0b264d); }
-  [data-theme="dark"] .signin-model-stage::before { border-color: #83c6ff40; box-shadow: 0 0 0 34px #83c6ff06, 0 0 0 35px #83c6ff18; background: radial-gradient(circle, #3898ed20, transparent 68%); }
+  [data-theme="dark"] .signin-model-stage::before { border-color: #83c6ff40; box-shadow: 0 0 0 22px #83c6ff06, 0 0 0 23px #83c6ff18; background: radial-gradient(circle, #3898ed20, transparent 68%); }
 }
