@@ -10,7 +10,7 @@
   ::view-transition-new(portal-background),::view-transition-new(portal-navigation),::view-transition-new(portal-header) { animation:none; }
 }
 
-/* Carry the sign-in scene into portal content without touching navigation. */
+/* Carry the sign-in palette into portal content. */
 @media screen {
   :root body:not(.login-page):has(.app) {
     background: radial-gradient(ellipse at 12% 10%, #d0efff 0, transparent 50%), linear-gradient(125deg, #b3e0ff, #8fc9f5);
@@ -23,7 +23,6 @@
     --scene-line: #91bce0;
     --scene-surface: #fff;
     --scene-soft: #f1f8ff;
-    --scene-orbit: #1262e812;
     --scene-shadow: 0 16px 42px #367bb21f;
   }
   :root body:not(.login-page) .app .topbar {
@@ -33,12 +32,13 @@
   :root body:not(.login-page) .app .page-title { color: var(--scene-ink); font-weight: 800; letter-spacing: -.4px; }
   :root body:not(.login-page) .app main :is(.hero, .intro) {
     position: relative;
-    padding: 28px;
-    border: 1px solid var(--scene-line);
-    border-radius: 24px;
-    background-color: var(--scene-surface);
-    background-image: radial-gradient(circle at 86% 140%, transparent 0 100px, var(--scene-orbit) 101px 102px, transparent 103px 134px, var(--scene-orbit) 135px 136px, transparent 137px 170px, var(--scene-orbit) 171px 172px, transparent 173px);
-    box-shadow: var(--scene-shadow);
+    padding: 22px 24px;
+    border: 1px solid #91b8df;
+    border-left: 4px solid #247bce;
+    border-radius: 18px;
+    background: var(--scene-surface);
+    background-clip: padding-box;
+    box-shadow: 0 10px 26px #215f9c26;
   }
   :root body:not(.login-page) .app main :is(.hero, .intro) h1 {
     color: var(--scene-ink);
@@ -69,9 +69,13 @@
   :root body:not(.login-page) .app main .stats .stat-link:is(:hover, :focus-visible) { background: var(--scene-soft); border-color: var(--scene-blue); box-shadow: 0 12px 32px #1262e82e; }
   :root body:not(.login-page) .app main :is(.section-head, .panel-heading) h2 { color: var(--scene-ink); letter-spacing: -.6px; }
   :root body:not(.login-page) .app main :is(.module, .manual-step-card, .manual-tool-card) { border-color: var(--scene-line); background: var(--scene-soft); border-radius: 16px; }
+  :root body:not(.login-page) .app main .module:is(:hover, :focus-visible) { background: #cce3ff; border-color: #5596de; box-shadow: 0 4px 14px #247bce26; }
   :root body:not(.login-page) .app main :is(.scan-btn, .banner-btn) { color: #fff; background: var(--scene-blue); border: 1px solid var(--scene-blue); border-radius: 12px; box-shadow: 0 8px 20px #1262e82b; }
   :root body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #084bc0; border-color: #084bc0; }
-  :root body:not(.login-page) .app main .record { background: var(--scene-surface); border-color: var(--scene-line); box-shadow: 0 8px 24px #367bb214; }
+  :root body:not(.login-page) .app main .record { background: var(--scene-surface); border: 1px solid var(--scene-line); border-radius: 16px; background-clip: padding-box; box-shadow: 0 8px 24px #367bb214; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+  :root body:not(.login-page) .app main :is(.record, .teacher-record):is(:hover, :focus-within) { background: #cce3ff; border-color: #5596de; box-shadow: inset 3px 0 #247bce, 0 6px 18px #247bce26; }
+  :root:not([data-theme="dark"]) #drawer .drawer-panel,
+  :root:not([data-theme="dark"]) #drawer .side-user { background: #e1f4ff; }
 
   :root[data-theme="dark"] body:not(.login-page):has(.app) {
     background: radial-gradient(ellipse at 12% 5%, #1b599a 0, transparent 55%), linear-gradient(125deg, #123a69, #0b264d);
@@ -84,16 +88,20 @@
     --scene-line: #456b93;
     --scene-surface: #142e4d;
     --scene-soft: #1b3a5d;
-    --scene-orbit: #83c6ff15;
     --scene-shadow: 0 16px 42px #020d1e33;
   }
   :root[data-theme="dark"] body:not(.login-page) .app .topbar { background: #102d4eed; border-color: #456b9380; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.hero, .intro) { background: #1d324b; border-color: #577899; border-left-color: #78baff; box-shadow: 0 10px 26px #020d1e55; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.record, .teacher-record, .module):is(:hover, :focus-within) { background: #28496d; border-color: #83c6ff; box-shadow: inset 3px 0 #83c6ff, 0 6px 18px #020d1e33; }
   :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn) { background: #1262e8; border-color: #4085ed; }
   :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #297bf5; }
 }
 @media screen and (max-width: 640px) {
-  :root body:not(.login-page) .app main :is(.hero, .intro) { padding: 20px; border-radius: 20px; }
+  :root body:not(.login-page) .app main :is(.hero, .intro) { padding: 18px; border-radius: 18px; }
   :root body:not(.login-page) .app main .stats .stat-link { border-radius: 20px; }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+  :root body:not(.login-page) .app main .record { transition: none; }
 }
 @media screen {
 :root { --portal-ink:#163858; --portal-muted:#526f8a; --portal-line:#b4d5ee; --portal-blue:#247bce; --portal-gold:#feb705; }
