@@ -94,7 +94,7 @@
   [data-theme="dark"] body :is(.icon-btn, .menu-button, .help-btn, .help-button,
     .ghost-btn, .btn-ghost, .nav-close, .profile-dialog-close, .dialog-close, .profile-cancel-button,
     .cancel-button, #closeStudentRecord, #closeAdminModalBtn, #cancelAdminModalBtn, #cancelArchiveStudent,
-    .open-student-record, .archive-student-btn, .unarchive-student-btn, .student-detail-navigation button) {
+    .open-student-record, .unarchive-student-btn, .student-detail-navigation button) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
   [data-theme="dark"] body :is(.sy-chip, .admin-year, .summary-icon, .action-icon, .section-chip,
@@ -197,6 +197,16 @@
   [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
 }
 @media print { .theme-toggle { display: none !important; } }
+
+/* Keep each portal page heading distinct from the decorative background. */
+@media screen {
+  :root[data-theme="light"] body:not(.login-page) :is(.hero, .intro) { background: #fff; border: 1px solid #91b8df; border-left: 4px solid #247bce; box-shadow: 0 10px 26px #215f9c26; }
+  :root[data-theme="dark"] body:not(.login-page) :is(.hero, .intro) { background: #1d324b; border: 1px solid #577899; border-left: 4px solid #78baff; box-shadow: 0 10px 26px #020d1e55; }
+  :root[data-theme="light"] .archive-student-btn { border: 1px solid #cc4352; color: #a52c3b; background: #fff7f8; }
+  :root[data-theme="light"] .archive-student-btn:is(:hover, :focus-visible):not(:disabled) { background: #b62f45; border-color: #942236; color: #fff; box-shadow: 0 3px 10px #b62f4530; }
+  :root[data-theme="dark"] body .archive-student-btn { border: 1px solid #ef7e8c; color: #ffadb8; background: #402a3a; }
+  :root[data-theme="dark"] body .archive-student-btn:is(:hover, :focus-visible):not(:disabled) { background: #713247; border-color: #ffa2ae; color: #fff; }
+}
 
 /* Light surfaces need a visible change of color, not just a brightness filter. */
 @media screen {

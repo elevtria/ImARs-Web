@@ -76,7 +76,9 @@ test("security headers prevent HTML caching and preserve API bodies and existing
     assert.equal(await response.text(), body);
     assert.equal(response.headers.get("Cache-Control"), type === "text/html" ? "private, no-store" : "no-store");
     assert.match(response.headers.get("Set-Cookie"), /existing=value/);
-    assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+    assert.equal(response.headers.get("Content-Security-Policy"), /^\/login(?:\.html)?$/.test(path)
+      ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:")
+      : CONTENT_SECURITY_POLICY);
     const scriptPolicy = CONTENT_SECURITY_POLICY.split(";").map(rule => rule.trim()).find(rule => rule.startsWith("script-src "));
     assert.ok(!scriptPolicy.includes("'unsafe-inline'") && !scriptPolicy.includes("'unsafe-eval'"));
     assert.ok(CONTENT_SECURITY_POLICY.includes("script-src-attr 'none'"));
@@ -127,21 +129,25 @@ test("both sign-in pages stay public with security headers while protected HTML 
       next: async () => { throw new Error("A private portal requires a session"); } });
     assert.equal(denied.status, 302);
   }
-  for (const path of ["/welcome", "/welcome.html", "/login", "/login.html", "/admin-login", "/admin-login.html"]) {
+  for (const path of ["/login", "/login.html", "/admin-login", "/admin-login.html"]) {
     const response = await onRequest({ request: new Request("https://imars.example.test" + path), env: app.env,
       next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
     assert.equal(response.status, 200);
     const policy = response.headers.get("Content-Security-Policy");
-    assert.equal(policy, path.startsWith("/welcome") ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:") : CONTENT_SECURITY_POLICY);
+    assert.equal(policy, path.startsWith("/login") ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:") : CONTENT_SECURITY_POLICY);
     assert.ok(!policy.includes("'unsafe-eval'"));
   }
 });
 
-test("the public entry opens the showcase without exposing the protected dashboard", async () => {
+test("the public entry goes directly to login without exposing the protected dashboard", async () => {
   const app = fixture();
   const root = await protectWebsite({ request: new Request("https://imars.example.test/"), env: app.env,
     next: async () => { throw Error("The dashboard shell must not be returned"); } });
-  assert.equal(root.status, 302); assert.equal(root.headers.get("Location"), "/welcome");
+  assert.equal(root.status, 302); assert.equal(root.headers.get("Location"), "/login");
+  for (const path of ["/welcome", "/welcome.html"]) {
+    const response = await app.page(path);
+    assert.equal(response.status, 302); assert.equal(response.headers.get("Location"), "/login");
+  }
   for (const path of ["/index", "/index.html", "/student-records"]) {
     const response = await protectWebsite({ request: new Request("https://imars.example.test" + path), env: app.env,
       next: async () => { throw Error("Private data requires authentication"); } });
@@ -163,7 +169,7 @@ test("hosted index canonicalization keeps a signed-in teacher on the dashboard",
   const app = fixture();
   const cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
   // Static hosts canonicalize /index.html to /. That second request must
-  // verify the session and serve the dashboard instead of returning to welcome.
+  // verify the session and serve the dashboard instead of returning to login.
   const canonical = await protectWebsite({ env: app.env,
     request: new Request("https://imars.example.test/index.html", { headers: { Cookie: cookie } }),
     next: async () => new Response(null, { status: 308, headers: { Location: "/" } }) });
@@ -179,7 +185,7 @@ test("an invalid session cookie cannot turn the public entry into a dashboard", 
   const app = fixture();
   const response = await app.page("/", "__Host-imars-web=invalid");
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get("Location"), "/welcome");
+  assert.equal(response.headers.get("Location"), "/login");
   assert.match(response.headers.get("Set-Cookie"), /Max-Age=0/);
 });
 

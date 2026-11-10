@@ -22,8 +22,8 @@ export async function onRequest(context) {
   const response = await protectWebsite(context);
   const secured = new Response(response.body, response);
   // The self-hosted 3D viewer initializes a WebAssembly decoder. Keep this
-  // permission on the public showcase only; JavaScript eval remains forbidden.
-  const showcase = /^\/welcome(?:\.html)?\/?$/.test(new URL(context.request.url).pathname);
+  // permission on the teacher login display only; JavaScript eval remains forbidden.
+  const showcase = /^\/login(?:\.html)?\/?$/.test(new URL(context.request.url).pathname);
   secured.headers.set("Content-Security-Policy", showcase
     ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:")
     : CONTENT_SECURITY_POLICY);
