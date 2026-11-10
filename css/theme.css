@@ -76,7 +76,7 @@
   [data-theme="dark"] body :is(dialog, #adminLoginModal, #studentRecordDialog, #archiveStudentForm,
     .profile-dialog, .teacher-dialog) { background: var(--surface); border-color: var(--line); color: var(--ink); }
   [data-theme="dark"] dialog::backdrop { background: #030810aa; }
-  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(:where(.search input)), select, textarea) {
+  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(:where(:is(.search, .teacher-search) input)), select, textarea) {
     background: #142031; color: var(--ink); border-color: #49617e;
   }
   [data-theme="dark"] body :is(input, textarea)::placeholder { color: #9aaec6; }
@@ -123,16 +123,16 @@
   [data-theme="dark"] body :is(.c-green, .green) { color: #5ed9b0; }
   [data-theme="dark"] body :is(.c-pink, .pink) { color: #ff8ac6; }
   /* Nested controls must not retain translucent white light-mode fills. */
-  [data-theme="dark"] body :is(.module, .search, .quiz-choice, .quiz-type-option,
+  [data-theme="dark"] body :is(.module, .search, .teacher-search, .quiz-choice, .quiz-type-option,
     .quiz-stepper-input button, .quiz-stepper li:not(.active):not(.done) span) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
   [data-theme="dark"] body .module span { color: var(--muted); }
-  [data-theme="dark"] body .search input {
+  [data-theme="dark"] body :is(.search, .teacher-search) input {
     background: transparent; color: var(--ink); box-shadow: none;
   }
   [data-theme="dark"] body .search svg { color: var(--muted); }
-  [data-theme="dark"] body .search:focus-within { border-color: var(--steel); }
+  [data-theme="dark"] body :is(.search, .teacher-search):focus-within { border-color: var(--steel); }
   [data-theme="dark"] body :is(.quiz-choice, .quiz-type-option, .quiz-stepper-input button):hover:not(:disabled) {
     background: #2b4059; border-color: var(--steel);
   }

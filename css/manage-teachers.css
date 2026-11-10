@@ -58,8 +58,15 @@
 .teacher-progress-item.post .progress-track i { background: #10b981; }
 .no-teachers { margin: 0; padding: 24px 12px; border: 1px solid #e5ebf3; border-radius: 15px; color: #8292ab; background: #fff; text-align: center; font-size: 12px; }
 
-.teacher-dialog { width: min(450px, calc(100% - 28px)); max-height: calc(100% - 32px); padding: 0; overflow: auto; border: 1px solid #e4eaf2; border-radius: 18px; color: #1d3352; box-shadow: 0 20px 70px rgba(23,43,73,.2); }
+.teacher-dialog { width: min(450px, calc(100% - 28px)); max-height: calc(100% - 32px); margin: auto; padding: 0; overflow: auto; border: 1px solid #e4eaf2; border-radius: 18px; color: #1d3352; box-shadow: 0 20px 70px rgba(23,43,73,.2); }
 .teacher-dialog::backdrop { background: rgba(24,39,63,.32); backdrop-filter: blur(2px); }
+@media (prefers-reduced-motion: no-preference) {
+  [data-theme="dark"] .teacher-dialog[open] { animation: teacher-dialog-enter 180ms ease-out; }
+  @keyframes teacher-dialog-enter {
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
+    to { opacity: 1; transform: none; }
+  }
+}
 .teacher-dialog form { display: grid; gap: 13px; padding: 20px; }
 .dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
 .dialog-heading h2 { margin: 0; font-size: 18px; }
