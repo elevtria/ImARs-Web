@@ -16,6 +16,8 @@ const firestore = getFirestore(firebaseApp);
 (() => {
   const fileInput = document.getElementById("quizFile");
   const generateButton = document.getElementById("generateQuiz");
+  const generationDialog = document.getElementById("quizGenerationStatusCard");
+  generationDialog.addEventListener("cancel", event => event.preventDefault());
   const dropzone = document.getElementById("quizDropzone");
   const selectedFileRow = document.getElementById("selectedFileRow");
   const fileError = document.getElementById("quizFileError");
@@ -223,7 +225,6 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     const button = generateButton;
-    const statusCard = document.getElementById("quizGenerationStatusCard");
     const loadingStatus = document.getElementById("quizGenerationStatus");
     const loadingHint = document.getElementById("quizGenerationHint");
     const file = selectedFile;
@@ -237,12 +238,12 @@ const firestore = getFirestore(firebaseApp);
     button.setAttribute("aria-busy", "true");
     loadingStatus.textContent = "Preparing your file…";
     loadingHint.textContent = "Larger files and more questions can take longer.";
-    statusCard.hidden = false;
     const slowMessage = setTimeout(() => {
       loadingHint.textContent = "This is taking longer than usual. Keep this page open while ImARs finishes.";
     }, 15000);
     showStatus(setupStatus, "", false);
     try {
+      generationDialog.showModal();
       const material = await prepareMaterial(file);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
@@ -264,10 +265,10 @@ const firestore = getFirestore(firebaseApp);
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
       clearTimeout(slowMessage);
-      statusCard.hidden = true;
       generating = false;
       updateGenerateButton();
       button.setAttribute("aria-busy", "false");
+      generationDialog.close();
     }
   }
 

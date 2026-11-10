@@ -171,10 +171,29 @@
 .quiz-empty-icon { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 16px; color: #5e86a6; background: #eaf2f8; font-size: 22px; }
 .quiz-empty-state h3 { margin-top: 12px; color: #405a74; font-size: 15px; }
 .quiz-empty-state p { margin: 5px 0 15px; color: #8796a8; font-size: 11px; }
-.quiz-generation-card { position: fixed; z-index: 25; top: 50%; left: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 8px; width: min(320px, calc(100% - 32px)); pointer-events: none; text-align: center; }
-.quiz-generation-card[hidden], body[data-auth-pending] .quiz-generation-card { display: none; }
+.quiz-generation-card {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  width: min(360px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  margin: auto;
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 24px 72px #0b1e3950;
+  text-align: center;
+}
+.quiz-generation-card::backdrop { background: #14263c68; backdrop-filter: blur(3px); }
+.quiz-generation-card:not([open]), body[data-auth-pending] .quiz-generation-card { display: none; }
+html:has(.quiz-generation-card[open]) { overflow: hidden; scrollbar-gutter: stable; }
+.quiz-generation-status { display: grid; justify-items: center; gap: 8px; }
+.quiz-generation-mark { display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: 8px; border-radius: 50%; background: color-mix(in srgb, var(--steel) 17%, var(--surface)); }
 .quiz-generation-card img { object-fit: contain; animation: section-data-spin 2.4s linear infinite; }
-.quiz-generation-card strong, .quiz-generation-card p { margin: 0; padding: 4px 8px; border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.quiz-generation-card strong { font-size: 17px; line-height: 1.35; }
+.quiz-generation-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
 #generateQuiz[aria-busy="true"]::before { content: none; }
 @media (prefers-reduced-motion: reduce) { .quiz-generation-card img { animation: none; } }
 

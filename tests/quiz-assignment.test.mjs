@@ -16,6 +16,8 @@ test("generation, review, unassigned draft and all-section release use the actua
     setAttribute() {}
     removeAttribute() {}
     focus() {}
+    showModal() { this.open = true; }
+    close() { this.open = false; }
     querySelector(selector) { if (!this.children.has(selector)) this.children.set(selector, new Element()); return this.children.get(selector); }
   }
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
@@ -60,7 +62,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("generateQuiz").disabled,false);
   element("questionCount").value="1";
   const generation = element("generateQuiz").listeners.click();
-  assert.equal(element("quizGenerationStatusCard").hidden, false);
+  assert.equal(element("quizGenerationStatusCard").open, true);
   assert.match(element("quizGenerationStatus").textContent, /Preparing/);
   await new Promise(setImmediate);
   assert.match(element("quizGenerationStatus").textContent, /Uploading your PDF/);
@@ -68,7 +70,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.match(element("quizGenerationHint").textContent, /taking longer/);
   finishGeneration([{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}]);
   await generation;
-  assert.equal(element("quizGenerationStatusCard").hidden, true);
+  assert.equal(element("quizGenerationStatusCard").open, false);
   assert.equal(showSlowMessage, null);
   assert.equal(requested.sectionId,undefined);
   assert.equal(element("reviewStep").hidden,false);

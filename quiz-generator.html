@@ -182,11 +182,13 @@
     </main>
   </div>
 
-  <div class="quiz-generation-card" id="quizGenerationStatusCard" role="status" aria-live="polite" aria-atomic="true" hidden>
-    <img src="assets/imars-loader-transparent.png" alt="" width="56" height="56" />
-    <strong id="quizGenerationStatus"></strong>
-    <p id="quizGenerationHint"></p>
-  </div>
+  <dialog class="quiz-generation-card" id="quizGenerationStatusCard" aria-label="Quiz generation">
+    <div class="quiz-generation-status" role="status" aria-live="polite" aria-atomic="true">
+      <span class="quiz-generation-mark"><img src="assets/imars-loader-transparent.png" alt="" width="56" height="56" /></span>
+      <strong id="quizGenerationStatus"></strong>
+      <p id="quizGenerationHint"></p>
+    </div>
+  </dialog>
 
   <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>
 
