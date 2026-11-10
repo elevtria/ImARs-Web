@@ -1,6 +1,8 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
 import { legacyActivityFields } from "./mobile-activity-store.js";
 
+import { RESULT_LIMIT } from "./student-quiz-store.js";
+
 const id = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const part = /^[A-Za-z0-9_-]{1,128}$/;
 const conflict = () => Object.assign(new Error("The records changed. Reload and try again."), { status: 409 });
@@ -292,6 +294,26 @@ export class SupabaseAppStore {
         ".eq." + boundary + ",path.gt." + after[1] + "))" } : {})
     });
     return (await response.json()).map(row => ({ ...this.projected(row, fields), path: row.path }));
+  }
+
+  async quizResults(context, ids) {
+    const response = await this.documents("GET", {
+      collection_path: `eq.users/${context.studentId}/generated_quiz_attempts`,
+      "fields->uid->>stringValue": "eq." + context.uid,
+      "fields->quizId->>stringValue": "in.(" + ids.join(",") + ")",
+      "fields->status->>stringValue": "in.(graded,pending-review,reviewed)",
+      select: "path,uid:fields->uid,quizId:fields->quizId,status:fields->status,submittedAt:fields->submittedAt," +
+        "receiptScore:fields->receipt->mapValue->fields->score,receiptMaximum:fields->receipt->mapValue->fields->maximum," +
+        "receiptTime:fields->receipt->mapValue->fields->submittedAtUtc,reviewScore:fields->review->mapValue->fields->score," +
+        "reviewMaximum:fields->review->mapValue->fields->maximum",
+      limit: String(RESULT_LIMIT + 1)
+    });
+    return (await response.json()).map(({ path, ...fields }) => {
+      const value = decodeFields(Object.fromEntries(Object.entries(fields).filter(([, item]) => item !== null)));
+      return { id: path.split("/").at(-1), data: { uid: value.uid, quizId: value.quizId, status: value.status, submittedAt: value.submittedAt,
+        receipt: { score: value.receiptScore, maximum: value.receiptMaximum, submittedAtUtc: value.receiptTime },
+        review: { score: value.reviewScore, maximum: value.reviewMaximum } } };
+    });
   }
 
   async recentScans(path, direction, limit, fieldPaths) {

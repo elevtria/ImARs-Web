@@ -37,6 +37,12 @@ export function fixture() {
         .sort(([a], [b]) => a.localeCompare(b)).slice(0, options.limit).map(([name, q]) => ({ id: name.split("/").at(-1), data: structuredClone(q), updateTime: versions.get(name) }));
     }
     async identity(uid) { return structuredClone(identities.get(uid)); }
+    async quizResults(context, ids) {
+      this.resultQueries = (this.resultQueries || 0) + 1;
+      const prefix = `users/${context.studentId}/generated_quiz_attempts/`;
+      return [...data].filter(([path, value]) => path.startsWith(prefix) && ids.includes(value.quizId))
+        .map(([path, value]) => ({ id: path.slice(prefix.length), data: structuredClone(value) }));
+    }
     async request(path, options) {
       assert.equal(path, "documents:runQuery");
       const q = JSON.parse(options.body).structuredQuery; this.queries.push(q);

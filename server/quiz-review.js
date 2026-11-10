@@ -2,7 +2,7 @@ import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
-import { QUIZ_TYPES, quizAssignmentScope, quizAssignedToSection, quizReviewPoints } from "../js/quiz-limits.js";
+import { QUIZ_TYPES, quizAssignedToSection, quizReviewPoints } from "../js/quiz-limits.js";
 
 const bytes = value => new TextEncoder().encode(value);
 const b64 = value => btoa(String.fromCharCode(...value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -57,8 +57,7 @@ async function sign(env, payload) {
 async function ownedQuiz(actor, store, id) {
   if (actor.role !== "teacher" || !validPart(id)) throw fail("FORBIDDEN");
   const q = (await store.get("generatedQuizzes/" + id))?.data;
-  if (!q || q.teacherUid !== actor.uid || q.teacherProfileId !== actor.id || !["all", "section"].includes(quizAssignmentScope(q))) throw fail("FORBIDDEN");
-  if (quizAssignmentScope(q) === "section") await ownedSection(actor, store, q.sectionId);
+  if (!q || q.teacherUid !== actor.uid || q.teacherProfileId !== actor.id) throw fail("FORBIDDEN");
   return q;
 }
 async function ownedSection(actor, store, id) {
@@ -133,7 +132,7 @@ async function studentAverage(actor, store, studentId) {
 async function sectionResults(actor, store, quiz, body, now) {
   if (!validPart(body.sectionId) || (body.cursor && !validPart(body.cursor))) throw fail("INVALID_REQUEST", 400);
   const available = quiz.availability === "now" || (quiz.availability === "scheduled" && Date.parse(quiz.availableAt) <= now);
-  if (!available) throw fail("FORBIDDEN");
+  const currentlyAssigned = available && quizAssignedToSection(quiz, body.sectionId);
   const limit = 10;
   const roster = await store.query("users", {
     filters: rosterFilters(body.sectionId),
@@ -143,10 +142,11 @@ async function sectionResults(actor, store, quiz, body, now) {
     .filter(student => rosterMember(actor, student))
     .map(async ({ id, data }) => {
       const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
+      if (!latest && !currentlyAssigned) return null;
       return { studentId: id, name: studentName(data) || id,
         ...(latest ? resultFor(latest) : { status: "not-submitted" }) };
     }));
-  return { items, nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
+  return { items: items.filter(Boolean), nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
 }
 export async function quizReview({ request, env }, { store, authenticate = requireStaff, now = Date.now } = {}) {
   const respond = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
@@ -166,11 +166,8 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (body.action === "student-average") return respond(await studentAverage(actor, store, body.studentId));
     if (body.action === "section-summary") return respond(await sectionSummary(actor, store, body.sectionId));
     const q = await ownedQuiz(actor, store, body.quizId);
-    const sectionId = body.sectionId || q.sectionId || "";
-    if (body.sectionId && body.sectionId !== q.sectionId) {
-      if (!quizAssignedToSection(q, body.sectionId)) throw fail("FORBIDDEN");
-      await ownedSection(actor, store, body.sectionId);
-    }
+    const sectionId = body.sectionId || "";
+    if (sectionId) await ownedSection(actor, store, sectionId);
     if (body.action === "section-results") return respond(await sectionResults(actor, store, q, body, now()));
     if (body.action === "list") {
       const rows = await store.reviewPage(actor, body.quizId, sectionId, await cursor(env, actor, body.quizId, sectionId, body.cursor, now()));
@@ -193,7 +190,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     }
     if (!validPart(body.studentId) || !/^[a-f0-9]{32}$/.test(body.attemptId)) throw fail("INVALID_REQUEST", 400);
     const path = `users/${body.studentId}/generated_quiz_attempts/${body.attemptId}`, attempt = await store.get(path), a = attempt?.data;
-    if (!a || a.quizId !== body.quizId || a.context?.teacherUid !== actor.uid || a.context?.teacherProfileId !== actor.id || !quizAssignedToSection(q, a.context?.sectionId) || (sectionId && a.context.sectionId !== sectionId) || !validPart(a.snapshotId) || !a.receipt) throw fail("FORBIDDEN");
+    if (!a || a.quizId !== body.quizId || a.context?.teacherUid !== actor.uid || a.context?.teacherProfileId !== actor.id || a.context?.studentId !== body.studentId || (sectionId && a.context.sectionId !== sectionId) || !validPart(a.snapshotId) || !a.receipt) throw fail("FORBIDDEN");
     if (!sectionId) await ownedSection(actor, store, a.context.sectionId);
     const snapshot = (await store.get("generatedQuizRevisions/" + a.snapshotId))?.data;
     if (!snapshot || snapshot.quizId !== body.quizId || snapshot.revision !== a.revision || !Object.hasOwn(QUIZ_TYPES, snapshot.type)) throw fail("FORBIDDEN");

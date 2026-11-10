@@ -16,6 +16,8 @@ async function setup(type = "essay", assignment = {}) {
 for (const type of ["essay", "identification-explanation", "modified-true-false"]) test(type + " reviews use the private original revision and preserve submitted answers/receipt", async () => {
   const f = await setup(type), before = structuredClone(f.data.get(f.path));
   f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), title: "Later edited title", questions: [] });
+  const pendingPage = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(pendingPage.items[0].result, { status: "pending-review", score: 0, maximum: 0 });
   const opened = await (await f.callReview({ action: "open" })).json(); assert.equal(opened.questions[0].id, "q-original"); assert.equal(opened.answers[0].questionId, "q-original");
   const response = await f.callReview({ action: "grade", revision: opened.revision, scores: [{ questionId: "q-original", score: 1 }], feedback: "Reviewed" }); assert.equal(response.status, 200); assert.equal((await response.json()).persisted, true);
   const after = f.data.get(f.path); assert.equal(after.status, "reviewed"); assert.equal(after.review.reviewerUid, "teacher-a"); assert.deepEqual(after.answers, before.answers); assert.deepEqual(after.receipt, before.receipt);
@@ -30,6 +32,9 @@ for (const type of ["essay", "identification-explanation", "modified-true-false"
   const saved = await (await f.callReview({ action: "open" })).json();
   assert.equal(saved.score, 0);
   assert.equal(saved.feedback, "Updated feedback");
+  const gradedPage = await (await f.call("list", { limit: 20, cursor: pendingPage.pageCursor })).json();
+  assert.deepEqual(gradedPage.items[0].result, { status: "reviewed", score: 0, maximum: opened.questions[0].points || 1 });
+  assert.doesNotMatch(JSON.stringify(gradedPage), /Student essay|Student correction|Student explanation|PRIVATE|feedback|reviewerUid/);
   assert.deepEqual(await (await f.call("submit", f.body)).json(), before.receipt);
 });
 test("a teacher can adjust an automatically graded submission within its original point limit", async () => {
@@ -48,6 +53,32 @@ test("a teacher can adjust an automatically graded submission within its origina
   assert.equal(updated.status, "reviewed");
   assert.equal(updated.score, 0);
   assert.equal((await f.callReview({ action: "open" }, { id: "TEACH2", uid: "teacher-b", role: "teacher" })).status, 403);
+});
+test("a teacher can grade a submitted essay after moving the quiz, while ownership still applies", async () => {
+  const f = await setup();
+  f.put("classes/C", { teacherId: "TEACH1" });
+  f.put("users/S4", { role: "student", classCode: "A", teacherId: "TEACH1" });
+  f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), sectionId: "C" });
+  f.store.reviewPage = async (_actor, _quiz, sectionId) => {
+    assert.equal(sectionId, "");
+    return [{ path: f.path, data: { context: { studentId: "S1", sectionId: "A" }, submittedAt: "2026-10-29T00:00:00Z" } }];
+  };
+  f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await f.store.get(path)])));
+  f.store.scorePage = async (_actor, studentId) => studentId === "S1" ? [{ path: f.path, data: f.data.get(f.path) }] : [];
+  const history = await f.callReview({ action: "list" });
+  assert.equal(history.status, 200);
+  assert.equal((await history.json()).items[0].sectionId, "A");
+  const table = await f.callReview({ action: "section-results", sectionId: "A" });
+  assert.equal(table.status, 200);
+  assert.deepEqual((await table.json()).items.map(row => row.studentId), ["S1"]);
+  const result = await f.callReview({ action: "open", sectionId: "A" });
+  assert.equal(result.status, 200);
+  const opened = await result.json();
+  const grade = await f.callReview({ action: "grade", sectionId: "A", revision: opened.revision,
+    scores: [{ questionId: "q-original", score: 2 }], feedback: "Reviewed" });
+  assert.deepEqual(await grade.json(), { persisted: true, score: 2, maximum: 4 });
+  f.put("classes/A", { teacherId: "TEACH2" });
+  assert.equal((await f.callReview({ action: "open" })).status, 403);
 });
 test("teacher review denies another teacher, a student, moved class and invalid scores", async () => {
   const f = await setup();

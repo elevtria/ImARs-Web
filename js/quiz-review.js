@@ -34,9 +34,11 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
   const filters = element("div", undefined, "quiz-review-filters");
   const sectionLabel = element("label", "Section"), section = element("select");
   sectionLabel.append(section); filters.append(sectionLabel);
-  const choices = quizSections.filter(item => quizAssignedToSection(resultsQuiz, item.id));
+  const choices = quizSections;
   section.replaceChildren(...choices.map(item => new Option(item.name, item.id)));
   if (choices.some(item => item.id === selectedSection)) section.value = selectedSection;
+  else if (choices.some(item => quizAssignedToSection(resultsQuiz, item.id)))
+    section.value = choices.find(item => quizAssignedToSection(resultsQuiz, item.id)).id;
   section.disabled = !choices.length;
   const content = element("div");
   dialog.append(header, filters, status, content);

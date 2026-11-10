@@ -3,7 +3,20 @@ import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
 // This projection is performed by Firestore, before documents reach the API.
 export const SUMMARY_FIELDS = ["id", "title", "sectionId", "assignmentScope", "teacherProfileId", "teacherUid", "type",
   "gradingMode", "availability", "availableAt", "createdAt", "schemaVersion", "questionCount"];
+export const RESULT_FIELDS = ["uid", "quizId", "status", "submittedAt", "receipt.score", "receipt.maximum", "receipt.submittedAtUtc", "review.score", "review.maximum"];
+export const RESULT_LIMIT = 200;
+
 export class StudentQuizStore extends FirestoreAdmin {
+  async quizResults(context, ids) {
+    const rows = await this.request(`documents/users/${context.studentId}:runQuery`, { method: "POST", body: JSON.stringify({
+      ...(this.transaction ? { transaction: this.transaction } : {}), structuredQuery: {
+        select: { fields: RESULT_FIELDS.map(fieldPath => ({ fieldPath })) }, from: [{ collectionId: "generated_quiz_attempts" }],
+        where: { fieldFilter: { field: { fieldPath: "quizId" }, op: "IN", value: { arrayValue: { values: ids.map(stringValue => ({ stringValue })) } } } },
+        limit: RESULT_LIMIT + 1
+      }
+    }) });
+    return rows.flatMap(({ document }) => document ? [{ id: document.name.split("/").at(-1), data: decodeFields(document.fields) }] : []);
+  }
   async quizPage(context, { limit = 21, after, upper, ids } = {}) {
     const field = (name, op, value) => ({ fieldFilter: { field: { fieldPath: name }, op, value } });
     const filters = ["teacherProfileId", "teacherUid"].map(name => field(name, "EQUAL", { stringValue: context[name] }));

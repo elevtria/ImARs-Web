@@ -3,6 +3,7 @@ import test from "node:test";
 import { studentQuizzes } from "../server/student-quizzes.js";
 import { StudentQuizStore, SUMMARY_FIELDS } from "../server/student-quiz-store.js";
 import { encodeFields } from "../server/firestore-admin.js";
+import { SupabaseAppStore } from "../server/supabase-app-store.js";
 import { protectWebsite } from "../server/web-auth.js";
 import { backfillQuizMetadata } from "../scripts/backfill-quiz-metadata.mjs";
 
@@ -110,6 +111,54 @@ for (const type of ["multiple-choice", "true-false", "essay", "identification-ex
   assert.equal(receipt.status, ["multiple-choice", "true-false"].includes(type) ? "graded" : "pending-review"); assert.equal(f.data.get("users/S1/generated_quiz_attempts/" + request.attemptId).answers[0].questionId, "q-original");
   assert.equal([...f.data.keys()].some(path => path.includes("test_results")), false);
   const commits = f.store.commits; assert.deepEqual(await (await f.call("submit", body)).json(), receipt); assert.equal(f.store.commits, commits);
+});
+test("one quiz result survives edits and two independently started attempts cannot both submit", async () => {
+  const f = fixture(), first = await f.begin(), second = await f.begin("quiz1", "b".repeat(32));
+  const payloads = [f.submission(first.request), f.submission(second.request)];
+  const replies = await Promise.all(payloads.map(body => f.call("submit", body)));
+  const winner = replies.findIndex(reply => reply.status === 200);
+  assert.ok(winner >= 0);
+  assert.ok([409, 503].includes(replies[1 - winner].status));
+  const receipt = await replies[winner].json();
+  assert.deepEqual(await (await f.call("submit", payloads[winner])).json(), receipt);
+  assert.equal((await (await f.call("submit", payloads[1 - winner])).json()).code, "QUIZ_COMPLETED");
+  assert.equal((await (await f.call("access", winner === 0 ? second.request : first.request)).json()).code, "QUIZ_COMPLETED");
+  f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), title: "Revised quiz" });
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(page.items[0].result, { status: "graded", score: 1, maximum: 1 });
+  const fresh = { ...first.request, revision: page.items[0].revision, attemptId: "c".repeat(32) };
+  assert.equal((await (await f.call("start", fresh)).json()).code, "QUIZ_COMPLETED");
+  assert.equal(f.data.get("users/S1/generated_quiz_completions/quiz1").attemptId, receipt.attemptId);
+});
+
+test("existing duplicate attempts match the teacher's latest completed grade and exclude foreign accounts", async () => {
+  const f = fixture();
+  for (const [suffix, uid, score, submittedAt] of [["a", "student-a", 1, "2026-10-29T01:00:00Z"],
+    ["b", "student-a", 0, "2026-10-29T01:01:00Z"], ["c", "student-b", 1, "2026-10-29T02:00:00Z"]]) {
+    f.put("users/S1/generated_quiz_attempts/" + suffix.repeat(32), { uid, quizId: "quiz1", status: "graded", submittedAt,
+      receipt: { score, maximum: 1 }, answers: [{ value: "private answer" }] });
+  }
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(page.items[0].result, { status: "graded", score: 0, maximum: 1 });
+  assert.doesNotMatch(JSON.stringify(page), /private answer|receipt|answers/);
+  assert.equal(f.store.resultQueries, 1, "result enrichment uses one query for the page");
+  assert.equal((await (await f.call("start", { quizId: "quiz1", revision: page.items[0].revision, attemptId: "d".repeat(32) })).json()).code, "QUIZ_COMPLETED");
+});
+
+test("Supabase result reads scope the projection to one student and the quiz page", async () => {
+  let query;
+  const store = new SupabaseAppStore({ IMARS_SUPABASE_URL: "https://fixture.supabase.co",
+    IMARS_SUPABASE_APP_DATASET_ID: "00000000-0000-0000-0000-000000000001", SUPABASE_SECRET_KEY: "sb_secret_synthetic" }, async url => {
+    query = new URL(url).searchParams;
+    return Response.json([{ path: "users/S1/generated_quiz_attempts/example", ...encodeFields({ uid: "student-a", quizId: "quiz1", status: "reviewed", reviewScore: 0, reviewMaximum: 4 }) }]);
+  });
+  const [attempt] = await store.quizResults({ studentId: "S1", uid: "student-a" }, ["quiz1", "quiz2"]);
+  assert.equal(query.get("collection_path"), "eq.users/S1/generated_quiz_attempts");
+  assert.equal(query.get("fields->uid->>stringValue"), "eq.student-a");
+  assert.equal(query.get("fields->quizId->>stringValue"), "in.(quiz1,quiz2)");
+  assert.equal(query.get("fields->status->>stringValue"), "in.(graded,pending-review,reviewed)");
+  assert.doesNotMatch(query.get("select"), /answers|feedback|rubric/);
+  assert.deepEqual(attempt.data.review, { score: 0, maximum: 4 });
 });
 test("lost response retry returns the committed receipt after relock, and changed payload conflicts", async () => {
   const f = fixture(), { request } = await f.begin(), body = f.submission(request);

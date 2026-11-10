@@ -1,6 +1,6 @@
 import { readJson } from "./web-auth.js";
 import { QUIZ_TYPES, normalizeQuizQuestion, writtenQuestion, quizAssignedToSection } from "../js/quiz-limits.js";
-import { StudentQuizStore } from "./student-quiz-store.js";
+import { RESULT_LIMIT, StudentQuizStore } from "./student-quiz-store.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { authenticateStudent, studentContext, quizRate, quizFailure as fail, validPart } from "./student-quiz-auth.js";
 
@@ -43,6 +43,33 @@ function summary(row, scope) {
     type: q.type, gradingMode: review(q.type) ? "teacher-review" : "automatic", availability: q.availability, availableAt: q.availableAt || "",
     createdAt: q.createdAt, schemaVersion: q.schemaVersion || 1, questionCount: q.questionCount, teacherName: scope.teacherName, revision: row.updateTime };
 }
+async function quizResults(store, context, ids) {
+  const results = new Map();
+  if (!ids.length) return results;
+  const rows = await store.quizResults(context, ids);
+  if (rows.length > RESULT_LIMIT) throw fail("SERVICE_UNAVAILABLE", 503, "Your quiz results need maintenance.");
+  const completed = rows.filter(({ data }) => data.uid === context.uid && ids.includes(data.quizId) &&
+    ["graded", "pending-review", "reviewed"].includes(data.status));
+  // Match the existing teacher report for older duplicate attempts.
+  const submitted = data => Date.parse(data.submittedAt || data.receipt?.submittedAtUtc) || 0;
+  completed.sort((a, b) => submitted(b.data) - submitted(a.data) || b.id.localeCompare(a.id));
+  for (const { data } of completed) {
+    if (results.has(data.quizId)) continue;
+    const status = data.status;
+    const { score = 0, maximum = 0 } = (status === "reviewed" ? data.review : data.receipt) || {};
+    if (status !== "pending-review" && (!Number.isInteger(score) || !Number.isInteger(maximum) || maximum < 1 || score < 0 || score > maximum)) {
+      throw fail("SERVICE_UNAVAILABLE", 503, "Your quiz result needs maintenance.");
+    }
+    results.set(data.quizId, status === "pending-review" ? { status, score: 0, maximum: 0 } : { status, score, maximum });
+  }
+  return results;
+}
+
+async function attachQuizResults(items, store, context) {
+  const results = await quizResults(store, context, items.map(item => item.id));
+  return items.map(item => results.has(item.id) ? { ...item, result: results.get(item.id) } : item);
+}
+
 async function list(body, scope, store, env, now) {
   if (!only(body, ["limit", "cursor"]) || !Number.isInteger(body.limit) || body.limit < 1 || body.limit > 20 || !text(body.cursor, 8192, true)) throw fail("INVALID_REQUEST", 400);
   const context = scope.context, cursor = body.cursor ? await readCursor(env, body.cursor, context, now) : null;
@@ -50,14 +77,18 @@ async function list(body, scope, store, env, now) {
   if (cursor?.kind === "page") {
     const rows = await store.quizPage(context, { ids: cursor.ids });
     const byId = new Map(rows.map(row => [row.id, row]));
-    return { items: cursor.ids.flatMap(id => { const row = byId.get(id); return row && quizAssignedToSection(row.data, context.sectionId) && ["now", "scheduled"].includes(row.data.availability) ? [summary(row, scope)] : []; }), pageCursor: body.cursor, nextCursor: cursor.next };
+    const items = cursor.ids.flatMap(id => {
+      const row = byId.get(id);
+      return row && quizAssignedToSection(row.data, context.sectionId) && ["now", "scheduled"].includes(row.data.availability) ? [summary(row, scope)] : [];
+    });
+    return { items: await attachQuizResults(items, store, context), pageCursor: body.cursor, nextCursor: cursor.next };
   }
   const rows = await store.quizPage(context, { limit: body.limit + 1, after: cursor?.after, upper: cursor?.upper });
   const items = rows.slice(0, body.limit).map(row => summary(row, scope));
   const tuple = item => [item.createdAt, item.id];
   const nextCursor = rows.length > body.limit ? await signCursor(env, { ...common, kind: "next", after: tuple(items.at(-1)), upper: cursor?.upper || tuple(items[0]) }) : "";
   const pageCursor = await signCursor(env, { ...common, kind: "page", ids: items.map(item => item.id), next: nextCursor });
-  return { items, pageCursor, nextCursor };
+  return { items: await attachQuizResults(items, store, context), pageCursor, nextCursor };
 }
 function validateAttempt(body, submit) {
   if (!only(body, submit ? ["assignmentId", "revision", "attemptId", "startedAtUtc", "completedAtUtc", "answers"] : ["quizId", "revision", "attemptId"]) ||
@@ -123,6 +154,8 @@ export async function studentQuizzes({ request, env }, { store, authenticate = a
       return respond(reservation.data.receipt);
     }
     const { q, safe } = await quizFor(body, scope, store, time, action === "submit");
+    if ((await quizResults(store, context, [safe.id])).has(safe.id))
+      throw fail("QUIZ_COMPLETED", 409, "You already submitted this quiz.");
     if (action === "access") {
       if (!reservation || reservation.data.receipt) throw fail("QUIZ_UNAVAILABLE");
       return respond({ context, allowed: true, quizId: safe.id, revision: safe.revision, attemptId: body.attemptId, serverTimeUtc: new Date(time).toISOString() });
@@ -148,7 +181,12 @@ export async function studentQuizzes({ request, env }, { store, authenticate = a
     const receipt = { context, persisted: true, quizId: safe.id, revision: safe.revision, attemptId: body.attemptId,
       status: teacherReview ? "pending-review" : "graded", submittedAtUtc: new Date(time).toISOString(),
       score: teacherReview ? 0 : q.questions.reduce((total, question, i) => total + (submitted[i].optionIndex === question.correctIndex ? 1 : 0), 0), maximum: teacherReview ? 0 : q.questions.length };
-    await store.commit([{ operation: "update", path, updateTime: reservation.updateTime, data: { status: receipt.status, answers: submitted,
+    // The deterministic document is created atomically with the attempt. Its
+    // must-not-exist precondition prevents two devices from both submitting.
+    const completionPath = `users/${context.studentId}/generated_quiz_completions/${safe.id}`;
+    await store.commit([
+      { operation: "set", path: completionPath, data: { uid: context.uid, quizId: safe.id, attemptId: body.attemptId } },
+      { operation: "update", path, updateTime: reservation.updateTime, data: { status: receipt.status, answers: submitted,
       payloadHash: await hash(canonical(body)), receipt, submittedAt: { $type: "serverTimestamp" }, startedAtClientUtc: body.startedAtUtc, completedAtClientUtc: body.completedAtUtc } }]);
     transaction = false;
     return respond(receipt);
