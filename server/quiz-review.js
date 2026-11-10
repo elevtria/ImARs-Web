@@ -112,6 +112,7 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
 
 async function sectionSummary(actor, store, sectionId) {
   await ownedSection(actor, store, sectionId);
+  if (store.quizReport) return store.quizReport(actor, sectionId);
   const roster = await store.query("users", { filters: rosterFilters(sectionId), fieldPaths: ["active", "status", "teacherId"] });
   const students = new Set(roster.filter(student => rosterMember(actor, student)).map(student => student.id));
   const totals = await summarizeScores(actor, store, sectionId, students);
@@ -129,23 +130,35 @@ async function studentAverage(actor, store, studentId) {
   return { average: count ? Math.round(totals.reduce((sum, quiz) => sum + quiz.percentTotal, 0) / count) : null };
 }
 
-async function sectionResults(actor, store, quiz, body, now) {
+async function sectionResults(actor, store, quiz, body) {
   if (!validPart(body.sectionId) || (body.cursor && !validPart(body.cursor))) throw fail("INVALID_REQUEST", 400);
-  const available = quiz.availability === "now" || (quiz.availability === "scheduled" && Date.parse(quiz.availableAt) <= now);
-  const currentlyAssigned = available && quizAssignedToSection(quiz, body.sectionId);
+  const currentlyAssigned = quizAssignedToSection(quiz, body.sectionId);
   const limit = 10;
-  const roster = await store.query("users", {
-    filters: rosterFilters(body.sectionId),
-    after: body.cursor, limit: limit + 1, fieldPaths: ["active", "status", "teacherId", ...studentNameFields]
-  });
-  const items = await Promise.all(roster.slice(0, limit)
-    .filter(student => rosterMember(actor, student))
-    .map(async ({ id, data }) => {
+  const roster = [];
+  let after = body.cursor;
+  while (roster.length <= limit) {
+    const page = await store.query("users", {
+      filters: rosterFilters(body.sectionId), after, limit: limit + 1,
+      fieldPaths: ["active", "status", "teacherId", ...studentNameFields]
+    });
+    roster.push(...page.filter(student => rosterMember(actor, student)));
+    if (page.length <= limit) break;
+    after = page.at(-1).id;
+  }
+  const page = roster.slice(0, limit);
+  const report = store.quizReport && page.length
+    ? await store.quizReport(actor, body.sectionId, body.quizId, page.map(student => student.id))
+    : null;
+  const scores = new Map(report?.items.map(item => [item.studentId, item]));
+  const items = await Promise.all(page.map(async ({ id, data }) => {
+    let result = scores.get(id);
+    if (!store.quizReport) {
       const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
-      if (!latest && !currentlyAssigned) return null;
-      return { studentId: id, name: studentName(data) || id,
-        ...(latest ? resultFor(latest) : { status: "not-submitted" }) };
-    }));
+      if (latest) result = resultFor(latest);
+    }
+    if (!result && !currentlyAssigned) return null;
+    return { ...result, studentId: id, name: studentName(data) || id, status: result?.status || "not-submitted" };
+  }));
   return { items: items.filter(Boolean), nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
 }
 export async function quizReview({ request, env }, { store, authenticate = requireStaff, now = Date.now } = {}) {
@@ -168,7 +181,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     const q = await ownedQuiz(actor, store, body.quizId);
     const sectionId = body.sectionId || "";
     if (sectionId) await ownedSection(actor, store, sectionId);
-    if (body.action === "section-results") return respond(await sectionResults(actor, store, q, body, now()));
+    if (body.action === "section-results") return respond(await sectionResults(actor, store, q, body));
     if (body.action === "list") {
       const rows = await store.reviewPage(actor, body.quizId, sectionId, await cursor(env, actor, body.quizId, sectionId, body.cursor, now()));
       const sections = new Map(sectionId ? [[sectionId, Promise.resolve(true)]] : []), items = [];

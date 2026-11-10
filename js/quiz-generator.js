@@ -485,7 +485,7 @@ const firestore = getFirestore(firebaseApp);
     libraryList.hidden = quizzes.length === 0;
     libraryList.innerHTML = quizzes.map((quiz) => {
       const status = currentAvailability(quiz);
-      const resultsButton = status === "now" && teacherSections.some(section => quizAssignedToSection(quiz, section.id))
+      const resultsButton = teacherSections.some(section => quizAssignedToSection(quiz, section.id))
         ? `<button type="button" data-results-quiz="${escapeHtml(quiz.id)}">View results</button>` : "";
       const statusLabel = status === "now" ? "Available" : status === "scheduled" ? "Scheduled · locked" : "Draft · locked";
       const statusClass = status === "now" ? "available" : status === "scheduled" ? "scheduled" : "";

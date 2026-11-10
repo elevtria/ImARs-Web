@@ -41,6 +41,19 @@ test("live staff profile and Auth status checks overlap, and either failed check
   await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:true}}),identity:async()=>({email:'teacher@example.test',disabled:true})}),error=>error.status===401);
 });
 
+test("Supabase supplies the approved admin profile and Firebase Auth still verifies the identity", async () => {
+  const env = { WEB_DATA_ENABLED: "true", IMARS_SUPABASE_WEB_DATA: "true", FIREBASE_SERVICE_ACCOUNT_JSON: "unused Firestore credential" };
+  const calls = [];
+  const row = { id: "ADMIN1", data: { role: "admin", uid: "current-admin", email: "current@example.test", active: true } };
+  const store = { env, get: async path => { calls.push(path); return path === "users/ADMIN1" ? row : null; },
+    identity: async uid => { calls.push(uid); return { email: row.data.email }; } };
+  const admin = await resolveStaff(env, "ADMIN1000", accounts, store);
+  assert.equal((await staffProfile(admin, store)).profile.uid, "current-admin");
+  assert.deepEqual(calls, ["users/ADMIN1000", "users/ADMIN1", "current-admin"]);
+  row.data.active = false;
+  assert.equal(await resolveStaff(env, "ADMIN1000", accounts, store), null);
+});
+
 test("mobile session invalidation persists across Worker restarts and never creates public access",async()=>{
   const values=new Map(),state={storage:{get:async key=>structuredClone(values.get(key)),put:async(key,value)=>values.set(key,structuredClone(value))}};
   let worker=new WebLoginState(state,{});

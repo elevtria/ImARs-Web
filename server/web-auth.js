@@ -1,6 +1,6 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
 import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
-import { appStore } from "./supabase-app-store.js";
+import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const cookieName = "__Host-imars-web";
@@ -68,6 +68,16 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1" || clean === "admin@imars.edu")) {
     const administrators = accounts.filter(item => item.role === "admin");
     if (administrators.length === 1) initial = administrators[0];
+  }
+  if (initial?.role === "admin" && dataEnabled(env) && supabaseWebData(env)) {
+    const fallback = initial.id !== "ADMIN1" && accounts.filter(item => item.role === "admin").length === 1;
+    const row = await store.get("users/" + initial.id) || (fallback ? await store.get("users/ADMIN1") : null);
+    const profile = row?.data;
+    const email = profile?.email || profile?.providedEmail;
+    if (profile?.role !== "admin" || typeof profile.uid !== "string" || !profile.uid ||
+        typeof email !== "string" || !email.trim() || profile.active === false ||
+        ["inactive", "disabled", "archived", "deleted"].includes(String(profile.status || "").toLowerCase())) return null;
+    return { ...initial, uid: profile.uid, email: email.trim(), adminRow: row };
   }
   if (initial?.role === "admin" && dataEnabled(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
     try {
@@ -142,7 +152,8 @@ const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
   // The approved account supplies both IDs. Its live profile and Auth status
   // can be read independently; neither result grants access on its own.
-  const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  const pendingProfile = account.adminRow ? Promise.resolve({ row: account.adminRow }) :
+    store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
@@ -157,7 +168,8 @@ export async function staffProfile(account, store, now = Date.now()) {
   const result = await pendingProfile;
   if (result.error) throw result.error;
   let row = result.row, profile = row?.data;
-  if (account.role === "admin" && (!profile || profile.uid !== account.uid) && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  if (account.role === "admin" && (!profile || profile.uid !== account.uid) &&
+      store.env?.FIREBASE_SERVICE_ACCOUNT_JSON && !supabaseWebData(store.env)) {
     try {
       const fbStore = new FirestoreAdmin(store.env);
       const fbRow = (await fbStore.get("users/" + account.id)) || (account.id !== "ADMIN1" ? await fbStore.get("users/ADMIN1") : null);

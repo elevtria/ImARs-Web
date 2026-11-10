@@ -76,17 +76,15 @@ function renderSection() {
   const { signal } = pageRequest;
   const user = auth.currentUser, section = sections.find(item => item.id === filter.value);
   body.replaceChildren();
-  const now = Date.now();
-  const available = section ? quizzes.filter(quiz => quizAssignedToSection(quiz, section.id)
-    && (quiz.availability === "now" || (quiz.availability === "scheduled" && Date.parse(quiz.availableAt) <= now))) : [];
-  if (!available.length) {
+  const assigned = section ? quizzes.filter(quiz => quizAssignedToSection(quiz, section.id)) : [];
+  if (!assigned.length) {
     const cell = body.insertRow().insertCell();
     cell.colSpan = 5;
-    cell.textContent = section ? "No published teacher quizzes for this section." : "No sections available.";
+    cell.textContent = section ? "No teacher quizzes assigned to this section." : "No sections available.";
     status.textContent = "";
     return;
   }
-  available.forEach((quiz, index) => renderQuiz(quiz, section, index, user, signal));
+  assigned.forEach((quiz, index) => renderQuiz(quiz, section, index, user, signal));
   return loadSummary(user, section, signal);
 }
 
