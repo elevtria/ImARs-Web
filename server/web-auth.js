@@ -13,7 +13,7 @@ export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const reusableShells = new WeakSet();
 export const isReusablePortalShell = response => reusableShells.has(response);
 const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
-  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/manage-teachers", "/school-analytics"]);
+  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
@@ -370,7 +370,7 @@ export async function protectWebsite(context, now = Date.now()) {
   if (home && !hasSessionCookie) return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
   if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
   if (!enabled(env) && !dataEnabled(env)) return context.next();
-  const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
+  const adminOnly = ["/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;

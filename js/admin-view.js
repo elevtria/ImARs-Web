@@ -17,6 +17,7 @@ globalThis.document?.querySelector(".help-button")?.addEventListener("click", ()
       <p><a href="/admin-dashboard">Overview</a> shows school totals and teacher performance.</p>
       <p><a href="/manage-teachers">Manage Teachers</a> lets you manage teacher accounts and section assignments.</p>
       <p><a href="/school-analytics">School Analytics</a> compares results by teacher and section.</p>
+      <p><a href="/admin-manual">Admin Manual</a> walks through the portal’s tools.</p>
       <form method="dialog"><button autofocus type="submit">Close</button></form>`;
     document.body.append(help);
   }

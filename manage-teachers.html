@@ -55,11 +55,31 @@
       </div>
     </section>
 
-    <section class="teacher-metrics" aria-label="Teacher and class totals" data-auth-shell data-await-content="admin-report">
-      <article class="teacher-metric" data-auth-shell><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">—</strong></div></article>
-      <article class="teacher-metric" data-auth-shell><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">—</strong></div></article>
-      <article class="teacher-metric" data-auth-shell><span class="metric-accent sections-accent"></span><div><small>Total Sections</small><strong id="sectionCount">—</strong></div></article>
-      <article class="teacher-metric" data-auth-shell><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">—</strong></div></article>
+    <section class="stats teacher-metrics" aria-label="Teacher and class totals" data-auth-shell data-await-content="admin-report">
+      <article class="card stat stat-summary" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
+        <span class="label">Active</span>
+        <span class="value" id="activeCount">—</span>
+        <span class="hint">Active teacher profiles</span>
+      </article>
+      <article class="card stat stat-summary" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg></span>
+        <span class="label">Inactive</span>
+        <span class="value" id="inactiveCount">—</span>
+        <span class="hint">Inactive teacher profiles</span>
+      </article>
+      <article class="card stat stat-summary" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg></span>
+        <span class="label">Total Sections</span>
+        <span class="value" id="sectionCount">—</span>
+        <span class="hint">Sections assigned to teachers</span>
+      </article>
+      <article class="card stat stat-summary" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
+        <span class="label">Total Students</span>
+        <span class="value" id="studentCount">—</span>
+        <span class="hint">Students across teachers</span>
+      </article>
     </section>
 
     <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…" data-auth-shell data-await-content="admin-report"></section>
@@ -77,6 +97,7 @@
         <a class="nav-item" href="admin-dashboard.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
         <a class="nav-item active" href="manage-teachers.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
         <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="nav-item" href="admin-manual.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v14H6a2 2 0 1 1 0-4h12M4 18V6a2 2 0 0 1 2-2m2 4h6m-6 4h6"/></svg>Admin Manual</a>
       </nav>
       <div class="side-user">
         <div class="user-avatar">A</div>

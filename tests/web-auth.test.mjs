@@ -165,6 +165,19 @@ test("old admin profile bookmarks lead signed-in admins to the overview", async 
   assert.equal((await app.page("/admin-profile", teacher)).status, 403);
 });
 
+test("the admin manual requires an administrator session", async () => {
+  const app = fixture();
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  for (const path of ["/admin-manual", "/admin-manual.html"]) {
+    const guest = await app.page(path);
+    assert.equal(guest.status, 302);
+    assert.match(guest.headers.get("Location"), /^\/admin-login\?/);
+    assert.equal((await app.page(path, teacher)).status, 403);
+    assert.equal((await app.page(path, admin)).status, 200);
+  }
+});
+
 test("hosted index canonicalization keeps a signed-in teacher on the dashboard", async () => {
   const app = fixture();
   const cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
