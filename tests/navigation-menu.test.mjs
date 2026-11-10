@@ -101,6 +101,24 @@ test("mobile close controls and breakpoint changes retain the drawer behavior", 
   f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), true); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
 });
 
+test("mobile link navigation and history restoration clear the drawer and its backdrop", () => {
+  const f = menu({ desktop: false });
+  for (const close of [
+    () => f.drawer.emit("click", { target: { closest: () => ({}) } }),
+    () => f.window.emit("pagehide"),
+    () => f.window.emit("pageshow", { persisted: true })
+  ]) {
+    f.button.emit("click");
+    f.accountButton.emit("click");
+    assert.equal(f.drawer.inert, false);
+    close();
+    assert.equal(f.accountMenu.hidden, true);
+    assert.equal(f.drawer.classes.has("open"), false);
+    assert.equal(f.drawer.inert, true);
+    assert.equal(f.button.attributes.get("aria-expanded"), "false");
+  }
+});
+
 test("sidebar logout closes the admin session and returns to admin sign-in", async () => {
   const source = readFileSync(new URL("../js/teacher-nav.js", import.meta.url), "utf8").replace(/^import .+\r?\n/gm, "");
   const location = { href: "https://imars.test/admin-dashboard", origin: "https://imars.test" };

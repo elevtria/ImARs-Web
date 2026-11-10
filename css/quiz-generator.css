@@ -171,9 +171,8 @@
 .quiz-empty-icon { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 16px; color: #5e86a6; background: #eaf2f8; font-size: 22px; }
 .quiz-empty-state h3 { margin-top: 12px; color: #405a74; font-size: 15px; }
 .quiz-empty-state p { margin: 5px 0 15px; color: #8796a8; font-size: 11px; }
-.quiz-generation-overlay { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(26,44,65,.42); }
-.quiz-generation-overlay[hidden] { display: none; }
-.quiz-generation-card { display: grid; justify-items: center; gap: 9px; width: min(100%, 340px); padding: 22px; border-radius: 18px; background: var(--card, #fff); box-shadow: var(--shadow); text-align: center; }
+.quiz-generation-card { display: grid; justify-items: center; gap: 9px; width: min(100%, 340px); margin-top: 16px; padding: 22px; border-radius: 18px; background: var(--card, #fff); box-shadow: var(--shadow); text-align: center; }
+.quiz-generation-card[hidden] { display: none; }
 .quiz-generation-card img { object-fit: contain; }
 .quiz-generation-card p { color: var(--muted); font-size: 13px; }
 .quiz-generation-card .section-data-loading::before { width: 22px; height: 22px; flex-basis: 22px; }

@@ -1,5 +1,5 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
-@media screen and (prefers-reduced-motion:no-preference) {
+@media screen and (min-width:1000px) and (prefers-reduced-motion:no-preference) {
   @view-transition { navigation:auto; }
   :root { view-transition-name:none; }
   .login-cubes { view-transition-name:portal-background; }

@@ -58,8 +58,6 @@ if (navigationDrawer) {
       if (event.key === "Tab") keyboardNavigation = true;
     });
     window.addEventListener("blur", resetHover);
-    window.addEventListener("pagehide", resetHover);
-    window.addEventListener("pageshow", resetHover);
     panel.addEventListener("focusin", updateCompact);
     panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
     hoverPointer.addEventListener("change", resetHover);
@@ -70,11 +68,20 @@ if (navigationDrawer) {
       navigationDrawer.inert = hidden;
       menuButton?.setAttribute("aria-expanded", String(open));
     };
-    desktop.addEventListener("change", () => {
+    const closeNavigation = (restoreFocus = false) => {
+      const wasOpen = navigationDrawer.classList.contains("open");
       navigationDrawer.classList.remove("open");
-      resetHover();
+      setAccountOpen(false);
+      if (wasOpen && restoreFocus) menuButton?.focus();
       syncDrawer();
-    });
+    };
+    const resetNavigation = () => {
+      resetHover();
+      closeNavigation();
+    };
+    desktop.addEventListener("change", resetNavigation);
+    window.addEventListener("pagehide", resetNavigation);
+    window.addEventListener("pageshow", resetNavigation);
     menuButton?.addEventListener("click", () => {
       navigationDrawer.classList.add("open");
       syncDrawer();
@@ -89,15 +96,10 @@ if (navigationDrawer) {
     close.setAttribute("aria-label", "Close navigation");
     close.innerHTML = svg('<path d="m6 6 12 12M18 6 6 18"/>');
     panel.append(close);
-    const closeNavigation = () => {
-      navigationDrawer.classList.remove("open");
-      setAccountOpen(false);
-      syncDrawer();
-      menuButton?.focus();
-    };
-    close.addEventListener("click", closeNavigation);
+    close.addEventListener("click", () => closeNavigation(true));
     navigationDrawer.addEventListener("click", event => {
-      if (event.target === navigationDrawer) closeNavigation();
+      if (event.target === navigationDrawer) closeNavigation(true);
+      else if (!desktop.matches && event.target.closest(".nav-item[href], .brand[href]")) closeNavigation();
     });
     accountButton?.addEventListener("click", () => setAccountOpen(accountMenu?.hidden === true));
     document.addEventListener("click", event => {
@@ -113,7 +115,7 @@ if (navigationDrawer) {
       if (desktop.matches) {
         resetHover();
         if (panel.contains(document.activeElement)) document.activeElement.blur();
-      } else if (navigationDrawer.classList.contains("open")) closeNavigation();
+      } else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();

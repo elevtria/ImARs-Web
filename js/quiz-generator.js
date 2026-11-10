@@ -223,16 +223,21 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     const button = generateButton;
-    const loadingOverlay = document.getElementById("quizGenerationOverlay");
+    const statusCard = document.getElementById("quizGenerationStatusCard");
     const loadingStatus = document.getElementById("quizGenerationStatus");
     const loadingHint = document.getElementById("quizGenerationHint");
     const file = selectedFile;
+    const settings = {
+      questionCount: Number(document.getElementById("questionCount").value),
+      difficulty,
+      questionType: document.querySelector("input[name='questionType']:checked").value
+    };
     generating = true;
     updateGenerateButton();
     button.setAttribute("aria-busy", "true");
     loadingStatus.textContent = "Preparing your file…";
     loadingHint.textContent = "Larger files and more questions can take longer.";
-    loadingOverlay.hidden = false;
+    statusCard.hidden = false;
     const slowMessage = setTimeout(() => {
       loadingHint.textContent = "This is taking longer than usual. Keep this page open while ImARs finishes.";
     }, 15000);
@@ -242,13 +247,7 @@ const firestore = getFirestore(firebaseApp);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
       loadingStatus.textContent = material.pdfFile ? "Uploading your PDF and generating questions…" : "Generating your quiz…";
-      const questions = await requestQuiz({
-        ...material,
-        fileName: file.name,
-        questionCount: Number(document.getElementById("questionCount").value),
-        difficulty,
-        questionType: document.querySelector("input[name='questionType']:checked").value
-      }, user.uid);
+      const questions = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid);
       if (auth.currentUser?.uid !== user.uid) return;
 
       generatedQuestions = questions.map((question) => ({
@@ -265,7 +264,7 @@ const firestore = getFirestore(firebaseApp);
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
       clearTimeout(slowMessage);
-      loadingOverlay.hidden = true;
+      statusCard.hidden = true;
       generating = false;
       updateGenerateButton();
       button.setAttribute("aria-busy", "false");

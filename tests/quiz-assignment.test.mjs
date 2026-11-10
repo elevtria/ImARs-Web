@@ -60,7 +60,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("generateQuiz").disabled,false);
   element("questionCount").value="1";
   const generation = element("generateQuiz").listeners.click();
-  assert.equal(element("quizGenerationOverlay").hidden, false);
+  assert.equal(element("quizGenerationStatusCard").hidden, false);
   assert.match(element("quizGenerationStatus").textContent, /Preparing/);
   await new Promise(setImmediate);
   assert.match(element("quizGenerationStatus").textContent, /Uploading your PDF/);
@@ -68,7 +68,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.match(element("quizGenerationHint").textContent, /taking longer/);
   finishGeneration([{text:"Which material freezes into ice?",options:["Water","Milk","Juice","Oil"],correctIndex:0}]);
   await generation;
-  assert.equal(element("quizGenerationOverlay").hidden, true);
+  assert.equal(element("quizGenerationStatusCard").hidden, true);
   assert.equal(showSlowMessage, null);
   assert.equal(requested.sectionId,undefined);
   assert.equal(element("reviewStep").hidden,false);

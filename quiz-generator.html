@@ -124,6 +124,12 @@
             <button class="primary-btn quiz-primary" id="generateQuiz" type="button" disabled><span>Generate quiz</span></button>
           </div>
           <p class="quiz-status" id="setupStatus" role="status" aria-live="polite"></p>
+          <div class="quiz-generation-card" id="quizGenerationStatusCard" role="status" aria-live="polite" aria-atomic="true" hidden>
+            <img src="assets/imars-logo.png" alt="ImARs" width="56" height="56" />
+            <span class="section-data-loading" aria-hidden="true"></span>
+            <strong id="quizGenerationStatus"></strong>
+            <p id="quizGenerationHint"></p>
+          </div>
         </section>
 
         <section class="quiz-step-pane" id="reviewStep" hidden data-auth-shell>
@@ -180,15 +186,6 @@
         <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
       </section>
     </main>
-  </div>
-
-  <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden>
-    <div class="quiz-generation-card" role="status" aria-live="polite" aria-atomic="true">
-      <img src="assets/imars-logo.png" alt="ImARs" width="56" height="56" />
-      <span class="section-data-loading" aria-hidden="true"></span>
-      <strong id="quizGenerationStatus"></strong>
-      <p id="quizGenerationHint"></p>
-    </div>
   </div>
 
   <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>
