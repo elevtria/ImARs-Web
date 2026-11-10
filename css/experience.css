@@ -11,12 +11,16 @@ body.login-scene { display: flex; flex-direction: column; min-height: 100svh; pa
 .admin-login-scene .signin-layout { grid-template-columns: 1fr 1.2fr; }
 
 /* A decorative model display with a short heading and no enclosing card. */
-.signin-model-scene { margin: 0; min-width: 0; text-align: center; }
-.signin-model-stage { position: relative; height: clamp(440px, calc(100svh - 210px), 720px); width: 100%; pointer-events: none; user-select: none; }
+.signin-model-scene { margin: 0; min-width: 0; text-align: left; }
+.signin-model-stage { position: relative; isolation: isolate; height: clamp(360px, calc(100svh - 340px), 600px); width: 100%; pointer-events: none; user-select: none; }
+.signin-model-stage::before { content: ""; position: absolute; z-index: -1; width: 78%; aspect-ratio: 1; max-height: 94%; left: 50%; top: 50%; transform: translate(-50%, -50%); border: 1px solid #2277bd38; border-radius: 50%; box-shadow: 0 0 0 34px #ffffff12, 0 0 0 35px #2277bd12; background: radial-gradient(circle, #e3f7ff55, transparent 68%); }
+.signin-model-stage::after { content: "+"; position: absolute; top: 21%; right: 9%; color: var(--experience-blue); font-size: 27px; font-weight: 400; line-height: 1; }
 .showcase-model { display: block; position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; clip-path: inset(2px); transition: opacity 400ms ease; --poster-color: transparent; }
 .showcase-model.is-current { opacity: 1; }
-.signin-model-scene figcaption { margin-bottom: 6px; color: var(--experience-navy); font-size: 32px; line-height: 1.3; letter-spacing: -.8px; font-weight: 800; }
+.signin-model-scene figcaption { position: relative; z-index: 1; margin: 0 0 0 5%; color: var(--experience-navy); font-size: clamp(32px, 3vw, 46px); line-height: 1.08; letter-spacing: -1.8px; font-weight: 800; }
 .signin-model-scene figcaption span { color: var(--experience-blue); }
+.scene-eyebrow { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; color: var(--experience-muted); font-size: 10px; font-weight: 700; letter-spacing: 2px; line-height: 1.4; }
+.scene-eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--experience-blue); box-shadow: 0 0 0 5px #1686e516; }
 
 .login-scene .login-card { width: 100%; max-width: 520px; justify-self: center; border: 1px solid #91bce0; padding: 34px; border-radius: 24px; background: #fff; box-shadow: 0 24px 70px #367bb22b; }
 .login-scene .login-card h1 { font-size: 30px; letter-spacing: -1px; }
@@ -38,8 +42,8 @@ body.login-scene { display: flex; flex-direction: column; min-height: 100svh; pa
   .experience-brand > span { font-size: 36px; }
   .experience-brand small { font-size: 8px; letter-spacing: 1.2px; }
   .signin-layout, .admin-login-scene .signin-layout { grid-template-columns: 1fr 1fr; gap: 32px; }
-  .signin-model-stage { height: clamp(400px, calc(100svh - 220px), 560px); }
-  .signin-model-scene figcaption { font-size: 28px; }
+  .signin-model-stage { height: clamp(330px, calc(100svh - 340px), 500px); }
+  .signin-model-scene figcaption { font-size: 36px; }
 }
 @media (max-width: 760px) {
   .experience-header { padding: 19px 6%; gap: 12px; }
@@ -51,10 +55,11 @@ body.login-scene { display: flex; flex-direction: column; min-height: 100svh; pa
   .signin-layout, .admin-login-scene .signin-layout { flex: 0 0 auto; grid-template-columns: 1fr; max-width: 520px; margin: 12px auto 24px; padding: 0 22px; gap: 24px; }
   .signin-model-scene { order: 2; }
   .signin-model-stage { height: 340px; }
-  .signin-model-scene figcaption { font-size: 24px; }
+  .signin-model-scene figcaption { font-size: 32px; }
   .login-scene .login-card { padding: 27px 23px; }
 }
 @media (prefers-reduced-motion: reduce) { .showcase-model { transition: none; } }
 @media screen {
   [data-theme="dark"] .login-scene { --experience-blue: #83c6ff; --experience-navy: #e4f1ff; --experience-muted: #bbd4ec; background: radial-gradient(ellipse at 12% 5%, #1b599a 0, transparent 55%), linear-gradient(125deg, #123a69, #0b264d); }
+  [data-theme="dark"] .signin-model-stage::before { border-color: #83c6ff40; box-shadow: 0 0 0 34px #83c6ff06, 0 0 0 35px #83c6ff18; background: radial-gradient(circle, #3898ed20, transparent 68%); }
 }
