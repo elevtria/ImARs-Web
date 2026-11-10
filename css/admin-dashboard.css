@@ -4,7 +4,6 @@ body[data-auth-pending] main { pointer-events: none; }
 
 :root {
   color-scheme: light;
-  --admin-bg: #f4f7fb;
   --admin-card: #fff;
   --admin-ink: #172b49;
   --admin-muted: #8292ab;
@@ -17,8 +16,7 @@ body[data-auth-pending] main { pointer-events: none; }
 }
 
 * { box-sizing: border-box; }
-html { min-height: 100%; background: var(--admin-bg); }
-body { min-height: 100vh; margin: 0; color: var(--admin-ink); background: var(--admin-bg); }
+body { min-height: 100vh; margin: 0; color: var(--admin-ink); }
 button, a { font: inherit; }
 button { cursor: pointer; }
 

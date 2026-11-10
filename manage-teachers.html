@@ -55,13 +55,11 @@
       </div>
     </section>
 
-    <section class="teacher-summary" aria-label="Teacher and class totals" data-auth-shell data-await-content="admin-report">
-      <dl class="teacher-metrics">
-        <div><dt>Active</dt><dd id="activeCount">—</dd></div>
-        <div><dt>Inactive</dt><dd id="inactiveCount">—</dd></div>
-        <div><dt>Total Sections</dt><dd id="sectionCount">—</dd></div>
-        <div><dt>Total Students</dt><dd id="studentCount">—</dd></div>
-      </dl>
+    <section class="teacher-metrics" aria-label="Teacher and class totals" data-auth-shell data-await-content="admin-report">
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">—</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">—</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent sections-accent"></span><div><small>Total Sections</small><strong id="sectionCount">—</strong></div></article>
+      <article class="teacher-metric" data-auth-shell><span class="metric-accent students-accent"></span><div><small>Total Students</small><strong id="studentCount">—</strong></div></article>
     </section>
 
     <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…" data-auth-shell data-await-content="admin-report"></section>

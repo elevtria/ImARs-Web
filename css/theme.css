@@ -40,7 +40,7 @@
     --ink: #e3ebf5; --muted: #a5b4c7; --surface: #1b2738; --line: #35465d;
     --shadow: 0 10px 30px #00000030;
     --portal-ink: #e3ebf5; --portal-muted: #a5b4c7; --portal-line: #35465d;
-    --admin-bg: #101824; --admin-card: #1b2738; --admin-ink: #e3ebf5;
+    --admin-card: #1b2738; --admin-ink: #e3ebf5;
     --admin-muted: #a5b4c7; --admin-line: #35465d;
     --admin-purple: #b6a2ff; --admin-cyan: #70d1f4; --admin-green: #5ed9b0; --admin-pink: #ff8ac6;
     --topic-chip-ink: #c5bdff; --topic-chip-bg: #34345a; --chart-track: #35465d;
