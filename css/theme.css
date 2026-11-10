@@ -237,8 +237,17 @@
   :root[data-theme="light"] :is(.quiz-choice, .quiz-stepper-input button, .quiz-view-tab):is(:hover, :focus-visible):not(:disabled),
   :root[data-theme="light"] .quiz-type-option:is(:hover, :focus-within) { background: #cce3ff; border-color: #247bce; color: #174b7a; box-shadow: inset 0 0 0 1px #5596de; }
   :root[data-theme="light"] .quiz-dropzone:is(:hover, :focus-within) { background: #d7eaff; border-color: #247bce; box-shadow: inset 0 0 0 1px #5596de; }
+  :root[data-theme="light"] .quiz-library-card { background: #fff; border-color: #adcbe8; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+  :root[data-theme="light"] .quiz-library-card:is(:hover, :focus-within) { background: #dcedff; border-color: #4b93df; box-shadow: 0 8px 22px #247bce30; transform: translateY(-2px); }
+  :root[data-theme="light"] .quiz-library-actions button { border-color: #91b6df; background: #edf5ff; color: #214f7e; }
+  :root[data-theme="light"] .quiz-library-actions button:is(:hover, :focus-visible):not(:disabled),
+  :root[data-theme="light"] .quiz-library-actions button[aria-expanded="true"]:not(:disabled) { background: #1d69c8; border-color: #1455af; color: #fff; box-shadow: 0 4px 12px #1765cf35; }
+  :root[data-theme="light"] .quiz-library-actions button.delete { background: #fff5f5; border-color: #e5b5b5; color: #9c3535; }
+  :root[data-theme="light"] .quiz-library-actions button.delete:is(:hover, :focus-visible):not(:disabled) { background: #b62f45; border-color: #942236; color: #fff; box-shadow: 0 4px 12px #b62f4530; }
+  :root[data-theme="light"] .quiz-library-actions button:disabled { opacity: .6; box-shadow: none; }
 }
 @media screen and (prefers-reduced-motion: reduce) {
-  :root[data-theme="light"] :is(.term-head, .activity-term-toggle, .topic-row, .teacher-dashboard .action),
+  :root[data-theme="light"] :is(.term-head, .activity-term-toggle, .topic-row, .teacher-dashboard .action, .quiz-library-card),
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr > :is(th, td) { transition: none; }
+  :root[data-theme="light"] .quiz-library-card:is(:hover, :focus-within) { transform: none; }
 }
