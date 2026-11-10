@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import { NetlifyState } from "../server/netlify-state.js";
 import { netlifyEnvironment, dispatchJob, verifyJob } from "../server/netlify-runtime.js";
 import { netlifyRouter } from "../server/netlify-router.js";
@@ -10,6 +11,26 @@ import { blobStore } from "./fixtures/netlify-blobs.js";
 import { staffProfile } from "../server/web-auth.js";
 
 const callState = (state, name, action, body) => state.get(name).fetch("https://private/" + action, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+test("Netlify loads session configuration for a signed-in dashboard at the root", async () => {
+  const source = readFileSync(new URL("../netlify/edge-functions/portal.js", import.meta.url), "utf8")
+    .replace(/^import .*;\r?\n/gm, "").replace("export default", "globalThis.edge =");
+  const context = vm.createContext({ URL, Response,
+    Netlify: { env: { get: () => "configured" } },
+    netlifyEnvironment: () => ({ env: { fullSessionConfiguration: true } }),
+    onRequest: async input => input.env
+  });
+  vm.runInContext(source, context);
+  for (const [path, cookie, full] of [
+    ["/", "", false], ["/", "analytics=public", false],
+    ["/", "analytics=public; __Host-imars-web=session", true],
+    ["/index.html", "__Host-imars-web=session", true],
+    ["/welcome", "__Host-imars-web=session", false], ["/login", "", false]
+  ]) {
+    const result = await context.edge(new Request("https://imars.netlify.app" + path, { headers: cookie ? { Cookie: cookie } : {} }), {});
+    assert.equal(Boolean(result.fullSessionConfiguration), full, path + " " + cookie);
+  }
+});
 
 test("independent Netlify instances share atomic login lockouts under concurrent requests", async () => {
   const store = blobStore(); let upstream = 0;
