@@ -55,7 +55,7 @@
     .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
     .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
     .quiz-library-card, .quiz-question-card, .login-card, .modal-card, .modal-content,
-    .manual-sheet, .manual-step-card, .manual-tool-card, .quiz-generation-card) {
+    .manual-sheet, .manual-step-card, .manual-tool-card) {
     background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); color: var(--ink);
   }
   [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {

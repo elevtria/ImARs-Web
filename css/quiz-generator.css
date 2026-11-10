@@ -171,11 +171,12 @@
 .quiz-empty-icon { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 16px; color: #5e86a6; background: #eaf2f8; font-size: 22px; }
 .quiz-empty-state h3 { margin-top: 12px; color: #405a74; font-size: 15px; }
 .quiz-empty-state p { margin: 5px 0 15px; color: #8796a8; font-size: 11px; }
-.quiz-generation-card { display: grid; justify-items: center; gap: 9px; width: min(100%, 340px); margin-top: 16px; padding: 22px; border-radius: 18px; background: var(--card, #fff); box-shadow: var(--shadow); text-align: center; }
-.quiz-generation-card[hidden] { display: none; }
-.quiz-generation-card img { object-fit: contain; }
-.quiz-generation-card p { color: var(--muted); font-size: 13px; }
-.quiz-generation-card .section-data-loading::before { width: 22px; height: 22px; flex-basis: 22px; }
+.quiz-generation-card { position: fixed; z-index: 25; top: 50%; left: 50%; transform: translate(-50%, -50%); display: grid; justify-items: center; gap: 8px; width: min(320px, calc(100% - 32px)); pointer-events: none; text-align: center; }
+.quiz-generation-card[hidden], body[data-auth-pending] .quiz-generation-card { display: none; }
+.quiz-generation-card img { object-fit: contain; animation: section-data-spin 2.4s linear infinite; }
+.quiz-generation-card strong, .quiz-generation-card p { margin: 0; padding: 4px 8px; border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 13px; }
+#generateQuiz[aria-busy="true"]::before { content: none; }
+@media (prefers-reduced-motion: reduce) { .quiz-generation-card img { animation: none; } }
 
 .quiz-type-option:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .quiz-option-editor textarea.quiz-input { height: auto; min-height: 100px; padding: 10px 12px; resize: vertical; }
