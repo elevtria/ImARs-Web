@@ -3,7 +3,7 @@
 .manage-heading h1 { margin: 0; font-size: clamp(27px, 2.55vw, 32px); line-height: 1.25; font-weight: 700; letter-spacing: -.04em; }
 .manage-heading p { margin: 4px 0 0; color: #647a99; font-size: 15px; }
 .manage-tools { display: flex; align-items: center; gap: 9px; }
-.teacher-search { display: flex; width: min(300px, 36vw); height: 44px; align-items: center; gap: 9px; padding: 0 13px; border: 1px solid #e2e9f2; border-radius: 12px; background: #f8faff; }
+.teacher-search { display: flex; width: min(300px, 36vw); height: 44px; align-items: center; gap: 9px; margin: 0; padding: 0 13px; border: 1px solid #e2e9f2; border-radius: 12px; background: #f8faff; }
 .teacher-search svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: #8b9ab0; stroke-width: 1.7; }
 .teacher-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #243958; background: transparent; font-size: 13px; }
 .teacher-search input::placeholder { color: #8796ac; }
