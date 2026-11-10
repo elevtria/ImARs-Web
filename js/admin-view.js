@@ -7,6 +7,22 @@ const reportIntervalMs = 5 * 60_000;
 export const formatAdminPercent = value => Number.isFinite(value) ? `${value}%` : "—";
 export const formatAdminGain = value => Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value} pp` : "—";
 
+globalThis.document?.querySelector(".help-button")?.addEventListener("click", () => {
+  let help = document.getElementById("adminHelp");
+  if (!help) {
+    help = document.createElement("dialog");
+    help.id = "adminHelp";
+    help.setAttribute("aria-labelledby", "adminHelpTitle");
+    help.innerHTML = `<h2 id="adminHelpTitle">Admin help</h2>
+      <p><a href="/admin-dashboard">Overview</a> shows school totals and teacher performance.</p>
+      <p><a href="/manage-teachers">Manage Teachers</a> lets you manage teacher accounts and section assignments.</p>
+      <p><a href="/school-analytics">School Analytics</a> compares results by teacher and section.</p>
+      <form method="dialog"><button autofocus type="submit">Close</button></form>`;
+    document.body.append(help);
+  }
+  help.showModal();
+});
+
 export async function showAdminView({ app, user, load, render, verified = () => {}, painted }) {
   const auth = getAuth(app);
   if (auth.currentUser?.uid !== user.uid) return;

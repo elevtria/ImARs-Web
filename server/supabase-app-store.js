@@ -263,6 +263,14 @@ export class SupabaseAppStore {
     return (await response.json()).map(row => this.projected(row, fields));
   }
 
+  async quizReport(actor, sectionId, quizId = null, studentIds = null) {
+    const response = await this.request("rpc/imars_quiz_report", "POST", {}, {
+      p_dataset: this.dataset, p_teacher_uid: actor.uid, p_teacher_id: actor.id,
+      p_section: sectionId, p_quiz: quizId, p_students: studentIds
+    });
+    return response.json();
+  }
+
   async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
     const fields = ["quizId", "status", "submittedAt", "receipt", "review"];
     const submittedAt = "fields->submittedAt->>timestampValue";

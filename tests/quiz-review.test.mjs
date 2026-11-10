@@ -139,3 +139,27 @@ test("quiz scores distinguish pending, auto-graded, reviewed and missing submiss
   assert.equal((await f.callReview({ action: "section-results", sectionId: "B" })).status, 403);
   assert.equal((await f.callReview({ action: "student-average", studentId: "S2" })).status, 403);
 });
+
+test("locking a quiz preserves its submitted results and archived rows do not consume a page", async () => {
+  const f = await setup();
+  f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), availability: "draft" });
+  for (let index = 0; index < 12; index++) f.put("users/A" + index, { role: "student", classCode: "A", status: "archived" });
+  for (let index = 0; index < 10; index++) f.put("users/Z" + index, { role: "student", classCode: "A" });
+  const requests = [];
+  f.store.quizReport = async (actor, section, quizId, ids) => {
+    assert.equal(actor.uid, "teacher-a");
+    assert.equal(section, "A");
+    assert.equal(quizId, "quiz1");
+    requests.push(ids);
+    return { items: ids.includes("S1") ? [{ studentId: "S1", status: "pending-review", attemptId: f.path.split("/").at(-1) }] : [] };
+  };
+  const first = await (await f.callReview({ action: "section-results", sectionId: "A" })).json();
+  assert.equal(first.items.length, 10);
+  assert.equal(first.items[0].status, "pending-review");
+  assert.ok(first.nextCursor);
+  const second = await (await f.callReview({ action: "section-results", sectionId: "A", cursor: first.nextCursor })).json();
+  assert.equal(second.items.length, 1);
+  assert.equal(second.nextCursor, "");
+  assert.equal(new Set(requests.flat()).size, 11);
+  assert.deepEqual(requests.map(ids => ids.length), [10, 1]);
+});
