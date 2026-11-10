@@ -10,14 +10,13 @@ body.login-scene { display: block; padding: 0; background: radial-gradient(ellip
 .experience-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: 1.8px; color: var(--experience-blue); }
 .signin-layout { width: 100%; max-width: 1180px; margin: 35px auto 60px; padding: 0 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
 
-/* The models float above a small plinth, with no enclosing card or controls. */
+/* A decorative model display with a short heading and no enclosing card. */
 .signin-model-scene { margin: 0; min-width: 0; text-align: center; }
-.signin-model-stage { position: relative; height: 460px; width: 100%; pointer-events: none; user-select: none; }
+.signin-model-stage { position: relative; height: 420px; width: 100%; pointer-events: none; user-select: none; }
 .showcase-model { display: block; position: absolute; inset: 0 0 auto; width: 100%; height: 410px; opacity: 0; pointer-events: none; clip-path: inset(2px); transition: opacity 400ms ease; --poster-color: transparent; }
 .showcase-model.is-current { opacity: 1; }
-.model-platform { position: absolute; left: 14%; right: 14%; bottom: 30px; height: 44px; border-radius: 50%; border: 1px solid #6aabdc; background: linear-gradient(#bedff7, #619ac6); box-shadow: 0 22px 30px #286a9f35; }
-.model-platform::before { content: ""; position: absolute; inset: -1px -1px 11px; border: 1px solid #e4f6ff; border-radius: 50%; background: radial-gradient(ellipse at 50% 30%, #f6fcff, #a0d3f4); }
-.signin-model-scene figcaption { padding-top: 5px; color: var(--experience-muted); font-size: 12px; font-weight: 400; }
+.signin-model-scene figcaption { margin-bottom: 14px; color: var(--experience-navy); font-size: 27px; line-height: 1.3; letter-spacing: -.8px; font-weight: 800; }
+.signin-model-scene figcaption span { color: var(--experience-blue); }
 
 /* The administrator scene keeps the sign-in form in the left column. */
 .signin-story { max-width: 470px; }
@@ -50,7 +49,7 @@ body.login-scene { display: block; padding: 0; background: radial-gradient(ellip
   .experience-brand small { font-size: 6px; letter-spacing: 1px; }
   .signin-layout { gap: 40px; }
   .signin-story h2 { font-size: 45px; }
-  .signin-model-stage { height: 420px; }
+  .signin-model-stage { height: 380px; }
   .showcase-model { height: 370px; }
 }
 @media (max-width: 760px) {
@@ -62,9 +61,9 @@ body.login-scene { display: block; padding: 0; background: radial-gradient(ellip
   .experience-actions .theme-toggle { width: 34px; height: 34px; flex-basis: 34px; border-radius: 10px; }
   .signin-layout { grid-template-columns: 1fr; max-width: 520px; margin: 20px auto 40px; padding: 0 22px; gap: 30px; }
   .signin-model-scene { order: 2; }
-  .signin-model-stage { height: 310px; }
+  .signin-model-stage { height: 280px; }
   .showcase-model { height: 270px; }
-  .model-platform { bottom: 20px; height: 36px; }
+  .signin-model-scene figcaption { font-size: 23px; }
   .signin-story h2 { font-size: 32px; margin: 13px 0; letter-spacing: -1px; }
   .signin-story h2 br { display: none; }
   .signin-story > p:last-of-type { font-size: 12px; }
@@ -74,8 +73,6 @@ body.login-scene { display: block; padding: 0; background: radial-gradient(ellip
 @media (prefers-reduced-motion: reduce) { .showcase-model { transition: none; } }
 @media screen {
   [data-theme="dark"] .login-scene { --experience-blue: #83c6ff; --experience-navy: #e4f1ff; --experience-muted: #bbd4ec; background: radial-gradient(ellipse at 12% 5%, #1b599a 0, transparent 55%), linear-gradient(125deg, #123a69, #0b264d); }
-  [data-theme="dark"] .model-platform { background: linear-gradient(#477fae, #1d4165); border-color: #5d94c0; box-shadow: 0 22px 30px #051d3a55; }
-  [data-theme="dark"] .model-platform::before { background: radial-gradient(ellipse at 50% 30%, #8cbde1, #3f76a3); border-color: #8bb9dc; }
   [data-theme="dark"] .signin-science { background: radial-gradient(ellipse at 30% 42%, #294f74, #193650 65%, #102d46); border-color: #3d6789; box-shadow: 0 12px 32px #061a3826; }
   [data-theme="dark"] .signin-science::after { border-color: #6aa8d660; outline-color: #6aa8d639; }
 }
