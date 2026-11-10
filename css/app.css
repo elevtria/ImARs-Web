@@ -2076,16 +2076,16 @@ label {
 
 /* Dashboard accents vary by purpose within the existing blue and gold palette. */
 :is(.teacher-dashboard,.admin-overview) .hero { padding:22px 24px; border-left:4px solid var(--gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stats :is(.stat-link,.stat-summary) { --card-accent:var(--steel); padding-right:80px; border-top:3px solid var(--card-accent); background:linear-gradient(125deg,#fff,#bfc8e224); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stats :is(.stat-link,.stat-summary):nth-child(2) { --card-accent:var(--sky); background:linear-gradient(125deg,#fff,#a4b8d926); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stats :is(.stat-link,.stat-summary):nth-child(3) { --card-accent:var(--gold); background:linear-gradient(125deg,#fff,#feb7050d); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stats :is(.stat-link,.stat-summary):nth-child(4) { --card-accent:var(--ink); background:linear-gradient(125deg,#fff,#81a2c126); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stat .label { color:var(--ink); letter-spacing:.065em; }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stat .value { color:var(--ink); }
-:is(.teacher-dashboard,.admin-overview,.manage-content) .stat .hint { text-align:left; }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link { --card-accent:var(--steel); padding-right:80px; border-top:3px solid var(--card-accent); background:linear-gradient(125deg,#fff,#bfc8e224); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(2) { --card-accent:var(--sky); background:linear-gradient(125deg,#fff,#a4b8d926); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(3) { --card-accent:var(--gold); background:linear-gradient(125deg,#fff,#feb7050d); }
+:is(.teacher-dashboard,.admin-overview) .stats .stat-link:nth-child(4) { --card-accent:var(--ink); background:linear-gradient(125deg,#fff,#81a2c126); }
+:is(.teacher-dashboard,.admin-overview) .stat .label { color:var(--ink); letter-spacing:.065em; }
+:is(.teacher-dashboard,.admin-overview) .stat .value { color:var(--ink); }
+:is(.teacher-dashboard,.admin-overview) .stat .hint { text-align:left; }
 .summary-icon { position:absolute; top:22px; right:24px; width:40px; height:40px; display:grid; place-items:center; background:#bfc8e233; color:#476781; border-radius:12px; }
 .summary-icon svg { width:23px; height:23px; }
-:is(.teacher-dashboard,.admin-overview,.manage-content) :is(.stat-link,.stat-summary):nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
+:is(.teacher-dashboard,.admin-overview) .stat-link:nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
 :is(.teacher-dashboard,.admin-overview) .stat-link-arrow { top:auto; bottom:18px; right:30px; color:#476781; font-size:19px; }
 .teacher-dashboard .section-head h2 { display:flex; align-items:center; gap:10px; }
 .teacher-dashboard .section-head h2::before { content:''; width:5px; height:20px; border-radius:4px; background:var(--steel); flex-shrink:0; }

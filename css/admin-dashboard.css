@@ -74,12 +74,7 @@ td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-siz
 .teacher-cell small { margin-top: 3px; color: var(--admin-muted); font-size: 11px; }
 .post-score { color: #00a96b; font-weight: 700; }
 .gain-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; color: #663fff; background: #f0ebff; font-size: 11px; font-weight: 700; }
-.help-button { position: fixed; right: 18px; bottom: 16px; z-index: 4; width: 40px; height: 40px; border: 1px solid #e7edf5; border-radius: 50%; color: #52647d; background: #fff; box-shadow: 0 2px 9px rgba(21,43,75,.12); font-size: 21px; }
-#adminHelp { max-width: min(28rem, calc(100% - 2rem)); padding: 1.5rem; border: 0; border-radius: 1rem; color-scheme: light dark; }
-#adminHelp::backdrop { background: rgb(15 23 42 / .45); }
-#adminHelp p { margin: .75rem 0; }
-#adminHelp a { text-decoration: underline; }
-#adminHelp button { padding: .35rem .8rem; border: 1px solid currentColor; border-radius: .5rem; }
+.help-button { position: fixed; right: 18px; bottom: 16px; z-index: 4; display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid #e7edf5; border-radius: 50%; color: #52647d; background: #fff; box-shadow: 0 2px 9px rgba(21,43,75,.12); font-size: 21px; text-decoration: none; }
 
 
 @media (max-width: 640px) {

@@ -11,8 +11,10 @@
 .add-teacher-button:hover { background: #6139f2; }
 .add-teacher-button span { font-size: 18px; line-height: 1; font-weight: 400; }
 
-.teacher-metrics .stat-summary { position: relative; }
-.teacher-metrics :is(.label, .value, .hint) { display: block; }
+.teacher-summary { margin-bottom: 16px; }
+.teacher-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.teacher-metrics > div { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; background: #bfc8e240; color: var(--ink); font-size: 13px; }
+.teacher-metrics dd { min-width: 24px; margin: 0; padding: 2px 6px; border-radius: 999px; background: var(--surface, #fff); font-weight: 800; text-align: center; }
 
 .teacher-list { display: grid; gap: 15px; }
 .teacher-record { padding: 20px 21px 17px; border: 1px solid #e5ebf3; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(21,43,75,.05), 0 6px 16px rgba(21,43,75,.025); }

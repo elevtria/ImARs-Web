@@ -52,13 +52,13 @@
   [data-theme="dark"] :is(.topbar, .admin-topbar) { background: #101824e8; border-color: var(--line); }
   [data-theme="dark"] #drawer .drawer-panel { background: #152031; border-color: var(--line); }
   [data-theme="dark"] body :is(.card, .card.section, .term-card, .panel, .metric-card, .profile-card,
-    .profile-info-card, .profile-session-card, .teacher-record, .teacher-analytics-card,
+    .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
     .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
     .quiz-library-card, .quiz-question-card, .login-card, .modal-card, .modal-content,
     .manual-sheet, .manual-step-card, .manual-tool-card) {
     background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); color: var(--ink);
   }
-  [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview, .manage-content) .stats :is(.stat-link, .stat-summary)) {
+  [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {
     background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
   }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
