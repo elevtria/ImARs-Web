@@ -67,9 +67,18 @@
       <a href="login.html" class="signin-admin">← Return to Teacher Login</a>
     </div>
   </main>
-    <aside class="signin-story" aria-labelledby="admin-story-title"><p class="experience-eyebrow">THE ADMINISTRATOR PORTAL</p><h2 id="admin-story-title">Support your teachers.<br /><span>Inspire discovery.</span></h2><p>Manage teacher accounts and follow school progress. Help your classrooms make the most of every science lesson.</p><div class="signin-science"><img src="assets/showcase/heart.webp" alt="3D heart from the ImARs app" width="160" height="190" /><p>Science you can<br />see differently.<small>Explore. Understand. Discover.</small></p></div></aside>
+    <figure class="signin-model-scene">
+      <figcaption>See science <span>come to life.</span></figcaption>
+      <div class="signin-model-stage" aria-hidden="true" inert>
+        <model-viewer class="showcase-model is-current" data-model="heart" src="assets/showcase/heart.glb" alt="" auto-rotate rotation-per-second="12deg" auto-rotate-delay="0" camera-orbit="0deg 80deg 100%" field-of-view="30deg" shadow-intensity="0" exposure="1" interaction-prompt="none" loading="eager" reveal="auto" tabindex="-1" inert><span slot="progress-bar"></span></model-viewer>
+        <model-viewer class="showcase-model" data-model="earth" src="assets/showcase/earth.glb" alt="" auto-rotate rotation-per-second="10deg" auto-rotate-delay="0" camera-orbit="20deg 60deg 105%" field-of-view="30deg" shadow-intensity="0" exposure="1" interaction-prompt="none" loading="eager" reveal="auto" tabindex="-1" inert><span slot="progress-bar"></span></model-viewer>
+        <model-viewer class="showcase-model" data-model="volcano" src="assets/showcase/volcano.glb" alt="" auto-rotate rotation-per-second="10deg" auto-rotate-delay="0" camera-orbit="30deg 65deg 105%" field-of-view="30deg" shadow-intensity="0" exposure="1" interaction-prompt="none" loading="eager" reveal="auto" tabindex="-1" inert><span slot="progress-bar"></span></model-viewer>
+      </div>
+    </figure>
   </div>
 
   <script type="module" src="js/admin-login.js"></script>
+  <script type="module" src="js/vendor/model-viewer.js"></script>
+  <script type="module" src="js/showcase.js"></script>
 </body>
 </html>

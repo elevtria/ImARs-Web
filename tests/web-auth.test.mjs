@@ -134,7 +134,7 @@ test("both sign-in pages stay public with security headers while protected HTML 
       next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
     assert.equal(response.status, 200);
     const policy = response.headers.get("Content-Security-Policy");
-    assert.equal(policy, path.startsWith("/login") ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:") : CONTENT_SECURITY_POLICY);
+    assert.equal(policy, CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:"));
     assert.ok(!policy.includes("'unsafe-eval'"));
   }
 });
