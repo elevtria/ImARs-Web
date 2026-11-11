@@ -9,6 +9,7 @@ const auth = getAuth(app);
 
 // --- VIEW TOGGLE ---
 const teacherContainer = document.getElementById("teacherAnalytics");
+const teacherOverall = document.getElementById("teacherOverall");
 const sectionContainer = document.getElementById("sectionAnalytics");
 const viewButtons = [...document.querySelectorAll("[data-view]")];
 
@@ -22,6 +23,7 @@ function setAnalyticsView(view) {
   });
 
   if (teacherContainer && sectionContainer) {
+    if (teacherOverall) teacherOverall.hidden = !showTeachers;
     teacherContainer.hidden = !showTeachers;
     sectionContainer.hidden = showTeachers;
     teacherContainer.style.display = showTeachers ? "grid" : "none";
@@ -52,6 +54,20 @@ function renderSchoolAnalytics(report) {
       sections: teacher.analyticsSections, color: cardColors[index % cardColors.length]
     }]));
     const sectionMap = new Map(report.sections.map((section, index) => [section.name, { ...section, color: cardColors[index % cardColors.length] }]));
+
+    const teacherTotals = report.teachers.reduce((totals, teacher) => {
+      totals.preSum += teacher.prePctSum || 0;
+      totals.preCount += teacher.preCount || 0;
+      totals.postSum += teacher.postPctSum || 0;
+      totals.postCount += teacher.postCount || 0;
+      return totals;
+    }, { preSum: 0, preCount: 0, postSum: 0, postCount: 0 });
+    const overallPre = teacherTotals.preCount ? Math.round(teacherTotals.preSum / teacherTotals.preCount) : null;
+    const overallPost = teacherTotals.postCount ? Math.round(teacherTotals.postSum / teacherTotals.postCount) : null;
+    const overallGain = overallPre === null || overallPost === null ? null : overallPost - overallPre;
+    document.getElementById("teacherOverallPre").textContent = formatAdminPercent(overallPre);
+    document.getElementById("teacherOverallPost").textContent = formatAdminPercent(overallPost);
+    document.getElementById("teacherOverallGain").textContent = formatAdminGain(overallGain);
 
     // 3. Render Teachers Analytics Cards
     if (teacherContainer) {

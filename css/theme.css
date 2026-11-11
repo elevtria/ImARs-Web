@@ -52,7 +52,7 @@
   [data-theme="dark"] :is(.topbar, .admin-topbar) { background: #101824e8; border-color: var(--line); }
   [data-theme="dark"] #drawer .drawer-panel { background: #152031; border-color: var(--line); }
   [data-theme="dark"] body :is(.card, .card.section, .term-card, .panel, .metric-card, .profile-card,
-    .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
+    .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card, .teacher-overall,
     .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
     .quiz-library-card, .quiz-question-card, .login-card, .modal-card, .modal-content,
     .manual-sheet, .manual-step-card, .manual-tool-card) {
@@ -81,6 +81,11 @@
   }
   [data-theme="dark"] body :is(input, textarea)::placeholder { color: #9aaec6; }
   [data-theme="dark"] body :is(input, select, textarea):focus-visible { outline: 2px solid #90bfea; outline-offset: 2px; }
+  [data-theme="dark"] body .teacher-search input:focus-visible { outline: none; }
+  [data-theme="dark"] body .teacher-overall-metrics > div { background: #28496d; border-color: var(--line); }
+  [data-theme="dark"] body .teacher-overall-metrics strong { color: #b8ddff; }
+  [data-theme="dark"] body .teacher-overall-metrics > div:last-child strong { color: #76dfbd; }
+  [data-theme="dark"] body .teacher-overall :is(h2, p, span) { color: var(--ink); }
   [data-theme="dark"] body :is(h1, h2, h3, h4, .page-title, .current-page, .stat .value, .stat .label,
     .topic strong, .record .student strong, .teacher-cell strong, .teacher-name-line strong,
     .teacher-stat strong, .profile-info-grid dd, .analytics-teacher-name, .section-title-row h2,

@@ -6,6 +6,8 @@
 .teacher-search { display: flex; width: min(300px, 36vw); height: 44px; align-items: center; gap: 9px; margin: 0; padding: 0 13px; border: 1px solid #e2e9f2; border-radius: 12px; background: #f8faff; }
 .teacher-search svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: #8b9ab0; stroke-width: 1.7; }
 .teacher-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #243958; background: transparent; font-size: 13px; }
+body:not(.login-page) .teacher-search input:focus-visible { outline: none; }
+.teacher-search:focus-within { outline: 2px solid var(--portal-blue, #247bce); outline-offset: 2px; }
 .teacher-search input::placeholder { color: #8796ac; }
 .add-teacher-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; padding: 0 17px; border: 0; border-radius: 12px; color: #fff; background: #7048ff; box-shadow: 0 4px 9px rgba(112,72,255,.16); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .add-teacher-button:hover { background: #6139f2; }

@@ -50,6 +50,17 @@
       </div>
     </section>
 
+    <section class="teacher-overall" id="teacherOverall" aria-labelledby="teacherOverallTitle" data-loading-path="users" data-loading-label="Loading overall teacher performance…" data-auth-shell data-await-content="admin-report">
+      <div class="teacher-overall-heading">
+        <h2 id="teacherOverallTitle">Overall Teacher Performance</h2>
+        <p>Combined results from students assigned to teachers</p>
+      </div>
+      <div class="teacher-overall-metrics">
+        <div><span>Average Pre-Test</span><strong id="teacherOverallPre">—</strong></div>
+        <div><span>Average Post-Test</span><strong id="teacherOverallPost">—</strong></div>
+        <div><span>Improvement</span><strong id="teacherOverallGain">—</strong></div>
+      </div>
+    </section>
     <section class="analytics-grid" id="teacherAnalytics" aria-label="Teacher performance" data-loading-path="users" data-loading-label="Loading teacher analytics…" data-auth-shell data-await-content="admin-report"></section>
     <section class="section-analytics" id="sectionAnalytics" aria-label="Section performance" hidden data-auth-shell data-await-content="admin-report"></section>
   </main>
