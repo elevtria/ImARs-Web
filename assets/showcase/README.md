@@ -11,7 +11,10 @@ These are web copies of models from the user's ImARs Unity project. The Unity or
 | snowflake.glb | PHYSICAL AND CHEMICAL CHANGES/Freezing_Snowflake.glb |
 | pulley.glb | SIMPLEMACHINE/Fixed_Pulley.glb |
 | water-cycle.glb | CHANGE OF STATE/Water_Cycle_Centered.glb |
+| magnet.glb | SEPARATION TECHNIQUES/magnet2.glb |
+| waves.glb | TRAVERSE AND LONGITUDINAL WAVE/Traverse and Longitudinal Wave.glb |
+| melting-ice.glb | PHYSICAL AND CHEMICAL CHANGES/iceCube_melting_animation.glb |
 
-Processed with glTF Transform: deduplicate, weld, resample animation, resize textures to a maximum of 1024 pixels, and prune unused data. The heart and water cycle meshes are additionally simplified. Newer models use WebP textures at up to 768 pixels. No remote geometry decoders are required. WebP posters for the original three assets are rendered from their models.
+Processed with glTF Transform: deduplicate, weld, resample animation, resize textures to a maximum of 1024 pixels, and prune unused data. The heart, water cycle, and wave meshes are additionally simplified. Newer models use WebP textures at up to 768 pixels. No remote geometry decoders are required. WebP posters for the original three assets are rendered from their models.
 
 The self-hosted viewer is Google model-viewer 4.1.0, distributed under Apache 2.0. Its license is in `assets/licenses/model-viewer.txt`. The viewer supports interactive camera controls; see https://modelviewer.dev/examples/stagingandcameras/.
