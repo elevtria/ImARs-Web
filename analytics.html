@@ -98,7 +98,7 @@
         </div>
         <div class="performance-controls">
           <label class="select-wrap">
-            <select id="sectionFilter" aria-label="Filter by section">
+            <select id="sectionFilter" aria-label="Filter by section" aria-controls="studentGrid teacherQuizBody">
               <option value="all">All Sections</option>
             </select>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -155,18 +155,9 @@
       <section class="section student-activity-section" aria-labelledby="teacherQuizHeading" data-auth-shell>
         <div class="section-head performance-head">
           <h2 id="teacherQuizHeading" data-public-label>Teacher Quiz Results</h2>
-          <div class="activity-record-filters">
-            <label class="activity-section-filter" for="teacherQuizSection">
-              <span>Section</span>
-              <span class="select-wrap">
-                <select id="teacherQuizSection" aria-controls="teacherQuizBody" disabled><option value="">Select a section</option></select>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-              </span>
-            </label>
-          </div>
+          <button id="teacherQuizRefresh" class="ghost-btn" type="button" disabled>Refresh</button>
         </div>
         <p id="teacherQuizStatus" class="view-data-status" role="status"></p>
-        <button id="teacherQuizRefresh" class="ghost-btn" type="button" disabled>Refresh</button>
         <div class="performance-table-wrap">
           <table class="performance-table activity-record-table teacher-quiz-table">
             <thead><tr><th scope="col">Quiz</th><th scope="col">Section</th><th scope="col">Average score</th><th scope="col">Learners</th><th scope="col">Quiz submissions</th></tr></thead>
@@ -273,7 +264,6 @@
   <script src="js/ui.js"></script>
   <!-- Updated to type="module" -->
   <script type="module" src="js/analytics.js"></script>
-  <script type="module" src="js/teacher-quiz-analytics.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>

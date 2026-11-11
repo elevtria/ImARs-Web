@@ -6,6 +6,7 @@ import { createTeacherReport } from "./teacher-report-data.js";
 import { activityPercent } from "./activity-score.js";
 import { buildStudentActivityRecords } from "./student-activity-record.js";
 import { buildPostTestHeatmap } from "./post-test-heatmap.js";
+import { setTeacherQuizSection } from "./teacher-quiz-analytics.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -352,6 +353,7 @@ const filterStudents = () => {
 search?.addEventListener("input", () => { tablePage = 0; filterStudents(); });
 sectionFilter?.addEventListener("change", () => {
   selectedSection = sectionFilter.value;
+  setTeacherQuizSection(lastReport?.classes.find(section => section.id === selectedSection));
   if (selectedSection && selectedSection !== "all" && activitySection !== selectedSection) {
     selectActivitySection(selectedSection);
   }
@@ -435,6 +437,7 @@ const report = createTeacherReport({ app,
         }
         sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || data.classes[0]?.id || "all" : selectedSection || "all";
         if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
+        setTeacherQuizSection(classes.find(section => section.id === sectionFilter.value));
       }
       for (const { classDoc, students } of sections) {
         const classCode = classDoc.id;

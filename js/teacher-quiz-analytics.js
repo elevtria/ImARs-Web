@@ -5,12 +5,11 @@ import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-revie
 import { createQuizResultsTable } from "./quiz-results-table.js";
 import { escapeHtml } from "./teacher-view.js";
 
-const filter = document.getElementById("teacherQuizSection");
 const body = document.getElementById("teacherQuizBody");
 const status = document.getElementById("teacherQuizStatus");
 const refresh = document.getElementById("teacherQuizRefresh");
 const auth = getAuth(), db = getFirestore();
-let sections = [], quizzes = [], pageRequest;
+let section, quizzes, pageRequest, sectionOwner;
 
 function sectionName(data, id) {
   return data.SectionName || data.sectionName || data.name || id;
@@ -56,6 +55,7 @@ async function loadSummary(user, section, signal) {
   status.textContent = "Loading quiz totals…";
   try {
     const summary = await requestQuizReview(user.uid, { action: "section-summary", sectionId: section.id }, signal);
+    if (signal.aborted) return;
     const totals = new Map(summary.items.map(item => [item.quizId, item]));
     for (const row of body.querySelectorAll("[data-quiz-id]")) {
       const quiz = totals.get(row.dataset.quizId);
@@ -72,15 +72,17 @@ async function loadSummary(user, section, signal) {
 
 function renderSection() {
   pageRequest?.abort();
+  closeQuizReview();
   pageRequest = new AbortController();
   const { signal } = pageRequest;
-  const user = auth.currentUser, section = sections.find(item => item.id === filter.value);
+  const user = auth.currentUser;
   body.replaceChildren();
+  if (user?.role !== "teacher" || !quizzes) return;
   const assigned = section ? quizzes.filter(quiz => quizAssignedToSection(quiz, section.id)) : [];
   if (!assigned.length) {
     const cell = body.insertRow().insertCell();
     cell.colSpan = 5;
-    cell.textContent = section ? "No teacher quizzes assigned to this section." : "No sections available.";
+    cell.textContent = section ? "No teacher quizzes assigned to this section." : "Choose a specific section in the filter above to see its quiz results.";
     status.textContent = "";
     return;
   }
@@ -89,41 +91,35 @@ function renderSection() {
 }
 
 let loadGeneration = 0;
-let sectionOwner, selectedSection = "";
+export function setTeacherQuizSection(classDoc) {
+  if (section?.id === classDoc?.id) return;
+  section = undefined;
+  if (classDoc) {
+    const data = classDoc.data(), name = sectionName(data, classDoc.id);
+    const grade = data.gradeLevel || data.GradeLevel;
+    const gradeLabel = grade ? (/^grade\b/i.test(grade) ? grade : `Grade ${grade}`) : "";
+    section = { id: classDoc.id, name, label: gradeLabel ? `${gradeLabel} – ${name}` : name };
+  }
+  void renderSection();
+}
+
 async function loadChoices(user) {
   const generation = ++loadGeneration;
   closeQuizReview();
   pageRequest?.abort();
-  selectedSection = sectionOwner === user?.uid ? filter.value || selectedSection : "";
+  if (sectionOwner !== user?.uid) section = undefined;
   sectionOwner = user?.uid;
-  filter.replaceChildren(new Option("Select a section", ""));
-  filter.disabled = true;
   body.replaceChildren();
-  sections = [];
-  quizzes = [];
+  quizzes = undefined;
   refresh.disabled = true;
   status.textContent = "";
   if (user?.role !== "teacher") return;
-  status.textContent = "Loading sections and quizzes…";
+  status.textContent = "Loading quizzes…";
   try {
-    const [classes, library] = await Promise.all([
-      getDocs(query(collection(db, "classes"), where("teacherId", "==", user.id))),
-      getDocs(query(collection(db, "generatedQuizzes"), where("teacherUid", "==", user.uid)))
-    ]);
+    const library = await getDocs(query(collection(db, "generatedQuizzes"), where("teacherUid", "==", user.uid)));
     if (generation !== loadGeneration) return;
-    sections = classes.docs.map(doc => {
-      const data = doc.data(), name = sectionName(data, doc.id);
-      const grade = data.gradeLevel || data.GradeLevel;
-      const gradeLabel = grade ? (/^grade\b/i.test(grade) ? grade : `Grade ${grade}`) : "";
-      return { id: doc.id, name, label: gradeLabel ? `${gradeLabel} – ${name}` : name };
-    }).sort((a, b) => a.name.localeCompare(b.name));
     quizzes = library.docs.map(doc => ({ ...doc.data(), id: doc.id }))
       .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
-    if (sections.length) {
-      filter.replaceChildren(...sections.map(section => new Option(section.name, section.id)));
-      if (sections.some(section => section.id === selectedSection)) filter.value = selectedSection;
-      filter.disabled = false;
-    }
     await renderSection();
   } catch (error) {
     if (generation !== loadGeneration) return;
@@ -132,7 +128,6 @@ async function loadChoices(user) {
     if (generation === loadGeneration) refresh.disabled = false;
   }
 }
-filter.addEventListener("change", renderSection);
 refresh.addEventListener("click", () => void loadChoices(auth.currentUser));
 onAuthStateChanged(auth, loadChoices);
 window.addEventListener("pagehide", () => { loadGeneration++; pageRequest?.abort(); });
