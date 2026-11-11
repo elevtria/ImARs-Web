@@ -209,15 +209,18 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (!snapshot || snapshot.quizId !== body.quizId || snapshot.revision !== a.revision || !Object.hasOwn(QUIZ_TYPES, snapshot.type)) throw fail("FORBIDDEN");
     if (body.action === "open") return respond({ studentId: body.studentId, revision: attempt.updateTime, type: snapshot.type, title: snapshot.title,
       questions: snapshot.questions, answers: a.answers, ...resultFor({ path, data: a }),
+      ...(a.automaticScores ? { automaticScores: a.automaticScores } : {}),
       ...(a.status === "reviewed" ? { scores: a.review?.scores, feedback: a.review?.feedback } : {}) });
     if (body.revision !== attempt.updateTime || !["pending-review", "reviewed", "graded"].includes(a.status)) {
       throw fail("REVISION_CHANGED", 409, "This submission changed. Reopen it before saving.");
     }
     if (!Array.isArray(body.scores) || body.scores.length !== snapshot.questions.length || new Set(body.scores.map(item => item?.questionId)).size !== body.scores.length || typeof body.feedback !== "string" || body.feedback.length > 4000) throw fail("INVALID_REVIEW", 400);
     let score = 0, maximum = 0;
+    const automatic = new Map(a.automaticScores?.map(item => [item.questionId, item.score]));
     const scores = snapshot.questions.map(question => {
       const item = body.scores.find(item => item.questionId === question.id), points = quizReviewPoints(snapshot.type, question);
       if (!only(item, ["questionId", "score"]) || !Number.isInteger(item.score) || item.score < 0 || item.score > points) throw fail("INVALID_REVIEW", 400);
+      if (automatic.has(question.id) && item.score !== automatic.get(question.id)) throw fail("INVALID_REVIEW", 400, "Automatically graded answers already have a score.");
       score += item.score; maximum += points; return { questionId: question.id, score: item.score };
     });
     await store.commit([{ operation: "update", path, updateTime: attempt.updateTime, data: { status: "reviewed", review: { score, maximum, scores, feedback: body.feedback, reviewerUid: actor.uid, reviewerProfileId: actor.id, reviewedAtUtc: new Date(now()).toISOString() }, reviewedAt: { $type: "serverTimestamp" } } }]);

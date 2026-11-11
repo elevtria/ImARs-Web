@@ -179,16 +179,23 @@ export async function studentQuizzes({ request, env }, { store, authenticate = a
         questions: q.questions.map(item => ({ id: item.id, text: item.text, options: writtenQuestion(q.type) ? [] : item.options, points: item.points || 1 })) });
     }
     if (!reservation) throw fail("ATTEMPT_CONFLICT", 409);
-    const submitted = answers(body, q), teacherReview = review(q.type);
+    const submitted = answers(body, q);
+    const automaticScores = q.questions.flatMap((question, index) => {
+      const answer = submitted[index];
+      if (writtenQuestion(q.type) || answer.correction) return [];
+      return [{ questionId: question.id, score: Number(answer.optionIndex === question.correctIndex) }];
+    });
+    const teacherReview = automaticScores.length !== q.questions.length;
     const receipt = { context, persisted: true, quizId: safe.id, revision: safe.revision, attemptId: body.attemptId,
       status: teacherReview ? "pending-review" : "graded", submittedAtUtc: new Date(time).toISOString(),
-      score: teacherReview ? 0 : q.questions.reduce((total, question, i) => total + (submitted[i].optionIndex === question.correctIndex ? 1 : 0), 0), maximum: teacherReview ? 0 : q.questions.length };
+      score: teacherReview ? 0 : automaticScores.reduce((total, item) => total + item.score, 0), maximum: teacherReview ? 0 : q.questions.length };
     // The deterministic document is created atomically with the attempt. Its
     // must-not-exist precondition prevents two devices from both submitting.
     const completionPath = `users/${context.studentId}/generated_quiz_completions/${safe.id}`;
     await store.commit([
       { operation: "set", path: completionPath, data: { uid: context.uid, quizId: safe.id, attemptId: body.attemptId } },
       { operation: "update", path, updateTime: reservation.updateTime, data: { status: receipt.status, answers: submitted,
+      ...(q.type === "modified-true-false" && automaticScores.length ? { automaticScores } : {}),
       payloadHash: await hash(canonical(body)), receipt, submittedAt: { $type: "serverTimestamp" }, startedAtClientUtc: body.startedAtUtc, completedAtClientUtc: body.completedAtUtc } }]);
     transaction = false;
     return respond(receipt);

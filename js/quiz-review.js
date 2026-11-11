@@ -58,10 +58,12 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       const form = element("form", undefined, "quiz-review-form"), scores = [];
       form.append(element("h3", row.name || "Student " + row.studentId));
       const awarded = new Map(attempt.scores?.map(item => [item.questionId, item.score]));
+      const automatic = new Map(attempt.automaticScores?.map(item => [item.questionId, item.score]));
       for (const [index, q] of attempt.questions.entries()) {
         const answer = attempt.answers.find(a => a.questionId === q.id), field = element("fieldset");
         const points = quizReviewPoints(attempt.type, q);
-        const score = attempt.status === "graded" ? Number(answer.optionIndex === q.correctIndex) : awarded.get(q.id);
+        const autoScore = automatic.get(q.id);
+        const score = autoScore ?? (attempt.status === "graded" ? Number(answer.optionIndex === q.correctIndex) : awarded.get(q.id));
         field.append(element("legend", (index + 1) + ". " + q.text));
         const written = answer.optionIndex >= 0 ? q.options[answer.optionIndex] : answer.value;
         field.append(element("p", "Student answer: " + written));
@@ -69,7 +71,10 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
         if (answer.correction) field.append(element("p", "Correction: " + answer.correction));
         const guide = element("details"), label = element("summary", "Teacher answer guide"); guide.append(label, element("p", q.answer || (q.correctIndex >= 0 ? q.options[q.correctIndex] : "")));
         if (q.rubric || q.explanation || q.correction) guide.append(element("p", q.rubric || q.explanation || q.correction)); field.append(guide);
-        if (grading) {
+        if (autoScore != null) {
+          field.append(element("p", `Automatically graded: ${autoScore}/${points}`));
+          scores.push({ questionId: q.id, score: autoScore });
+        } else if (grading) {
           const scoreLabel = element("label", `Score (0–${points}) `), input = element("input"); input.type = "number"; input.min = "0"; input.max = String(points); input.step = "1"; input.required = true;
           if (score != null) input.value = String(score);
           scoreLabel.append(input); field.append(scoreLabel); scores.push({ questionId: q.id, input });
@@ -107,7 +112,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
         save.setAttribute("aria-busy", "true"); status.textContent = "";
         try {
           const result = await api({ action: "grade", studentId: row.studentId, attemptId: row.attemptId, revision: attempt.revision,
-            scores: scores.map(item => ({ questionId: item.questionId, score: Number(item.input.value) })), feedback: feedback.value });
+            scores: scores.map(item => ({ questionId: item.questionId, score: item.score ?? Number(item.input.value) })), feedback: feedback.value });
           if (!result.persisted) throw new Error("Review was not confirmed. Please retry.");
           if (submission) {
             closeQuizReview();
@@ -123,8 +128,8 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       content.hidden = filters.hidden = true;
       if (previousForm) previousForm.replaceWith(form);
       else dialog.append(form);
-      status.textContent = "Review each answer and save the scores.";
-      if (previousForm) scores[0]?.input.focus();
+      status.textContent = automatic.size ? "Review the written answers and save the scores." : "Review each answer and save the scores.";
+      if (previousForm) scores.find(item => item.input)?.input.focus();
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
     finally { busy = false; section.disabled = false; if (button) button.disabled = false; setLoadingState(status, false); }
   }

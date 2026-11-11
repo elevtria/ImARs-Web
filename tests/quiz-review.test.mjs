@@ -3,16 +3,41 @@ import test from "node:test";
 import { quizReview, QuizReviewStore } from "../server/quiz-review.js";
 import { fixture, quiz } from "./fixtures/student-quizzes.js";
 
-async function setup(type = "essay", assignment = {}) {
+async function setup(type = "essay", assignment = {}, submittedAnswers) {
   const f = fixture(); f.put("generatedQuizzes/quiz1", quiz("quiz1", type, assignment)); const { request } = await f.begin(), body = f.submission(request);
   if (!["multiple-choice", "true-false"].includes(type)) {
     Object.assign(body.answers[0], type === "modified-true-false" ? { optionIndex: 1, correction: "Student correction" } : type === "identification-explanation" ? { optionIndex: -1, value: "Student identification", explanation: "Student explanation" } : { optionIndex: -1, value: "Student essay" });
   }
+  if (submittedAnswers) body.answers = submittedAnswers;
   assert.equal((await f.call("submit", body)).status, 200);
   const path = "users/S1/generated_quiz_attempts/" + request.attemptId;
   const call = (input, actor = { id: "TEACH1", uid: "teacher-a", role: "teacher" }) => quizReview({ env: f.env, request: new Request("https://imars.test/api/quiz-review/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quizId: "quiz1", studentId: "S1", attemptId: request.attemptId, ...input }) }) }, { store: f.store, authenticate: async () => actor });
   return { ...f, path, callReview: call, body };
 }
+
+test("Modified True or False scores taps automatically and publishes a combined score after written review", async () => {
+  const original = quiz("quiz1", "modified-true-false").questions[0];
+  const trueQuestion = { ...original, id: "q-true", correctIndex: 0, correction: "" };
+  const tap = questionId => ({ questionId, optionIndex: 0, value: "", explanation: "", correction: "" });
+  const questions = [trueQuestion, original];
+  const choiceOnly = await setup("modified-true-false", { questions, questionCount: 2 }, [tap("q-true"), tap("q-original")]);
+  const automatic = await (await choiceOnly.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(automatic.items[0].result, { status: "graded", score: 1, maximum: 2 });
+
+  const mixed = await setup("modified-true-false", { questions, questionCount: 2 },
+    [tap("q-true"), { ...tap("q-original"), optionIndex: 1, correction: "A written correction" }]);
+  const pending = await (await mixed.call("list", { limit: 20, cursor: "" })).json();
+  assert.equal(pending.items[0].result.status, "pending-review");
+  const opened = await (await mixed.callReview({ action: "open" })).json();
+  assert.deepEqual(opened.automaticScores, [{ questionId: "q-true", score: 1 }]);
+  assert.equal(opened.answers[1].correction, "A written correction");
+  const grade = { action: "grade", revision: opened.revision, feedback: "", scores: [{ questionId: "q-true", score: 0 }, { questionId: "q-original", score: 1 }] };
+  assert.equal((await mixed.callReview(grade)).status, 400);
+  grade.scores[0].score = 1;
+  assert.deepEqual(await (await mixed.callReview(grade)).json(), { persisted: true, score: 2, maximum: 2 });
+  const published = await (await mixed.call("list", { limit: 20, cursor: pending.pageCursor })).json();
+  assert.deepEqual(published.items[0].result, { status: "reviewed", score: 2, maximum: 2 });
+});
 for (const type of ["essay", "identification-explanation", "modified-true-false"]) test(type + " reviews use the private original revision and preserve submitted answers/receipt", async () => {
   const f = await setup(type), before = structuredClone(f.data.get(f.path));
   f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), title: "Later edited title", questions: [] });
