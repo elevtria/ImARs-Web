@@ -32,20 +32,21 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
         toggle(value, enabled) { if (enabled) classes.add(value); else classes.delete(value); } } };
   };
   const panel = target(), drawer = target(), button = target(), document = target(), window = target();
+  const accountButton = target(), accountMenu = { hidden: true };
   const outside = { matches: () => false }, focusedLink = { inside: true, matches: () => true, blur: () => { document.activeElement = outside; } };
   document.activeElement = outside;
   panel.contains = element => element === panel || element?.inside === true;
   panel.matches = () => inheritedHover;
-  panel.querySelector = () => ({}); panel.querySelectorAll = () => [];
+  panel.querySelector = () => ({ focus() {} }); panel.querySelectorAll = () => [];
   drawer.querySelector = () => panel;
-  document.getElementById = id => id === "drawer" ? drawer : id === "menuBtn" ? button : null;
+  document.getElementById = id => ({ drawer, menuBtn: button, accountBtn: accountButton, accountMenu })[id];
   document.querySelectorAll = () => []; document.createElement = () => target(); document.head = { append() {} };
   const screen = Object.assign(target(), { matches: desktop }), pointer = Object.assign(target(), { matches: true });
   window.matchMedia = query => query.includes("min-width") ? screen : pointer;
   window.location = { href: "https://imars.test/", origin: "https://imars.test" };
   vm.runInNewContext(script, { window, document, navigator: {}, URL, queueMicrotask: callback => callback(),
     MutationObserver: class { observe() {} }, setTimeout: callback => { timers.set(++timer, callback); return timer; }, clearTimeout: id => timers.delete(id) });
-  return { panel, drawer, document, window, screen, button, focusedLink, outside, compact: () => drawer.classes.has("is-compact"),
+  return { panel, drawer, document, window, screen, button, accountButton, accountMenu, focusedLink, outside, compact: () => drawer.classes.has("is-compact"),
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
@@ -88,9 +89,54 @@ test("mobile close controls and breakpoint changes retain the drawer behavior", 
   const f = menu({ desktop: false });
   assert.equal(f.compact(), false); assert.equal(f.drawer.attributes.get("aria-hidden"), "true");
   f.button.focus = () => {};
-  f.drawer.classes.add("open"); f.panel.children[0].emit("click");
+  f.button.emit("click");
+  assert.equal(f.button.attributes.get("aria-expanded"), "true");
+  assert.equal(f.drawer.inert, false);
+  f.accountButton.emit("click");
+  assert.equal(f.accountMenu.hidden, false);
+  f.panel.children[0].emit("click");
   assert.equal(f.drawer.classes.has("open"), false);
+  assert.equal(f.accountMenu.hidden, true);
+  assert.equal(f.drawer.inert, true);
   f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), true); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
+});
+
+test("mobile link navigation and history restoration clear the drawer and its backdrop", () => {
+  const f = menu({ desktop: false });
+  for (const close of [
+    () => f.drawer.emit("click", { target: { closest: () => ({}) } }),
+    () => f.window.emit("pagehide"),
+    () => f.window.emit("pageshow", { persisted: true })
+  ]) {
+    f.button.emit("click");
+    f.accountButton.emit("click");
+    assert.equal(f.drawer.inert, false);
+    close();
+    assert.equal(f.accountMenu.hidden, true);
+    assert.equal(f.drawer.classes.has("open"), false);
+    assert.equal(f.drawer.inert, true);
+    assert.equal(f.button.attributes.get("aria-expanded"), "false");
+  }
+});
+
+test("sidebar logout closes the admin session and returns to admin sign-in", async () => {
+  const source = readFileSync(new URL("../js/teacher-nav.js", import.meta.url), "utf8").replace(/^import .+\r?\n/gm, "");
+  const location = { href: "https://imars.test/admin-dashboard", origin: "https://imars.test" };
+  const app = { name: "[DEFAULT]" }, auth = {};
+  let logout, signedOut;
+  vm.runInNewContext(source, { URL, window: { location }, document: {
+    body: { classList: { contains: name => name === "admin-portal" } },
+    querySelector: () => ({}),
+    addEventListener: (_, callback) => { logout = callback; }
+  }, getApps: () => [app], getAuth: () => auth, initWebSession() {}, onAuthStateChanged() {},
+  initTeacherNotifications: () => assert.fail("the admin sidebar should not start teacher notifications"),
+  signOut: async value => { signedOut = value; } });
+  const link = { href: "https://imars.test/admin-login.html" };
+  let prevented = false;
+  await logout({ target: { closest: () => link }, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(signedOut, auth);
+  assert.equal(location.href, link.href);
 });
 
 test("hover warms only versioned public assets, does not execute scripts and deduplicates shared designs", () => {

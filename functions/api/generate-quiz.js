@@ -2,16 +2,17 @@ import { MAX_QUIZ_TEXT_CHARACTERS, QUIZ_TYPES, writtenQuestion, normalizeQuizQue
 import { QuizRequestError as RequestValidationError, readQuizMaterial, uploadPdf, deletePdf } from "../../server/quiz-material.js";
 import { dataEnabled, requireStaff, stateCall } from "../../server/web-auth.js";
 import { appStore } from "../../server/supabase-app-store.js";
+import { quizJobObject, quizJobIdPattern, quizJobResponse, signQuizJob } from "../../server/quiz-background.js";
 
 const FIREBASE_PROJECT_ID = "imars-db-a733b";
 const GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 const GENERATION_TIMEOUT_MS = 60000;
 const MAX_PDF_BASE64_CHARACTERS = 14000000;
 
-export async function onRequestPost(context, { store, authenticate = requireStaff, limitGeneration = true } = {}) {
+export async function onRequestPost(context, { store, authenticate = requireStaff, limitGeneration = true, prepared } = {}) {
   const { request, env } = context;
   const started = Date.now();
-  let uploadedFile;
+  let uploadedFile = prepared?.uploadedFile;
   try {
     if (!env.GEMINI_API_KEY) {
       return jsonResponse({ error: "The question-generation service is not configured yet." }, 503);
@@ -29,7 +30,7 @@ export async function onRequestPost(context, { store, authenticate = requireStaf
     const authorization = request.headers.get("Authorization") || "";
     const idToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
     if (!gateway && !idToken) return jsonResponse({ error: "Please sign in with a teacher account first." }, 401);
-    const { body, binaryPdf } = await readQuizMaterial(request);
+    const { body, binaryPdf } = prepared || await readQuizMaterial(request);
     const validationError = validateRequest(body, binaryPdf, gateway);
     if (validationError) return jsonResponse({ error: validationError }, 400);
 
@@ -42,18 +43,49 @@ export async function onRequestPost(context, { store, authenticate = requireStaf
     }
     const authorized = Date.now();
 
-    const prompt = buildPrompt(body);
-    const input = [{ type: "text", text: prompt }];
+    const background = gateway && !prepared && env.QUIZ_GENERATION_JOBS && new URL(request.url).searchParams.get("background") === "1";
+    let job;
+    if (background) {
+      job = quizJobObject(env, staff);
+      const current = await job.fetch("https://quiz-job.internal/");
+      if (!current.ok) return jsonResponse({ error: "Quiz generation is temporarily unavailable." }, 503);
+      const { status, id } = await current.json();
+      if (["queued", "running", "complete"].includes(status)) return jsonResponse({ status, id }, 202);
+      if (body.fileMimeType === "application/pdf" && !binaryPdf) return jsonResponse({ error: "Refresh the page and choose the PDF again." }, 400);
+    }
+
+    let uri = prepared?.uri;
     if (body.fileMimeType === "application/pdf") {
-      if (binaryPdf) {
-        const uri = await uploadPdf(request.body, body.fileSize, env.GEMINI_API_KEY, name => { uploadedFile = name; });
-        input.push({ type: "document", uri, mime_type: "application/pdf" });
-      } else {
-        input.push({ type: "document", data: body.fileBase64, mime_type: "application/pdf" });
+      if (binaryPdf && !prepared) {
+        uri = await uploadPdf(request.body, body.fileSize, env.GEMINI_API_KEY, name => { uploadedFile = name; });
       }
     }
     const materialReady = Date.now();
 
+    if (job) {
+      const id = crypto.randomUUID();
+      const { fileName, fileMimeType, questionCount, questionType, difficulty, sourceText, sectionId } = body;
+      const title = typeof body.title === "string" ? body.title.trim().slice(0, 500) : "";
+      const callback = await signQuizJob(env.WEB_SESSION_SECRET, {
+        id,
+        actor: { id: staff.id, uid: staff.uid, role: staff.role, email: staff.email, requiresVerifiedEmail: staff.requiresVerifiedEmail },
+        body: { fileName, fileMimeType, questionCount, questionType, difficulty, sourceText, sectionId },
+        binaryPdf, uri, uploadedFile, executeBy: Date.now() + 5 * 60_000
+      });
+      const queued = await job.fetch("https://quiz-job.internal/", {
+        method: "POST", body: JSON.stringify({ id, details: { title, fileName, questionCount, questionType, difficulty }, callback })
+      });
+      if (queued.status === 202) uploadedFile = undefined; // The background request now owns cleanup.
+      if (queued.status === 202 || queued.status === 409) return jsonResponse(await queued.json(), 202);
+      return jsonResponse({ error: "Quiz generation is temporarily unavailable." }, 503);
+    }
+
+    const input = [{ type: "text", text: buildPrompt(body) }];
+    if (body.fileMimeType === "application/pdf") {
+      input.push(binaryPdf
+        ? { type: "document", uri, mime_type: "application/pdf" }
+        : { type: "document", data: body.fileBase64, mime_type: "application/pdf" });
+    }
     const requestBody = {
       input,
       store: false,
@@ -167,6 +199,24 @@ export async function onRequestPost(context, { store, authenticate = requireStaf
     if (request.body && !request.bodyUsed && !request.body.locked) await request.body.cancel().catch(() => {});
   }
 }
+
+async function accessJob({ request, env }, remove = false) {
+  try {
+    const staff = await requireStaff(request, env);
+    if (staff.role !== "teacher") return quizJobResponse({ error: "Only a teacher account can access quiz jobs." }, 403);
+    if (!env.QUIZ_GENERATION_JOBS) return quizJobResponse({ status: "none" });
+    const id = new URL(request.url).searchParams.get("id");
+    if (remove && !quizJobIdPattern.test(id)) return quizJobResponse({ error: "Invalid quiz job." }, 400);
+    const path = remove ? "?id=" + id : "";
+    return await quizJobObject(env, staff).fetch("https://quiz-job.internal/" + path, { method: request.method });
+  } catch (error) {
+    const status = [401, 403].includes(error.status) ? error.status : 503;
+    return quizJobResponse({ error: status === 503 ? "Quiz status is temporarily unavailable." : error.message }, status);
+  }
+}
+
+export const onRequestGet = context => accessJob(context);
+export const onRequestDelete = context => accessJob(context, true);
 
 function validateRequest(body, binaryPdf, gateway = false) {
   if (!body || typeof body !== "object") return "The quiz request is incomplete.";

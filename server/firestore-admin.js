@@ -1,3 +1,5 @@
+import { legacyActivityFields } from "./mobile-activity-store.js";
+
 // Server-only administrative access. Never import this module from browser JS.
 const encode = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const utf8 = value => new TextEncoder().encode(value);
@@ -158,6 +160,37 @@ export class FirestoreAdmin {
     }));
     if (records.length > limit && limit === 5000) throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     return records.slice(0, limit);
+  }
+  async activityResultsForRoster(studentIds) {
+    if (!studentIds.length || studentIds.length > 25) throw new Error("Invalid activity roster.");
+    const prefixes = new Map(studentIds.map(id => [this.name("users/" + id + "/activity_results"), id]));
+    const filters = [...prefixes.keys()].map(prefix => ({
+      compositeFilter: { op: "AND", filters: [
+        { fieldFilter: { field: { fieldPath: "__name__" }, op: "GREATER_THAN_OR_EQUAL", value: { referenceValue: prefix + "/-" } } },
+        { fieldFilter: { field: { fieldPath: "__name__" }, op: "LESS_THAN_OR_EQUAL", value: { referenceValue: prefix + "/~" } } }
+      ] }
+    }));
+    const results = [];
+    let after;
+    for (;;) {
+      const rows = await this.request("documents:runQuery", { method: "POST", body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: "activity_results", allDescendants: true }],
+          select: { fields: legacyActivityFields.map(fieldPath => ({ fieldPath })) },
+          where: filters.length === 1 ? filters[0] : { compositeFilter: { op: "OR", filters } },
+          orderBy: [{ field: { fieldPath: "__name__" }, direction: "ASCENDING" }],
+          ...(after ? { startAt: { values: [{ referenceValue: after }], before: false } } : {}),
+          limit: 250
+        }
+      }) });
+      const documents = rows.flatMap(row => row.document ? [row.document] : []);
+      for (const row of documents) {
+        const studentId = prefixes.get(row.name.slice(0, row.name.lastIndexOf("/")));
+        if (studentId) results.push({ studentId, data: decodeFields(row.fields) });
+      }
+      if (documents.length < 250) return results;
+      after = documents.at(-1).name;
+    }
   }
   async count(path, filters = []) {
     this.name(path);

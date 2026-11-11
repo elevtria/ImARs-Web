@@ -17,6 +17,10 @@
         "DASHBOARD_SUMMARIES_ENABLED": "true",
         "TEACHER_SESSION_SYNC_ENABLED": "true",
         "IMARS_SUPABASE_WEB_DATA": "true",
+        "WEB_LEGACY_ACTIVITY_READS_ENABLED": "true",
+        "MOBILE_API_ENABLED": "true",
+        "MOBILE_ACTIVITY_PRODUCTION_ENABLED": "true",
+        "IMARS_MOBILE_DATASET_EPOCH": "mobile-production-v1",
         "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
         "IMARS_SUPABASE_APP_DATASET_ID": "a176e0fd-0b7e-4840-99c5-413452160b6a"
       },
@@ -25,6 +29,10 @@
           "name": "WEB_LOGIN_STATE",
           "class_name": "WebLoginState",
           "script_name": "imars-web-auth"
+        }, {
+          "name": "QUIZ_GENERATION_JOBS",
+          "class_name": "QuizGenerationJob",
+          "script_name": "imars-quiz-jobs"
         }]
       }
     },

@@ -5,10 +5,10 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        ice: "#A4B8D9",
-        mist: "#E2E3E7",
-        periwinkle: "#BFC8E2",
-        steel: "#81A2C1",
+        ice: "#9DC7E7",
+        mist: "#E9F5FF",
+        periwinkle: "#C8E6FB",
+        steel: "#247BCE",
         gold: "#FEB705"
       },
       fontFamily: {

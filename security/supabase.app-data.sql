@@ -143,4 +143,69 @@ $$;
 revoke all on function public.imars_app_scan_page(uuid, text, boolean, integer, integer) from public, anon, authenticated, service_role;
 grant execute on function public.imars_app_scan_page(uuid, text, boolean, integer, integer) to service_role;
 
+create or replace function public.imars_quiz_report(
+  p_dataset uuid, p_teacher_uid text, p_teacher_id text, p_section text,
+  p_quiz text, p_students text[]
+) returns jsonb
+language sql stable set search_path = ''
+as $$
+  with roster as materialized (
+    select d.path, split_part(d.path, '/', 2) as student
+    from public.imars_app_documents d
+    where d.dataset_id = p_dataset and d.collection_path = 'users'
+      and d.fields @> jsonb_build_object(
+        'role', jsonb_build_object('stringValue', 'student'),
+        'classCode', jsonb_build_object('stringValue', p_section))
+      and coalesce(d.fields #>> '{active,booleanValue}', 'true') <> 'false'
+      and lower(coalesce(d.fields #>> '{status,stringValue}', '')) not in ('inactive', 'disabled', 'deleted', 'archived')
+      and coalesce(nullif(d.fields #>> '{teacherId,stringValue}', ''), p_teacher_id) = p_teacher_id
+      and (p_students is null or d.path = any(array(select 'users/' || unnest(p_students))))
+  ),
+  attempts as (
+    select r.student, a.path, a.fields, a.fields #>> '{quizId,stringValue}' as quiz,
+           a.fields #>> '{submittedAt,timestampValue}' as submitted
+    from roster r
+    join public.imars_app_documents a on a.dataset_id = p_dataset
+      and a.collection_path = r.path || '/generated_quiz_attempts'
+    where a.fields @> jsonb_build_object('context', jsonb_build_object('mapValue', jsonb_build_object('fields',
+      jsonb_build_object('teacherUid', jsonb_build_object('stringValue', p_teacher_uid),
+        'teacherProfileId', jsonb_build_object('stringValue', p_teacher_id),
+        'sectionId', jsonb_build_object('stringValue', p_section)))))
+      and a.fields #>> '{submittedAt,timestampValue}' is not null
+      and (p_quiz is null or a.fields #>> '{quizId,stringValue}' = p_quiz)
+  ),
+  latest as (
+    select distinct on (student, quiz) student, path, quiz, submitted, fields #>> '{status,stringValue}' as status,
+      case fields #>> '{status,stringValue}'
+        when 'reviewed' then fields #> '{review,mapValue,fields}'
+        when 'graded' then fields #> '{receipt,mapValue,fields}'
+      end as grade
+    from attempts
+    where quiz ~ '^[A-Za-z0-9_-]{1,128}$'
+    order by student, quiz, submitted::timestamptz desc, path desc
+  ),
+  scores as (
+    select student, split_part(path, '/', 4) as attempt, quiz, submitted, status,
+      coalesce(grade #>> '{score,integerValue}', grade #>> '{score,doubleValue}')::numeric as score,
+      coalesce(grade #>> '{maximum,integerValue}', grade #>> '{maximum,doubleValue}')::numeric as maximum
+    from latest
+  ),
+  totals as (
+    select quiz, count(*) as submitted, round(avg(score * 100 / nullif(maximum, 0))
+      filter (where maximum > 0)) as average
+    from scores where p_quiz is null
+    group by quiz
+  )
+  select case when p_quiz is null then jsonb_build_object(
+    'learners', (select count(*) from roster),
+    'items', coalesce((select jsonb_agg(jsonb_build_object(
+      'quizId', quiz, 'submitted', submitted, 'average', average)) from totals), '[]'::jsonb)
+  ) else jsonb_build_object('items', coalesce((select jsonb_agg(jsonb_build_object(
+    'studentId', student, 'attemptId', attempt, 'submittedAtUtc', submitted, 'status', status,
+    'score', score, 'maximum', maximum)) from scores), '[]'::jsonb)) end;
+$$;
+
+revoke all on function public.imars_quiz_report(uuid, text, text, text, text, text[]) from public, anon, authenticated;
+grant execute on function public.imars_quiz_report(uuid, text, text, text, text, text[]) to service_role;
+
 commit;

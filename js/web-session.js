@@ -49,7 +49,10 @@ export function initWebSession(auth) {
           invalidateTeacherViews();
           document.querySelector("main")?.setAttribute("hidden", "");
           try { await firebaseSignOut(auth); }
-          finally { window.location.replace("/login?reason=web-session"); }
+          finally {
+            const loginPath = user.role === "admin" ? "/admin-login" : "/login";
+            window.location.replace(loginPath + "?reason=web-session");
+          }
         }
       });
     });

@@ -12,6 +12,7 @@ import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailabilit
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
 const escapeHtml = vm.runInNewContext(source("teacher-view.js") + "\nescapeHtml;");
+const adminFormatting = vm.runInNewContext(source("admin-view.js") + "\n({ formatAdminPercent, formatAdminGain });");
 const attack = '<img src=x onerror="alert(1)"> & \' " <svg/onload=alert(2)>';
 const record = (id, data) => ({ id, exists: () => true, data: () => data });
 const snapshot = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: callback => docs.forEach(callback) });
@@ -40,9 +41,9 @@ function page(file, report, resolveReport) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   const termButtons = ["term_01", "term_02", "term_03"].map(term => Object.assign(new Element(), { dataset: { term } }));
   let authChanged, requested, controllerIndex = 0;
-  const requests = [], controllers = [], revealed = [];
+  const requests = [], controllers = [], revealed = [], quizSections = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -51,6 +52,7 @@ function page(file, report, resolveReport) {
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
+    setTeacherQuizSection: classDoc => quizSections.push(classDoc?.id),
     createTeacherReport: options => {
       const index = controllerIndex++; controllers.push(options);
       return { stop() {}, open: async input => { requested=input; requests.push({ index, ...input }); options.render(resolveReport ? await resolveReport(input, index) : report); } };
@@ -63,7 +65,7 @@ function page(file, report, resolveReport) {
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, quizSections, render: () => authChanged({ uid: "teacher-a" }) };
 }
 
 function assertTextOnly(html) {
@@ -221,6 +223,19 @@ function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", class
     })) })) };
 }
 
+test("the main Analytics filter supplies the section for Teacher Quiz Results", async () => {
+  const app = page("analytics.js", activityReportData());
+  await app.render();
+  assert.equal(app.quizSections.at(-1), "A");
+  const filter = app.element("sectionFilter");
+  filter.value = "B";
+  await filter.events.change();
+  assert.equal(app.quizSections.at(-1), "B");
+  filter.value = "all";
+  await filter.events.change();
+  assert.equal(app.quizSections.at(-1), undefined);
+});
+
 test("activity section dropdown shows each topic once and reuses loaded sections without extra requests", async () => {
   const data = activityReportData(), app = page("analytics.js", data);
   assert.equal(app.revealed.length, 0, "data cards must wait for the report");
@@ -349,7 +364,7 @@ test("the shared term and activity section drive completion rates without anothe
   assert.match(topics.html(), /100%.*Topic for term_01/s);
   await app.termButtons[1].events.click();
   assert.match(topics.html(), /50%.*Topic for term_02/s);
-  assert.match(app.element("studentActivityBody").html(), /1\/2 completed/);
+  assert.match(app.element("studentActivityBody").html(), /1\/2 submitted/);
   assert.equal(app.element("questionHeatmapScope").textContent, "Term 2 · Section A");
   await app.termButtons[1].events.click();
   assert.equal(app.requests.length, 2, "the current term must not start a duplicate report");

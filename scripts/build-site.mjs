@@ -50,7 +50,7 @@ for (const directory of ["js", "css"]) {
   if (relative(output, generated) !== directory) throw new Error("Invalid generated asset directory.");
   await rm(generated, { recursive: true, force: true });
 }
-await writeFile(join(output, "_redirects"), "/scan-qr-ar /sync-offline-results 302\n/scan-qr-ar.html /sync-offline-results 302\n");
+await writeFile(join(output, "_redirects"), "/scan-qr-ar /sync-offline-results 302\n/scan-qr-ar.html /sync-offline-results 302\n/welcome /login 302\n/welcome.html /login 302\n");
 
 let files = 0;
 let largest = 0;

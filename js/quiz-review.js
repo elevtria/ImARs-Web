@@ -1,77 +1,69 @@
 import { setLoadingState } from "./loading.js";
-import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { collection, getDocs, getFirestore, query, where } from "./firebase-data.js";
-import { quizAssignedToSection, quizAssignmentScope, writtenQuestion } from "./quiz-limits.js";
+import { quizAssignedToSection, quizReviewPoints } from "./quiz-limits.js";
+import { createQuizResultsTable, quizScoreLabel } from "./quiz-results-table.js";
 
-let dialog, controller, generation = 0;
-function closeQuizReview() {
-  generation++; controller?.abort(); controller = null;
+let dialog, controller;
+export function closeQuizReview() {
+  controller?.abort(); controller = null;
   dialog?.close(); dialog?.remove(); dialog = null;
 }
 window.addEventListener("pagehide", closeQuizReview);
 const element = (tag, text, className) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; if (className) item.className = className; return item; };
-async function openQuizReview(user) {
-  closeQuizReview(); const current = generation; controller = new AbortController();
+export async function requestQuizReview(uid, body, signal) {
+  const response = await fetch("/api/quiz-review/action", { method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify(body), signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) });
+  if (!response.headers.get("Content-Type")?.includes("application/json")) throw new Error("Please sign in again.");
+  const result = await response.json();
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("imars-session-ended"));
+    throw new Error(result.error || "Could not load quiz results.");
+  }
+  signal.throwIfAborted();
+  return result;
+}
+export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection, { submission, onReviewed } = {}) {
+  closeQuizReview(); controller = new AbortController();
   const uid = user.uid;
   const signal = controller.signal;
   dialog = element("dialog", undefined, "quiz-review-dialog"); dialog.setAttribute("aria-labelledby", "quizReviewTitle");
-  const heading = element("h2", "Quiz Submissions"); heading.id = "quizReviewTitle";
+  if (!submission) dialog.classList.add("quiz-results-dialog");
+  const heading = element("h2", `Results for ${resultsQuiz.title}`); heading.id = "quizReviewTitle";
   const close = element("button", "Close", "btn-ghost"); close.type = "button"; close.addEventListener("click", closeQuizReview);
   const header = element("div", undefined, "quiz-review-header"); header.append(heading, close);
   const status = element("p", "", "quiz-status"); status.setAttribute("role", "status");
   const filters = element("div", undefined, "quiz-review-filters");
-  const sectionLabel = element("label", "Section"), quizLabel = element("label", "Quiz");
-  const section = element("select"), quiz = element("select");
-  sectionLabel.append(section); quizLabel.append(quiz); filters.append(sectionLabel, quizLabel);
-  const option = (label, value = "") => { const item = element("option", label); item.value = value; return item; };
-  section.append(option("All sections")); quiz.append(option("Choose a quiz"));
-  section.disabled = quiz.disabled = true;
-  const content = element("div"), next = element("button", "Load more", "btn-ghost"); next.type = "button"; next.hidden = true;
-  dialog.append(header, filters, status, content, next); dialog.addEventListener("cancel", event => { event.preventDefault(); closeQuizReview(); }); document.body.append(dialog); dialog.showModal();
-  let busy = false, cursor = "";
-  let availableQuizzes = [];
-  const sections = new Map();
+  const sectionLabel = element("label", "Section"), section = element("select");
+  sectionLabel.append(section); filters.append(sectionLabel);
+  const choices = quizSections;
+  section.replaceChildren(...choices.map(item => new Option(item.name, item.id)));
+  if (choices.some(item => item.id === selectedSection)) section.value = selectedSection;
+  else if (choices.some(item => quizAssignedToSection(resultsQuiz, item.id)))
+    section.value = choices.find(item => quizAssignedToSection(resultsQuiz, item.id)).id;
+  section.disabled = !choices.length;
+  const content = element("div");
+  dialog.append(header, filters, status, content);
+  dialog.addEventListener("cancel", event => { event.preventDefault(); closeQuizReview(); });
+  document.body.append(dialog); dialog.showModal();
+  let busy = false;
   async function api(body) {
-    const response = await fetch("/api/quiz-review/action", { method: "POST", credentials: "same-origin", cache: "no-store",
-      headers: { "Content-Type": "application/json", "X-Web-User": uid }, body: JSON.stringify({ ...body, quizId: quiz.value, sectionId: section.value }), signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]) });
-    if (!response.headers.get("Content-Type")?.includes("application/json")) throw new Error("Please sign in again.");
-    const result = await response.json();
-    if (!response.ok) {
-      if (response.status === 401) window.dispatchEvent(new Event("imars-session-ended"));
-      if ([401, 403].includes(response.status)) closeQuizReview();
-      throw new Error(result.error || "Could not load quiz reviews.");
-    }
-    if (current !== generation) throw new DOMException("Canceled", "AbortError"); return result;
+    return requestQuizReview(uid, { ...body, quizId: resultsQuiz.id, sectionId: section.value }, signal);
   }
-  async function load() {
-    if (busy || !quiz.value) return;
-    busy = true; next.disabled = section.disabled = quiz.disabled = true;
-    setLoadingState(status, true, "Loading submissions");
-    try {
-      const page = await api({ action: "list", cursor }); cursor = page.nextCursor;
-      next.textContent = "Load more";
-      for (const row of page.items) {
-        const button = element("button", [row.studentId, sections.get(row.sectionId), new Date(row.submittedAtUtc).toLocaleString()].filter(Boolean).join(" · "), "quiz-review-submission"); button.type = "button";
-        button.addEventListener("click", () => show(row, button)); content.append(button);
-      }
-      status.textContent = content.children.length ? "Select a submission to review." : "No answers are waiting for review."; next.hidden = !cursor;
-    } catch (error) { if (error.name !== "AbortError") { status.textContent = error.message; next.textContent = "Retry"; next.hidden = false; } }
-    finally { busy = false; next.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
-  }
-  async function show(row, button) {
-    if (busy) return; busy = true; button.disabled = section.disabled = quiz.disabled = true;
+  async function show(row, button, updateScore, previousForm) {
+    if (busy) return; busy = true; section.disabled = true;
+    if (button) button.disabled = true;
     setLoadingState(status, true, "Loading student answers");
     try {
       const attempt = await api({ action: "open", studentId: row.studentId, attemptId: row.attemptId });
-      if (attempt.status !== "pending-review") {
-        button.remove();
-        status.textContent = "This submission has already been graded.";
-        return;
-      }
+      const grading = Boolean(previousForm) || attempt.status === "pending-review";
       const form = element("form", undefined, "quiz-review-form"), scores = [];
-      form.append(element("h3", "Student " + row.studentId));
+      form.append(element("h3", row.name || "Student " + row.studentId));
+      const awarded = new Map(attempt.scores?.map(item => [item.questionId, item.score]));
+      const automatic = new Map(attempt.automaticScores?.map(item => [item.questionId, item.score]));
       for (const [index, q] of attempt.questions.entries()) {
         const answer = attempt.answers.find(a => a.questionId === q.id), field = element("fieldset");
+        const points = quizReviewPoints(attempt.type, q);
+        const autoScore = automatic.get(q.id);
+        const score = autoScore ?? (attempt.status === "graded" ? Number(answer.optionIndex === q.correctIndex) : awarded.get(q.id));
         field.append(element("legend", (index + 1) + ". " + q.text));
         const written = answer.optionIndex >= 0 ? q.options[answer.optionIndex] : answer.value;
         field.append(element("p", "Student answer: " + written));
@@ -79,69 +71,86 @@ async function openQuizReview(user) {
         if (answer.correction) field.append(element("p", "Correction: " + answer.correction));
         const guide = element("details"), label = element("summary", "Teacher answer guide"); guide.append(label, element("p", q.answer || (q.correctIndex >= 0 ? q.options[q.correctIndex] : "")));
         if (q.rubric || q.explanation || q.correction) guide.append(element("p", q.rubric || q.explanation || q.correction)); field.append(guide);
-        const scoreLabel = element("label", "Score (0–" + (q.points || 1) + ") "), input = element("input"); input.type = "number"; input.min = "0"; input.max = String(q.points || 1); input.step = "1"; input.required = true;
-        scoreLabel.append(input); field.append(scoreLabel); scores.push({ questionId: q.id, input }); form.append(field);
+        if (autoScore != null) {
+          field.append(element("p", `Automatically graded: ${autoScore}/${points}`));
+          scores.push({ questionId: q.id, score: autoScore });
+        } else if (grading) {
+          const scoreLabel = element("label", `Score (0–${points}) `), input = element("input"); input.type = "number"; input.min = "0"; input.max = String(points); input.step = "1"; input.required = true;
+          if (score != null) input.value = String(score);
+          scoreLabel.append(input); field.append(scoreLabel); scores.push({ questionId: q.id, input });
+        } else if (score != null) {
+          field.append(element("p", `Score: ${score}/${points}`));
+        }
+        form.append(field);
+      }
+      const cancel = element("button", "Back to results", "btn-ghost"); cancel.type = "button";
+      const back = () => {
+        if (submission) { closeQuizReview(); return; }
+        form.remove(); content.hidden = filters.hidden = false;
+      };
+      cancel.addEventListener("click", () => {
+        back();
+        status.textContent = "";
+        button?.focus();
+      });
+      if (!grading) {
+        if (attempt.feedback) form.append(element("p", "Feedback: " + attempt.feedback));
+        const edit = element("button", "Edit review", "primary-btn"); edit.type = "button";
+        edit.addEventListener("click", () => void show(row, button, updateScore, form));
+        form.append(edit, cancel);
+        content.hidden = filters.hidden = true;
+        dialog.append(form);
+        status.textContent = "Quiz score: " + quizScoreLabel(attempt);
+        return;
       }
       const feedbackLabel = element("label", "Feedback "), feedback = element("textarea"); feedback.maxLength = 4000; feedbackLabel.append(feedback); form.append(feedbackLabel);
-      const save = element("button", "Save review", "primary-btn"), cancel = element("button", "Back to submissions", "btn-ghost"); save.type = "submit"; cancel.type = "button";
-      const back = () => { form.remove(); content.hidden = false; filters.hidden = false; next.hidden = !cursor; };
-      cancel.addEventListener("click", () => { back(); status.textContent = "Select a submission to review."; }); form.append(save, cancel);
+      feedback.value = attempt.feedback || "";
+      const save = element("button", "Save review", "primary-btn"); save.type = "submit";
+      form.append(save, cancel);
       form.addEventListener("submit", async event => {
         event.preventDefault(); if (save.disabled) return; save.disabled = cancel.disabled = true;
         save.setAttribute("aria-busy", "true"); status.textContent = "";
         try {
           const result = await api({ action: "grade", studentId: row.studentId, attemptId: row.attemptId, revision: attempt.revision,
-            scores: scores.map(item => ({ questionId: item.questionId, score: Number(item.input.value) })), feedback: feedback.value });
+            scores: scores.map(item => ({ questionId: item.questionId, score: item.score ?? Number(item.input.value) })), feedback: feedback.value });
           if (!result.persisted) throw new Error("Review was not confirmed. Please retry.");
-          button.remove(); back(); status.textContent = "Grade saved: " + result.score + "/" + result.maximum + ".";
+          if (submission) {
+            closeQuizReview();
+            onReviewed?.(result);
+            return;
+          }
+          back();
+          updateScore?.(result);
+          status.textContent = "";
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
       });
-      content.hidden = filters.hidden = next.hidden = true; dialog.append(form); status.textContent = "Review each answer and save the scores.";
+      content.hidden = filters.hidden = true;
+      if (previousForm) previousForm.replaceWith(form);
+      else dialog.append(form);
+      status.textContent = automatic.size ? "Review the written answers and save the scores." : "Review each answer and save the scores.";
+      if (previousForm) scores.find(item => item.input)?.input.focus();
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
-    finally { busy = false; button.disabled = section.disabled = quiz.disabled = false; setLoadingState(status, false); }
+    finally { busy = false; section.disabled = false; if (button) button.disabled = false; setLoadingState(status, false); }
   }
-  function resetList() {
-    cursor = "";
-    content.replaceChildren(); next.hidden = true; next.textContent = "Load more";
-    status.textContent = "Choose a quiz to view pending submissions.";
+  if (submission && section.value) {
+    filters.hidden = true;
+    await show(submission);
+  } else if (choices.length) {
+    const showResults = () => {
+      const sectionId = section.value;
+      const table = createQuizResultsTable({
+        compact: true,
+        signal,
+        fetchPage: cursor => requestQuizReview(uid, { action: "section-results", quizId: resultsQuiz.id, sectionId, cursor }, signal),
+        reviewAnswers: (row, button, updateScore) => void show(row, button, updateScore)
+      });
+      content.replaceChildren(table.element);
+      table.load();
+    };
+    section.addEventListener("change", showResults);
+    showResults();
+  } else {
+    status.textContent = "There are no assigned sections to show.";
   }
-  function filterQuizzes() {
-    const choices = availableQuizzes.filter(item => !section.value || quizAssignedToSection(item, section.value));
-    quiz.replaceChildren(option("Choose a quiz"), ...choices.map(item => option(item.title || "Untitled quiz", item.id)));
-    quiz.disabled = !choices.length;
-    resetList();
-    if (!choices.length) status.textContent = "No assigned written quizzes for this section.";
-  }
-  section.addEventListener("change", filterQuizzes);
-  quiz.addEventListener("change", () => { resetList(); void load(); });
-  next.addEventListener("click", load);
-  setLoadingState(status, true, "Loading sections and quizzes");
-  try {
-    const db = getFirestore();
-    const [classList, quizzes] = await Promise.all([
-      getDocs(query(collection(db, "classes"), where("teacherId", "==", user.id))),
-      getDocs(query(collection(db, "generatedQuizzes"), where("teacherUid", "==", uid)))
-    ]);
-    if (current !== generation) return;
-    for (const row of classList.docs) sections.set(row.id, row.data().SectionName || row.data().name || row.id);
-    for (const [id, name] of sections) section.append(option(name, id));
-    const selected = document.getElementById("sectionFilter")?.value;
-    if (sections.has(selected)) section.value = selected;
-    availableQuizzes = quizzes.docs.map(row => ({ ...row.data(), id: row.id })).filter(item =>
-      ["all", "section"].includes(quizAssignmentScope(item)) && (writtenQuestion(item.type) || item.type === "modified-true-false"));
-    section.disabled = !sections.size;
-    filterQuizzes();
-  } catch {
-    if (current === generation) status.textContent = "Could not load sections or quizzes. Close and try again.";
-  } finally { setLoadingState(status, false); }
-}
-
-const submissionsButton = document.getElementById("quizSubmissionsBtn");
-if (submissionsButton) {
-  const auth = getAuth();
-  onAuthStateChanged(auth, user => { closeQuizReview(); submissionsButton.disabled = user?.role !== "teacher"; });
-  submissionsButton.addEventListener("click", () => {
-    if (auth.currentUser?.role === "teacher") void openQuizReview(auth.currentUser);
-  });
 }

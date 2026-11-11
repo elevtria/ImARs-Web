@@ -1,4 +1,7 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
+import { legacyActivityFields } from "./mobile-activity-store.js";
+
+import { RESULT_LIMIT, SUMMARY_FIELDS } from "./student-quiz-store.js";
 
 const id = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const part = /^[A-Za-z0-9_-]{1,128}$/;
@@ -146,6 +149,44 @@ export class SupabaseAppStore {
     }));
   }
 
+  async adminLessonResults(fieldPaths) {
+    const pattern = "^users/[A-Za-z0-9_-]+/test_results/term_0[1-3]/lessons/lesson_0[1-4]$";
+    const select = this.selection(fieldPaths);
+    const rows = [];
+    let after;
+    for (;;) {
+      const response = await this.documents("GET", {
+        path: "match." + pattern, select, order: "path.asc", limit: "500",
+        ...(after ? { and: "(path.gt." + after + ")" } : {})
+      });
+      const page = await response.json();
+      rows.push(...page.map(row => ({ path: row.path, ...this.projected(row, fieldPaths) })));
+      if (page.length < 500) return rows;
+      after = page.at(-1).path;
+    }
+  }
+
+  async activityResultsForRoster(studentIds) {
+    if (!studentIds.length || studentIds.length > 25 || !studentIds.every(id => part.test(id))) {
+      throw new Error("Invalid activity roster.");
+    }
+    const collections = studentIds.map(id => "users/" + id + "/activity_results");
+    const fields = legacyActivityFields;
+    const select = this.selection(fields);
+    const results = [];
+    let after;
+    for (;;) {
+      const response = await this.documents("GET", {
+        collection_path: "in.(" + collections.join(",") + ")", select, order: "path.asc", limit: "250",
+        ...(after ? { path: "gt." + after } : {})
+      });
+      const rows = await response.json();
+      results.push(...rows.map(row => ({ studentId: row.path.split("/")[1], data: this.projected(row, fields).data })));
+      if (rows.length < 250) return results;
+      after = rows.at(-1).path;
+    }
+  }
+
   async rawDocuments(paths, fieldPaths) {
     if (!paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     for (const path of paths) validatePath(path, true);
@@ -256,8 +297,7 @@ export class SupabaseAppStore {
 
   async quizPage(context, { limit = 21, after, upper, ids } = {}) {
     if (ids && !ids.length) return [];
-    const fields = ["id", "title", "sectionId", "assignmentScope", "teacherProfileId", "teacherUid", "type",
-      "gradingMode", "availability", "availableAt", "createdAt", "schemaVersion", "questionCount"];
+    const fields = SUMMARY_FIELDS;
     const createdAt = "fields->createdAt->>stringValue";
     const cursor = after || upper;
     const response = await this.documents("GET", {
@@ -275,6 +315,30 @@ export class SupabaseAppStore {
     return (await response.json()).map(row => this.projected(row, fields));
   }
 
+  async quizReport(actor, sectionId, quizId = null, studentIds = null) {
+    const response = await this.request("rpc/imars_quiz_report", "POST", {}, {
+      p_dataset: this.dataset, p_teacher_uid: actor.uid, p_teacher_id: actor.id,
+      p_section: sectionId, p_quiz: quizId, p_students: studentIds
+    });
+    return response.json();
+  }
+
+  async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
+    const fields = ["quizId", "status", "submittedAt", "receipt", "review"];
+    const submittedAt = "fields->submittedAt->>timestampValue";
+    const context = { teacherUid: actor.uid, teacherProfileId: actor.id, sectionId };
+    const boundary = after && quoted(sortableTimestamp(after[0]));
+    const response = await this.documents("GET", {
+      collection_path: studentId ? `eq.users/${studentId}/generated_quiz_attempts` : "like.users/*/generated_quiz_attempts",
+      select: this.selection(fields),
+      fields: "cs." + JSON.stringify(encodeFields({ context, ...(quizId ? { quizId } : {}) })),
+      [submittedAt]: "not.is.null", order: submittedAt + ".desc,path.desc", limit: String(limit),
+      ...(after ? { or: "(" + submittedAt + ".lt." + boundary + ",and(" + submittedAt +
+        ".eq." + boundary + ",path.lt." + after[1] + "))" } : {})
+    });
+    return (await response.json()).map(row => ({ ...this.projected(row, fields), path: row.path }));
+  }
+
   async reviewPage(actor, quizId, sectionId, after) {
     const fields = ["context", "quizId", "status", "submittedAt"];
     const submittedAt = "fields->submittedAt->>timestampValue";
@@ -288,6 +352,26 @@ export class SupabaseAppStore {
         ".eq." + boundary + ",path.gt." + after[1] + "))" } : {})
     });
     return (await response.json()).map(row => ({ ...this.projected(row, fields), path: row.path }));
+  }
+
+  async quizResults(context, ids) {
+    const response = await this.documents("GET", {
+      collection_path: `eq.users/${context.studentId}/generated_quiz_attempts`,
+      "fields->uid->>stringValue": "eq." + context.uid,
+      "fields->quizId->>stringValue": "in.(" + ids.join(",") + ")",
+      "fields->status->>stringValue": "in.(graded,pending-review,reviewed)",
+      select: "path,uid:fields->uid,quizId:fields->quizId,status:fields->status,submittedAt:fields->submittedAt," +
+        "receiptScore:fields->receipt->mapValue->fields->score,receiptMaximum:fields->receipt->mapValue->fields->maximum," +
+        "receiptTime:fields->receipt->mapValue->fields->submittedAtUtc,reviewScore:fields->review->mapValue->fields->score," +
+        "reviewMaximum:fields->review->mapValue->fields->maximum",
+      limit: String(RESULT_LIMIT + 1)
+    });
+    return (await response.json()).map(({ path, ...fields }) => {
+      const value = decodeFields(Object.fromEntries(Object.entries(fields).filter(([, item]) => item !== null)));
+      return { id: path.split("/").at(-1), data: { uid: value.uid, quizId: value.quizId, status: value.status, submittedAt: value.submittedAt,
+        receipt: { score: value.receiptScore, maximum: value.receiptMaximum, submittedAtUtc: value.receiptTime },
+        review: { score: value.reviewScore, maximum: value.reviewMaximum } } };
+    });
   }
 
   async recentScans(path, direction, limit, fieldPaths) {

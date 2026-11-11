@@ -3,6 +3,7 @@ import test from "node:test";
 import { studentQuizzes } from "../server/student-quizzes.js";
 import { StudentQuizStore, SUMMARY_FIELDS } from "../server/student-quiz-store.js";
 import { encodeFields } from "../server/firestore-admin.js";
+import { SupabaseAppStore } from "../server/supabase-app-store.js";
 import { protectWebsite } from "../server/web-auth.js";
 import { backfillQuizMetadata } from "../scripts/backfill-quiz-metadata.mjs";
 
@@ -22,6 +23,7 @@ test("all-section quizzes stay scoped to the current teacher and refresh removes
     assert.equal(response.status, 200);
     const page = await response.json(); pages.push(page);
     assert.ok(page.items.some(item => item.id === "shared"));
+    assert.equal(page.items.some(item => item.id === "quiz1"), uid === "student-a");
     assert.equal(page.items.some(item => item.id === "draft"), false);
     assert.ok(page.items.every(item => item.sectionId === (uid === "student-a" ? "A" : "C")));
     assert.equal((await f.call("start", { quizId: "shared", revision: f.versions.get("generatedQuizzes/shared"), attemptId: "a".repeat(32) }, { uid })).status, 200);
@@ -96,8 +98,48 @@ test("drafts and foreign assignments are hidden; scheduled content opens only at
   const page = await (await f.call("list", { limit: 20, cursor: "" })).json(); assert.deepEqual(page.items.map(q => q.id), ["quiz1"]);
   f.put("generatedQuizzes/scheduled", quiz("scheduled", "multiple-choice", { availability: "scheduled", availableAt: new Date(NOW + 1000).toISOString() }));
   const request = { quizId: "scheduled", revision: f.versions.get("generatedQuizzes/scheduled"), attemptId: "b".repeat(32) };
-  assert.equal((await f.call("start", request)).status, 403); f.setNow(NOW + 1000); assert.equal((await f.call("start", request)).status, 200); f.setNow(NOW + 1_000_000); assert.equal((await f.call("access", request)).status, 200);
+  const list = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.equal(list.items.find(item => item.id === "scheduled").availability, "scheduled");
+  assert.doesNotMatch(JSON.stringify(list), /"questions"|correctIndex/);
+  const locked = await f.call("start", request);
+  assert.equal(locked.status, 403);
+  assert.equal((await locked.json()).code, "NOT_RELEASED");
+  f.setNow(NOW + 1000);
+  const refreshed = await (await f.call("list", { limit: 20, cursor: list.pageCursor })).json();
+  const released = refreshed.items.find(item => item.id === "scheduled");
+  assert.equal(released.availability, "now");
+  assert.equal(released.availableAt, new Date(NOW + 1000).toISOString());
+  assert.equal(released.revision, request.revision);
+  const opened = await f.call("start", request);
+  assert.equal(opened.status, 200);
+  const [question] = (await opened.json()).questions;
+  assert.deepEqual(Object.keys(question).sort(), ["id", "options", "points", "text"]);
+  assert.equal(question.options.length, 4);
+  f.setNow(NOW + 1_000_000);
+  assert.equal((await f.call("access", request)).status, 200);
 });
+test("the student API returns the deadline and rejects new attempts and late submissions at the cutoff", async () => {
+  const f = fixture();
+  const deadlineUtc = new Date(NOW + 10_000).toISOString();
+  f.put("generatedQuizzes/quiz1", quiz("quiz1", "multiple-choice", { deadlineUtc }));
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.equal(page.items[0].deadlineUtc, deadlineUtc);
+  const { request, opened } = await f.begin();
+  assert.equal(opened.quiz.deadlineUtc, deadlineUtc);
+  f.setNow(NOW + 9999);
+  assert.equal((await f.call("access", request)).status, 200);
+  f.setNow(NOW + 10_000);
+  for (const [action, payload] of [
+    ["start", { ...request, attemptId: "b".repeat(32) }],
+    ["access", request],
+    ["submit", f.submission(request)]
+  ]) {
+    const response = await f.call(action, payload);
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, "QUIZ_EXPIRED");
+  }
+});
+
 for (const type of ["multiple-choice", "true-false", "essay", "identification-explanation", "modified-true-false"]) test(type + " preserves IDs, strips guides, validates answers and persists the right grading status", async () => {
   const f = fixture(); f.put("generatedQuizzes/quiz1", quiz("quiz1", type)); const { request, opened } = await f.begin();
   assert.equal(opened.questions[0].text, "Choose the correct response"); assert.equal(opened.questions[0].id, "q-original"); assert.doesNotMatch(JSON.stringify(opened), /PRIVATE|correctIndex|"rubric"|"answer"|"explanation"|"correction"/);
@@ -110,6 +152,54 @@ for (const type of ["multiple-choice", "true-false", "essay", "identification-ex
   assert.equal(receipt.status, ["multiple-choice", "true-false"].includes(type) ? "graded" : "pending-review"); assert.equal(f.data.get("users/S1/generated_quiz_attempts/" + request.attemptId).answers[0].questionId, "q-original");
   assert.equal([...f.data.keys()].some(path => path.includes("test_results")), false);
   const commits = f.store.commits; assert.deepEqual(await (await f.call("submit", body)).json(), receipt); assert.equal(f.store.commits, commits);
+});
+test("one quiz result survives edits and two independently started attempts cannot both submit", async () => {
+  const f = fixture(), first = await f.begin(), second = await f.begin("quiz1", "b".repeat(32));
+  const payloads = [f.submission(first.request), f.submission(second.request)];
+  const replies = await Promise.all(payloads.map(body => f.call("submit", body)));
+  const winner = replies.findIndex(reply => reply.status === 200);
+  assert.ok(winner >= 0);
+  assert.ok([409, 503].includes(replies[1 - winner].status));
+  const receipt = await replies[winner].json();
+  assert.deepEqual(await (await f.call("submit", payloads[winner])).json(), receipt);
+  assert.equal((await (await f.call("submit", payloads[1 - winner])).json()).code, "QUIZ_COMPLETED");
+  assert.equal((await (await f.call("access", winner === 0 ? second.request : first.request)).json()).code, "QUIZ_COMPLETED");
+  f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), title: "Revised quiz" });
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(page.items[0].result, { status: "graded", score: 1, maximum: 1 });
+  const fresh = { ...first.request, revision: page.items[0].revision, attemptId: "c".repeat(32) };
+  assert.equal((await (await f.call("start", fresh)).json()).code, "QUIZ_COMPLETED");
+  assert.equal(f.data.get("users/S1/generated_quiz_completions/quiz1").attemptId, receipt.attemptId);
+});
+
+test("existing duplicate attempts match the teacher's latest completed grade and exclude foreign accounts", async () => {
+  const f = fixture();
+  for (const [suffix, uid, score, submittedAt] of [["a", "student-a", 1, "2026-10-29T01:00:00Z"],
+    ["b", "student-a", 0, "2026-10-29T01:01:00Z"], ["c", "student-b", 1, "2026-10-29T02:00:00Z"]]) {
+    f.put("users/S1/generated_quiz_attempts/" + suffix.repeat(32), { uid, quizId: "quiz1", status: "graded", submittedAt,
+      receipt: { score, maximum: 1 }, answers: [{ value: "private answer" }] });
+  }
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.deepEqual(page.items[0].result, { status: "graded", score: 0, maximum: 1 });
+  assert.doesNotMatch(JSON.stringify(page), /private answer|receipt|answers/);
+  assert.equal(f.store.resultQueries, 1, "result enrichment uses one query for the page");
+  assert.equal((await (await f.call("start", { quizId: "quiz1", revision: page.items[0].revision, attemptId: "d".repeat(32) })).json()).code, "QUIZ_COMPLETED");
+});
+
+test("Supabase result reads scope the projection to one student and the quiz page", async () => {
+  let query;
+  const store = new SupabaseAppStore({ IMARS_SUPABASE_URL: "https://fixture.supabase.co",
+    IMARS_SUPABASE_APP_DATASET_ID: "00000000-0000-0000-0000-000000000001", SUPABASE_SECRET_KEY: "sb_secret_synthetic" }, async url => {
+    query = new URL(url).searchParams;
+    return Response.json([{ path: "users/S1/generated_quiz_attempts/example", ...encodeFields({ uid: "student-a", quizId: "quiz1", status: "reviewed", reviewScore: 0, reviewMaximum: 4 }) }]);
+  });
+  const [attempt] = await store.quizResults({ studentId: "S1", uid: "student-a" }, ["quiz1", "quiz2"]);
+  assert.equal(query.get("collection_path"), "eq.users/S1/generated_quiz_attempts");
+  assert.equal(query.get("fields->uid->>stringValue"), "eq.student-a");
+  assert.equal(query.get("fields->quizId->>stringValue"), "in.(quiz1,quiz2)");
+  assert.equal(query.get("fields->status->>stringValue"), "in.(graded,pending-review,reviewed)");
+  assert.doesNotMatch(query.get("select"), /answers|feedback|rubric/);
+  assert.deepEqual(attempt.data.review, { score: 0, maximum: 4 });
 });
 test("lost response retry returns the committed receipt after relock, and changed payload conflicts", async () => {
   const f = fixture(), { request } = await f.begin(), body = f.submission(request);

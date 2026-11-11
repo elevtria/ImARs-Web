@@ -1,50 +1,15 @@
-import { loadAdminReports } from "./admin-report-data.js";
-import { showAdminView } from "./admin-view.js";
+import { formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { webProtectionEnabled } from "./web-login.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
-import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
-import { 
-  getFirestore, 
-  collection, 
-  query, 
-  where, 
-  getDocsWithLoading as getDocs,
-  doc, 
-  updateDoc, 
-  deleteDoc, 
-  createTeacher,
-  serverTimestamp 
-} from "./firebase-data.js";
+import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
+import { confirmAction } from "./confirm-action.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-// Drawer Navigation Logic
-const menuButton = document.getElementById("adminMenuButton");
-const drawer = document.getElementById("adminNavigation");
-const closeButton = document.getElementById("adminDrawerClose");
-
-function setDrawerOpen(open) {
-  if (!drawer || !menuButton) return;
-  drawer.classList.toggle("open", open);
-  drawer.setAttribute("aria-hidden", String(!open));
-  menuButton.setAttribute("aria-expanded", String(open));
-}
-
-if (menuButton) menuButton.addEventListener("click", () => setDrawerOpen(!drawer.classList.contains("open")));
-if (closeButton) closeButton.addEventListener("click", () => setDrawerOpen(false));
-if (drawer) {
-  drawer.addEventListener("click", (event) => {
-    if (event.target === drawer) setDrawerOpen(false);
-  });
-}
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setDrawerOpen(false);
-});
 
 // UI Elements
 const list = document.getElementById("teacherList");
@@ -119,8 +84,8 @@ function render() {
         </div>
         <div class="teacher-stats" aria-label="${escapeHtml(teacher.name)} performance">
           <div class="teacher-stat"><small>Students</small><strong>${teacher.students}</strong></div>
-          <div class="teacher-stat"><small>Pre-Test</small><strong>${teacher.pre}%</strong></div>
-          <div class="teacher-stat"><small>Post-Test</small><strong>${teacher.post}%</strong></div>
+          <div class="teacher-stat"><small>Pre-Test</small><strong>${formatAdminPercent(teacher.pre)}</strong></div>
+          <div class="teacher-stat"><small>Post-Test</small><strong>${formatAdminPercent(teacher.post)}</strong></div>
           <div class="teacher-stat"><small>AR hrs</small><strong>${teacher.hours}</strong></div>
           <div class="teacher-actions">
             ${webLocksEnabled ? `<button class="record-action activate" type="button" ${adminReady ? "" : "disabled"} data-unlock-web-id="${escapeHtml(teacher.schoolId || teacher.id)}" aria-label="Unlock web login for ${escapeHtml(teacher.name)}" title="Unlock web login"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M9 10V7a4 4 0 0 1 8 0m-5 8v2"/></svg></button>` : ""}
@@ -137,11 +102,11 @@ function render() {
       </div>
       <div class="teacher-progress">
         <div class="teacher-progress-item">
-          <div class="progress-label"><span>Avg Pre-Test</span><strong>${teacher.pre}%</strong></div>
+          <div class="progress-label"><span>Avg Pre-Test</span><strong>${formatAdminPercent(teacher.pre)}</strong></div>
           <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.pre))}%"></i></div>
         </div>
         <div class="teacher-progress-item post">
-          <div class="progress-label"><span>Avg Post-Test</span><strong>${teacher.post}%</strong></div>
+          <div class="progress-label"><span>Avg Post-Test</span><strong>${formatAdminPercent(teacher.post)}</strong></div>
           <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, teacher.post))}%"></i></div>
         </div>
       </div>
@@ -156,13 +121,12 @@ const addTeacherButton = document.getElementById("addTeacherButton");
 if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
   adminReady = false;
-  if (!user) { window.location.href = "login.html"; return; }
-  initAdminIdleTimeout(auth);
+  if (!user) { window.location.href = "admin-login.html"; return; }
   const timing = createPagePerformance("Manage Teachers");
   try {
-    await showAdminView({ app, user, page: "reports",
+    await showAdminView({ app, user,
       verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
-      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+      load: () => timing.data(getAdminReport),
       render: report => timing.render(() => { teachers = report.teachers; render(); }),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });
@@ -179,7 +143,8 @@ if (list) {
     const unlock = event.target.closest("[data-unlock-web-id]");
     if (unlock) {
       const identifier = unlock.dataset.unlockWebId;
-      if (!window.confirm(`Restore web login for ${identifier}? This clears their failed-attempt history. Mobile access is unchanged.`)) return;
+      const uid = auth.currentUser.uid;
+      if (!await confirmAction({ title: "Restore web login?", message: `Clear the failed-attempt history for ${identifier}.`, confirmLabel: "Restore login", destructive: false }) || auth.currentUser?.uid !== uid) return;
       unlock.disabled = true;
       try {
         await webRequest("/api/web-auth/unlock", { identifier });
@@ -196,6 +161,9 @@ if (list) {
       if (!teacher) return;
 
       const nextStatus = !teacher.active;
+      const uid = auth.currentUser.uid;
+      if (!nextStatus && !await confirmAction({ title: "Deactivate teacher?", message: `Deactivate ${teacher.name}’s staff profile?`, confirmLabel: "Deactivate teacher" })) return;
+      if (auth.currentUser?.uid !== uid) return;
       try {
         await updateDoc(doc(db, "users", teacherId), {
           active: nextStatus,
@@ -217,15 +185,15 @@ if (list) {
       const teacher = teachers.find((t) => t.id === teacherId);
       if (!teacher) return;
 
-      if (window.confirm(`Are you sure you want to remove ${teacher.name}?`)) {
-        try {
-          await deleteDoc(doc(db, "users", teacherId));
-          teachers = teachers.filter((t) => t.id !== teacherId);
-          render();
-        } catch (err) {
-          console.error("Failed to delete teacher:", err);
-          alert("Error deleting teacher.");
-        }
+      const uid = auth.currentUser.uid;
+      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name}’s staff profile? This cannot be undone.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
+      try {
+        await deleteDoc(doc(db, "users", teacherId));
+        teachers = teachers.filter((t) => t.id !== teacherId);
+        render();
+      } catch (err) {
+        console.error("Failed to delete teacher:", err);
+        alert("Error deleting teacher.");
       }
     }
   });
@@ -272,9 +240,9 @@ if (form) {
         joined: "Just now",
         sections,
         students: 0,
-        pre: 0,
-        post: 0,
-        hours: "0m",
+        pre: null,
+        post: null,
+        hours: "0 min",
         active: true
       });
 

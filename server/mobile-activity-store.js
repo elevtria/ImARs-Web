@@ -1,3 +1,19 @@
+export const activities = new Map([
+  ["states-of-matter", "States of Matter", 1, 1],
+  ["physical-chemical-changes", "Physical and Chemical Changes", 1, 2],
+  ["separation-techniques", "Separation Techniques", 1, 3],
+  ["circulatory-system", "Circulatory System", 1, 4],
+  ["food-web", "Food Web", 2, 1],
+  ["simple-machines", "Simple Machines", 2, 2],
+  ["sound-waves", "Sound Waves", 2, 3],
+  ["longitudinal-waves", "Longitudinal Waves", 3, 1],
+  ["volcanic-eruptions", "Volcanic Activity", 3, 2],
+  ["earth-motion", "Motions of the Earth", 3, 3],
+  ["constellation", "Constellations", 3, 4]
+].map(([activityId, title, term, lesson]) => [activityId, { activityId, title, termId: "term_0" + term, lessonId: "lesson_0" + lesson }]));
+
+export const legacyActivityFields = ["activityId", "classCode", "uid", "status", "score", "maximum", "completedAtUtc"];
+
 const reportFields = [
   "activityId", "termId", "lessonId", "title", "runId", "studentId", "classCode", "deviceId", "status",
   "startedAtUtc", "completedAtUtc", "updatedAtUtc", "checkpointRevision", "score", "maximum",

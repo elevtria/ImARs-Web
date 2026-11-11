@@ -9,6 +9,47 @@ import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
 
+test("student activity averages use only the selected term and include a real zero", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("users/ACTIVITY", { role: "student", classCode: "A", teacherId: "TEACH1000" });
+  const base = "users/ACTIVITY/test_results/";
+  app.data.set(base + "term_02/lessons/lesson_01", { activityScore: 3, activityTotalPoints: 4 });
+  app.data.set(base + "term_02/lessons/lesson_02", { activityScore: 0, activityTotalQuestions: 5 });
+  app.data.set(base + "term_01/lessons/lesson_01", { activityScore: 100, activityTotalPoints: 100 });
+  const input = { action: "student-activity-average", studentId: "ACTIVITY", termId: "term_02" };
+  assert.deepEqual(await (await app.call(input, cookie)).json(), { average: 38 });
+  assert.deepEqual(await (await app.call({ ...input, termId: "term_03" }, cookie)).json(), { average: null });
+  assert.equal((await app.call({ ...input, studentId: "0026271001" }, cookie)).status, 403);
+});
+
+test("the admin report batches school results and returns aggregates only to admins", async () => {
+  const app = fixture();
+  const [admin, teacher] = await Promise.all([app.login("ADMIN1000", "admin"), app.login()]);
+  for (let index = 0; index < 24; index++) {
+    app.data.set("users/STUDENT" + index, { role: "student", teacherId: "TEACH1000", fullName: "Private student name" });
+  }
+  app.data.set("users/STUDENT0/test_results/term_03/lessons/lesson_01", {
+    isPostTestCompleted: true, postTestTotalQuestions: 10, postTestScore: 8, arTimeMinutes: 12
+  });
+  const getAll = app.store.getAll.bind(app.store), batches = [];
+  app.store.getAll = (paths, options) => { batches.push(paths); return getAll(paths, options); };
+  const request = { action: "admin-report" };
+  assert.equal((await app.call(request)).status, 401);
+  assert.equal((await app.call(request, teacher)).status, 403);
+  assert.deepEqual(batches, []);
+  const response = await app.call(request, admin);
+  assert.equal(response.status, 200);
+  const report = await response.json();
+  assert.equal(report.totalStudents, 26);
+  assert.equal(report.post, 80);
+  assert.equal(report.hours, "12 min");
+  assert.equal(report.gain, null);
+  assert.doesNotMatch(JSON.stringify(report), /Private student name|STUDENT0|must-never-leave-server|postTestScore/);
+  assert.deepEqual(batches.map(paths => paths.length), [100, 100, 100, 12]);
+  app.store.getAll = async () => { throw new Error("Data unavailable"); };
+  assert.equal((await app.call(request, admin)).status, 503);
+});
+
 test("identity and new session checks return countdowns without exposing timestamps or credentials", async () => {
   const app = fixture(), cookie = await app.login();
   const identity = await app.auth("identity", {}, cookie);
@@ -389,6 +430,31 @@ test("quiz releases can change between assigned sections while preserving questi
   const other = await app.login("TEACH1001");
   assert.equal((await app.call(save("generatedQuizzes/section-release", { ...saved, teacherUid: "teacher-b", teacherProfileId: "TEACH1001", sectionId: "B" }, false), other)).status, 403);
   assert.deepEqual(app.data.get("generatedQuizzes/section-release"), saved);
+});
+
+test("the scheduler can reassign a legacy quiz without rewriting its content", async () => {
+  const app = fixture(), cookie = await app.login();
+  const path = "generatedQuizzes/legacy-quiz";
+  const questions = [{ id: "q1", text: "Water?", options: ["A", "B", "C", "D"], correctIndex: 0 }];
+  app.data.set(path, { title: "Legacy quiz", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A",
+    section: "Section A", type: "multiple-choice", questions, availability: "draft", legacyNote: "Keep this" });
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
+  const saveRelease = data => app.call({ action: "commit", writes: [{ operation: "update", path, data }] }, cookie);
+  const scheduled = { section: "Section C", sectionId: "C", assignmentScope: "section", availability: "scheduled", availableAt: "2099-10-20T09:30:00+08:00" };
+  assert.equal((await saveRelease({ ...scheduled, availableAt: "2099-10-20" })).status, 400);
+  assert.equal((await saveRelease({ ...scheduled, sectionId: "B" })).status, 403);
+  assert.equal((await saveRelease({ ...scheduled, deadlineUtc: scheduled.availableAt })).status, 400);
+  assert.equal((await saveRelease({ ...scheduled, deadlineUtc: "2099-10-20T10:30:00+08:00" })).status, 200);
+  assert.equal(app.data.get(path).availableAt, "2099-10-20T01:30:00.000Z");
+  assert.equal(app.data.get(path).sectionId, "C");
+  assert.equal((await saveRelease({ section: "All my sections", sectionId: "", assignmentScope: "all", availability: "now", availableAt: "" })).status, 200);
+  const saved = app.data.get(path);
+  assert.equal(saved.id, "legacy-quiz");
+  assert.equal(saved.questionCount, 1);
+  assert.equal(saved.assignmentScope, "all");
+  assert.equal(saved.deadlineUtc, "2099-10-20T02:30:00.000Z");
+  assert.equal(saved.legacyNote, "Keep this");
+  assert.deepEqual(saved.questions, questions);
 });
 
 test("unassigned quiz drafts can be saved and released to all owned sections without exposing other teachers' quizzes", async () => {

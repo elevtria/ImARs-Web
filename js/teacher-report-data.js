@@ -20,7 +20,8 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     const students = [...merged.values()];
     const sections = visibleClasses().map(classDoc => ({ classDoc, students: students.filter(row => row.classId === classDoc.id) }));
     const total = state.complete ? students.length : state.countsKnown ? state.counts.reduce((sum, row) => sum + row.active, 0) : null;
-    render({ ...state, sections, loaded: students.length, total, termId: options.termId, teacherName: user.displayName || "Teacher" });
+    render({ ...state, sections, loaded: students.length, total, termId: options.termId, teacherName: user.displayName || "Teacher",
+      activitySyncPending: state.pages.some(page => page.activitySyncPending) });
     progress({ loaded: students.length, total, complete: state.complete, termId: options.termId });
   };
   const remember = changedIndex => {
@@ -67,7 +68,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
         remember(); paint(); return;
       }
       const slot = state.pages.findIndex(page => JSON.stringify(page.cursor) === JSON.stringify(cursor));
-      const page = { cursor, batchSize, students: result.students };
+      const page = { cursor, batchSize, students: result.students, ...(result.activitySyncPending ? { activitySyncPending: true } : {}) };
       const changed = slot < 0 || JSON.stringify(encodeView(state.pages[slot])) !== JSON.stringify(encodeView(page)) || (result.counts && JSON.stringify(state.counts) !== JSON.stringify(result.counts));
       if (slot < 0) state.pages.push(page); else state.pages[slot] = page;
       state.classes = result.classes; if (result.counts) { state.counts = result.counts; state.countsKnown = true; }

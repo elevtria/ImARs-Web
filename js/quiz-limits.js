@@ -11,6 +11,7 @@ export const QUIZ_TYPES = Object.freeze({
 });
 export const questionTypeLabel = type => Object.hasOwn(QUIZ_TYPES, type) ? QUIZ_TYPES[type] : "Unknown question type";
 export const writtenQuestion = type => ["essay", "identification-explanation"].includes(type);
+export const quizReviewPoints = (type, question) => ["multiple-choice", "true-false"].includes(type) ? 1 : question.points || 1;
 
 export function quizAssignmentScope(quiz) {
   const scope = quiz?.assignmentScope ?? "section";
@@ -56,5 +57,5 @@ export function normalizeQuizQuestion(question, type) {
 
 export function quizFileSizeError(size) {
   if (!Number.isSafeInteger(size) || size < 1) return "This file is empty or could not be read.";
-  return size > MAX_QUIZ_FILE_BYTES ? "Please choose a file of 50 MB or less." : "";
+  return size > MAX_QUIZ_FILE_BYTES ? "This file exceeds the 50 MB limit. Choose a smaller file." : "";
 }

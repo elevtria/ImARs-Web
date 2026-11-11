@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { mobileApi } from "../server/mobile-api.js";
 import { webData } from "../server/web-data.js";
 import { fixture } from "./fixtures/web-data.js";
@@ -67,4 +68,71 @@ test("production web report projects only the selected roster's activity grades 
   assert.equal(fields.activityTotalQuestions, 100);
   assert.equal(app.data.get(path).activityTotalQuestions, 5);
   assert.equal(reads, 1);
+});
+
+test("teacher report reads copied mobile grades without enabling mobile writes", async () => {
+  const app = fixture(), cookie = await app.login();
+  const studentId = "0026271000";
+  const result = { activityId: "food-web", score: 50, maximum: 100, completedAtUtc: "2026-11-01T12:00:00Z" };
+  let reads = 0;
+  app.store.activityResultsForRoster = async ids => {
+    reads++;
+    assert.deepEqual(ids, [studentId]);
+    return [
+      { studentId, data: result },
+      { studentId, data: { ...result, score: 0, completedAtUtc: "2026-11-02T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, status: "in_progress", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, classCode: "B", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId, data: { ...result, score: 100, uid: "other-user", completedAtUtc: "2026-11-03T12:00:00Z" } },
+      { studentId: "0026271001", data: result }
+    ];
+  };
+  const body = { action: "teacher-report-page", termId: "term_02", sectionId: "A", includeCurriculum: false };
+  const response = await app.call(body, cookie);
+  assert.equal(response.status, 200);
+  const { students } = await response.json();
+  assert.equal(students.length, 1);
+  assert.equal(students[0].lessons[0].id, "lesson_01");
+  assert.deepEqual(students[0].lessons[0].data, { activityScore: 0, activityTotalQuestions: 100, activityTotalPoints: 100 });
+  assert.equal((await app.call({ ...body, heatmapLesson: "lesson_01" }, cookie)).status, 200);
+  assert.equal(reads, 1, "the post-test heatmap does not query activity scores");
+});
+
+test("newer legacy submissions are scoped to the roster and saved grades survive an outage", async () => {
+  const app = fixture(), cookie = await app.login();
+  const studentId = "0026271000";
+  const data = { activityId: "food-web", score: 40, maximum: 100, completedAtUtc: "2026-11-01T12:00:00Z" };
+  app.store.activityResultsForRoster = async ids => {
+    assert.deepEqual(ids, [studentId]);
+    return [{ studentId, data }];
+  };
+  const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" } });
+  const env = { ...app.env, IMARS_SUPABASE_WEB_DATA: "true", WEB_LEGACY_ACTIVITY_READS_ENABLED: "true",
+    FIREBASE_SERVICE_ACCOUNT_JSON: JSON.stringify({ project_id: "imars-db-a733b", client_email: "test@imars-db-a733b.iam.gserviceaccount.com", private_key: privateKey }) };
+  let outage = false;
+  const fetcher = async (input, options) => {
+    const url = new URL(input);
+    if (url.hostname === "oauth2.googleapis.com") return Response.json({ access_token: "test-token", expires_in: 3600 });
+    assert.equal(url.hostname, "firestore.googleapis.com");
+    const query = JSON.parse(options.body).structuredQuery;
+    assert.deepEqual(query.from, [{ collectionId: "activity_results", allDescendants: true }]);
+    const bounds = query.where.compositeFilter.filters.map(item => item.fieldFilter.value.referenceValue);
+    assert.ok(bounds.every(bound => bound.includes("/users/" + studentId + "/activity_results/")));
+    if (outage) return Response.json({}, { status: 503 });
+    return Response.json([{ document: { name: bounds[0].replace(/-$/, "food-web"), fields: {
+      activityId: { stringValue: "food-web" }, score: { integerValue: "85" }, maximum: { integerValue: "100" },
+      completedAtUtc: { stringValue: "2026-11-02T12:00:00Z" }
+    } } }]);
+  };
+  const getReport = async () => {
+    const request = app.request("/api/web-data", { action: "teacher-report-page", termId: "term_02", sectionId: "A", includeCurriculum: false }, cookie);
+    const response = await webData({ request, env }, { store: app.store, legacyActivityFetcher: fetcher });
+    assert.equal(response.status, 200);
+    const report = await response.json();
+    return { score: report.students[0].lessons[0].data.activityScore, pending: report.activitySyncPending };
+  };
+  assert.deepEqual(await getReport(), { score: 85, pending: undefined });
+  outage = true;
+  assert.deepEqual(await getReport(), { score: 40, pending: true });
 });

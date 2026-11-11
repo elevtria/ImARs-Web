@@ -1,37 +1,11 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { initAdminIdleTimeout } from "./admin-idle-timeout.js";
-import { getFirestore } from "./firebase-data.js";
-import { loadAdminReports } from "./admin-report-data.js";
-import { showAdminView } from "./admin-view.js";
+import { getAdminReport } from "./firebase-data.js";
+import { formatAdminGain, formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
-const db = getFirestore(app);
-
-// --- DRAWER UI LOGIC ---
-const menuButton = document.getElementById("adminMenuButton");
-const drawer = document.getElementById("adminNavigation");
-const closeButton = document.getElementById("adminDrawerClose");
-
-function setDrawerOpen(open) {
-  if (!drawer || !menuButton) return;
-  drawer.classList.toggle("open", open);
-  drawer.setAttribute("aria-hidden", String(!open));
-  menuButton.setAttribute("aria-expanded", String(open));
-}
-
-if (menuButton) menuButton.addEventListener("click", () => setDrawerOpen(!drawer.classList.contains("open")));
-if (closeButton) closeButton.addEventListener("click", () => setDrawerOpen(false));
-if (drawer) {
-  drawer.addEventListener("click", (event) => {
-    if (event.target === drawer) setDrawerOpen(false);
-  });
-}
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") setDrawerOpen(false);
-});
 
 // --- VIEW TOGGLE ---
 const teacherContainer = document.getElementById("teacherAnalytics");
@@ -85,24 +59,21 @@ function renderSchoolAnalytics(report) {
         teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">No teachers found.</p>`;
       } else {
         teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher) => {
-          const avgPre = teacher.preCount > 0 ? Math.round(teacher.prePctSum / teacher.preCount) : 0;
-          const avgPost = teacher.postCount > 0 ? Math.round(teacher.postPctSum / teacher.postCount) : 0;
-          const gain = avgPost - avgPre;
-          const gainText = gain >= 0 ? `+${gain}% gain` : `${gain}% gain`;
+          const { pre, post, gain } = teacher;
 
           return `
-            <article class="teacher-analytics-card" style="--teacher-color:${teacher.color};--score:${avgPost}%">
+            <article class="teacher-analytics-card" style="--teacher-color:${teacher.color};--score:${post ?? 0}%">
               <span class="analytics-avatar">${escapeHtml(teacher.initials)}</span>
               <h2 class="analytics-teacher-name">${escapeHtml(teacher.name)}</h2>
               <p class="analytics-teacher-sections">${escapeHtml(teacher.sections)}</p>
-              <div class="analytics-donut" role="img" aria-label="${avgPost} percent average post-test">
+              <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}">
                 <div class="analytics-donut-inner" aria-hidden="true"></div>
               </div>
-              <strong class="analytics-post-score">${avgPost}%</strong>
+              <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
               <span class="analytics-post-label">avg post-test</span>
               <div class="analytics-card-footer">
-                <span>Pre: <strong>${avgPre}%</strong></span>
-                <span class="teacher-gain">${gainText}</span>
+                <span>Pre: <strong>${formatAdminPercent(pre)}</strong></span>
+                <span class="teacher-gain">${formatAdminGain(gain)}</span>
               </div>
             </article>
           `;
@@ -116,10 +87,7 @@ function renderSchoolAnalytics(report) {
         sectionContainer.innerHTML = `<p style="text-align: center; color: #64748b; padding: 32px;">No student sections found.</p>`;
       } else {
         sectionContainer.innerHTML = Array.from(sectionMap.values()).map((section) => {
-          const avgPre = section.preCount > 0 ? Math.round(section.prePctSum / section.preCount) : 0;
-          const avgPost = section.postCount > 0 ? Math.round(section.postPctSum / section.postCount) : 0;
-          const gain = avgPost - avgPre;
-          const gainText = gain >= 0 ? `+${gain}% improvement` : `${gain}% improvement`;
+          const { pre, post, gain } = section;
 
           return `
             <article class="section-analytics-card" style="--section-color:${section.color}">
@@ -127,15 +95,15 @@ function renderSchoolAnalytics(report) {
                 <span class="section-color-dot" aria-hidden="true"></span>
                 <h2>${escapeHtml(section.name)}</h2>
                 <span class="section-student-count">${section.students} ${section.students === 1 ? "student" : "students"}</span>
-                <span class="section-improvement">${gainText}</span>
+                <span class="section-improvement">${formatAdminGain(gain)}</span>
               </div>
               <div class="section-meter">
-                <div class="section-meter-head"><span>Pre-Test Average</span><strong>${avgPre}%</strong></div>
-                <div class="section-meter-track"><i style="width:${Math.max(0, Math.min(100, avgPre))}%"></i></div>
+                <div class="section-meter-head"><span>Pre-Test Average</span><strong>${formatAdminPercent(pre)}</strong></div>
+                <div class="section-meter-track"><i style="width:${pre ?? 0}%"></i></div>
               </div>
               <div class="section-meter post">
-                <div class="section-meter-head"><span>Post-Test Average</span><strong>${avgPost}%</strong></div>
-                <div class="section-meter-track"><i style="width:${Math.max(0, Math.min(100, avgPost))}%"></i></div>
+                <div class="section-meter-head"><span>Post-Test Average</span><strong>${formatAdminPercent(post)}</strong></div>
+                <div class="section-meter-track"><i style="width:${post ?? 0}%"></i></div>
               </div>
             </article>
           `;
@@ -146,12 +114,11 @@ function renderSchoolAnalytics(report) {
 }
 
 onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "login.html"; return; }
-  initAdminIdleTimeout(auth);
+  if (!user) { window.location.href = "admin-login.html"; return; }
   const timing = createPagePerformance("School Analytics");
   try {
-    await showAdminView({ app, user, page: "reports",
-      load: ({ read }) => timing.data(() => loadAdminReports(db, read)),
+    await showAdminView({ app, user,
+      load: () => timing.data(getAdminReport),
       render: report => timing.render(() => renderSchoolAnalytics(report)),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });

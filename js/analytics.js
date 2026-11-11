@@ -6,6 +6,7 @@ import { createTeacherReport } from "./teacher-report-data.js";
 import { activityPercent } from "./activity-score.js";
 import { buildStudentActivityRecords } from "./student-activity-record.js";
 import { buildPostTestHeatmap } from "./post-test-heatmap.js";
+import { setTeacherQuizSection } from "./teacher-quiz-analytics.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -273,6 +274,9 @@ function renderActivityReport(data, section) {
   if (!data.curriculumSnap) return;
   activityData = data;
   const records = buildStudentActivityRecords([data.curriculumSnap], [section], termLabels, [data.termId]);
+  const status = document.getElementById("activitySyncStatus");
+  status.textContent = data.activitySyncPending ? "Showing saved scores. Recent submissions from older app versions could not be checked." : "";
+  status.hidden = !data.activitySyncPending;
   studentActivityBody.removeAttribute("aria-busy");
   renderStudentActivities(records, data.complete === false);
   if (data.complete !== false) renderTopics(records);
@@ -293,7 +297,8 @@ function renderStudentActivities(records, partial) {
     const total = record.learners.length;
     const page = Math.min(activityPages.get(key) || 0, Math.max(0, Math.ceil(total / studentsPerPage) - 1));
     const start = page * studentsPerPage, end = Math.min(start + studentsPerPage, total);
-    const learnerRows = (open ? record.learners.slice(start, end) : []).map(learner => {
+    const learners = open ? [...record.learners].sort((a, b) => Number(b.score !== null) - Number(a.score !== null)) : [];
+    const learnerRows = learners.slice(start, end).map(learner => {
       const initials = learner.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase();
       const rawCell = result => `<td><span class="activity-result-score${result === null ? " is-empty" : ""}">${result === null ? "—" : `${result.score}/${result.total}`}</span></td>`;
       const activity = learner.score === null ? null : { score: learner.rawScore, total: learner.totalScore };
@@ -302,7 +307,7 @@ function renderStudentActivities(records, partial) {
     return `<tr class="activity-record-row">
       <th scope="row"><button class="activity-record-toggle" type="button" data-activity-index="${index}" aria-expanded="${open}" aria-controls="${detailId}"><span class="activity-record-chevron" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span><span>${escapeHtml(record.title)}<small>${escapeHtml(record.term)} · AR lesson</small></span></button></th>
       <td>${escapeHtml(record.section)}</td><td>${record.averageMinutes === null ? "—" : `${record.averageMinutes} min`}</td><td>${record.learnerCount}</td>
-      <td><span class="activity-record-completed">${record.completedCount}/${record.learnerCount} completed</span></td>
+      <td><span class="activity-record-completed">${record.submittedCount}/${record.learnerCount} submitted</span></td>
     </tr><tr class="activity-record-detail" id="${detailId}" ${open ? "" : "hidden"}><td colspan="5">
       <div class="activity-record-detail-head"><div><strong>Topic Student Results</strong><small>${escapeHtml(record.title)} · ${studentPageLabel(start, end, total, partial)}</small></div></div>
       ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Activity score</th><th scope="col">Recorded time</th></tr></thead><tbody>${learnerRows}</tbody></table></div><p class="activity-record-empty">Scores show earned points / total points for this topic. A dash means a score or time is missing.</p>` : '<p class="activity-record-empty">No students to show for this section.</p>'}
@@ -348,6 +353,7 @@ const filterStudents = () => {
 search?.addEventListener("input", () => { tablePage = 0; filterStudents(); });
 sectionFilter?.addEventListener("change", () => {
   selectedSection = sectionFilter.value;
+  setTeacherQuizSection(lastReport?.classes.find(section => section.id === selectedSection));
   if (selectedSection && selectedSection !== "all" && activitySection !== selectedSection) {
     selectActivitySection(selectedSection);
   }
@@ -431,6 +437,7 @@ const report = createTeacherReport({ app,
         }
         sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || data.classes[0]?.id || "all" : selectedSection || "all";
         if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
+        setTeacherQuizSection(classes.find(section => section.id === sectionFilter.value));
       }
       for (const { classDoc, students } of sections) {
         const classCode = classDoc.id;

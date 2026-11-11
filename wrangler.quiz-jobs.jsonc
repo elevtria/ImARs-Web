@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "imars-quiz-jobs",
+  "main": "workers/quiz-jobs-worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "QUIZ_JOB_CALLBACK_ORIGIN": "https://imars-web.pages.dev" },
+  "durable_objects": {
+    "bindings": [{ "name": "QUIZ_GENERATION_JOBS", "class_name": "QuizGenerationJob" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["QuizGenerationJob"] }]
+}

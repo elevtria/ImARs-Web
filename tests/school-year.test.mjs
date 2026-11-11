@@ -15,7 +15,7 @@ function database() {
 }
 async function mount(store, { role = "teacher", selector = false, storage = new Map() } = {}) {
   const uid = `${role}-uid`, profile = { uid, role, active: true };
-  const auth = { currentUser: { uid } };
+  const auth = { currentUser: { uid, role } };
   const labels = [{ textContent: "SY 2026–27" }, { textContent: "SY 2026–27" }];
   const select = { value: "2026", disabled: true, options: [], events: {}, replaceChildren(...options) { this.options = options; },
     addEventListener(name, callback) { this.events[name] = callback; } };
@@ -99,7 +99,7 @@ test("navigation and history restoration reuse a fresh school year without polli
   assert.equal(store.reads, 1);
   assert.deepEqual(Object.keys(JSON.parse(storage.get("imars-school-year-v1"))).sort(), ["checkedAt", "startYear"]);
   const admin = await mount(store, { role: "admin", selector: true, storage });
-  assert.equal(store.reads, 2, "the admin editor opens with a fresh server read");
+  assert.equal(store.reads, 1, "the admin editor reuses the recent school year");
   assert.equal(admin.select.disabled, false);
   storage.set("imars-school-year-v1", JSON.stringify({ startYear: 2029, checkedAt: Date.now() }));
   next.events.get("storage")({ key: "imars-school-year-v1" });

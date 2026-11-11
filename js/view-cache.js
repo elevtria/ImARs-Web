@@ -138,11 +138,14 @@ export function reuseTeacherReport(cache, uid, { termId = "term_01", sectionId =
     if (selected && !counts.length) continue;
     if (!selected && !key.endsWith(":all")) continue;
     const records = new Map();
+    let activitySyncPending = false;
     for (const index of saved.pages) {
       const page = cache.get(uid, key + ":" + index);
       if (!page) throw new Error("Incomplete report cache");
-      for (const row of decodeView(page).students) {
+      const decoded = decodeView(page);
+      for (const row of decoded.students) {
         if (selected && row.classId !== selected) continue;
+        activitySyncPending ||= Boolean(decoded.activitySyncPending);
         const results = row.results.filter(result => allTerms || result.termId === termId);
         if (!allTerms && !results.length) throw new Error("Missing cached term");
         if (allTerms && ["term_01", "term_02", "term_03"].some(term => !results.some(result => result.termId === term))) throw new Error("Incomplete cached terms");
@@ -162,6 +165,7 @@ export function reuseTeacherReport(cache, uid, { termId = "term_01", sectionId =
       offset += batchSize;
     }
     if (!pages.length) pages.push({ cursor: null, batchSize: 25, students: [] });
+    if (activitySyncPending) pages[0].activitySyncPending = true;
     return { ...saved, counts, pages, cursor: null, refreshCursor: null, refreshSeen: [],
       termSnap: curriculum.termSnap, curriculumSnap: curriculum.curriculumSnap };
   } catch { /* Missing, stale or malformed cache entries use the normal gateway. */ }

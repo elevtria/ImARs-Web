@@ -12,6 +12,7 @@ const select = document.getElementById("schoolYearSelect");
 const status = document.getElementById("schoolYearStatus");
 const CACHE_KEY = "imars-school-year-v1";
 const FRESH_FOR_MS = 24 * 60 * 60_000;
+const EDITOR_FRESH_FOR_MS = 5 * 60_000;
 let confirmedYear = 2026;
 let loaded = false;
 let canEdit = false;
@@ -82,14 +83,17 @@ onAuthStateChanged(auth, async user => {
 
   const saved = savedYear();
   if (saved) displayYear(saved.startYear);
+  if (select) {
+    canEdit = user.role === "admin";
+    if (!canEdit) { showStatus("Only administrators can change the school year.", true); return; }
+    if (saved && Date.now() - saved.checkedAt < EDITOR_FRESH_FOR_MS) {
+      loaded = true;
+      refreshControl();
+      return;
+    }
+  }
   if (!select && saved && Date.now() - saved.checkedAt < FRESH_FOR_MS) return;
   try {
-    if (select) {
-      const allowed = await isAdministrator(user);
-      if (currentGeneration !== generation) return;
-      canEdit = allowed;
-      if (!canEdit) { showStatus("Only administrators can change the school year.", true); return; }
-    }
     const startedAt = Date.now();
     pendingRead ||= getDoc(reference).finally(() => { pendingRead = undefined; });
     const snapshot = await pendingRead;

@@ -1,5 +1,5 @@
 import { appStore } from "./supabase-app-store.js";
-import { activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
+import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { activeProfile, authenticateStudent, validPart } from "./student-quiz-auth.js";
 import { checkTeacherSession } from "./teacher-sessions.js";
 import { readJson, requireStaff, stateCall } from "./web-auth.js";
@@ -121,19 +121,6 @@ async function scheduleResponse(store, scope, body, now) {
   return { scope, serverTimeUtc: now.toISOString(), schoolDate: schoolTodayISO(now), revision: await digest(items.map(item => item.revision)), items };
 }
 
-const activities = new Map([
-  ["states-of-matter", "States of Matter", 1, 1],
-  ["physical-chemical-changes", "Physical and Chemical Changes", 1, 2],
-  ["separation-techniques", "Separation Techniques", 1, 3],
-  ["circulatory-system", "Circulatory System", 1, 4],
-  ["food-web", "Food Web", 2, 1],
-  ["simple-machines", "Simple Machines", 2, 2],
-  ["sound-waves", "Sound Waves", 2, 3],
-  ["longitudinal-waves", "Longitudinal Waves", 3, 1],
-  ["volcanic-eruptions", "Volcanic Activity", 3, 2],
-  ["earth-motion", "Motions of the Earth", 3, 3],
-  ["constellation", "Constellations", 3, 4]
-].map(([activityId, title, term, lesson]) => [activityId, { activityId, title, termId: terms[term - 1], lessonId: lessons[lesson - 1] }]));
 const readActions = ["me", "schedules"];
 const reportAction = "staff-activity-results";
 const writeKeys = {

@@ -50,6 +50,10 @@
         <button class="quiz-view-tab active" id="createTab" type="button" role="tab" aria-selected="true">Create a quiz</button>
         <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
       </div>
+      <div class="quiz-job-status" id="quizJobStatus" hidden>
+        <p id="quizJobMessage" role="status"></p>
+        <button class="primary-btn quiz-primary" id="reviewQuizJob" type="button" hidden>Review questions</button>
+      </div>
 
       <section id="createView" class="quiz-view" data-auth-shell>
         <ol class="quiz-stepper" aria-label="Quiz creation progress">
@@ -69,7 +73,7 @@
             <div class="quiz-upload-column">
               <label class="quiz-field-label" for="quizFile">Learning material</label>
               <label class="quiz-dropzone" id="quizDropzone" for="quizFile" tabindex="0">
-                <input id="quizFile" type="file" aria-describedby="quizUploadLimits quizContentLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
+                <input id="quizFile" type="file" aria-describedby="quizUploadLimits quizFileError quizContentLimits uploadHelp" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/msword,application/vnd.ms-powerpoint" />
                 <span class="quiz-upload-icon" aria-hidden="true">
                   <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5"/></svg>
                 </span>
@@ -77,6 +81,7 @@
                 <small id="quizUploadLimits">PDF, DOCX, or PPTX · Maximum 50 MB per file</small>
                 <small>Save older PPT files as PPTX or PDF first.</small>
               </label>
+              <p class="quiz-file-error" id="quizFileError" role="alert"></p>
               <div class="quiz-file-selected" id="selectedFileRow" hidden>
                 <span class="quiz-file-type" id="fileTypeBadge">PDF</span>
                 <span class="quiz-file-name" id="selectedFileName"></span>
@@ -123,7 +128,6 @@
             <button class="primary-btn quiz-primary" id="generateQuiz" type="button" disabled><span>Generate quiz</span></button>
           </div>
           <p class="quiz-status" id="setupStatus" role="status" aria-live="polite"></p>
-          <div class="quiz-generation-overlay" id="quizGenerationOverlay" hidden aria-busy="false"><span class="section-data-loading" role="status" aria-label="Generating quiz"></span></div>
         </section>
 
         <section class="quiz-step-pane" id="reviewStep" hidden data-auth-shell>
@@ -147,20 +151,25 @@
           </div>
           <div class="quiz-editor-toolbar">
             <div class="quiz-field quiz-editor-title-field"><label class="quiz-field-label" for="editorTitle">Quiz title</label><input class="quiz-input" id="editorTitle" type="text" maxlength="90" /></div>
-            <div class="quiz-editor-section"><span class="quiz-field-label">Assignment</span><b id="editorSectionName"></b></div>
+            <div class="quiz-editor-section">
+              <label class="quiz-field-label" for="editorSectionSelect">Assignment</label>
+              <b id="editorSectionName">Assign in My quizzes</b>
+              <select class="quiz-input" id="editorSectionSelect" hidden></select>
+            </div>
           </div>
           <div class="quiz-demo-note" id="editorDemoNotice"><b>Review carefully:</b> Check every question and correct answer before saving.</div>
           <div class="quiz-question-editor-list" id="questionEditorList"></div>
           <button class="quiz-add-question" id="addQuestion" type="button"><span>＋</span> Add question <small id="questionLimitText">0 / 50</small></button>
 
           <section class="quiz-availability-card" id="quizAvailability" data-auth-shell>
-            <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose how this quiz becomes available in its section.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
+            <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose when learners in the assigned sections can take this quiz.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
             <div class="quiz-release-options">
               <label class="quiz-release-option selected"><input type="radio" name="availability" value="draft" checked /><span class="quiz-release-radio"></span><span><b>Save as draft</b><small>Only you can see it. It stays locked for learners.</small></span></label>
-              <label class="quiz-release-option"><input type="radio" name="availability" value="now" /><span class="quiz-release-radio"></span><span><b>Available now</b><small>Learners in this section can open it after you save.</small></span></label>
+              <label class="quiz-release-option"><input type="radio" name="availability" value="now" /><span class="quiz-release-radio"></span><span><b>Available now</b><small>Learners in the assigned sections can open it after you save.</small></span></label>
               <label class="quiz-release-option"><input type="radio" name="availability" value="scheduled" /><span class="quiz-release-radio"></span><span><b>Schedule</b><small>Keep it locked until a date and time.</small></span></label>
             </div>
             <div class="quiz-schedule-fields" id="scheduleFields" hidden><label class="quiz-field-label" for="availableAt">Available starting</label><input class="quiz-input" id="availableAt" type="datetime-local" /><small>Uses your device’s local time.</small></div>
+            <div class="quiz-schedule-fields"><label class="quiz-field-label" for="quizDeadline">Deadline (optional)</label><input class="quiz-input" id="quizDeadline" type="datetime-local" /><small>Uses your device’s local time. Students must submit before the deadline.</small></div>
           </section>
 
           <div class="quiz-editor-footer">
@@ -181,6 +190,14 @@
       </section>
     </main>
   </div>
+
+  <dialog class="quiz-generation-card" id="quizGenerationStatusCard" aria-label="Quiz generation">
+    <div class="quiz-generation-status" role="status" aria-live="polite" aria-atomic="true">
+      <span class="quiz-generation-mark"><img src="assets/imars-loader-transparent.png" alt="" width="56" height="56" /></span>
+      <strong id="quizGenerationStatus"></strong>
+      <p id="quizGenerationHint"></p>
+    </div>
+  </dialog>
 
   <button class="help" id="helpBtn" type="button" aria-label="Help">?</button>
 

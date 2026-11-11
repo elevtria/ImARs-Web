@@ -9,13 +9,15 @@ import { quizReview, QuizReviewStore } from "../server/quiz-review.js";
 const project = "demo-imars-generated-quizzes", origin = "http://127.0.0.1:58088";
 const env = { STUDENT_QUIZZES_ENABLED: "true", ACCOUNT_ACCESS_ENABLED: "true", WEB_SESSION_SECRET: "emulator-only-cursor-secret-with-32-characters" };
 let requests = 0, queryRequests = 0;
+const emulatorName = path => `projects/${project}/databases/(default)/documents/${path}`;
 function store() {
   const db = new StudentQuizStore(env);
+  db.name = emulatorName;
   db.identity = async uid => ({ localId: uid, email: uid + "@example.test", emailVerified: true });
   db.request = async (suffix, options = {}) => {
-    requests++; if (suffix.endsWith("runQuery")) queryRequests++;
+    requests++; if (suffix === "documents:runQuery") queryRequests++;
     const response = await fetch(`${origin}/v1/projects/${project}/databases/(default)/${suffix}`, { ...options,
-      headers: { Authorization: "Bearer owner", "Content-Type": "application/json" }, ...(options.body ? { body: options.body.replaceAll("imars-db-a733b", project) } : {}) });
+      headers: { Authorization: "Bearer owner", "Content-Type": "application/json" } });
     if (response.status === 404) return null;
     const body = await response.json();
     if (!response.ok) throw Object.assign(new Error("Emulator request: " + response.status + " " + JSON.stringify(body)), { status: [400, 409].includes(response.status) && ["ABORTED", "FAILED_PRECONDITION", "ALREADY_EXISTS"].includes(body.error?.status) ? 409 : 503 });
@@ -85,7 +87,7 @@ const essayBody = { assignmentId: "essay", revision: essayRow.updateTime, attemp
 const pendingResponse = await call("submit", essayBody); assert.equal(pendingResponse.status, 200, await pendingResponse.clone().text());
 check("Essay persistence awaits teacher review", (await pendingResponse.json()).status === "pending-review");
 const reviewCall = async (action, extra = {}, actor = { id: "T1", uid: "teacher-a", role: "teacher" }) => {
-  const reviewStore = new QuizReviewStore(env); reviewStore.request = db.request;
+  const reviewStore = new QuizReviewStore(env); reviewStore.request = db.request; reviewStore.name = emulatorName;
   return quizReview({ env, request: new Request("https://imars.test/api/quiz-review/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, quizId: "essay", studentId: "S1", attemptId: essayAttemptId, ...extra }) }) }, { store: reviewStore, authenticate: async (_request, _env, currentStore) => { await currentStore.get("users/" + actor.id); return actor; } });
 };
 const reviewPage = await reviewCall("list", { cursor: "" }); assert.equal(reviewPage.status, 200, await reviewPage.clone().text()); check("Collection-group review query is scoped and returns the submitted essay", (await reviewPage.json()).items.length === 1);

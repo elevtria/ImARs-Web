@@ -1,9 +1,17 @@
-// Presentation controls for the teacher navigation; account actions stay in teacher-nav.
+// Presentation controls shared by the teacher and admin sidebars.
 const navigationDrawer = document.getElementById("drawer");
 if (navigationDrawer) {
   const panel = navigationDrawer.querySelector(".drawer-panel");
   const brand = panel?.querySelector(".brand");
   if (panel && brand) {
+    const menuButton = document.getElementById("menuBtn");
+    const accountButton = document.getElementById("accountBtn");
+    const accountMenu = document.getElementById("accountMenu");
+    const setAccountOpen = open => {
+      if (!accountMenu) return;
+      accountMenu.hidden = !open;
+      accountButton?.setAttribute("aria-expanded", String(open));
+    };
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
     const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
@@ -12,7 +20,9 @@ if (navigationDrawer) {
     let collapseTimer;
     const updateCompact = () => {
       const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
-      navigationDrawer.classList.toggle("is-compact", desktop.matches && hoverPointer.matches && !pointerInside && !focused);
+      const compact = desktop.matches && hoverPointer.matches && !pointerInside && !focused;
+      navigationDrawer.classList.toggle("is-compact", compact);
+      if (compact) setAccountOpen(false);
     };
     const setPointerInside = inside => {
       if (inside === pointerInside) return;
@@ -48,27 +58,37 @@ if (navigationDrawer) {
       if (event.key === "Tab") keyboardNavigation = true;
     });
     window.addEventListener("blur", resetHover);
-    window.addEventListener("pagehide", resetHover);
-    window.addEventListener("pageshow", resetHover);
     panel.addEventListener("focusin", updateCompact);
     panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
     hoverPointer.addEventListener("change", resetHover);
-    const syncLayout = () => {
-      resetHover();
-      navigationDrawer.setAttribute("aria-hidden", String(!desktop.matches && !navigationDrawer.classList.contains("open")));
+    const syncDrawer = () => {
+      const open = !desktop.matches && navigationDrawer.classList.contains("open");
+      const hidden = !desktop.matches && !open;
+      navigationDrawer.setAttribute("aria-hidden", String(hidden));
+      navigationDrawer.inert = hidden;
+      menuButton?.setAttribute("aria-expanded", String(open));
     };
-    desktop.addEventListener("change", syncLayout);
-    new MutationObserver(() => {
-      const hidden = String(!desktop.matches && !navigationDrawer.classList.contains("open"));
-      if (navigationDrawer.getAttribute("aria-hidden") !== hidden) navigationDrawer.setAttribute("aria-hidden", hidden);
-    }).observe(navigationDrawer, { attributes:true, attributeFilter:["aria-hidden", "class"] });
-    document.getElementById("menuBtn")?.addEventListener("click", event => {
-      if (!desktop.matches) return;
-      event.stopImmediatePropagation();
-      pointerInside = true;
-      updateCompact();
-    }, true);
-    syncLayout();
+    const closeNavigation = (restoreFocus = false) => {
+      const wasOpen = navigationDrawer.classList.contains("open");
+      navigationDrawer.classList.remove("open");
+      setAccountOpen(false);
+      if (wasOpen && restoreFocus) menuButton?.focus();
+      syncDrawer();
+    };
+    const resetNavigation = () => {
+      resetHover();
+      closeNavigation();
+    };
+    desktop.addEventListener("change", resetNavigation);
+    window.addEventListener("pagehide", resetNavigation);
+    window.addEventListener("pageshow", resetNavigation);
+    menuButton?.addEventListener("click", () => {
+      navigationDrawer.classList.add("open");
+      syncDrawer();
+      brand.focus();
+    });
+    resetHover();
+    syncDrawer();
 
     const close = document.createElement("button");
     close.type = "button";
@@ -76,18 +96,26 @@ if (navigationDrawer) {
     close.setAttribute("aria-label", "Close navigation");
     close.innerHTML = svg('<path d="m6 6 12 12M18 6 6 18"/>');
     panel.append(close);
-    const closeNavigation = () => {
-      navigationDrawer.classList.remove("open");
-      navigationDrawer.setAttribute("aria-hidden", "true");
-      document.getElementById("menuBtn")?.focus();
-    };
-    close.addEventListener("click", closeNavigation);
+    close.addEventListener("click", () => closeNavigation(true));
+    navigationDrawer.addEventListener("click", event => {
+      if (event.target === navigationDrawer) closeNavigation(true);
+      else if (!desktop.matches && event.target.closest(".nav-item[href], .brand[href]")) closeNavigation();
+    });
+    accountButton?.addEventListener("click", () => setAccountOpen(accountMenu?.hidden === true));
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".account")) setAccountOpen(false);
+    });
     document.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
+      if (accountMenu && !accountMenu.hidden) {
+        setAccountOpen(false);
+        accountButton?.focus();
+        return;
+      }
       if (desktop.matches) {
         resetHover();
         if (panel.contains(document.activeElement)) document.activeElement.blur();
-      } else if (navigationDrawer.classList.contains("open")) closeNavigation();
+      } else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();

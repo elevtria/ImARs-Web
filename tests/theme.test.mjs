@@ -6,7 +6,12 @@ import vm from "node:vm";
 const source = readFileSync(new URL("../js/theme.js", import.meta.url), "utf8");
 function page({ saved = null, dark = false, blocked = false, toolbar = true } = {}) {
   const events = {}, systemEvents = {}, attrs = {}, writes = [];
-  const root = { dataset: {} };
+  const rootClasses = new Set();
+  const root = { dataset: {}, classList: {
+    contains: name => rootClasses.has(name),
+    add: name => rootClasses.add(name),
+    remove: name => rootClasses.delete(name)
+  } };
   let button, mounted;
   const system = { matches: dark, addEventListener: (name, fn) => { systemEvents[name] = fn; } };
   const context = {

@@ -8,23 +8,6 @@ import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailabilit
 const app = initializeApp();
 const auth = getAuth(app);
 
-// --- EXISTING UI LOGIC ---
-const drawer = document.getElementById("drawer");
-const openDrawer = () => { drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); };
-const closeDrawer = () => { drawer.classList.remove("open"); drawer.setAttribute("aria-hidden", "true"); };
-document.getElementById("menuBtn").onclick = openDrawer;
-drawer.onclick = (e) => { if (e.target === drawer) closeDrawer(); };
-
-const accountBtn = document.getElementById("accountBtn");
-const accountMenu = document.getElementById("accountMenu");
-accountBtn.onclick = (e) => {
-  e.stopPropagation();
-  accountMenu.hidden = !accountMenu.hidden;
-};
-document.addEventListener("click", (e) => {
-  if (!e.target.closest(".account")) accountMenu.hidden = true;
-});
-
 document.getElementById("helpBtn").onclick = () => {
   window.location.href = "teacher-manual.html";
 };

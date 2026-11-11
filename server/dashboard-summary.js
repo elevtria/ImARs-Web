@@ -18,7 +18,7 @@ export function dashboardRefreshInterval(summary) {
 }
 export const lessonPaths = id => [1, 2, 3].flatMap(term => [1, 2, 3, 4].map(lesson => `users/${id}/test_results/term_0${term}/lessons/lesson_0${lesson}`));
 
-function points(data, kind, maximum) {
+export function assessmentPoints(data, kind, maximum) {
   const prefix = kind === "pre" ? "preTest" : "postTest";
   if (data[kind === "pre" ? "isPreTestCompleted" : "isPostTestCompleted"] !== true) return null;
   const total = data[prefix + "TotalQuestions"];
@@ -30,7 +30,7 @@ export function summarizeStudent(id, profile, section, lessons) {
   const row = { id, name: String(profile.displayName || profile.fullName || "Student").slice(0, 300), section,
     preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, lastActive: 0, hasActivity: false };
   for (const data of lessons) {
-    const pre = points(data, "pre", 5), post = points(data, "post", 10);
+    const pre = assessmentPoints(data, "pre", 5), post = assessmentPoints(data, "post", 10);
     if (pre !== null) { row.preSum += pre; row.preCount++; }
     if (post !== null) { row.postSum += post; row.postCount++; }
     const ar = positive(data.arTimeMinutes) || positive(data.arNavigationTimeMinutes);

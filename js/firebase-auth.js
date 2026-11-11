@@ -11,7 +11,7 @@ export const initializeApp = () => app;
 export const getApps = () => [app];
 const loginPage = () => /^\/(?:admin-)?login(?:\.html)?\/?$/.test(window.location.pathname);
 const adminLoginPage = () => /^\/admin-login(?:\.html)?\/?$/.test(window.location.pathname);
-const portalRole = () => /^\/(?:admin-dashboard|admin-profile|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
+const portalRole = () => /^\/(?:admin-dashboard|admin-profile|admin-manual|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
 const sharedPage = () => /^\/teacher-manual(?:\.html)?\/?$/.test(window.location.pathname);
 const hidePortal = () => {
   if (loginPage()) return;
@@ -51,7 +51,7 @@ function reuseVisitedPage(event, auth, state) {
   const navigation = window.navigation;
   if (!navigation?.currentEntry || !auth.currentUser || state.denied || state.suspended || !state.visitId || visit()?.tabId !== state.visitId ||
       event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-  const link = event.target.closest?.(".side-nav a[href], .admin-side-nav a[href]");
+  const link = event.target.closest?.(".side-nav a[href]");
   if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
   try {
     const current = navigation.currentEntry;
@@ -77,7 +77,8 @@ function denyAccess(auth, state, reason = "web-session") {
   auth.currentUser = null;
   clearVisit();
   document.querySelector("main")?.replaceChildren();
-  window.location.replace(`/login?reason=${reason}`);
+  const loginPath = portalRole() === "admin" ? "/admin-login" : "/login";
+  window.location.replace(`${loginPath}?reason=${reason}`);
 }
 async function identity(auth, state) {
   const saved = visit();

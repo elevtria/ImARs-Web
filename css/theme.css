@@ -40,7 +40,7 @@
     --ink: #e3ebf5; --muted: #a5b4c7; --surface: #1b2738; --line: #35465d;
     --shadow: 0 10px 30px #00000030;
     --portal-ink: #e3ebf5; --portal-muted: #a5b4c7; --portal-line: #35465d;
-    --admin-bg: #101824; --admin-card: #1b2738; --admin-ink: #e3ebf5;
+    --admin-card: #1b2738; --admin-ink: #e3ebf5;
     --admin-muted: #a5b4c7; --admin-line: #35465d;
     --admin-purple: #b6a2ff; --admin-cyan: #70d1f4; --admin-green: #5ed9b0; --admin-pink: #ff8ac6;
     --topic-chip-ink: #c5bdff; --topic-chip-bg: #34345a; --chart-track: #35465d;
@@ -50,15 +50,15 @@
     background: radial-gradient(ellipse at 10% 0%, #24395280, transparent 55%), #101824;
   }
   [data-theme="dark"] :is(.topbar, .admin-topbar) { background: #101824e8; border-color: var(--line); }
-  [data-theme="dark"] :is(#drawer .drawer-panel, .admin-drawer-panel) { background: #152031; border-color: var(--line); }
+  [data-theme="dark"] #drawer .drawer-panel { background: #152031; border-color: var(--line); }
   [data-theme="dark"] body :is(.card, .card.section, .term-card, .panel, .metric-card, .profile-card,
     .profile-info-card, .profile-session-card, .teacher-metric, .teacher-record, .teacher-analytics-card,
     .section-analytics-card, .record, .scan-card, .recent-card, .progress-card, .quiz-step-pane,
     .quiz-library-card, .quiz-question-card, .login-card, .modal-card, .modal-content,
-    .manual-sheet, .manual-step-card, .manual-tool-card, .quiz-generation-card) {
+    .manual-sheet, .manual-step-card, .manual-tool-card) {
     background: var(--surface); border-color: var(--line); box-shadow: var(--shadow); color: var(--ink);
   }
-  [data-theme="dark"] body :is(.hero, .intro, .teacher-dashboard .stats .stat-link) {
+  [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {
     background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
   }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
@@ -76,7 +76,7 @@
   [data-theme="dark"] body :is(dialog, #adminLoginModal, #studentRecordDialog, #archiveStudentForm,
     .profile-dialog, .teacher-dialog) { background: var(--surface); border-color: var(--line); color: var(--ink); }
   [data-theme="dark"] dialog::backdrop { background: #030810aa; }
-  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(:where(.search input)), select, textarea) {
+  [data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(:where(:is(.search, .teacher-search) input)), select, textarea) {
     background: #142031; color: var(--ink); border-color: #49617e;
   }
   [data-theme="dark"] body :is(input, textarea)::placeholder { color: #9aaec6; }
@@ -91,15 +91,15 @@
     .archive-section-hint, .action p, .login-card small, .login-card h1 + p, .login-page label,
     .login-field > .field-icon, #adminModalDescription, .quiz-field-label, .quiz-help-text,
     .manual-tool-card p, .manual-checklist, .manual-sheet-footer, .record .student small) { color: var(--muted); }
-  [data-theme="dark"] body :is(.icon-btn, .menu-button, .drawer-close, .help-btn, .help-button,
+  [data-theme="dark"] body :is(.icon-btn, .menu-button, .help-btn, .help-button,
     .ghost-btn, .btn-ghost, .nav-close, .profile-dialog-close, .dialog-close, .profile-cancel-button,
     .cancel-button, #closeStudentRecord, #closeAdminModalBtn, #cancelAdminModalBtn, #cancelArchiveStudent,
-    .open-student-record, .archive-student-btn, .unarchive-student-btn, .student-detail-navigation button) {
+    .open-student-record, .unarchive-student-btn, .student-detail-navigation button) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
   [data-theme="dark"] body :is(.sy-chip, .admin-year, .summary-icon, .action-icon, .section-chip,
     .quiz-library-count, .quiz-view-tab span, .student-status-switch span, .teacher-count) { background: #2b4059; color: #d5e7ff; }
-  [data-theme="dark"] body :is(.side-user, .admin-side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
+  [data-theme="dark"] body :is(.side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
   [data-theme="dark"] body :is(td, th, .scan-row, .file-row, .profile-info-grid > div, .analytics-card-footer) { border-color: var(--line); }
   [data-theme="dark"] body :is(.table-wrap, .table-scroll) tbody tr:nth-child(even) { background: #22324966; }
   [data-theme="dark"] body :is(.action, .record, .stat-link, .quiz-dropzone):hover { background: #2b4059; }
@@ -123,16 +123,16 @@
   [data-theme="dark"] body :is(.c-green, .green) { color: #5ed9b0; }
   [data-theme="dark"] body :is(.c-pink, .pink) { color: #ff8ac6; }
   /* Nested controls must not retain translucent white light-mode fills. */
-  [data-theme="dark"] body :is(.module, .search, .quiz-choice, .quiz-type-option,
+  [data-theme="dark"] body :is(.module, .search, .teacher-search, .quiz-choice, .quiz-type-option,
     .quiz-stepper-input button, .quiz-stepper li:not(.active):not(.done) span) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
   [data-theme="dark"] body .module span { color: var(--muted); }
-  [data-theme="dark"] body .search input {
+  [data-theme="dark"] body :is(.search, .teacher-search) input {
     background: transparent; color: var(--ink); box-shadow: none;
   }
   [data-theme="dark"] body .search svg { color: var(--muted); }
-  [data-theme="dark"] body .search:focus-within { border-color: var(--steel); }
+  [data-theme="dark"] body :is(.search, .teacher-search):focus-within { border-color: var(--steel); }
   [data-theme="dark"] body :is(.quiz-choice, .quiz-type-option, .quiz-stepper-input button):hover:not(:disabled) {
     background: #2b4059; border-color: var(--steel);
   }
@@ -165,6 +165,13 @@
     background: #2b4059; color: #b8ddff;
   }
   [data-theme="dark"] body .activity-result-score.is-empty { background: #223249; color: var(--muted); }
+  [data-theme="dark"] body .teacher-quiz-results .activity-result-score.is-pending { background: #482732; color: #ffadb8; }
+  [data-theme="dark"] body .teacher-quiz-results .activity-result-score.is-completed { background: #1d3b32; color: #9ce7c2; }
+  [data-theme="dark"] body .quiz-review-form details {
+    background: #223249; color: var(--ink);
+  }
+  [data-theme="dark"] body :is(.quiz-review-form label, .quiz-review-dialog .quiz-status) { color: var(--muted); }
+  [data-theme="dark"] body .quiz-review-form fieldset { border-color: var(--line); }
   [data-theme="dark"] body .activity-result-time { color: #b8ddff; }
   [data-theme="dark"] body .improvement-value { color: #5ed9b0; }
   /* The detail dialog clones a record; override its ID-scoped white fill. */
@@ -190,3 +197,71 @@
   [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
 }
 @media print { .theme-toggle { display: none !important; } }
+
+/* Keep each portal page heading distinct from the decorative background. */
+@media screen {
+  :root[data-theme="light"] body:not(.login-page) :is(.hero, .intro) { background: #fff; border: 1px solid #91b8df; border-left: 4px solid #247bce; box-shadow: 0 10px 26px #215f9c26; }
+  :root[data-theme="dark"] body:not(.login-page) :is(.hero, .intro) { background: #1d324b; border: 1px solid #577899; border-left: 4px solid #78baff; box-shadow: 0 10px 26px #020d1e55; }
+  :root[data-theme="light"] .archive-student-btn { border: 1px solid #cc4352; color: #a52c3b; background: #fff7f8; }
+  :root[data-theme="light"] .archive-student-btn:is(:hover, :focus-visible):not(:disabled) { background: #b62f45; border-color: #942236; color: #fff; box-shadow: 0 3px 10px #b62f4530; }
+  :root[data-theme="dark"] body .archive-student-btn { border: 1px solid #ef7e8c; color: #ffadb8; background: #402a3a; }
+  :root[data-theme="dark"] body .archive-student-btn:is(:hover, :focus-visible):not(:disabled) { background: #713247; border-color: #ffa2ae; color: #fff; }
+}
+
+/* Light surfaces need a visible change of color, not just a brightness filter. */
+@media screen {
+  :root[data-theme="light"] :is(.term-head, .activity-term-toggle) {
+    transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+  :root[data-theme="light"] :is(.term-head, .activity-term-toggle):is(:hover, :focus-visible):not(:disabled) {
+    background: #cce3ff;
+    box-shadow: inset 0 0 0 2px #5596de;
+  }
+  :root[data-theme="light"] .topic-row { transition: background-color 160ms ease; }
+  :root[data-theme="light"] .topic-row:is(:hover, :focus-within) { background: #e0efff; }
+  :root[data-theme="light"] :is(.date-btn, .lock-btn, .lock-all, .ghost-btn) {
+    border: 1px solid #91b6df;
+    background: #edf5ff;
+    color: #214f7e;
+  }
+  :root[data-theme="light"] .lock-btn.locked { color: #946300; }
+  :root[data-theme="light"] :is(.date-btn, .lock-btn, .lock-all, .ghost-btn):is(:hover, :focus-visible):not(:disabled) {
+    background: #bcdcff;
+    border-color: #247bce;
+    box-shadow: 0 3px 10px #247bce30;
+  }
+  :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr > :is(th, td) {
+    background: #fff;
+    transition: background-color 140ms ease, box-shadow 140ms ease;
+  }
+  :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:nth-child(even) > :is(th, td) { background: #f0f7ff; }
+  :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :is(th, td) { background: #c8e2ff; }
+  :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :first-child { box-shadow: inset 4px 0 #247bce; }
+  :root[data-theme="light"] .analytics-term-switch button[aria-pressed="false"]:is(:hover, :focus-visible) { background: #c8e2ff; color: #174b7a; }
+  :root[data-theme="light"] #drawer .nav-item:not(.active):is(:hover, :focus-visible) { background: #cce3ff; color: #174b7a; box-shadow: inset 3px 0 #247bce; }
+  :root[data-theme="light"] .teacher-dashboard .action { border-color: #91b6df; background: #fff; box-shadow: 0 3px 10px #247bce12; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+  :root[data-theme="light"] .teacher-dashboard .action:is(:hover, :focus-visible) { background: #cce3ff; border-color: #247bce; box-shadow: 0 6px 16px #247bce30; transform: translateY(-2px); }
+  :root[data-theme="light"] .quiz-primary { border: 1px solid #1455af; background: #1765cf; color: #fff; box-shadow: 0 5px 12px #1765cf30; }
+  :root[data-theme="light"] .quiz-primary:is(:hover, :focus-visible):not(:disabled) { background: #0c4ca6; border-color: #083c87; box-shadow: 0 7px 18px #1765cf50; }
+  :root[data-theme="light"] .quiz-primary:disabled { opacity: 1; background: #d5e1ef; border-color: #acbfd6; color: #526a85; box-shadow: none; }
+  :root[data-theme="light"] :is(.quiz-choice, .quiz-stepper-input button, .quiz-view-tab):is(:hover, :focus-visible):not(:disabled),
+  :root[data-theme="light"] .quiz-type-option:is(:hover, :focus-within) { background: #cce3ff; border-color: #247bce; color: #174b7a; box-shadow: inset 0 0 0 1px #5596de; }
+  :root[data-theme="light"] .quiz-dropzone:is(:hover, :focus-within) { background: #d7eaff; border-color: #247bce; box-shadow: inset 0 0 0 1px #5596de; }
+  :root[data-theme="light"] .quiz-library-card { background: #fff; border-color: #adcbe8; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+  :root[data-theme="light"] .quiz-library-card:is(:hover, :focus-within) { background: #dcedff; border-color: #4b93df; box-shadow: 0 8px 22px #247bce30; transform: translateY(-2px); }
+  :root[data-theme="light"] .quiz-library-actions button { border-color: #91b6df; background: #edf5ff; color: #214f7e; }
+  :root[data-theme="light"] .quiz-library-actions button:is(:hover, :focus-visible):not(:disabled),
+  :root[data-theme="light"] .quiz-library-actions button[aria-expanded="true"]:not(:disabled) { background: #1d69c8; border-color: #1455af; color: #fff; box-shadow: 0 4px 12px #1765cf35; }
+  :root[data-theme="light"] .quiz-library-actions button.delete { background: #fff5f5; border-color: #e5b5b5; color: #9c3535; }
+  :root[data-theme="light"] .quiz-library-actions button.delete:is(:hover, :focus-visible):not(:disabled) { background: #b62f45; border-color: #942236; color: #fff; box-shadow: 0 4px 12px #b62f4530; }
+  :root[data-theme="light"] .quiz-library-actions button:disabled { opacity: .6; box-shadow: none; }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+  :root[data-theme="light"] :is(.term-head, .activity-term-toggle, .topic-row, .teacher-dashboard .action, .quiz-library-card),
+  :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr > :is(th, td) { transition: none; }
+  :root[data-theme="light"] .quiz-library-card:is(:hover, :focus-within) { transform: none; }
+}
+/* Crossfade the whole page when the theme changes. */
+:root.theme-switching { view-transition-name: root; }
+:root.theme-switching :is(.login-cubes, #drawer .side-nav, body:has(#drawer) .topbar) { view-transition-name: none; }
+:root.theme-switching::view-transition-group(root) { animation-duration: 650ms; }

@@ -23,3 +23,13 @@
   from = "/scan-qr-ar.html"
   to = "/sync-offline-results"
   status = 302
+
+[[redirects]]
+  from = "/welcome"
+  to = "/login"
+  status = 302
+
+[[redirects]]
+  from = "/welcome.html"
+  to = "/login"
+  status = 302

@@ -1,9 +1,11 @@
-import { databaseQuotaFailure } from "./firestore-admin.js";
+import { databaseQuotaFailure, FirestoreAdmin } from "./firestore-admin.js";
 import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
 import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
-import { activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
+import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
+import { loadAdminReports } from "./admin-report-data.js";
+import { activityPercent } from "../js/activity-score.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -226,15 +228,21 @@ class Scope {
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
-      const releaseOnly = input.operation === "update" && names(["section", "sectionId", "assignmentScope", "availability", "availableAt"]);
+      const releaseFields = ["section", "sectionId", "assignmentScope", "availability", "availableAt"];
+      const releaseOnly = input.operation === "update" && names([...releaseFields, "deadlineUtc"]);
       const release = releaseOnly ? data : null;
-      if (releaseOnly) data = { ...previous, ...release };
+      if (releaseOnly) {
+        if (!releaseFields.every(field => Object.hasOwn(release, field))) throw fail("Choose a section and release option.", 400);
+        data = { id: p[1], demo: false, ...previous, ...release };
+      }
       const assignment = quizAssignmentScope(data);
       if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
       if (assignment === "section") await this.ownsClass(data.sectionId);
-      if (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
-          data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) || !text(data.sourceFile, 240) ||
-          !Object.hasOwn(QUIZ_TYPES, data.type) || !["Easy", "Medium", "Hard"].includes(data.difficulty) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
+      if (assignment === "all" && !(await this.assignedClasses()).length) throw fail("You have no assigned sections for this quiz.", 400);
+      if (!releaseOnly && (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "deadlineUtc", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
+          !text(data.sourceFile, 240) || !["Easy", "Medium", "Hard"].includes(data.difficulty))) throw fail("Invalid quiz details.", 400);
+      if (data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) ||
+          !Object.hasOwn(QUIZ_TYPES, data.type) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
           (data.schemaVersion !== undefined && data.schemaVersion !== 2) ||
           (data.gradingMode !== undefined && data.gradingMode !== (writtenQuestion(data.type) || data.type === "modified-true-false" ? "teacher-review" : "automatic")) ||
           !Array.isArray(data.questions) || data.questions.length < 1 || data.questions.length > 50 || new Set(data.questions.map(q => q?.id)).size !== data.questions.length) throw fail("Invalid quiz details.", 400);
@@ -242,8 +250,21 @@ class Scope {
       if (data.questions.some(question => !object(question) || !fields(question, ["id", "text", "options", "correctIndex", ...answerFields]) || !part(question.id) ||
           (writtenQuestion(data.type) && (!Array.isArray(question.options) || question.options.length !== 0 || question.correctIndex !== -1)) || !normalizeQuizQuestion(question, data.type))) throw fail("Check the quiz questions and answer guides.", 400);
       if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
-      if (data.availability === "scheduled" ? !Number.isFinite(Date.parse(data.availableAt)) || Date.parse(data.availableAt) <= Date.now() : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
-      return { ...input, data: { ...(release || data), questionCount: data.questions.length, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() }, updateTime: row?.updateTime };
+      const now = Date.now();
+      const releaseAt = typeof data.availableAt === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(data.availableAt) ? Date.parse(data.availableAt) : NaN;
+      if (data.availability === "scheduled" ? !Number.isFinite(releaseAt) || releaseAt <= now : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
+      const deadline = Object.hasOwn(data, "deadlineUtc") ? data.deadlineUtc : previous?.deadlineUtc ?? "";
+      let deadlineUtc = "";
+      if (deadline !== "") {
+        const deadlineAt = typeof deadline === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(deadline) ? Date.parse(deadline) : NaN;
+        if (!Number.isFinite(deadlineAt)) throw fail("Choose a valid quiz deadline.", 400);
+        if (data.availability === "scheduled" && deadlineAt <= releaseAt) throw fail("Set the deadline after the release time.", 400);
+        if (deadlineAt <= now && deadlineAt !== Date.parse(previous?.deadlineUtc)) throw fail("Choose a future deadline.", 400);
+        deadlineUtc = new Date(deadlineAt).toISOString();
+      }
+      return { ...input, data: { ...(release || data), id: p[1], availableAt: data.availability === "scheduled" ? new Date(releaseAt).toISOString() : "",
+        deadlineUtc,
+        questionCount: data.questions.length, createdAt: previous?.createdAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
   }
@@ -257,7 +278,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
   if (source && /^users\/[^/]+$/.test(path)) data = pick(source, profileFields);
   if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"]);
   if (source && /^generatedQuizzes\/[^/]+$/.test(path)) {
-    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "createdAt", "demo", "teacherUid"]);
+    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "deadlineUtc", "createdAt", "demo", "teacherUid"]);
     data.questions = Array.isArray(source.questions) ? source.questions.filter(object).map(question =>
       pick(question, ["id", "text", "options", "correctIndex", "answer", "points", "rubric", "explanation", "correction"])) : [];
   }
@@ -273,7 +294,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
 }
 
 function quizListEntry(row) {
-  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt"]);
+  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt", "deadlineUtc"]);
   return { id: row.id, path: "generatedQuizzes/" + row.id, data: { ...data, questionCount: Array.isArray(row.data.questions) ? row.data.questions.length : 0 } };
 }
 
@@ -371,7 +392,39 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   return { ...page, counts };
 }
 
-async function reportActivityGrades(env, students, termIds, fetcher) {
+async function reportActivityGrades(env, appData, students, termIds, fetcher, legacyFetcher) {
+  const grades = new Map();
+  let activitySyncPending = false;
+  if (appData.activityResultsForRoster) {
+    const roster = new Map(students.map(row => [row.document.id, row]));
+    const groups = [];
+    for (let offset = 0; offset < students.length; offset += 25) {
+      groups.push(students.slice(offset, offset + 25).map(row => row.document.id));
+    }
+    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? new FirestoreAdmin(env, legacyFetcher) : null;
+    const [saved, current] = await Promise.all([
+      Promise.all(groups.map(ids => appData.activityResultsForRoster(ids))),
+      legacy ? Promise.allSettled(groups.map(ids => legacy.activityResultsForRoster(ids))) : []
+    ]);
+    activitySyncPending = current.some(result => result.status === "rejected");
+    for (const results of [...current.flatMap(result => result.status === "fulfilled" ? [result.value] : []), ...saved]) {
+      for (const { studentId, data } of results) {
+        const student = roster.get(studentId), activity = activities.get(data.activityId);
+        const completedAt = typeof data.completedAtUtc === "string" ? Date.parse(data.completedAtUtc) : NaN;
+        if (!student || !activity || !termIds.includes(activity.termId) || !Number.isFinite(completedAt) ||
+            (data.status && data.status !== "completed") || (data.classCode && data.classCode !== student.classId) ||
+            (data.uid && data.uid !== student.document.data.uid) ||
+            !Number.isSafeInteger(data.score) || !Number.isSafeInteger(data.maximum) ||
+            data.maximum <= 0 || data.score < 0 || data.score > data.maximum) continue;
+        const key = [student.classId, studentId, activity.termId, activity.lessonId].join("/");
+        if (!grades.has(key) || grades.get(key).completedAt < completedAt) {
+          grades.set(key, { score: data.score, maximum: data.maximum, completedAt });
+        }
+      }
+    }
+  }
+  if (env.MOBILE_API_ENABLED !== "true" || activityStorageDataset(env) !== "production") return { grades, activitySyncPending };
+
   const store = new MobileActivityStore(env, fetcher);
   const bySection = new Map();
   for (const row of students) {
@@ -383,7 +436,6 @@ async function reportActivityGrades(env, students, termIds, fetcher) {
     for (let offset = 0; offset < studentIds.length; offset += 20)
       requests.push([sectionId, studentIds.slice(offset, offset + 20)]);
   }
-  const grades = new Map();
   for (let offset = 0; offset < requests.length; offset += 4) {
     await Promise.all(requests.slice(offset, offset + 4).map(async ([sectionId, studentIds]) => {
       for (const row of await store.gradesForRoster(sectionId, termIds, studentIds)) {
@@ -395,10 +447,10 @@ async function reportActivityGrades(env, students, termIds, fetcher) {
       }
     }));
   }
-  return grades;
+  return { grades, activitySyncPending };
 }
 
-async function teacherReportPage(scope, body, env, fetcher) {
+async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   if (scope.actor.role !== "teacher") throw fail();
   if (!term(body.termId)) throw fail("Choose one term.", 400);
   if (body.allTerms !== undefined && typeof body.allTerms !== "boolean") throw fail("Invalid report scope.", 400);
@@ -419,15 +471,18 @@ async function teacherReportPage(scope, body, env, fetcher) {
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
+  const gradeRequest = !heatmap && page.students.length
+    ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))
+    : null;
   const records = new Map();
   for (let offset = 0; offset < paths.length; offset += 400) {
     const batches = [];
     for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100), heatmap ? { fieldPaths: heatmapFields } : undefined));
     for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
   }
-  const activityGrades = !heatmap && page.students.length && env.MOBILE_API_ENABLED === "true" &&
-    activityStorageDataset(env) === "production"
-    ? await reportActivityGrades(env, page.students, termIds, fetcher) : null;
+  const gradeResult = await gradeRequest;
+  if (gradeResult?.error) throw gradeResult.error;
+  const { grades: activityGrades, activitySyncPending } = gradeResult?.value || {};
   const students = page.students.map(row => {
     const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
@@ -443,7 +498,27 @@ async function teacherReportPage(scope, body, env, fetcher) {
   const curriculum = curriculumResult?.value;
   const counts = pendingCounts ? await pendingCounts : null;
   if (counts?.error) throw counts.error;
-  return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId };
+  return { ...page, counts, students, cursor: counts?.every(row => row.active === 0) ? null : page.cursor, curriculum, termId: body.termId,
+    ...(activitySyncPending ? { activitySyncPending } : {}) };
+}
+
+async function studentActivityAverage(scope, body, env, fetcher, legacyFetcher) {
+  if (scope.actor.role !== "teacher") throw fail();
+  if (!part(body.studentId) || !term(body.termId)) throw fail("Choose a student and term.", 400);
+  const student = await scope.student(body.studentId);
+  const section = student.data.classCode;
+  const ids = ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
+  const base = `users/${body.studentId}/test_results/${body.termId}/lessons/`;
+  const [lessons, { grades }] = await Promise.all([
+    scope.store.getAll(ids.map(id => base + id)),
+    reportActivityGrades(env, scope.store, [{ classId: section, document: { id: body.studentId, data: student.data } }],
+      [body.termId], fetcher, legacyFetcher)
+  ]);
+  const scores = ids.map(id => {
+    const grade = grades.get([section, body.studentId, body.termId, id].join("/"));
+    return grade ? grade.score / grade.maximum * 100 : activityPercent(lessons.get(base + id)?.data);
+  }).filter(score => score !== null);
+  return { average: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null };
 }
 
 async function teacherTopicOverview(scope) {
@@ -465,7 +540,7 @@ async function teacherTopicOverview(scope) {
 }
 
 export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
-  settingsFetcher = fetch, activityFetcher = fetch } = {}) {
+  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -506,7 +581,12 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
     }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
-    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher));
+    if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
+    if (body.action === "admin-report") {
+      if (actor.role !== "admin") throw fail();
+      return respond(await loadAdminReports(store));
+    }
+    if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {
       const profile = body.profile;

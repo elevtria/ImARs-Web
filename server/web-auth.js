@@ -1,6 +1,6 @@
 import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
 import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
-import { appStore } from "./supabase-app-store.js";
+import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 
 const cookieName = "__Host-imars-web";
@@ -13,7 +13,7 @@ export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const reusableShells = new WeakSet();
 export const isReusablePortalShell = response => reusableShells.has(response);
 const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
-  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"]);
+  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
@@ -68,6 +68,16 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   if (!initial && dataEnabled(env) && (clean === "admin" || clean === "admin1" || clean === "admin@imars.edu")) {
     const administrators = accounts.filter(item => item.role === "admin");
     if (administrators.length === 1) initial = administrators[0];
+  }
+  if (initial?.role === "admin" && dataEnabled(env) && supabaseWebData(env)) {
+    const fallback = initial.id !== "ADMIN1" && accounts.filter(item => item.role === "admin").length === 1;
+    const row = await store.get("users/" + initial.id) || (fallback ? await store.get("users/ADMIN1") : null);
+    const profile = row?.data;
+    const email = profile?.email || profile?.providedEmail;
+    if (profile?.role !== "admin" || typeof profile.uid !== "string" || !profile.uid ||
+        typeof email !== "string" || !email.trim() || profile.active === false ||
+        ["inactive", "disabled", "archived", "deleted"].includes(String(profile.status || "").toLowerCase())) return null;
+    return { ...initial, uid: profile.uid, email: email.trim(), adminRow: row };
   }
   if (initial?.role === "admin" && dataEnabled(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
     try {
@@ -142,7 +152,8 @@ const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
   // The approved account supplies both IDs. Its live profile and Auth status
   // can be read independently; neither result grants access on its own.
-  const pendingProfile = store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  const pendingProfile = account.adminRow ? Promise.resolve({ row: account.adminRow }) :
+    store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
@@ -157,7 +168,8 @@ export async function staffProfile(account, store, now = Date.now()) {
   const result = await pendingProfile;
   if (result.error) throw result.error;
   let row = result.row, profile = row?.data;
-  if (account.role === "admin" && (!profile || profile.uid !== account.uid) && store.env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  if (account.role === "admin" && (!profile || profile.uid !== account.uid) &&
+      store.env?.FIREBASE_SERVICE_ACCOUNT_JSON && !supabaseWebData(store.env)) {
     try {
       const fbStore = new FirestoreAdmin(store.env);
       const fbRow = (await fbStore.get("users/" + account.id)) || (account.id !== "ADMIN1" ? await fbStore.get("users/ADMIN1") : null);
@@ -342,7 +354,6 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
 
 export async function protectWebsite(context, now = Date.now()) {
   const { request, env } = context;
-  if (!enabled(env) && !dataEnabled(env)) return context.next();
   const url = new URL(request.url);
   let path;
   try {
@@ -353,16 +364,24 @@ export async function protectWebsite(context, now = Date.now()) {
     path = canonical.pathname.replace(/\/$/, "").replace(/\.html$/, "");
   } catch { return json({ error: "Invalid path." }, 400); }
   if (["/assets/", "/css/", "/js/"].some(prefix => path.startsWith(prefix)) || ["/favicon.ico", "/sw.js"].includes(path)) return context.next();
-  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  const home = path === "";
+  if (path === "/welcome") return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
+  const hasSessionCookie = request.headers.get("Cookie")?.split(/;\s*/).some(value => value.startsWith(`${cookieName}=`));
+  if (home && !hasSessionCookie) return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
+  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path === "/api/run-quiz-job" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  if (!enabled(env) && !dataEnabled(env)) return context.next();
+  const adminOnly = ["/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);
-      return new Response(null, { status: 302, headers: { Location: "/login?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
+      if (home) return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
+      const loginPath = adminOnly ? "/admin-login" : "/login";
+      return new Response(null, { status: 302, headers: { Location: loginPath + "?reason=web-session", "Cache-Control": "no-store", "Set-Cookie": cookie("", 0) } });
     }
-    const adminOnly = ["/admin-dashboard", "/admin-profile", "/manage-teachers", "/school-analytics"].includes(path);
     if (!path.startsWith("/api/") && account.role !== (adminOnly ? "admin" : "teacher") && path !== "/teacher-manual") return json({ error: "This account cannot access that page." }, 403);
+    if (path === "/admin-profile") return new Response(null, { status: 302, headers: { Location: "/admin-dashboard", "Cache-Control": "no-store" } });
     requestSessions.set(request, { env, account });
     const response = await context.next();
     const protectedResponse = new Response(response.body, response);

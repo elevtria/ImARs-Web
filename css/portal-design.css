@@ -1,5 +1,5 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
-@media screen and (prefers-reduced-motion:no-preference) {
+@media screen and (min-width:1000px) and (prefers-reduced-motion:no-preference) {
   @view-transition { navigation:auto; }
   :root { view-transition-name:none; }
   .login-cubes { view-transition-name:portal-background; }
@@ -9,12 +9,106 @@
   ::view-transition-old(portal-background),::view-transition-old(portal-navigation),::view-transition-old(portal-header) { display:none; }
   ::view-transition-new(portal-background),::view-transition-new(portal-navigation),::view-transition-new(portal-header) { animation:none; }
 }
+
+/* Carry the sign-in palette into portal content. */
 @media screen {
-:root { --portal-ink:#2c3a4f; --portal-muted:#596b7e; --portal-line:#a4b8d94d; --portal-blue:#81a2c1; --portal-gold:#feb705; }
-#drawer .drawer-panel, #drawer .side-nav, .admin-drawer-panel, .admin-side-nav { scrollbar-width:none; -ms-overflow-style:none; }
-#drawer .drawer-panel::-webkit-scrollbar, #drawer .side-nav::-webkit-scrollbar, .admin-drawer-panel::-webkit-scrollbar, .admin-side-nav::-webkit-scrollbar { display:none; width:0; height:0; }
+  :root body:not(.login-page):has(.app) {
+    background: radial-gradient(ellipse at 12% 10%, #d0efff 0, transparent 50%), linear-gradient(125deg, #b3e0ff, #8fc9f5);
+    background-attachment: fixed;
+  }
+  :root body:not(.login-page) .app {
+    --scene-ink: #102e54;
+    --scene-muted: #375c7e;
+    --scene-blue: #1262e8;
+    --scene-line: #91bce0;
+    --scene-surface: #fff;
+    --scene-soft: #f1f8ff;
+    --scene-shadow: 0 16px 42px #367bb21f;
+  }
+  :root body:not(.login-page) .app .topbar {
+    background: #e3f4ffed;
+    border-bottom: 1px solid #91bce080;
+  }
+  :root body:not(.login-page) .app .page-title { color: var(--scene-ink); font-weight: 800; letter-spacing: -.4px; }
+  :root body:not(.login-page) .app main :is(.hero, .intro) {
+    position: relative;
+    padding: 22px 24px;
+    border: 1px solid #91b8df;
+    border-left: 4px solid #247bce;
+    border-radius: 18px;
+    background: var(--scene-surface);
+    background-clip: padding-box;
+    box-shadow: 0 10px 26px #215f9c26;
+  }
+  :root body:not(.login-page) .app main :is(.hero, .intro) h1 {
+    color: var(--scene-ink);
+    font-size: clamp(26px, 2.6vw, 36px);
+    letter-spacing: -1.2px;
+    line-height: 1.2;
+  }
+  :root body:not(.login-page) .app main :is(.hero, .intro) p { color: var(--scene-muted); }
+  :root body:not(.login-page) .app main :is(.card.section, .term-card, .progress-card, .scan-card, .recent-card, .panel, .profile-info-card, .profile-session-card, .teacher-record, .teacher-metric, .teacher-analytics-card, .section-analytics-card, .quiz-step-pane, .manual-sheet) {
+    border: 1px solid var(--scene-line);
+    border-radius: 24px;
+    background: var(--scene-surface);
+    box-shadow: var(--scene-shadow);
+  }
+  :root body:not(.login-page) .app main .stats .stat-link {
+    --card-accent: var(--scene-blue);
+    border: 1px solid var(--scene-line);
+    border-top: 3px solid var(--card-accent);
+    border-radius: 24px;
+    background: linear-gradient(125deg, var(--scene-surface) 55%, var(--scene-soft));
+    box-shadow: var(--scene-shadow);
+  }
+  :root body:not(.login-page) .app main .stats .stat-link:nth-child(3) { --card-accent: #feb705; }
+  :root body:not(.login-page) .app main .stats .stat-link .value { color: var(--scene-ink); letter-spacing: -1.5px; }
+  :root body:not(.login-page) .app main .stats .stat-link .label { color: var(--scene-muted); font-size: 11px; letter-spacing: 1px; }
+  :root body:not(.login-page) .app main .stats .stat-link .hint { color: var(--scene-muted); }
+  :root body:not(.login-page) .app main .summary-icon { color: var(--scene-blue); background: var(--scene-soft); border: 1px solid var(--scene-line); border-radius: 14px; }
+  :root body:not(.login-page) .app main .stats .stat-link:is(:hover, :focus-visible) { background: var(--scene-soft); border-color: var(--scene-blue); box-shadow: 0 12px 32px #1262e82e; }
+  :root body:not(.login-page) .app main :is(.section-head, .panel-heading) h2 { color: var(--scene-ink); letter-spacing: -.6px; }
+  :root body:not(.login-page) .app main :is(.module, .manual-step-card, .manual-tool-card) { border-color: var(--scene-line); background: var(--scene-soft); border-radius: 16px; }
+  :root body:not(.login-page) .app main .module:is(:hover, :focus-visible) { background: #cce3ff; border-color: #5596de; box-shadow: 0 4px 14px #247bce26; }
+  :root body:not(.login-page) .app main :is(.scan-btn, .banner-btn) { color: #fff; background: var(--scene-blue); border: 1px solid var(--scene-blue); border-radius: 12px; box-shadow: 0 8px 20px #1262e82b; }
+  :root body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #084bc0; border-color: #084bc0; }
+  :root body:not(.login-page) .app main .record { background: var(--scene-surface); border: 1px solid var(--scene-line); border-radius: 16px; background-clip: padding-box; box-shadow: 0 8px 24px #367bb214; transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+  :root body:not(.login-page) .app main :is(.record, .teacher-record):is(:hover, :focus-within) { background: #cce3ff; border-color: #5596de; box-shadow: inset 3px 0 #247bce, 0 6px 18px #247bce26; }
+  :root:not([data-theme="dark"]) #drawer .drawer-panel,
+  :root:not([data-theme="dark"]) #drawer .side-user { background: #e1f4ff; }
+
+  :root[data-theme="dark"] body:not(.login-page):has(.app) {
+    background: radial-gradient(ellipse at 12% 5%, #1b599a 0, transparent 55%), linear-gradient(125deg, #123a69, #0b264d);
+    background-attachment: fixed;
+  }
+  :root[data-theme="dark"] body:not(.login-page) .app {
+    --scene-ink: #e4f1ff;
+    --scene-muted: #bbd4ec;
+    --scene-blue: #83c6ff;
+    --scene-line: #456b93;
+    --scene-surface: #142e4d;
+    --scene-soft: #1b3a5d;
+    --scene-shadow: 0 16px 42px #020d1e33;
+  }
+  :root[data-theme="dark"] body:not(.login-page) .app .topbar { background: #102d4eed; border-color: #456b9380; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.hero, .intro) { background: #1d324b; border-color: #577899; border-left-color: #78baff; box-shadow: 0 10px 26px #020d1e55; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.record, .teacher-record, .module):is(:hover, :focus-within) { background: #28496d; border-color: #83c6ff; box-shadow: inset 3px 0 #83c6ff, 0 6px 18px #020d1e33; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn) { background: #1262e8; border-color: #4085ed; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #297bf5; }
+}
+@media screen and (max-width: 640px) {
+  :root body:not(.login-page) .app main :is(.hero, .intro) { padding: 18px; border-radius: 18px; }
+  :root body:not(.login-page) .app main .stats .stat-link { border-radius: 20px; }
+}
+@media screen and (prefers-reduced-motion: reduce) {
+  :root body:not(.login-page) .app main .record { transition: none; }
+}
+@media screen {
+:root { --portal-ink:#163858; --portal-muted:#526f8a; --portal-line:#b4d5ee; --portal-blue:#247bce; --portal-gold:#feb705; }
+#drawer .drawer-panel, #drawer .side-nav { scrollbar-width:none; -ms-overflow-style:none; }
+#drawer .drawer-panel::-webkit-scrollbar, #drawer .side-nav::-webkit-scrollbar { display:none; width:0; height:0; }
 body:not(.login-page) :is(.hero,.intro) { padding:22px 24px; border-left:4px solid var(--portal-gold); border-radius:18px; background:linear-gradient(110deg,#ffffffb8,#bfc8e230); }
-body:not(.login-page) :is(.card.section,.term-card,.progress-card,.scan-card,.recent-card,.panel,.profile-info-card,.profile-session-card) { border:1px solid #ffffffbd; border-radius:20px; box-shadow:0 8px 28px #81a2c11a; background:linear-gradient(135deg,#fffffff0,#f6f8fcdf); }
+body:not(.login-page) :is(.card.section,.term-card,.progress-card,.scan-card,.recent-card,.panel,.profile-info-card,.profile-session-card,.teacher-record,.teacher-metric,.teacher-analytics-card,.section-analytics-card) { border:1px solid #ffffffbd; border-radius:20px; box-shadow:0 8px 28px #81a2c11a; background:linear-gradient(135deg,#fffffff0,#f6f8fcdf); }
 body:not(.login-page) :is(.section-head,.panel-heading) h2 { color:var(--portal-ink); letter-spacing:-.025em; }
 body:not(.login-page) :is(.progress-card,.scan-card,.recent-card) > h2 { padding-left:12px; border-left:4px solid var(--portal-blue); }
 body:not(.login-page) :is(.metric-card,.profile-card) { border-radius:20px; border-top:3px solid var(--portal-blue); box-shadow:0 8px 24px #81a2c11a; }
@@ -25,6 +119,5 @@ body:not(.login-page) :is(.table-wrap,.table-scroll) thead { background:#bfc8e23
 body:not(.login-page) :is(.table-wrap,.table-scroll) tbody tr:nth-child(even) { background:#bfc8e214; }
 body:not(.login-page) :is(input,select,textarea):focus-visible { outline:2px solid var(--portal-blue); outline-offset:2px; }
 body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outline:3px solid var(--portal-blue); outline-offset:3px; }
-body:not(.login-page) :is(.admin-nav-link,.admin-nav-item).active { background:var(--portal-blue); color:#fff; }
 @media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
 }

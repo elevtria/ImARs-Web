@@ -9,100 +9,90 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
   <link rel="stylesheet" href="css/admin-dashboard.css" />
   <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body data-auth-pending>
+<body class="admin-portal admin-overview" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
-  <header class="admin-topbar">
-    <div class="admin-topbar-inner">
-      <div class="admin-topbar-left">
-        <button class="menu-button" id="adminMenuButton" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="adminNavigation">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+  <div class="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <span class="current-page">Overview</span>
+        <span class="page-title">Overview</span>
       </div>
-      <div class="admin-topbar-right">
-        <button class="menu-button admin-notification" type="button" aria-label="Notifications">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5"/><path d="M9.5 17a2.5 2.5 0 0 0 5 0"/></svg>
-          <span class="notification-dot" aria-hidden="true"></span>
-        </button>
+      <div class="topbar-right">
         <div class="school-year-control">
           <label for="schoolYearSelect">School year for all teachers</label>
-          <select class="admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <select class="sy-chip admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
           <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
         </div>
       </div>
     </div>
   </header>
 
-  <aside class="admin-drawer" id="adminNavigation" aria-hidden="true">
-    <div class="admin-drawer-panel" role="navigation" aria-label="Admin portal">
-      <div class="admin-drawer-heading">
-        <a class="drawer-brand" href="admin-dashboard.html" aria-label="Admin dashboard"><img class="admin-brand-mark" src="assets/imars-logo.png" alt="" /><div><strong>ImARs</strong><small>School Admin</small></div></a>
-        <button class="drawer-close" id="adminDrawerClose" type="button" aria-label="Close navigation">×</button>
-      </div>
-      <nav class="admin-side-nav">
-        <a class="admin-nav-link active" href="admin-dashboard.html" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
-        <a class="admin-nav-link" href="manage-teachers.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
-        <a class="admin-nav-link" href="school-analytics.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
-        <a class="admin-nav-link" href="admin-profile.html"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Admin Profile</a>
-      </nav>
-      <div class="admin-side-user"><span class="admin-side-avatar">DS</span><span><strong>Dr. Maria Santos</strong><small>School Administrator</small></span></div>
-    </div>
-  </aside>
-
   <main class="dashboard-content" inert data-auth-shell>
-    <section class="page-intro" data-auth-shell>
+    <section class="page-intro hero" data-auth-shell>
       <div>
         <h1 data-auth-shell>Admin Overview</h1>
-        <p>School-wide performance · AR Learning Platform · <span data-school-year>SY 2026–27</span></p>
+        <p>School-wide performance across all three terms</p>
       </div>
     </section>
 
-<section class="metric-grid" aria-label="School summary" data-loading-path="users" data-loading-label="Loading school summary…" data-auth-shell data-await-content="admin-report">
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label purple">Total Teachers</span>
-        <strong class="metric-value" id="totalTeachersVal">0</strong>
-        <span class="metric-note" id="totalTeachersNote">0 registered</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label cyan">Total Students</span>
-        <strong class="metric-value" id="totalStudentsVal">0</strong>
-        <span class="metric-note" id="totalStudentsNote">Across all sections</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label green">School Avg Post-Test</span>
-        <strong class="metric-value" id="schoolAvgPostVal">0%</strong>
-        <span class="metric-note" id="schoolAvgPreNote">Up from 0% pre-test</span>
-      </article>
-      <article class="metric-card" data-auth-shell>
-        <span class="metric-label pink">Total AR Hours</span>
-        <strong class="metric-value" id="totalArHoursVal">0h</strong>
-        <span class="metric-note">All teachers combined</span>
-      </article>
+    <section class="stats" aria-label="School summary" data-auth-shell data-await-content="admin-report">
+      <a class="card stat stat-link" href="manage-teachers.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/></svg></span>
+        <div class="label" data-public-label>Teachers</div>
+        <div class="value" id="totalTeachersVal">—</div>
+        <div class="hint">Registered teachers</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg></span>
+        <div class="label" data-public-label>Students</div>
+        <div class="value" id="totalStudentsVal">—</div>
+        <div class="hint">Active across all sections</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>
+        <div class="label" data-public-label>Avg Post-Test</div>
+        <div class="value" id="schoolAvgPostVal">—</div>
+        <div class="hint" id="schoolAvgPreNote">Completed tests</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
+      <a class="card stat stat-link" href="school-analytics.html" data-auth-shell>
+        <span class="summary-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></span>
+        <div class="label" data-public-label>Total AR Time</div>
+        <div class="value" id="totalArHoursVal">—</div>
+        <div class="hint">Across all sections</div>
+        <span class="stat-link-arrow" aria-hidden="true">↗</span>
+      </a>
     </section>
 
     <section class="panel learning-panel" aria-labelledby="learningTitle" data-auth-shell data-await-content="admin-report">
       <h2 id="learningTitle" data-public-label>School-Wide Learning Gain</h2>
       <div class="learning-content">
         <div class="learning-ring" id="learningRing" role="img" aria-label="School average post-test score">
-          <div class="ring-center"><strong id="ringPostScore">0%</strong><span>school avg</span></div>
+          <div class="ring-center"><strong id="ringPostScore">—</strong><span>school avg</span></div>
         </div>
         <div class="learning-metrics">
           <div class="learning-row">
-            <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan" id="meterPreVal">0%</strong></div>
+            <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan" id="meterPreVal">—</strong></div>
             <div class="meter"><i class="pre-meter" id="meterPreBar" style="width:0%"></i></div>
           </div>
           <div class="learning-row">
-            <div class="learning-meta"><span>School Post-Test Average</span><strong class="green" id="meterPostVal">0%</strong></div>
+            <div class="learning-meta"><span>School Post-Test Average</span><strong class="green" id="meterPostVal">—</strong></div>
             <div class="meter"><i class="post-meter" id="meterPostBar" style="width:0%"></i></div>
           </div>
           <div class="learning-row">
-            <div class="learning-meta"><span>Average Improvement</span><strong class="purple" id="meterGainVal">0%</strong></div>
+            <div class="learning-meta"><span>Change in Average</span><strong class="purple" id="meterGainVal">—</strong></div>
             <div class="meter"><i class="gain-meter" id="meterGainBar" style="width:0%"></i></div>
           </div>
         </div>
@@ -112,7 +102,7 @@
     <section class="panel teacher-panel" aria-labelledby="teacherTitle" data-auth-shell data-await-content="admin-report">
       <div class="panel-heading">
         <h2 id="teacherTitle" data-public-label>Teacher Performance Snapshot</h2>
-        <span class="teacher-count" id="tableTeacherCount">0 teachers</span>
+        <span class="teacher-count" id="tableTeacherCount"></span>
       </div>
       <div class="table-scroll">
         <table>
@@ -122,7 +112,7 @@
               <th scope="col">Students</th>
               <th scope="col">Avg Pre</th>
               <th scope="col">Avg Post</th>
-              <th scope="col">AR Hours</th>
+              <th scope="col">AR Time</th>
               <th scope="col">Gain</th>
             </tr>
           </thead>
@@ -137,9 +127,35 @@
       </div>
     </section>
   </main>
+  </div>
 
-  <button class="help-button" type="button" aria-label="Help">?</button>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Admin portal">
+      <a class="brand" href="admin-dashboard.html" aria-label="Admin dashboard">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="" />
+        <div><strong>ImARs</strong><small>School Admin</small></div>
+      </a>
+      <nav class="side-nav">
+        <a class="nav-item active" href="admin-dashboard.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="nav-item" href="manage-teachers.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="nav-item" href="admin-manual.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v14H6a2 2 0 1 1 0-4h12M4 18V6a2 2 0 0 1 2-2m2 4h6m-6 4h6"/></svg>Admin Manual</a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">A</div>
+        <div class="user-meta"><strong>Admin</strong><small>School Administrator</small></div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options" aria-expanded="false" aria-controls="accountMenu">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden><a href="admin-login.html">Log out</a></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <a class="help-button" href="admin-manual.html" aria-label="Open Admin Manual">?</a>
   <script type="module" src="js/admin-dashboard.js"></script>
+  <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
 </body>
 </html>

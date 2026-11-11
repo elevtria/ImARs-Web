@@ -41,6 +41,19 @@ test("live staff profile and Auth status checks overlap, and either failed check
   await assert.rejects(staffProfile(accounts[0],{get:async()=>({data:{uid:'teacher-a',role:'teacher',active:true}}),identity:async()=>({email:'teacher@example.test',disabled:true})}),error=>error.status===401);
 });
 
+test("Supabase supplies the approved admin profile and Firebase Auth still verifies the identity", async () => {
+  const env = { WEB_DATA_ENABLED: "true", IMARS_SUPABASE_WEB_DATA: "true", FIREBASE_SERVICE_ACCOUNT_JSON: "unused Firestore credential" };
+  const calls = [];
+  const row = { id: "ADMIN1", data: { role: "admin", uid: "current-admin", email: "current@example.test", active: true } };
+  const store = { env, get: async path => { calls.push(path); return path === "users/ADMIN1" ? row : null; },
+    identity: async uid => { calls.push(uid); return { email: row.data.email }; } };
+  const admin = await resolveStaff(env, "ADMIN1000", accounts, store);
+  assert.equal((await staffProfile(admin, store)).profile.uid, "current-admin");
+  assert.deepEqual(calls, ["users/ADMIN1000", "users/ADMIN1", "current-admin"]);
+  row.data.active = false;
+  assert.equal(await resolveStaff(env, "ADMIN1000", accounts, store), null);
+});
+
 test("mobile session invalidation persists across Worker restarts and never creates public access",async()=>{
   const values=new Map(),state={storage:{get:async key=>structuredClone(values.get(key)),put:async(key,value)=>values.set(key,structuredClone(value))}};
   let worker=new WebLoginState(state,{});
@@ -63,7 +76,9 @@ test("security headers prevent HTML caching and preserve API bodies and existing
     assert.equal(await response.text(), body);
     assert.equal(response.headers.get("Cache-Control"), type === "text/html" ? "private, no-store" : "no-store");
     assert.match(response.headers.get("Set-Cookie"), /existing=value/);
-    assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+    assert.equal(response.headers.get("Content-Security-Policy"), /^\/login(?:\.html)?$/.test(path)
+      ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:")
+      : CONTENT_SECURITY_POLICY);
     const scriptPolicy = CONTENT_SECURITY_POLICY.split(";").map(rule => rule.trim()).find(rule => rule.startsWith("script-src "));
     assert.ok(!scriptPolicy.includes("'unsafe-inline'") && !scriptPolicy.includes("'unsafe-eval'"));
     assert.ok(CONTENT_SECURITY_POLICY.includes("script-src-attr 'none'"));
@@ -79,7 +94,7 @@ test("security headers also cover redirects from protected routes", async () => 
   const response = await onRequest({ request: new Request("https://imars.example.test/admin-dashboard"), env: app.env,
     next: async () => { throw new Error("An unauthenticated request must not open the page"); } });
   assert.equal(response.status, 302);
-  assert.equal(response.headers.get("Location"), "/login?reason=web-session");
+  assert.equal(response.headers.get("Location"), "/admin-login?reason=web-session");
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
 });
 
@@ -117,8 +132,74 @@ test("both sign-in pages stay public with security headers while protected HTML 
   for (const path of ["/login", "/login.html", "/admin-login", "/admin-login.html"]) {
     const response = await onRequest({ request: new Request("https://imars.example.test" + path), env: app.env,
       next: async () => new Response("Sign in", { headers: { "Content-Type": "text/html" } }) });
-    assert.equal(response.status, 200); assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
+    assert.equal(response.status, 200);
+    const policy = response.headers.get("Content-Security-Policy");
+    assert.equal(policy, CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:"));
+    assert.ok(!policy.includes("'unsafe-eval'"));
   }
+});
+
+test("the public entry goes directly to login without exposing the protected dashboard", async () => {
+  const app = fixture();
+  const root = await protectWebsite({ request: new Request("https://imars.example.test/"), env: app.env,
+    next: async () => { throw Error("The dashboard shell must not be returned"); } });
+  assert.equal(root.status, 302); assert.equal(root.headers.get("Location"), "/login");
+  for (const path of ["/welcome", "/welcome.html"]) {
+    const response = await app.page(path);
+    assert.equal(response.status, 302); assert.equal(response.headers.get("Location"), "/login");
+  }
+  for (const path of ["/index", "/index.html", "/student-records"]) {
+    const response = await protectWebsite({ request: new Request("https://imars.example.test" + path), env: app.env,
+      next: async () => { throw Error("Private data requires authentication"); } });
+    assert.equal(response.status, 302); assert.match(response.headers.get("Location"), /^\/login/);
+  }
+});
+
+test("old admin profile bookmarks lead signed-in admins to the overview", async () => {
+  const app = fixture();
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  const response = await app.page("/admin-profile.html", admin);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "/admin-dashboard");
+  assert.equal((await app.page("/admin-profile", teacher)).status, 403);
+});
+
+test("the admin manual requires an administrator session", async () => {
+  const app = fixture();
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  for (const path of ["/admin-manual", "/admin-manual.html"]) {
+    const guest = await app.page(path);
+    assert.equal(guest.status, 302);
+    assert.match(guest.headers.get("Location"), /^\/admin-login\?/);
+    assert.equal((await app.page(path, teacher)).status, 403);
+    assert.equal((await app.page(path, admin)).status, 200);
+  }
+});
+
+test("hosted index canonicalization keeps a signed-in teacher on the dashboard", async () => {
+  const app = fixture();
+  const cookie = app.cookieOf(await app.login("TEACH1000", "correct"));
+  // Static hosts canonicalize /index.html to /. That second request must
+  // verify the session and serve the dashboard instead of returning to login.
+  const canonical = await protectWebsite({ env: app.env,
+    request: new Request("https://imars.example.test/index.html", { headers: { Cookie: cookie } }),
+    next: async () => new Response(null, { status: 308, headers: { Location: "/" } }) });
+  assert.equal(canonical.headers.get("Location"), "/");
+  const dashboard = await app.page("/", cookie);
+  assert.equal(dashboard.status, 200);
+  assert.equal(await dashboard.text(), "portal-page");
+  assert.equal(dashboard.headers.get("Location"), null);
+  assert.equal((await app.page("/admin-dashboard", cookie)).status, 403);
+});
+
+test("an invalid session cookie cannot turn the public entry into a dashboard", async () => {
+  const app = fixture();
+  const response = await app.page("/", "__Host-imars-web=invalid");
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "/login");
+  assert.match(response.headers.get("Set-Cookie"), /Max-Age=0/);
 });
 
 function fixture() {

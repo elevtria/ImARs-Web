@@ -138,7 +138,9 @@ test("mismatched UIDs, expired visits, external history and cross-portal navigat
     const app = page({ saved: grant(), referrer: "https://imars.example.test/index", ...options });
     app.observe(); await flush();
     assert.deepEqual(app.deliveries, []); assert.equal(app.body.pending, true);
-    assert.match(app.location.redirect, /\/login\?reason=(web-session|access-denied|access-unavailable)/);
+    const redirect = new URL(app.location.redirect, "https://imars.example.test");
+    assert.equal(redirect.pathname, options.path === "/admin-dashboard" ? "/admin-login" : "/login");
+    assert.match(redirect.searchParams.get("reason"), /^(web-session|access-denied|access-unavailable)$/);
   }
 });
 
@@ -186,7 +188,7 @@ test("the teacher and admin sidebars reuse verified entries from this visit and 
   const tabId = "imars-web:fixture-tab";
   for (const { role, current, previous, next } of [
     { role: "teacher", current: "/topic-scheduler", previous: "/", next: "/student-records" },
-    { role: "admin", current: "/admin-profile", previous: "/admin-dashboard", next: "/manage-teachers" }
+    { role: "admin", current: "/school-analytics", previous: "/admin-dashboard", next: "/manage-teachers" }
   ]) {
     const opened = [], entry = (index, path, visit) => ({ index, key: String(index), url: origin + path, getState: () => ({ imarsVisit: visit }) });
     const currentEntry = entry(1, current);
@@ -240,7 +242,7 @@ test("blocked browser storage cannot leave a partially signed-in account", async
 
 test("every portal includes the initial privacy guard and uses the shared authentication wrapper", () => {
   const root = new URL("../", import.meta.url);
-  for (const file of readdirSync(root).filter(file => file.endsWith(".html") && !file.startsWith("_") && !["login.html", "admin-login.html"].includes(file))) {
+  for (const file of readdirSync(root).filter(file => file.endsWith(".html") && !file.startsWith("_") && !["welcome.html", "login.html", "admin-login.html"].includes(file))) {
     const html = readFileSync(new URL(file, root), "utf8");
     assert.match(html, /<body\b[^>]*\bdata-auth-pending(?:\s|>)/);
     assert.match(html, /<main\b[^>]*\binert\b[^>]*\bdata-auth-shell\b/);

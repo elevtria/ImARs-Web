@@ -5,10 +5,14 @@ import { initTeacherNotifications } from "./teacher-notifications.js";
 
 const nameElement = document.querySelector(".side-user .user-meta strong");
 const avatarElement = document.querySelector(".side-user .user-avatar");
+const adminPortal = document.body.classList.contains("admin-portal");
 
 document.addEventListener("click", async event => {
-  const link = event.target.closest("a[href]");
-  if (!link || new URL(link.href, window.location.href).pathname.replace(/\.html$/, "") !== "/login") return;
+  const link = event.target.closest(".account-menu a[href]");
+  if (!link) return;
+  const url = new URL(link.href, window.location.href);
+  const loginPath = adminPortal ? "/admin-login" : "/login";
+  if (url.origin !== window.location.origin || url.pathname.replace(/\.html$/, "") !== loginPath) return;
   event.preventDefault();
   try {
     const app = getApps().find(candidate => candidate.name === "[DEFAULT]");
@@ -26,23 +30,20 @@ if (nameElement && avatarElement) {
   const app = getApps().find((candidate) => candidate.name === "[DEFAULT]") || initializeApp();
   const auth = getAuth(app);
   initWebSession(auth);
-  initTeacherNotifications(app, auth);
+  if (!adminPortal) initTeacherNotifications(app, auth);
 
   onAuthStateChanged(auth, (user) => {
     if (!user) return;
 
     try {
-      // Identity already returns the name from the current verified profile.
-      const teacherName = user.displayName || "Teacher";
-
-      nameElement.textContent = teacherName;
-
-      const nameParts = teacherName.trim().split(/\s+/).filter(Boolean);
+      const name = user.displayName || (adminPortal ? "Admin" : "Teacher");
+      nameElement.textContent = name;
+      const nameParts = name.trim().split(/\s+/).filter(Boolean);
       avatarElement.textContent = nameParts.length > 1
         ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
-        : (nameParts[0] || "T").slice(0, 2).toUpperCase();
+        : (nameParts[0] || (adminPortal ? "A" : "T")).slice(0, 2).toUpperCase();
     } catch (error) {
-      console.error("Unable to load the signed-in teacher name:", error);
+      console.error("Unable to display the signed-in account name:", error);
     }
   });
 }
