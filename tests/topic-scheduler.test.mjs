@@ -132,6 +132,23 @@ test("verified teacher identities load sections without a redundant profile requ
   assert.match(app.element("terms").innerHTML, /0\/4 unlocked/);
 });
 
+test("a shared unlocked default can still be released to the selected section", async () => {
+  const app = await scheduler();
+  const topic = app.records.get("term_02")[0];
+  topic.isLocked = false;
+  topic.sectionSchedules = { A: { isLocked: true, scheduledDate: "" } };
+  app.emit("term_02");
+  app.element("scheduleSection").value = "C";
+  app.element("scheduleSection").events.change();
+  await app.click("lock", "1-0");
+  assert.deepEqual(topic.sectionSchedules, {
+    A: { isLocked: true, scheduledDate: "" },
+    C: { isLocked: false, scheduledDate: "", activityDeadlineUtc: "" }
+  });
+  await app.click("lock", "1-0");
+  assert.equal(topic.sectionSchedules.C.isLocked, true);
+});
+
 test("a fresh scheduler reveals populated section choices and explains why schedule cards wait", async () => {
   const app = await scheduler({ chooseSection: false, identity: { uid: "test-teacher", role: "teacher", id: "TEACH1000" } });
   assert.match(app.element("scheduleSection").innerHTML, /Section A/);
@@ -180,7 +197,7 @@ test("live snapshots update badges, unlocked counts, and progress together", asy
   const app = await scheduler();
   assert.match(app.element("terms").innerHTML, /0\/4 unlocked/);
   assert.match(app.element("yearProgress").innerHTML, /aria-valuenow="0"/);
-  app.records.get("term_01")[0].isLocked = false;
+  app.records.get("term_01")[0].sectionSchedules = { A: { isLocked: false, scheduledDate: "" } };
   app.emit("term_01");
   assert.match(app.element("terms").innerHTML, /1\/4 unlocked/);
   assert.match(app.element("terms").innerHTML, /Partly unlocked/);
@@ -290,7 +307,7 @@ test("a confirmed activity lock stays selected before the delayed listener refre
 
 test("background snapshots retain unsaved activity access choices", async () => {
   const app = await scheduler();
-  app.records.get("term_01")[0].isLocked = false; app.emit("term_01");
+  app.records.get("term_01")[0].sectionSchedules = { A: { isLocked: false, scheduledDate: "" } }; app.emit("term_01");
   app.activityChange("0-0", "locked");
   app.emit("term_02");
   assert.match(app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1], /value="locked" selected/);
@@ -298,7 +315,8 @@ test("background snapshots retain unsaved activity access choices", async () => 
 
 test("release-date drafts survive background updates and are cleared when changing sections", async () => {
   const app = await scheduler();
-  app.records.get("term_01")[0].isLocked = false; app.emit("term_01");
+  const released = { isLocked: false, scheduledDate: "" };
+  app.records.get("term_01")[0].sectionSchedules = { A: released, C: { ...released } }; app.emit("term_01");
   app.activityChange("0-0", "scheduled", "2099-10-20"); app.emit("term_03");
   const html = app.element("activityScheduleList").innerHTML.match(/data-activity="0-0"([\s\S]*?)<\/article>/)[1];
   assert.match(html, /value="scheduled" selected/);

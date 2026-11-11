@@ -11,7 +11,7 @@ const watched = new WeakSet();
 const refreshViews = new Map();
 const pendingViews = new Map();
 
-export function watchVisibleData(app, user, refresh, intervalMs = 60000) {
+export function watchVisibleData(app, user, refresh, intervalMs = 60000, refreshOnFocus = false) {
   if (typeof window === "undefined" || !window.addEventListener || !document.addEventListener) return () => {};
   let stopped = false, running = false, timer, last = Date.now();
   const stop = () => {
@@ -28,7 +28,7 @@ export function watchVisibleData(app, user, refresh, intervalMs = 60000) {
     try { await refresh(); } catch (error) { console.warn("Background data update failed:", error); }
     finally { running = false; }
   };
-  const focus = () => { if (Date.now() - last >= intervalMs) void run(); };
+  const focus = () => { if (Date.now() - last >= (refreshOnFocus ? 1000 : intervalMs)) void run(); };
   const tick = async () => { if (Date.now() - last >= intervalMs) await run(); if (!stopped) timer = setTimeout(tick, intervalMs); };
   window.addEventListener("focus", focus);
   window.addEventListener("pagehide", stop);
@@ -75,7 +75,7 @@ async function renderTeacherView(options) {
   if (getAuth(app).currentUser?.uid !== user.uid) return;
   if (!refreshOnly) {
     refreshViews.get(page)?.();
-    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true }), refreshIntervalMs));
+    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true }), refreshIntervalMs, options.refreshOnFocus));
   }
   const cache = prepareTeacherCache(app, user);
   let version = cache.version();

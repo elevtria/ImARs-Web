@@ -7,6 +7,7 @@ import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
 import { activityPercent } from "../js/activity-score.js";
+import { activeProfile } from "./student-quiz-auth.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
 const fail = (message = "You cannot access that record.", status = 403) => Object.assign(new Error(message), { status });
@@ -523,11 +524,11 @@ async function studentActivityAverage(scope, body, env, fetcher, legacyFetcher) 
 
 async function teacherTopicOverview(scope) {
   if (scope.actor.role !== "teacher") throw fail();
-  const classes = await scope.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: scope.actor.id }] });
-  const sectionIds = classes.map(row => row.id);
+  const classes = await scope.assignedClasses();
+  const sectionIds = classes.filter(row => part(row.id) && activeProfile(row.data)).map(row => row.id);
   const termIds = ["term_01", "term_02", "term_03"];
   const paths = termIds.flatMap(termId => [1, 2, 3, 4].map(index => `terms/${termId}/lessons/lesson_0${index}`));
-  const records = classes.length ? await scope.store.getAll(paths, { fieldPaths: ["title", "name", "isLocked", "scheduledDate", "sectionSchedules"] }) : new Map();
+  const records = sectionIds.length ? await scope.store.getAll(paths, { fieldPaths: ["title", "name", "isLocked", "scheduledDate", "sectionSchedules"] }) : new Map();
   return { sectionIds, terms: termIds.map(id => ({ id, lessons: paths.filter(path => path.startsWith(`terms/${id}/`)).flatMap(path => {
     const data = records.get(path)?.data;
     if (!data) return [];

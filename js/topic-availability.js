@@ -17,9 +17,7 @@ export function schoolTodayISO(now = new Date()) {
 export function currentScheduledTerm(terms, sectionIds, today = schoolTodayISO()) {
   for (const term of [...terms].sort((a, b) => b.id.localeCompare(a.id))) {
     if (term.lessons.some(lesson => sectionIds.some(sectionId => {
-      // Shared unlocked defaults do not prove that this teacher opened a term.
-      if (!lesson.sectionSchedules || !Object.hasOwn(lesson.sectionSchedules, sectionId)) return false;
-      const schedule = sectionSchedule(lesson, sectionId);
+      const schedule = teacherSectionSchedule(lesson, sectionId);
       return !topicAvailability({ locked: schedule.isLocked, date: schedule.scheduledDate }, today).locked;
     }))) return term.id;
   }
@@ -62,6 +60,12 @@ export function sectionSchedule(lesson, sectionId) {
     return { isLocked: true, scheduledDate: "" };
   }
   return { isLocked: value.isLocked, scheduledDate: value.scheduledDate || "" };
+}
+
+export function teacherSectionSchedule(lesson, sectionId) {
+  // A shared default does not record a release by this teacher.
+  if (!Object.hasOwn(lesson.sectionSchedules ?? {}, sectionId)) return { isLocked: true, scheduledDate: "" };
+  return sectionSchedule(lesson, sectionId);
 }
 
 export function topicAvailability(topic, today = todayISO()) {

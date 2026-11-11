@@ -176,10 +176,10 @@ async function saveStaffSchedules(store, scope, body, now) {
   }
   if (body.setDeadline && body.activityDeadlineUtc && Date.parse(body.activityDeadlineUtc) <= now.getTime())
     throw failure("INVALID_SCHEDULE", 400, "Choose a deadline in the future.");
-  const sections = (await staffScheduleSections(store, scope)).filter(section => !body.sectionId || section.id === body.sectionId);
-  if (!sections.length) throw forbidden();
-  // Track individual ownership reads inside the same transaction as the topic writes.
-  for (const section of sections) await permittedSection(store, scope, section.id);
+  const sectionIds = body.sectionId ? [body.sectionId] : (await staffScheduleSections(store, scope)).map(section => section.id);
+  if (!sectionIds.length) throw forbidden();
+  // Validate each target's current ownership in the same transaction as the topic writes.
+  for (const sectionId of sectionIds) await permittedSection(store, scope, sectionId);
   const writes = [];
   const paths = new Set();
   for (const topic of body.topics) {
@@ -192,14 +192,14 @@ async function saveStaffSchedules(store, scope, body, now) {
     const row = await store.get(path);
     if (!row || row.updateTime !== topic.revision) throw conflict("SCHEDULE_CHANGED", "The schedule changed. Review it and try again.");
     const updates = [];
-    for (const section of sections) {
+    for (const sectionId of sectionIds) {
       try {
-        const updated = updateSectionSchedule(row.data, section.id, {
-          ...(body.preserveAccess ? sectionSchedule(row.data, section.id)
+        const updated = updateSectionSchedule(row.data, sectionId, {
+          ...(body.preserveAccess ? sectionSchedule(row.data, sectionId)
             : { isLocked: body.isLocked, scheduledDate: body.scheduledDate }),
           ...(body.setDeadline ? { activityDeadlineUtc: body.activityDeadlineUtc } : {})
         });
-        updates.push([section.id, updated]);
+        updates.push([sectionId, updated]);
       } catch (error) { throw failure("INVALID_SCHEDULE", 400, error.message); }
     }
     writes.push({ operation: "update", path, updateTime: row.updateTime,

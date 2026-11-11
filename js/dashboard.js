@@ -3,7 +3,7 @@ import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { getTeacherTopicOverview, getDashboardSummary } from "./firebase-data.js";
-import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "./topic-availability.js";
+import { currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability } from "./topic-availability.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -43,7 +43,7 @@ function renderCurrentTopics(data = topicOverview) {
   if (!data.sectionIds.length) { modules.textContent = "No sections assigned yet."; return; }
   for (const [index, lesson] of (term?.lessons || []).entries()) {
     const available = data.sectionIds.some(sectionId => {
-      const schedule = sectionSchedule(lesson, sectionId);
+      const schedule = teacherSectionSchedule(lesson, sectionId);
       return !topicAvailability({ locked: schedule.isLocked, date: schedule.scheduledDate }, today).locked;
     });
     modules.insertAdjacentHTML("beforeend", `<article class="module"><div class="badge ${available ? "done" : "next"}">${index + 1}</div><div><h3>${escapeHtml(lesson.title)}</h3><span>${available ? "Available" : "Upcoming"}</span></div></article>`);
@@ -122,7 +122,7 @@ const report = createTeacherReport({ app,
 onAuthStateChanged(auth, async user => {
   if (!user) { topicOverview = null; topicOwnerUid = null; clearTimeout(topicTimer); clearTimeout(summaryTimer); window.location.href = "login.html"; return; }
   topicOwnerUid = user.uid;
-  const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", freshForMs: 300_000, refreshIntervalMs: 300_000,
+  const topics = showTeacherView({ app, user, page: "dashboard-topics-v1", freshForMs: 0, refreshIntervalMs: 15_000, refreshOnFocus: true,
     load: () => getTeacherTopicOverview(), render: renderCurrentTopics })
     .catch(error => {
       console.error("Topic overview update failed:", error);

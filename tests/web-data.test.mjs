@@ -8,6 +8,7 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 
 import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
+import { currentScheduledTerm } from "../js/topic-availability.js";
 const stamp = { $type: "serverTimestamp" };
 
 test("website and mobile topic locks share one durable, section-scoped schedule", async () => {
@@ -81,6 +82,59 @@ test("website and mobile topic locks share one durable, section-scoped schedule"
   assert.equal(websiteStats.status, 200);
   assert.deepEqual(mobileStats.summary, (await websiteStats.json()).summary);
   assert.equal((await mobile("staff-dashboard", "student-a")).status, 403);
+
+  // The teacher has a second active section, plus an archived section with a
+  // previously released topic. Neither should be changed when A is selected.
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  app.data.set("classes/archived", { teacherId: "TEACH1000", status: "archived" });
+  app.data.set("users/0026271002", { uid: "student-c", role: "student", classCode: "C", teacherId: "TEACH1000" });
+  for (const termId of ["term_02", "term_03"]) {
+    app.data.set(`terms/${termId}/lessons/lesson_01`, { isLocked: false, scheduledDate: "", sectionSchedules: {
+      B: { isLocked: false, scheduledDate: "" },
+      C: { isLocked: true, scheduledDate: "" },
+      archived: { isLocked: false, scheduledDate: "" }
+    } });
+  }
+  const expectTerm = async expected => {
+    const response = await app.call({ action: "teacher-topic-overview" }, cookie);
+    assert.equal(response.status, 200);
+    const overview = await response.json();
+    assert.deepEqual(overview.sectionIds, ["A", "C"]);
+    assert.equal(currentScheduledTerm(overview.terms, overview.sectionIds, "2026-11-11"), expected);
+    const snapshot = await staffRead();
+    assert.deepEqual(snapshot.sections.map(section => section.id), overview.sectionIds);
+    return snapshot;
+  };
+  const initial = await expectTerm("term_01");
+  assert.deepEqual(initial.topics.find(topic => topic.termId === "term_02" && topic.lessonId === "lesson_01").schedules
+    .map(({ sectionId, hasOverride, isLocked }) => ({ sectionId, hasOverride, isLocked })), [
+    { sectionId: "A", hasOverride: false, isLocked: false },
+    { sectionId: "C", hasOverride: true, isLocked: true }
+  ]);
+  const releaseTerm = (snapshot, termId, sectionId = "A") => ({
+    sectionId, topics: [{ termId, lessonId: "lesson_01",
+      revision: snapshot.topics.find(topic => topic.termId === termId && topic.lessonId === "lesson_01").revision }],
+    isLocked: false, scheduledDate: "", setDeadline: false
+  });
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", releaseTerm(initial, "term_02", "B"))).status, 403);
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", releaseTerm(initial, "term_02"))).saved, true);
+  const afterTerm2 = await expectTerm("term_02");
+  const term3 = releaseTerm(afterTerm2, "term_03");
+  const term3Path = "terms/term_03/lessons/lesson_01";
+  const beforeTerm3 = app.data.get(term3Path).sectionSchedules;
+  assert.equal((await app.call({ action: "commit", writes: [{ operation: "update", path: term3Path,
+    data: { sectionId: "A", isLocked: false, scheduledDate: "" } }] }, cookie)).status, 200);
+  const afterTerm3 = await expectTerm("term_03");
+  assert.deepEqual(app.data.get(term3Path).sectionSchedules, {
+    ...beforeTerm3, A: { isLocked: false, scheduledDate: "", activityDeadlineUtc: "" }
+  });
+  for (const termId of ["term_02", "term_03"]) {
+    assert.equal((await mobile("schedules", "student-a", { termId })).items[0].isLocked, false);
+    assert.equal((await mobile("schedules", "student-c", { termId })).items[0].isLocked, true);
+  }
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", { ...term3, isLocked: true })).status, 409);
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", { ...releaseTerm(afterTerm3, "term_03"), isLocked: true })).saved, true);
+  await expectTerm("term_02");
 });
 
 test("student activity averages use only the selected term and include a real zero", async () => {

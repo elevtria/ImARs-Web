@@ -7,7 +7,7 @@ import { buildStudentActivityRecords } from "../js/student-activity-record.js";
 import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
 import { encodeView } from "../js/view-cache.js";
-import { currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability } from "../js/topic-availability.js";
+import { currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability } from "../js/topic-availability.js";
 
 const source = file => readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8")
   .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
@@ -50,7 +50,7 @@ function page(file, report, resolveReport) {
     getDashboardSummary: async () => report?.preparedSummary || { enabled: false },
     showTeacherView: async options => options.render(options.page === "dashboard-summary-v1" ? await options.load() : file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
-    currentScheduledTerm, schoolTodayISO, sectionSchedule, topicAvailability,
+    currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
     setTeacherQuizSection: classDoc => quizSections.push(classDoc?.id),
     createTeacherReport: options => {
@@ -168,10 +168,15 @@ test("dashboard cards combine sections and terms while recent activity excludes 
   const html=app.element("studentTableBody").html();assert.doesNotMatch(html,/Never used app/);assert.ok(html.indexOf("Newest learner")<html.indexOf("Older learner"));assert.match(html,/Grade 6 – C/);
 });
 
-test('the dashboard automatically shows released Term 3 topics independently of unchanged all-term averages',async()=>{
+test('the dashboard follows a release to just one section from Term 2 to Term 3',async()=>{
+  const term3Topic = {id:'lesson_01',title:'Released Term 3 topic',isLocked:false,sectionSchedules:{C:{isLocked:true,scheduledDate:''}}};
   const app=page('dashboard.js',{teacherName:'Teacher',total:1,sections:[{classDoc:record('A',{}),students:[{studentDoc:record('S1',{displayName:'Student'}),results:[{termId:'term_01',lessonsSnap:snapshot([record('lesson_01',{isPreTestCompleted:true,preTestScore:2,preTestTotalQuestions:5})])}]}]}],
-    topicOverview:{sectionIds:['A'],terms:[{id:'term_01',lessons:[{id:'lesson_01',title:'Earlier topic',isLocked:false,sectionSchedules:{}}]},
-    {id:'term_03',lessons:[{id:'lesson_01',title:'Released Term 3 topic',sectionSchedules:{A:{isLocked:false,scheduledDate:''}}},{id:'lesson_02',title:'Still locked',sectionSchedules:{A:{isLocked:true,scheduledDate:''}}}]}]}});
+    topicOverview:{sectionIds:['A','C'],terms:[
+    {id:'term_02',lessons:[{id:'lesson_01',title:'Earlier topic',sectionSchedules:{A:{isLocked:false,scheduledDate:''}}}]},
+    {id:'term_03',lessons:[term3Topic,{id:'lesson_02',title:'Still locked',sectionSchedules:{A:{isLocked:true,scheduledDate:''}}}]}]}});
+  await app.render();
+  assert.equal(app.element('currentTermHeader').textContent,'Current Term — Term 2');
+  term3Topic.sectionSchedules.A = {isLocked:false,scheduledDate:''};
   await app.render();
   assert.equal(app.element('currentTermHeader').textContent,'Current Term — Term 3');
   assert.match(app.element('modulesContainer').html(),/Released Term 3 topic/);assert.match(app.element('modulesContainer').html(),/Available/);assert.match(app.element('modulesContainer').html(),/Upcoming/);

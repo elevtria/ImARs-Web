@@ -12,7 +12,7 @@ import {
   updateDoc,
   writeBatch
 } from "./firebase-data.js";
-import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
+import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, teacherSectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -270,7 +270,7 @@ function receiveSectionSchedule(termIndex, snapshot) {
   }
   terms[termIndex].topics = DEFAULT_TERMS[termIndex].topics.map((topic, topicIndex) => {
     const lessonDoc = lessonDocs[topicIndex], data = lessonDoc.data();
-    const schedule = sectionSchedule(data, selectedSection);
+    const schedule = teacherSectionSchedule(data, selectedSection);
     return { ...topic, title: typeof data.title === "string" && data.title.trim() ? data.title : topic.title,
       docId: lessonDoc.id, date: schedule.scheduledDate, locked: schedule.isLocked,
       activityDeadlineUtc: data.sectionSchedules?.[selectedSection]?.activityDeadlineUtc ?? "" };
