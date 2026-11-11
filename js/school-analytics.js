@@ -9,7 +9,7 @@ const auth = getAuth(app);
 
 // --- VIEW TOGGLE ---
 const teacherContainer = document.getElementById("teacherAnalytics");
-const teacherOverall = document.getElementById("teacherOverall");
+const overallContainer = document.getElementById("overallAnalytics");
 const sectionContainer = document.getElementById("sectionAnalytics");
 const viewButtons = [...document.querySelectorAll("[data-view]")];
 
@@ -23,7 +23,6 @@ function setAnalyticsView(view) {
   });
 
   if (teacherContainer && sectionContainer) {
-    if (teacherOverall) teacherOverall.hidden = !showTeachers;
     teacherContainer.hidden = !showTeachers;
     sectionContainer.hidden = showTeachers;
     teacherContainer.style.display = showTeachers ? "grid" : "none";
@@ -48,6 +47,25 @@ const getInitials = (name) => {
 
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
+function performanceCard({ name, details, initials, color, pre, post, gain }) {
+  return `
+    <article class="teacher-analytics-card" style="--teacher-color:${color};--score:${post ?? 0}%">
+      <span class="analytics-avatar">${escapeHtml(initials)}</span>
+      <h2 class="analytics-teacher-name">${escapeHtml(name)}</h2>
+      <p class="analytics-teacher-sections">${escapeHtml(details)}</p>
+      <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}">
+        <div class="analytics-donut-inner" aria-hidden="true"></div>
+      </div>
+      <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
+      <span class="analytics-post-label">avg post-test</span>
+      <div class="analytics-card-footer">
+        <span>Pre: <strong>${formatAdminPercent(pre)}</strong></span>
+        <span class="teacher-gain">${formatAdminGain(gain)}</span>
+      </div>
+    </article>
+  `;
+}
+
 function renderSchoolAnalytics(report) {
     const teacherMap = new Map(report.teachers.map((teacher, index) => [teacher.id, {
       ...teacher, name: teacher.analyticsName, initials: getInitials(teacher.analyticsName),
@@ -65,35 +83,22 @@ function renderSchoolAnalytics(report) {
     const overallPre = teacherTotals.preCount ? Math.round(teacherTotals.preSum / teacherTotals.preCount) : null;
     const overallPost = teacherTotals.postCount ? Math.round(teacherTotals.postSum / teacherTotals.postCount) : null;
     const overallGain = overallPre === null || overallPost === null ? null : overallPost - overallPre;
-    document.getElementById("teacherOverallPre").textContent = formatAdminPercent(overallPre);
-    document.getElementById("teacherOverallPost").textContent = formatAdminPercent(overallPost);
-    document.getElementById("teacherOverallGain").textContent = formatAdminGain(overallGain);
+    if (overallContainer) {
+      overallContainer.innerHTML = [
+        performanceCard({ name: "Overall Teacher Performance", details: "Students assigned to teachers", initials: "TR", color: "#7048ff", pre: overallPre, post: overallPost, gain: overallGain }),
+        performanceCard({ name: "Average School Performance", details: "All students across the school", initials: "SC", color: "#247bce", pre: report.pre, post: report.post, gain: report.gain })
+      ].join("");
+    }
 
     // 3. Render Teachers Analytics Cards
     if (teacherContainer) {
       if (teacherMap.size === 0) {
         teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">No teachers found.</p>`;
       } else {
-        teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher) => {
-          const { pre, post, gain } = teacher;
-
-          return `
-            <article class="teacher-analytics-card" style="--teacher-color:${teacher.color};--score:${post ?? 0}%">
-              <span class="analytics-avatar">${escapeHtml(teacher.initials)}</span>
-              <h2 class="analytics-teacher-name">${escapeHtml(teacher.name)}</h2>
-              <p class="analytics-teacher-sections">${escapeHtml(teacher.sections)}</p>
-              <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}">
-                <div class="analytics-donut-inner" aria-hidden="true"></div>
-              </div>
-              <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
-              <span class="analytics-post-label">avg post-test</span>
-              <div class="analytics-card-footer">
-                <span>Pre: <strong>${formatAdminPercent(pre)}</strong></span>
-                <span class="teacher-gain">${formatAdminGain(gain)}</span>
-              </div>
-            </article>
-          `;
-        }).join("");
+        teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher) => performanceCard({
+          name: teacher.name, details: teacher.sections, initials: teacher.initials,
+          color: teacher.color, pre: teacher.pre, post: teacher.post, gain: teacher.gain
+        })).join("");
       }
     }
 
