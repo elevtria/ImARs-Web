@@ -52,7 +52,7 @@ function updateFields(write, previous, timestamp) {
 
 // Server-side only. Each request or transaction gets its own store instance.
 export class SupabaseAppStore {
-  constructor(env, fetcher = fetch) {
+  constructor(env, fetcher = fetch, { mirrorToFirestore = true } = {}) {
     const project = new URL(env.IMARS_SUPABASE_URL || "about:blank");
     const key = env.SUPABASE_SECRET_KEY || "";
     const dataset = env.IMARS_SUPABASE_APP_DATASET_ID || "";
@@ -63,7 +63,7 @@ export class SupabaseAppStore {
     Object.assign(this, { env, project, key, dataset, revision: null });
     this.fetcher = (...args) => fetcher(...args);
     try {
-      this.firestoreMirror = new FirestoreAdmin(env, fetcher);
+      this.firestoreMirror = mirrorToFirestore ? new FirestoreAdmin(env, fetcher) : null;
     } catch {
       this.firestoreMirror = null;
     }

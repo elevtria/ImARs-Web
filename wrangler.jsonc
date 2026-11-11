@@ -19,6 +19,7 @@
         "IMARS_SUPABASE_WEB_DATA": "true",
         "WEB_LEGACY_ACTIVITY_READS_ENABLED": "true",
         "MOBILE_API_ENABLED": "true",
+        "MOBILE_LEARNING_PROGRESS_ENABLED": "true",
         "MOBILE_ACTIVITY_PRODUCTION_ENABLED": "true",
         "IMARS_MOBILE_DATASET_EPOCH": "mobile-production-v1",
         "IMARS_SUPABASE_URL": "https://ggqgiysotrnukqtzaqxn.supabase.co",
