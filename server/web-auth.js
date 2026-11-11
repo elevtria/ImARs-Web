@@ -368,7 +368,7 @@ export async function protectWebsite(context, now = Date.now()) {
   if (path === "/welcome") return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
   const hasSessionCookie = request.headers.get("Cookie")?.split(/;\s*/).some(value => value.startsWith(`${cookieName}=`));
   if (home && !hasSessionCookie) return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
-  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
+  if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path === "/api/run-quiz-job" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
   if (!enabled(env) && !dataEnabled(env)) return context.next();
   const adminOnly = ["/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
   try {

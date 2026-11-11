@@ -29,6 +29,10 @@
           "name": "WEB_LOGIN_STATE",
           "class_name": "WebLoginState",
           "script_name": "imars-web-auth"
+        }, {
+          "name": "QUIZ_GENERATION_JOBS",
+          "class_name": "QuizGenerationJob",
+          "script_name": "imars-quiz-jobs"
         }]
       }
     },
