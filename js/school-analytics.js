@@ -81,7 +81,8 @@ function performanceCard({ name, details, initials, color, pre, post, gain }) {
 function renderSchoolAnalytics(report) {
     const teacherMap = new Map(report.teachers.map((teacher, index) => [teacher.id, {
       ...teacher, name: teacher.analyticsName, initials: getInitials(teacher.analyticsName),
-      sections: teacher.analyticsSections, color: cardColors[index % cardColors.length]
+      assignedSections: Array.isArray(teacher.sections) ? teacher.sections.filter(Boolean) : [],
+      color: cardColors[index % cardColors.length]
     }]));
     const sectionMap = new Map(report.sections.map((section, index) => [section.name, { ...section, color: cardColors[index % cardColors.length] }]));
     if (teacherListCount) teacherListCount.textContent = `${teacherMap.size} ${teacherMap.size === 1 ? "teacher" : "teachers"}`;
@@ -111,7 +112,7 @@ function renderSchoolAnalytics(report) {
         teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher, index) => `
           <tr class="teacher-table-row" style="--teacher-color:${teacher.color}">
             <th scope="row"><button class="teacher-table-toggle" type="button" aria-expanded="false" aria-controls="teacherDetail-${index}" aria-label="Show details for ${escapeHtml(teacher.name)}" data-teacher-name="${escapeHtml(teacher.name)}"><span class="teacher-table-chevron" aria-hidden="true">›</span><span class="table-avatar">${escapeHtml(teacher.initials)}</span><span>${escapeHtml(teacher.name)}</span></button></th>
-            <td>${escapeHtml(teacher.sections)}</td>
+            <td>${teacher.assignedSections.length ? `${teacher.assignedSections.length} ${teacher.assignedSections.length === 1 ? "section" : "sections"}` : "—"}</td>
             <td>${formatAdminPercent(teacher.pre)}</td>
             <td>${formatAdminPercent(teacher.post)}</td>
             <td class="teacher-table-gain">${formatAdminGain(teacher.gain)}</td>
@@ -123,6 +124,8 @@ function renderSchoolAnalytics(report) {
             <div><dt>School ID</dt><dd>${escapeHtml(teacher.schoolId)}</dd></div>
             <div><dt>Email</dt><dd>${escapeHtml(teacher.email)}</dd></div>
             <div><dt>Status</dt><dd>${teacher.active ? "Active" : "Inactive"}</dd></div>
+            <div class="teacher-detail-sections"><dt>Assigned Sections</dt><dd class="teacher-section-list">${teacher.assignedSections.length ? teacher.assignedSections.map((section) => `<span>${escapeHtml(section)}</span>`).join("") : "No sections assigned"}</dd></div>
+            <div class="teacher-detail-mobile-score"><dt>Improvement</dt><dd>${formatAdminGain(teacher.gain)}</dd></div>
           </dl></td></tr>
         `).join("");
       }

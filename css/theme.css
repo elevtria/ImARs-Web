@@ -64,6 +64,7 @@
   [data-theme="dark"] body .teacher-list-heading :is(h2, span), [data-theme="dark"] body .teacher-table-detail dd { color: var(--ink); }
   [data-theme="dark"] body .teacher-table-detail dt { color: var(--muted); }
   [data-theme="dark"] body .teacher-table-chevron { background: #28496d; color: #b8ddff; }
+  [data-theme="dark"] body .teacher-section-list span { background: #28496d; color: #b8ddff; }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
     .quiz-file-selected, .quiz-upload-icon, .quiz-preview, .quiz-library-empty, .quiz-schedule-card,
     .view-switch, .analytics-term-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,
