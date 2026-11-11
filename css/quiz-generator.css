@@ -107,6 +107,7 @@
 .quiz-editor-title-field { max-width: 460px; }
 .quiz-editor-section { display: flex; flex-direction: column; justify-content: center; }
 .quiz-editor-section b { color: #526a83; font-size: 13px; }
+.quiz-editor-section [hidden] { display: none; }
 .quiz-question-card { padding: 15px; border: 1px solid rgba(255,255,255,.9); border-radius: 15px; background: rgba(255,255,255,.87); box-shadow: 0 4px 12px rgba(44,58,79,.04); }
 .quiz-question-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .quiz-question-card-head strong { color: #4d7190; font-size: 11px; }

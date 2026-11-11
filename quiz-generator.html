@@ -151,17 +151,21 @@
           </div>
           <div class="quiz-editor-toolbar">
             <div class="quiz-field quiz-editor-title-field"><label class="quiz-field-label" for="editorTitle">Quiz title</label><input class="quiz-input" id="editorTitle" type="text" maxlength="90" /></div>
-            <div class="quiz-editor-section"><span class="quiz-field-label">Assignment</span><b id="editorSectionName"></b></div>
+            <div class="quiz-editor-section">
+              <label class="quiz-field-label" for="editorSectionSelect">Assignment</label>
+              <b id="editorSectionName">Assign in My quizzes</b>
+              <select class="quiz-input" id="editorSectionSelect" hidden></select>
+            </div>
           </div>
           <div class="quiz-demo-note" id="editorDemoNotice"><b>Review carefully:</b> Check every question and correct answer before saving.</div>
           <div class="quiz-question-editor-list" id="questionEditorList"></div>
           <button class="quiz-add-question" id="addQuestion" type="button"><span>＋</span> Add question <small id="questionLimitText">0 / 50</small></button>
 
           <section class="quiz-availability-card" id="quizAvailability" data-auth-shell>
-            <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose how this quiz becomes available in its section.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
+            <div class="quiz-availability-title"><div><span class="quiz-section-tag">ACCESS</span><h3>When can learners take it?</h3><p>Choose when learners in the assigned sections can take this quiz.</p></div><span class="quiz-locked-chip">Locked by default</span></div>
             <div class="quiz-release-options">
               <label class="quiz-release-option selected"><input type="radio" name="availability" value="draft" checked /><span class="quiz-release-radio"></span><span><b>Save as draft</b><small>Only you can see it. It stays locked for learners.</small></span></label>
-              <label class="quiz-release-option"><input type="radio" name="availability" value="now" /><span class="quiz-release-radio"></span><span><b>Available now</b><small>Learners in this section can open it after you save.</small></span></label>
+              <label class="quiz-release-option"><input type="radio" name="availability" value="now" /><span class="quiz-release-radio"></span><span><b>Available now</b><small>Learners in the assigned sections can open it after you save.</small></span></label>
               <label class="quiz-release-option"><input type="radio" name="availability" value="scheduled" /><span class="quiz-release-radio"></span><span><b>Schedule</b><small>Keep it locked until a date and time.</small></span></label>
             </div>
             <div class="quiz-schedule-fields" id="scheduleFields" hidden><label class="quiz-field-label" for="availableAt">Available starting</label><input class="quiz-input" id="availableAt" type="datetime-local" /><small>Uses your device’s local time.</small></div>

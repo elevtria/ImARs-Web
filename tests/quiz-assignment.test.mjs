@@ -110,6 +110,24 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(saves.at(-1).availableAt, new Date("2099-10-20T09:30").toISOString());
   assert.equal(element("librarySectionFilter").value, "A");
   assert.match(element("quizLibraryList").innerHTML, /Scheduled · locked/);
+  await element("quizLibraryList").listeners.click({ target: { closest: selector =>
+    selector === "[data-edit-quiz]" ? { dataset: { editQuiz: saves[0].id } } : null } });
+  await new Promise(setImmediate);
+  const sectionPicker = element("editorSectionSelect");
+  assert.equal(sectionPicker.hidden, false);
+  assert.equal(sectionPicker.value, "A");
+  assert.match(sectionPicker.innerHTML, /All my sections/);
+  assert.match(sectionPicker.innerHTML, /Section A/);
+  assert.match(sectionPicker.innerHTML, /Section C/);
+  assert.doesNotMatch(sectionPicker.innerHTML, /Section B/);
+  sectionPicker.value = "*";
+  sectionPicker.listeners.change();
+  availability.value = "now";
+  await element("saveQuiz").listeners.click();
+  assert.equal(saves.at(-1).id, saves[0].id);
+  assert.equal(saves.at(-1).assignmentScope, "all");
+  assert.equal(saves.at(-1).availability, "now");
+  availability.value = "draft";
   const deleteClick = { target: { closest: selector =>
     selector === "[data-delete-quiz]" ? { dataset: { deleteQuiz: saves[0].id } } : null } };
   await element("quizLibraryList").listeners.click(deleteClick);

@@ -23,6 +23,7 @@ const firestore = getFirestore(firebaseApp);
   const fileError = document.getElementById("quizFileError");
   const setupStatus = document.getElementById("setupStatus");
   const editorStatus = document.getElementById("editorStatus");
+  const editorSectionSelect = document.getElementById("editorSectionSelect");
   const suggestionList = document.getElementById("suggestionsList");
   const editorList = document.getElementById("questionEditorList");
   const libraryList = document.getElementById("quizLibraryList");
@@ -177,6 +178,18 @@ const firestore = getFirestore(firebaseApp);
   function assignmentLabel(quiz) {
     const scope = quizAssignmentScope(quiz);
     return scope === "all" ? "All my sections" : scope === "section" ? quiz.section : "Not assigned";
+  }
+
+  function sectionOptions(quiz) {
+    return `<option value="*" ${quizAssignmentScope(quiz) === "all" ? "selected" : ""} ${teacherSections.length ? "" : "disabled"}>All my sections</option>` +
+      teacherSections.map(section => `<option value="${escapeHtml(section.id)}" ${section.id === quiz.sectionId ? "selected" : ""}>${escapeHtml(section.name)}</option>`).join("");
+  }
+
+  function selectedAssignment(value) {
+    if (!value) return { assignmentScope: "unassigned", sectionId: "", section: "Not assigned" };
+    if (value === "*" && teacherSections.length) return { assignmentScope: "all", sectionId: "", section: "All my sections" };
+    const section = teacherSections.find(item => item.id === value);
+    return section ? { assignmentScope: "section", sectionId: section.id, section: section.name } : null;
   }
 
   function fileExtension(file) {
@@ -376,7 +389,8 @@ const firestore = getFirestore(firebaseApp);
     editingQuiz = null;
     editRequest++;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
-    document.getElementById("editorSectionName").textContent = "Assign in My quizzes → Schedule";
+    document.getElementById("editorSectionName").hidden = false;
+    editorSectionSelect.hidden = true;
     document.getElementById("quizAvailability").hidden = true;
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value);
     document.getElementById("editorDemoNotice").hidden = false;
@@ -439,7 +453,12 @@ const firestore = getFirestore(firebaseApp);
       showStatus(editorStatus, "Complete every question, answer choice, answer guide, and required correction before saving. Multiple-choice options must be distinct.", true);
       return;
     }
-    const availability = document.querySelector("input[name='availability']:checked").value;
+    const assignment = selectedAssignment(editingQuiz ? editorSectionSelect.value : "");
+    if (!assignment) {
+      showStatus(editorStatus, "Choose one of your sections or All my sections.", true);
+      return;
+    }
+    const availability = assignment.assignmentScope === "unassigned" ? "draft" : document.querySelector("input[name='availability']:checked").value;
     const availableAt = document.getElementById("availableAt").value;
     if (availability === "scheduled" && !availableAt) {
       showStatus(editorStatus, "Choose the date and time when the quiz should unlock.", true);
@@ -461,9 +480,7 @@ const firestore = getFirestore(firebaseApp);
     const quiz = {
       id: oldQuiz?.id || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
       title: title,
-      section: oldQuiz ? oldQuiz.section : "Not assigned",
-      sectionId: oldQuiz ? oldQuiz.sectionId : "",
-      assignmentScope: oldQuiz ? quizAssignmentScope(oldQuiz) : "unassigned",
+      ...assignment,
       sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || "Uploaded source",
       type,
       schemaVersion: 2,
@@ -506,10 +523,8 @@ const firestore = getFirestore(firebaseApp);
       } catch { /* The saved quiz uses the same ID if cleanup has to be retried. */ }
     }
     resetNewQuiz();
-    if (quiz.assignmentScope === "unassigned") {
-      librarySectionFilter.value = "";
-      expandedScheduleQuizId = quiz.id;
-    }
+    if (librarySectionFilter.value && !quizAssignedToSection(quiz, librarySectionFilter.value)) librarySectionFilter.value = quiz.sectionId;
+    if (quiz.assignmentScope === "unassigned") expandedScheduleQuizId = quiz.id;
     setView("library");
     showStatus(document.getElementById("libraryStatus"), "Saved. " + availabilityText(quiz) + ".", false);
   }
@@ -563,8 +578,7 @@ const firestore = getFirestore(firebaseApp);
         <div class="quiz-library-scheduler-fields">
           <label>Assign to section <select name="sectionId" aria-label="Section for ${escapeHtml(quiz.title)}" required>
             ${quizAssignmentScope(quiz) === "all" || teacherSections.some(section => section.id === quiz.sectionId) ? "" : '<option value="" selected disabled>Choose a section</option>'}
-            <option value="*" ${quizAssignmentScope(quiz) === "all" ? "selected" : ""} ${teacherSections.length ? "" : "disabled"}>All my sections</option>
-            ${teacherSections.map(section => `<option value="${escapeHtml(section.id)}" ${section.id === quiz.sectionId ? "selected" : ""}>${escapeHtml(section.name)}</option>`).join("")}
+            ${sectionOptions(quiz)}
           </select></label>
           <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
             <option value="draft" ${status === "draft" ? "selected" : ""}>Keep locked</option>
@@ -588,9 +602,8 @@ const firestore = getFirestore(firebaseApp);
     const dateInput = form.elements.availableAt;
     const releaseDate = availability === "scheduled" ? new Date(dateInput.value) : null;
     const libraryStatus = document.getElementById("libraryStatus");
-    const allSections = form.elements.sectionId.value === "*";
-    const section = teacherSections.find(item => item.id === form.elements.sectionId.value);
-    if ((allSections && !teacherSections.length) || (!allSections && !section)) {
+    const assignment = selectedAssignment(form.elements.sectionId.value);
+    if (!assignment || assignment.assignmentScope === "unassigned") {
       showStatus(libraryStatus, "Choose one of your assigned sections for this quiz.", true);
       return;
     }
@@ -608,9 +621,7 @@ const firestore = getFirestore(firebaseApp);
     try {
       const reference = doc(firestore, "generatedQuizzes", id);
       const updated = {
-        assignmentScope: allSections ? "all" : "section",
-        sectionId: allSections ? "" : section.id,
-        section: allSections ? "All my sections" : section.name,
+        ...assignment,
         availability,
         availableAt: availability === "scheduled" ? releaseDate.toISOString() : ""
       };
@@ -668,8 +679,11 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("editorTitle").value = quiz.title || "";
-    document.getElementById("editorSectionName").textContent = assignmentLabel(quiz);
-    document.getElementById("quizAvailability").hidden = quizAssignmentScope(quiz) === "unassigned";
+    document.getElementById("editorSectionName").hidden = true;
+    editorSectionSelect.hidden = false;
+    editorSectionSelect.innerHTML = '<option value="">Unassigned · draft only</option>' + sectionOptions(quiz);
+    editorSectionSelect.value = quizAssignmentScope(quiz) === "all" ? "*" : quiz.sectionId;
+    document.getElementById("quizAvailability").hidden = !editorSectionSelect.value;
     document.getElementById("editorDemoNotice").hidden = !quiz.demo;
     document.getElementById("backToReview").hidden = true;
     document.getElementById("quizTitle").value = quiz.title || "";
@@ -883,6 +897,9 @@ const firestore = getFirestore(firebaseApp);
     editorList.lastElementChild.querySelector("textarea").focus();
   });
   document.querySelectorAll("input[name='availability']").forEach((radio) => radio.addEventListener("change", updateReleaseSelection));
+  editorSectionSelect.addEventListener("change", () => {
+    document.getElementById("quizAvailability").hidden = !editorSectionSelect.value;
+  });
   document.getElementById("saveQuiz").addEventListener("click", saveCurrentQuiz);
   document.getElementById("createTab").addEventListener("click", () => setView("create"));
   document.getElementById("libraryTab").addEventListener("click", () => setView("library"));
