@@ -61,6 +61,8 @@
   [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {
     background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
   }
+  [data-theme="dark"] body .teacher-list-disclosure > summary { background: var(--surface); border-color: var(--line); color: var(--ink); }
+  [data-theme="dark"] body .teacher-list-count, [data-theme="dark"] body .teacher-list-chevron { color: var(--muted); }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
     .quiz-file-selected, .quiz-upload-icon, .quiz-preview, .quiz-library-empty, .quiz-schedule-card,
     .view-switch, .analytics-term-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,

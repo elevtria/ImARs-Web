@@ -7,6 +7,16 @@
 .view-switch button.selected { color: #fff; background: #7048ff; box-shadow: 0 2px 6px rgba(112,72,255,.18); }
 .analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .analytics-overview { margin-bottom: 20px; }
+.teacher-list-disclosure[hidden] { display: none; }
+.teacher-list-disclosure > summary { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 15px 22px; border: 1px solid #ffffffbd; border-radius: 18px; background: linear-gradient(135deg, #fffffff0, #f6f8fcdf); box-shadow: 0 8px 28px #81a2c11a; color: #1a2e4b; cursor: pointer; list-style: none; }
+.teacher-list-disclosure > summary::-webkit-details-marker { display: none; }
+.teacher-list-disclosure > summary:focus-visible { outline: 2px solid var(--portal-blue, #247bce); outline-offset: 3px; }
+.teacher-list-title { font-size: 17px; font-weight: 700; }
+.teacher-list-count { margin-left: auto; color: #647a99; font-size: 12px; font-weight: 600; }
+.teacher-list-chevron { width: 20px; height: 20px; flex: 0 0 auto; color: #526f8a; transition: transform .2s ease; }
+.teacher-list-disclosure[open] .teacher-list-chevron { transform: rotate(180deg); }
+.teacher-list-disclosure > .analytics-grid { margin-top: 14px; }
+.teacher-list-disclosure:not([open]) > .analytics-grid { display: none; }
 .teacher-analytics-card { display: flex; min-height: 292px; flex-direction: column; align-items: center; padding: 19px 17px 13px; border: 1px solid #e5ebf3; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(21,43,75,.05), 0 6px 16px rgba(21,43,75,.025); text-align: center; }
 .analytics-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #fff; background: var(--teacher-color); font-size: 9px; font-weight: 700; }
 .analytics-teacher-name { margin: 11px 0 3px; color: #1a2e4b; font-size: 13px; font-weight: 700; }
@@ -36,6 +46,7 @@
 .section-meter.post .section-meter-track i { background: var(--section-color); }
 
 @media (max-width: 620px) {
+  .teacher-list-disclosure > summary { padding: 14px 16px; }
   .analytics-heading { align-items: flex-start; flex-direction: column; }
   .view-switch { align-self: stretch; }
   .view-switch button { flex: 1; }

@@ -9,6 +9,8 @@ const auth = getAuth(app);
 
 // --- VIEW TOGGLE ---
 const teacherContainer = document.getElementById("teacherAnalytics");
+const teacherListDisclosure = document.getElementById("teacherListDisclosure");
+const teacherListCount = document.getElementById("teacherListCount");
 const overallContainer = document.getElementById("overallAnalytics");
 const sectionContainer = document.getElementById("sectionAnalytics");
 const viewButtons = [...document.querySelectorAll("[data-view]")];
@@ -22,10 +24,9 @@ function setAnalyticsView(view) {
     button.setAttribute("aria-pressed", String(selected));
   });
 
-  if (teacherContainer && sectionContainer) {
-    teacherContainer.hidden = !showTeachers;
+  if (teacherListDisclosure && sectionContainer) {
+    teacherListDisclosure.hidden = !showTeachers;
     sectionContainer.hidden = showTeachers;
-    teacherContainer.style.display = showTeachers ? "grid" : "none";
     sectionContainer.style.display = showTeachers ? "none" : "grid";
   }
 }
@@ -72,6 +73,7 @@ function renderSchoolAnalytics(report) {
       sections: teacher.analyticsSections, color: cardColors[index % cardColors.length]
     }]));
     const sectionMap = new Map(report.sections.map((section, index) => [section.name, { ...section, color: cardColors[index % cardColors.length] }]));
+    if (teacherListCount) teacherListCount.textContent = `${teacherMap.size} ${teacherMap.size === 1 ? "teacher" : "teachers"}`;
 
     const teacherTotals = report.teachers.reduce((totals, teacher) => {
       totals.preSum += teacher.prePctSum || 0;
