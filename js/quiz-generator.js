@@ -209,8 +209,8 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function quizSummaries(quizzes) {
-    return quizzes.map(({ id, title, section, sectionId, assignmentScope, type, availability, availableAt, questionCount, questions }) => ({
-      id, title, section, sectionId, assignmentScope, type, availability, availableAt,
+    return quizzes.map(({ id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc, questionCount, questions }) => ({
+      id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc,
       questionCount: Number.isInteger(questionCount) ? questionCount : (questions?.length || 0)
     }));
   }
@@ -489,6 +489,7 @@ const firestore = getFirestore(firebaseApp);
       questions: normalizedQuestions.map((question, index) => ({ id: editorQuestions[index].id, ...question })),
       availability: availability,
       availableAt: availability === "scheduled" ? new Date(availableAt).toISOString() : "",
+      deadlineUtc: assignment.assignmentScope === "unassigned" ? "" : deadlineValue(document.getElementById("quizDeadline").value, oldQuiz?.deadlineUtc),
       createdAt: oldQuiz ? oldQuiz.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       demo: false
@@ -504,7 +505,7 @@ const firestore = getFirestore(firebaseApp);
       });
     } catch (error) {
       console.error("Could not save quiz to Firestore:", error);
-      showStatus(editorStatus, "The quiz could not be saved. Check your connection and try again.", true);
+      showStatus(editorStatus, error.message || "The quiz could not be saved. Check your connection and try again.", true);
       return;
     } finally {
       saveButton.disabled = false;
@@ -550,6 +551,13 @@ const firestore = getFirestore(firebaseApp);
     return date.toISOString().slice(0, 16);
   }
 
+  function deadlineValue(value, previous) {
+    if (!value) return "";
+    if (value === toLocalDateTimeInput(previous)) return previous;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toISOString();
+  }
+
   function currentAvailability(quiz) {
     if (quiz.availability === "scheduled" && quiz.availableAt && new Date(quiz.availableAt).getTime() <= Date.now()) return "now";
     return quiz.availability || "draft";
@@ -569,9 +577,11 @@ const firestore = getFirestore(firebaseApp);
       const status = currentAvailability(quiz);
       const resultsButton = teacherSections.some(section => quizAssignedToSection(quiz, section.id))
         ? `<button type="button" data-results-quiz="${escapeHtml(quiz.id)}">View results</button>` : "";
-      const statusLabel = status === "now" ? "Available" : status === "scheduled" ? "Scheduled · locked" : "Draft · locked";
-      const statusClass = status === "now" ? "available" : status === "scheduled" ? "scheduled" : "";
-      const availability = status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
+      const closed = status !== "draft" && Date.parse(quiz.deadlineUtc) <= Date.now();
+      const statusLabel = closed ? "Closed" : status === "now" ? "Available" : status === "scheduled" ? "Scheduled · locked" : "Draft · locked";
+      const statusClass = !closed && status === "now" ? "available" : status === "scheduled" ? "scheduled" : "";
+      const availability = closed ? "" : status === "scheduled" ? "Unlocks " + escapeHtml(formatDate(quiz.availableAt)) : status === "now" ? "Available now" : "Only visible to you";
+      const deadline = quiz.deadlineUtc ? `<span>${closed ? "Closed " : "Due "}${escapeHtml(formatDate(quiz.deadlineUtc))}</span>` : "";
       const expanded = expandedScheduleQuizId === quiz.id;
       const scheduleForm = expanded ? `<form class="quiz-library-scheduler" data-schedule-form="${escapeHtml(quiz.id)}">
         <div><strong>Quiz release</strong><p>Choose one section or all your sections, then set when learners can open this quiz.</p></div>
@@ -586,10 +596,11 @@ const firestore = getFirestore(firebaseApp);
             <option value="scheduled" ${status === "scheduled" ? "selected" : ""}>Schedule release</option>
           </select></label>
           <label class="quiz-library-date" ${status === "scheduled" ? "" : "hidden"}>Release date and time <input name="availableAt" type="datetime-local" value="${status === "scheduled" ? escapeHtml(toLocalDateTimeInput(quiz.availableAt)) : ""}"></label>
+          <label>Deadline (optional) <input name="deadlineUtc" type="datetime-local" value="${escapeHtml(toLocalDateTimeInput(quiz.deadlineUtc))}"></label>
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span><span>${availability}</span></div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Assign / schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span>${availability ? `<span>${availability}</span>` : ""}${deadline}</div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Assign / schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -623,7 +634,8 @@ const firestore = getFirestore(firebaseApp);
       const updated = {
         ...assignment,
         availability,
-        availableAt: availability === "scheduled" ? releaseDate.toISOString() : ""
+        availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
+        deadlineUtc: deadlineValue(form.elements.deadlineUtc?.value, quiz.deadlineUtc)
       };
       const uid = auth.currentUser?.uid;
       await updateDoc(reference, updated);
@@ -698,6 +710,7 @@ const firestore = getFirestore(firebaseApp);
     const availability = currentAvailability(quiz);
     document.querySelector("input[name='availability'][value='" + availability + "']").checked = true;
     document.getElementById("availableAt").value = availability === "scheduled" ? toLocalDateTimeInput(quiz.availableAt) : "";
+    document.getElementById("quizDeadline").value = toLocalDateTimeInput(quiz.deadlineUtc);
     updateReleaseSelection();
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions";
     setView("create");
@@ -728,6 +741,7 @@ const firestore = getFirestore(firebaseApp);
     difficulty = "Medium";
     document.querySelector("input[name='availability'][value='draft']").checked = true;
     document.getElementById("availableAt").value = "";
+    document.getElementById("quizDeadline").value = "";
     updateReleaseSelection();
     showStatus(setupStatus, "", false);
     showStatus(editorStatus, "", false);

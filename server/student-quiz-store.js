@@ -2,7 +2,7 @@ import { FirestoreAdmin, decodeFields } from "./firestore-admin.js";
 
 // This projection is performed by Firestore, before documents reach the API.
 export const SUMMARY_FIELDS = ["id", "title", "sectionId", "assignmentScope", "teacherProfileId", "teacherUid", "type",
-  "gradingMode", "availability", "availableAt", "createdAt", "schemaVersion", "questionCount"];
+  "gradingMode", "availability", "availableAt", "deadlineUtc", "createdAt", "schemaVersion", "questionCount"];
 export const RESULT_FIELDS = ["uid", "quizId", "status", "submittedAt", "receipt.score", "receipt.maximum", "receipt.submittedAtUtc", "review.score", "review.maximum"];
 export const RESULT_LIMIT = 200;
 

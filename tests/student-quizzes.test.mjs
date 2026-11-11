@@ -118,6 +118,28 @@ test("drafts and foreign assignments are hidden; scheduled content opens only at
   f.setNow(NOW + 1_000_000);
   assert.equal((await f.call("access", request)).status, 200);
 });
+test("the student API returns the deadline and rejects new attempts and late submissions at the cutoff", async () => {
+  const f = fixture();
+  const deadlineUtc = new Date(NOW + 10_000).toISOString();
+  f.put("generatedQuizzes/quiz1", quiz("quiz1", "multiple-choice", { deadlineUtc }));
+  const page = await (await f.call("list", { limit: 20, cursor: "" })).json();
+  assert.equal(page.items[0].deadlineUtc, deadlineUtc);
+  const { request, opened } = await f.begin();
+  assert.equal(opened.quiz.deadlineUtc, deadlineUtc);
+  f.setNow(NOW + 9999);
+  assert.equal((await f.call("access", request)).status, 200);
+  f.setNow(NOW + 10_000);
+  for (const [action, payload] of [
+    ["start", { ...request, attemptId: "b".repeat(32) }],
+    ["access", request],
+    ["submit", f.submission(request)]
+  ]) {
+    const response = await f.call(action, payload);
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, "QUIZ_EXPIRED");
+  }
+});
+
 for (const type of ["multiple-choice", "true-false", "essay", "identification-explanation", "modified-true-false"]) test(type + " preserves IDs, strips guides, validates answers and persists the right grading status", async () => {
   const f = fixture(); f.put("generatedQuizzes/quiz1", quiz("quiz1", type)); const { request, opened } = await f.begin();
   assert.equal(opened.questions[0].text, "Choose the correct response"); assert.equal(opened.questions[0].id, "q-original"); assert.doesNotMatch(JSON.stringify(opened), /PRIVATE|correctIndex|"rubric"|"answer"|"explanation"|"correction"/);

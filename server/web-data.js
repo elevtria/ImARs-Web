@@ -228,17 +228,18 @@ class Scope {
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
-      const releaseOnly = input.operation === "update" && names(["section", "sectionId", "assignmentScope", "availability", "availableAt"]);
+      const releaseFields = ["section", "sectionId", "assignmentScope", "availability", "availableAt"];
+      const releaseOnly = input.operation === "update" && names([...releaseFields, "deadlineUtc"]);
       const release = releaseOnly ? data : null;
       if (releaseOnly) {
-        if (Object.keys(release).length !== 5) throw fail("Choose a section and release option.", 400);
+        if (!releaseFields.every(field => Object.hasOwn(release, field))) throw fail("Choose a section and release option.", 400);
         data = { id: p[1], demo: false, ...previous, ...release };
       }
       const assignment = quizAssignmentScope(data);
       if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
       if (assignment === "section") await this.ownsClass(data.sectionId);
       if (assignment === "all" && !(await this.assignedClasses()).length) throw fail("You have no assigned sections for this quiz.", 400);
-      if (!releaseOnly && (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
+      if (!releaseOnly && (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "deadlineUtc", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
           !text(data.sourceFile, 240) || !["Easy", "Medium", "Hard"].includes(data.difficulty))) throw fail("Invalid quiz details.", 400);
       if (data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) ||
           !Object.hasOwn(QUIZ_TYPES, data.type) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
@@ -252,7 +253,17 @@ class Scope {
       const now = Date.now();
       const releaseAt = typeof data.availableAt === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(data.availableAt) ? Date.parse(data.availableAt) : NaN;
       if (data.availability === "scheduled" ? !Number.isFinite(releaseAt) || releaseAt <= now : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
+      const deadline = Object.hasOwn(data, "deadlineUtc") ? data.deadlineUtc : previous?.deadlineUtc ?? "";
+      let deadlineUtc = "";
+      if (deadline !== "") {
+        const deadlineAt = typeof deadline === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(deadline) ? Date.parse(deadline) : NaN;
+        if (!Number.isFinite(deadlineAt)) throw fail("Choose a valid quiz deadline.", 400);
+        if (data.availability === "scheduled" && deadlineAt <= releaseAt) throw fail("Set the deadline after the release time.", 400);
+        if (deadlineAt <= now && deadlineAt !== Date.parse(previous?.deadlineUtc)) throw fail("Choose a future deadline.", 400);
+        deadlineUtc = new Date(deadlineAt).toISOString();
+      }
       return { ...input, data: { ...(release || data), id: p[1], availableAt: data.availability === "scheduled" ? new Date(releaseAt).toISOString() : "",
+        deadlineUtc,
         questionCount: data.questions.length, createdAt: previous?.createdAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
@@ -267,7 +278,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
   if (source && /^users\/[^/]+$/.test(path)) data = pick(source, profileFields);
   if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"]);
   if (source && /^generatedQuizzes\/[^/]+$/.test(path)) {
-    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "createdAt", "demo", "teacherUid"]);
+    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "deadlineUtc", "createdAt", "demo", "teacherUid"]);
     data.questions = Array.isArray(source.questions) ? source.questions.filter(object).map(question =>
       pick(question, ["id", "text", "options", "correctIndex", "answer", "points", "rubric", "explanation", "correction"])) : [];
   }
@@ -283,7 +294,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
 }
 
 function quizListEntry(row) {
-  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt"]);
+  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt", "deadlineUtc"]);
   return { id: row.id, path: "generatedQuizzes/" + row.id, data: { ...data, questionCount: Array.isArray(row.data.questions) ? row.data.questions.length : 0 } };
 }
 

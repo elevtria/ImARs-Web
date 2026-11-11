@@ -41,7 +41,7 @@ function summary(row, scope, now) {
       (review(q.type) && (q.schemaVersion !== 2 || q.gradingMode !== "teacher-review"))) throw fail("QUIZ_METADATA_INVALID", 503, "This quiz needs teacher maintenance.");
   const availability = q.availability === "scheduled" && Date.parse(q.availableAt) <= now ? "now" : q.availability;
   return { id: row.id, title: q.title, sectionId: context.sectionId, teacherProfileId: q.teacherProfileId, teacherUid: q.teacherUid,
-    type: q.type, gradingMode: review(q.type) ? "teacher-review" : "automatic", availability, availableAt: q.availableAt || "",
+    type: q.type, gradingMode: review(q.type) ? "teacher-review" : "automatic", availability, availableAt: q.availableAt || "", deadlineUtc: date(q.deadlineUtc) ? q.deadlineUtc : "",
     createdAt: q.createdAt, schemaVersion: q.schemaVersion || 1, questionCount: q.questionCount, teacherName: scope.teacherName, revision: row.updateTime };
 }
 async function quizResults(store, context, ids) {
@@ -99,6 +99,7 @@ async function quizFor(body, scope, store, now, submit = false) {
   const id = submit ? body.assignmentId : body.quizId, row = await store.get("generatedQuizzes/" + id), q = row?.data;
   if (!q || !quizAssignedToSection(q, scope.context.sectionId) || !["teacherProfileId", "teacherUid"].every(key => q[key] === scope.context[key]) || q.availability === "draft") throw fail("QUIZ_UNAVAILABLE");
   if (!["now", "scheduled"].includes(q.availability) || (q.availability === "scheduled" && (!date(q.availableAt) || Date.parse(q.availableAt) > now))) throw fail("NOT_RELEASED");
+  if (date(q.deadlineUtc) && Date.parse(q.deadlineUtc) <= now) throw fail("QUIZ_EXPIRED", 403, "The deadline for this quiz has passed.");
   if (row.updateTime !== body.revision) throw fail("REVISION_CHANGED", 409, "Your teacher updated this quiz. Reopen it to continue.");
   const safe = summary({ ...row, id }, scope, now);
   if (!Array.isArray(q.questions) || q.questions.length !== safe.questionCount || new Set(q.questions.map(item => item?.id)).size !== q.questions.length ||

@@ -1,7 +1,7 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
 import { legacyActivityFields } from "./mobile-activity-store.js";
 
-import { RESULT_LIMIT } from "./student-quiz-store.js";
+import { RESULT_LIMIT, SUMMARY_FIELDS } from "./student-quiz-store.js";
 
 const id = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
 const part = /^[A-Za-z0-9_-]{1,128}$/;
@@ -246,8 +246,7 @@ export class SupabaseAppStore {
 
   async quizPage(context, { limit = 21, after, upper, ids } = {}) {
     if (ids && !ids.length) return [];
-    const fields = ["id", "title", "sectionId", "assignmentScope", "teacherProfileId", "teacherUid", "type",
-      "gradingMode", "availability", "availableAt", "createdAt", "schemaVersion", "questionCount"];
+    const fields = SUMMARY_FIELDS;
     const createdAt = "fields->createdAt->>stringValue";
     const cursor = after || upper;
     const response = await this.documents("GET", {

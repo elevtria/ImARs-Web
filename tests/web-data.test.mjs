@@ -443,7 +443,8 @@ test("the scheduler can reassign a legacy quiz without rewriting its content", a
   const scheduled = { section: "Section C", sectionId: "C", assignmentScope: "section", availability: "scheduled", availableAt: "2099-10-20T09:30:00+08:00" };
   assert.equal((await saveRelease({ ...scheduled, availableAt: "2099-10-20" })).status, 400);
   assert.equal((await saveRelease({ ...scheduled, sectionId: "B" })).status, 403);
-  assert.equal((await saveRelease(scheduled)).status, 200);
+  assert.equal((await saveRelease({ ...scheduled, deadlineUtc: scheduled.availableAt })).status, 400);
+  assert.equal((await saveRelease({ ...scheduled, deadlineUtc: "2099-10-20T10:30:00+08:00" })).status, 200);
   assert.equal(app.data.get(path).availableAt, "2099-10-20T01:30:00.000Z");
   assert.equal(app.data.get(path).sectionId, "C");
   assert.equal((await saveRelease({ section: "All my sections", sectionId: "", assignmentScope: "all", availability: "now", availableAt: "" })).status, 200);
@@ -451,6 +452,7 @@ test("the scheduler can reassign a legacy quiz without rewriting its content", a
   assert.equal(saved.id, "legacy-quiz");
   assert.equal(saved.questionCount, 1);
   assert.equal(saved.assignmentScope, "all");
+  assert.equal(saved.deadlineUtc, "2099-10-20T02:30:00.000Z");
   assert.equal(saved.legacyNote, "Keep this");
   assert.deepEqual(saved.questions, questions);
 });
