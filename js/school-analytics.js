@@ -9,7 +9,7 @@ const auth = getAuth(app);
 
 // --- VIEW TOGGLE ---
 const teacherContainer = document.getElementById("teacherAnalytics");
-const teacherListDisclosure = document.getElementById("teacherListDisclosure");
+const teacherListSection = document.getElementById("teacherListSection");
 const teacherListCount = document.getElementById("teacherListCount");
 const overallContainer = document.getElementById("overallAnalytics");
 const sectionContainer = document.getElementById("sectionAnalytics");
@@ -24,8 +24,8 @@ function setAnalyticsView(view) {
     button.setAttribute("aria-pressed", String(selected));
   });
 
-  if (teacherListDisclosure && sectionContainer) {
-    teacherListDisclosure.hidden = !showTeachers;
+  if (teacherListSection && sectionContainer) {
+    teacherListSection.hidden = !showTeachers;
     sectionContainer.hidden = showTeachers;
     sectionContainer.style.display = showTeachers ? "none" : "grid";
   }
@@ -33,6 +33,17 @@ function setAnalyticsView(view) {
 
 viewButtons.forEach((button) => {
   button.addEventListener("click", () => setAnalyticsView(button.dataset.view));
+});
+
+teacherContainer?.addEventListener("click", (event) => {
+  const button = event.target.closest(".teacher-table-toggle");
+  if (!button) return;
+  const detail = document.getElementById(button.getAttribute("aria-controls"));
+  if (!detail) return;
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(expanded));
+  button.setAttribute("aria-label", `${expanded ? "Hide" : "Show"} details for ${button.dataset.teacherName}`);
+  detail.hidden = !expanded;
 });
 
 // --- HELPERS ---
@@ -92,15 +103,28 @@ function renderSchoolAnalytics(report) {
       ].join("");
     }
 
-    // 3. Render Teachers Analytics Cards
+    // 3. Render the teacher list and its expandable details
     if (teacherContainer) {
       if (teacherMap.size === 0) {
-        teacherContainer.innerHTML = `<p style="grid-column: 1 / -1; text-align: center; color: #64748b; padding: 32px;">No teachers found.</p>`;
+        teacherContainer.innerHTML = `<tr><td colspan="5" class="teacher-table-empty">No teachers found.</td></tr>`;
       } else {
-        teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher) => performanceCard({
-          name: teacher.name, details: teacher.sections, initials: teacher.initials,
-          color: teacher.color, pre: teacher.pre, post: teacher.post, gain: teacher.gain
-        })).join("");
+        teacherContainer.innerHTML = Array.from(teacherMap.values()).map((teacher, index) => `
+          <tr class="teacher-table-row" style="--teacher-color:${teacher.color}">
+            <th scope="row"><button class="teacher-table-toggle" type="button" aria-expanded="false" aria-controls="teacherDetail-${index}" aria-label="Show details for ${escapeHtml(teacher.name)}" data-teacher-name="${escapeHtml(teacher.name)}"><span class="teacher-table-chevron" aria-hidden="true">›</span><span class="table-avatar">${escapeHtml(teacher.initials)}</span><span>${escapeHtml(teacher.name)}</span></button></th>
+            <td>${escapeHtml(teacher.sections)}</td>
+            <td>${formatAdminPercent(teacher.pre)}</td>
+            <td>${formatAdminPercent(teacher.post)}</td>
+            <td class="teacher-table-gain">${formatAdminGain(teacher.gain)}</td>
+          </tr>
+          <tr class="teacher-table-detail" id="teacherDetail-${index}" hidden><td colspan="5"><dl>
+            <div><dt>Subject</dt><dd>${escapeHtml(teacher.subject)}</dd></div>
+            <div><dt>Students</dt><dd>${teacher.students}</dd></div>
+            <div><dt>AR Time</dt><dd>${escapeHtml(teacher.hours)}</dd></div>
+            <div><dt>School ID</dt><dd>${escapeHtml(teacher.schoolId)}</dd></div>
+            <div><dt>Email</dt><dd>${escapeHtml(teacher.email)}</dd></div>
+            <div><dt>Status</dt><dd>${teacher.active ? "Active" : "Inactive"}</dd></div>
+          </dl></td></tr>
+        `).join("");
       }
     }
 

@@ -7,16 +7,25 @@
 .view-switch button.selected { color: #fff; background: #7048ff; box-shadow: 0 2px 6px rgba(112,72,255,.18); }
 .analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .analytics-overview { margin-bottom: 20px; }
-.teacher-list-disclosure[hidden] { display: none; }
-.teacher-list-disclosure > summary { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 15px 22px; border: 1px solid #ffffffbd; border-radius: 18px; background: linear-gradient(135deg, #fffffff0, #f6f8fcdf); box-shadow: 0 8px 28px #81a2c11a; color: #1a2e4b; cursor: pointer; list-style: none; }
-.teacher-list-disclosure > summary::-webkit-details-marker { display: none; }
-.teacher-list-disclosure > summary:focus-visible { outline: 2px solid var(--portal-blue, #247bce); outline-offset: 3px; }
-.teacher-list-title { font-size: 17px; font-weight: 700; }
-.teacher-list-count { margin-left: auto; color: #647a99; font-size: 12px; font-weight: 600; }
-.teacher-list-chevron { width: 20px; height: 20px; flex: 0 0 auto; color: #526f8a; transition: transform .2s ease; }
-.teacher-list-disclosure[open] .teacher-list-chevron { transform: rotate(180deg); }
-.teacher-list-disclosure > .analytics-grid { margin-top: 14px; }
-.teacher-list-disclosure:not([open]) > .analytics-grid { display: none; }
+.teacher-list-section[hidden] { display: none; }
+.teacher-list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 4px 14px; }
+.teacher-list-heading h2 { margin: 0; color: #17375a; font-size: 23px; line-height: 1.3; letter-spacing: -.025em; }
+.teacher-list-heading span { color: #526f8a; font-size: 13px; font-weight: 600; }
+.teacher-performance-table { min-width: 700px; }
+.teacher-performance-table thead th { background: #dcecfb; }
+.teacher-performance-table tbody tr.teacher-table-detail[hidden] { display: none; }
+.teacher-performance-table tbody tr.teacher-table-row:nth-of-type(4n+3) > :is(th, td) { background: #f0f7ff; }
+.teacher-performance-table tbody tr.teacher-table-detail > td { background: #eaf4ff; }
+.teacher-table-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; color: inherit; background: transparent; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.teacher-table-toggle:focus-visible { outline: 2px solid var(--portal-blue, #247bce); outline-offset: 3px; border-radius: 6px; }
+.teacher-table-toggle .table-avatar { margin-right: 0; color: #fff; background: var(--teacher-color); }
+.teacher-table-chevron { display: inline-grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border-radius: 8px; color: #247bce; background: #e5f1ff; font-size: 22px; font-weight: 500; line-height: 1; transition: transform .2s ease; }
+.teacher-table-toggle[aria-expanded="true"] .teacher-table-chevron { transform: rotate(90deg); }
+.teacher-table-gain { color: #0a986d; font-weight: 700; white-space: nowrap; }
+.teacher-table-detail dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; margin: 2px 0; }
+.teacher-table-detail dt { color: #708198; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.teacher-table-detail dd { margin: 4px 0 0; color: #1a2e4b; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.teacher-table-empty { padding: 24px; color: #647a99; text-align: center; }
 .teacher-analytics-card { display: flex; min-height: 292px; flex-direction: column; align-items: center; padding: 19px 17px 13px; border: 1px solid #e5ebf3; border-radius: 18px; background: #fff; box-shadow: 0 1px 2px rgba(21,43,75,.05), 0 6px 16px rgba(21,43,75,.025); text-align: center; }
 .analytics-avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: #fff; background: var(--teacher-color); font-size: 9px; font-weight: 700; }
 .analytics-teacher-name { margin: 11px 0 3px; color: #1a2e4b; font-size: 13px; font-weight: 700; }
@@ -46,7 +55,7 @@
 .section-meter.post .section-meter-track i { background: var(--section-color); }
 
 @media (max-width: 620px) {
-  .teacher-list-disclosure > summary { padding: 14px 16px; }
+  .teacher-list-heading h2 { font-size: 20px; }
   .analytics-heading { align-items: flex-start; flex-direction: column; }
   .view-switch { align-self: stretch; }
   .view-switch button { flex: 1; }

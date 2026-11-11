@@ -61,8 +61,9 @@
   [data-theme="dark"] body :is(.hero, .intro, :is(.teacher-dashboard, .admin-overview) .stats .stat-link) {
     background: linear-gradient(120deg, #223249, #192536); border-color: var(--line);
   }
-  [data-theme="dark"] body .teacher-list-disclosure > summary { background: var(--surface); border-color: var(--line); color: var(--ink); }
-  [data-theme="dark"] body .teacher-list-count, [data-theme="dark"] body .teacher-list-chevron { color: var(--muted); }
+  [data-theme="dark"] body .teacher-list-heading :is(h2, span), [data-theme="dark"] body .teacher-table-detail dd { color: var(--ink); }
+  [data-theme="dark"] body .teacher-table-detail dt { color: var(--muted); }
+  [data-theme="dark"] body .teacher-table-chevron { background: #28496d; color: #b8ddff; }
   [data-theme="dark"] body :is(.action, .record-progress-tile, .col, .drop, .quiz-dropzone,
     .quiz-file-selected, .quiz-upload-icon, .quiz-preview, .quiz-library-empty, .quiz-schedule-card,
     .view-switch, .analytics-term-switch, .student-status-switch, .manual-step-icon, .manual-tool-icon,
@@ -160,6 +161,8 @@
   [data-theme="dark"] body :is(.performance-table, .activity-record-results) tbody > tr:hover > :is(th, td) {
     background: #263a52;
   }
+  [data-theme="dark"] body .teacher-performance-table tbody > tr.teacher-table-detail > td { background: #1f3550; }
+  [data-theme="dark"] body .teacher-table-toggle .table-avatar { background: var(--teacher-color); color: #fff; }
   [data-theme="dark"] body :is(.performance-table, .activity-record-results) thead th {
     background: #223249; color: #bbcee4; border-color: var(--line);
   }
@@ -238,6 +241,8 @@
     transition: background-color 140ms ease, box-shadow 140ms ease;
   }
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:nth-child(even) > :is(th, td) { background: #f0f7ff; }
+  :root[data-theme="light"] .teacher-performance-table tbody > tr.teacher-table-row:nth-of-type(4n+3):not(:hover):not(:focus-within) > :is(th, td) { background: #f0f7ff; }
+  :root[data-theme="light"] .teacher-performance-table tbody > tr.teacher-table-detail > td { background: #eaf4ff; }
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :is(th, td) { background: #c8e2ff; }
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :first-child { box-shadow: inset 4px 0 #247bce; }
   :root[data-theme="light"] .analytics-term-switch button[aria-pressed="false"]:is(:hover, :focus-visible) { background: #c8e2ff; color: #174b7a; }

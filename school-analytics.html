@@ -51,14 +51,18 @@
     </section>
 
     <section class="analytics-grid analytics-overview" id="overallAnalytics" aria-label="Overall teacher and school performance" data-loading-path="users" data-loading-label="Loading overall performance…" data-auth-shell data-await-content="admin-report"></section>
-    <details class="teacher-list-disclosure" id="teacherListDisclosure" data-auth-shell>
-      <summary>
-        <span class="teacher-list-title">Teacher List</span>
-        <span class="teacher-list-count" id="teacherListCount"></span>
-        <svg class="teacher-list-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-      </summary>
-      <section class="analytics-grid" id="teacherAnalytics" aria-label="Teacher performance" data-loading-path="users" data-loading-label="Loading teacher analytics…" data-auth-shell data-await-content="admin-report"></section>
-    </details>
+    <section class="teacher-list-section" id="teacherListSection" aria-labelledby="teacherListTitle" data-auth-shell data-await-content="admin-report">
+      <div class="teacher-list-heading">
+        <h2 id="teacherListTitle">Teacher List</h2>
+        <span id="teacherListCount"></span>
+      </div>
+      <div class="performance-table-wrap" data-loading-path="users" data-loading-label="Loading teacher analytics…">
+        <table class="performance-table teacher-performance-table">
+          <thead><tr><th scope="col">Teacher</th><th scope="col">Sections</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Improvement</th></tr></thead>
+          <tbody id="teacherAnalytics"></tbody>
+        </table>
+      </div>
+    </section>
     <section class="section-analytics" id="sectionAnalytics" aria-label="Section performance" hidden data-auth-shell data-await-content="admin-report"></section>
   </main>
   </div>
