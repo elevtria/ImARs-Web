@@ -59,6 +59,54 @@ export class SupabaseAppStore {
     }
     Object.assign(this, { env, project, key, dataset, revision: null });
     this.fetcher = (...args) => fetcher(...args);
+    try {
+      this.firestoreMirror = new FirestoreAdmin(env, fetcher);
+    } catch {
+      this.firestoreMirror = null;
+    }
+  }
+
+  async mirrorWritesToFirestore(writes) {
+    if (!this.firestoreMirror) return;
+    try {
+      const mirroredWrites = writes.map(write => ({
+        operation: write.operation === "update" ? "set" : write.operation,
+        path: write.path,
+        ...(write.operation === "delete" ? {} : {
+          data: write.data,
+          merge: write.operation === "update" ? true : Boolean(write.merge)
+        })
+      }));
+      await this.firestoreMirror.commit(mirroredWrites);
+    } catch (err) {
+      console.warn("Firestore mirror commit warning:", err?.message || err);
+    }
+  }
+
+  async mirrorDocsToFirestore(collectionPath, docs) {
+    if (!this.firestoreMirror || !docs?.length) return;
+    if (!["users", "classes"].includes(collectionPath)) return;
+    try {
+      // Only mirror full documents (when not using partial field projections)
+      const batch = [];
+      for (const doc of docs) {
+        if (!doc?.id || !doc?.data) continue;
+        batch.push({
+          operation: "set",
+          path: `${collectionPath}/${doc.id}`,
+          data: doc.data,
+          merge: true
+        });
+        if (batch.length === 40) {
+          await this.firestoreMirror.commit(batch.splice(0, batch.length));
+        }
+      }
+      if (batch.length) {
+        await this.firestoreMirror.commit(batch);
+      }
+    } catch (err) {
+      console.warn("Firestore background sync warning:", err?.message || err);
+    }
   }
 
   async request(resource, method, params, body) {
@@ -102,7 +150,6 @@ export class SupabaseAppStore {
     if (!paths.length || paths.length > 100 || new Set(paths).size !== paths.length) throw new Error("Load at most 100 distinct documents.");
     for (const path of paths) validatePath(path, true);
     paths = paths.map(supabaseDocumentPath);
-    // Most batches fit into a few reads. Leave room in the URL for projections.
     const groups = [];
     let group = [];
     let length = 0;
@@ -167,7 +214,11 @@ export class SupabaseAppStore {
     if (rows.length > limit && limit === 5000) {
       throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     }
-    return rows.slice(0, limit).map(row => this.projected(row, fieldPaths));
+    const results = rows.slice(0, limit).map(row => this.projected(row, fieldPaths));
+    if (!fieldPaths && (path === "users" || path === "classes")) {
+      await this.mirrorDocsToFirestore(path, results);
+    }
+    return results;
   }
 
   selection(fields) {
@@ -295,5 +346,6 @@ export class SupabaseAppStore {
     await this.request("rpc/imars_commit_app_documents", "POST", {}, {
       dataset: this.dataset, expected_revision: revision, changes
     });
+    await this.mirrorWritesToFirestore(writes);
   }
 }
