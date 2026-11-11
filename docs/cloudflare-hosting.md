@@ -66,6 +66,13 @@ uploads to the configured Pages project. Git-connected Pages projects can also
 build automatically when changes are pushed to `main`. Do not create a separate
 Direct Upload project if you want the guide's Git-based deployment workflow.
 
+Deploy the private quiz job Worker with
+`npx wrangler deploy --config wrangler.quiz-jobs.jsonc` before a production
+Pages deployment that adds its binding. The Worker runs the generation callback
+after the upload finishes. Pages authenticates the teacher and signs the
+callback using its existing session secret. The Worker needs no copy of the
+Gemini or session secrets. An unsaved result is available for up to one hour.
+
 ## Verify the live site
 
 - Open `login.html` and confirm branding, styles, and the password toggle load.

@@ -2,7 +2,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { closeQuizReview, openQuizReview } from "./quiz-review.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "./firebase-data.js";
-import { requestQuiz } from "./quiz-request.js";
+import { discardQuizJob, readQuizJob, requestQuiz } from "./quiz-request.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection } from "./quiz-limits.js";
 import { extractOfficeText } from "./quiz-office.js";
@@ -44,7 +44,65 @@ const firestore = getFirestore(firebaseApp);
   let expandedScheduleQuizId = null;
   let scheduleBusy = false;
   let generating = false;
-  const updateGenerateButton = () => { generateButton.disabled = generating || !selectedFile; };
+  let backgroundJob;
+  let reviewedJob;
+  let jobTimer;
+  let jobCheck = 0;
+  const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
+  const updateGenerateButton = () => { generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile; };
+  const jobStatus = document.getElementById("quizJobStatus");
+  const jobMessage = document.getElementById("quizJobMessage");
+  const reviewJob = document.getElementById("reviewQuizJob");
+
+  function renderJob() {
+    const status = backgroundJob?.status;
+    jobStatus.hidden = !status || status === "none" || (status === "complete" && reviewedJob?.id === backgroundJob.id);
+    reviewJob.hidden = status !== "complete";
+    jobMessage.textContent = status === "complete" ? "Your quiz is ready to review."
+      : status === "failed" ? backgroundJob.error : "Your quiz is generating. You can visit another page and come back here.";
+    updateGenerateButton();
+  }
+
+  async function refreshJob(user) {
+    clearTimeout(jobTimer);
+    const check = ++jobCheck;
+    try {
+      const result = await readQuizJob(user.uid);
+      if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
+      backgroundJob = result;
+      renderJob();
+    } catch {
+      if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
+      if (activeJob()) jobMessage.textContent = "Reconnecting to check quiz progress…";
+    }
+    if (activeJob()) jobTimer = setTimeout(() => { void refreshJob(user); }, 5000);
+  }
+
+  function openQuestions(questions) {
+    generatedQuestions = questions.map(question => ({ ...question, id: makeId(), accepted: false, discarded: false }));
+    document.getElementById("reviewSummary").dataset.requested = "";
+    document.getElementById("demoNotice").hidden = false;
+    showStatus(setupStatus, "", false);
+    setStep("review");
+  }
+
+  reviewJob.addEventListener("click", () => {
+    if (backgroundJob?.status !== "complete" || !Array.isArray(backgroundJob.questions)) return;
+    const { title, questionType, difficulty: level } = backgroundJob.details;
+    resetNewQuiz();
+    reviewedJob = backgroundJob;
+    document.getElementById("quizTitle").value = title;
+    const type = document.querySelector(`input[name='questionType'][value='${questionType}']`);
+    if (type) type.checked = true;
+    difficulty = level;
+    updateTypeSelection();
+    renderJob();
+    openQuestions(backgroundJob.questions);
+  });
+  window.addEventListener("pagehide", () => {
+    ++jobCheck;
+    clearTimeout(jobTimer);
+  });
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, (character) => ({
@@ -213,7 +271,7 @@ const firestore = getFirestore(firebaseApp);
   }
 
   async function startGeneration() {
-    if (generating) return;
+    if (generating || activeJob() || backgroundJob?.status === "complete") return;
     const error = validateSetup();
     if (error) {
       showStatus(setupStatus, error, true);
@@ -229,6 +287,7 @@ const firestore = getFirestore(firebaseApp);
     const loadingHint = document.getElementById("quizGenerationHint");
     const file = selectedFile;
     const settings = {
+      title: document.getElementById("quizTitle").value.trim(),
       questionCount: Number(document.getElementById("questionCount").value),
       difficulty,
       questionType: document.querySelector("input[name='questionType']:checked").value
@@ -247,20 +306,15 @@ const firestore = getFirestore(firebaseApp);
       const material = await prepareMaterial(file);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
-      loadingStatus.textContent = material.pdfFile ? "Uploading your PDF and generating questions…" : "Generating your quiz…";
-      const questions = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid);
+      loadingStatus.textContent = material.pdfFile ? "Uploading your PDF…" : "Starting quiz generation…";
+      const result = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid, { background: true });
       if (auth.currentUser?.uid !== user.uid) return;
-
-      generatedQuestions = questions.map((question) => ({
-        ...question,
-        id: makeId(),
-        accepted: false,
-        discarded: false
-      }));
-      document.getElementById("reviewSummary").dataset.requested = "";
-      document.getElementById("demoNotice").hidden = false;
-      showStatus(setupStatus, "", false);
-      setStep("review");
+      if (Array.isArray(result)) openQuestions(result);
+      else {
+        backgroundJob = { ...result, status: "queued" };
+        renderJob();
+        void refreshJob(user);
+      }
     } catch (generationError) {
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
@@ -405,12 +459,12 @@ const firestore = getFirestore(firebaseApp);
     const quizzes = loadQuizzes();
     const oldQuiz = editingQuiz;
     const quiz = {
-      id: oldQuiz?.id || makeId(),
+      id: oldQuiz?.id || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
       title: title,
       section: oldQuiz ? oldQuiz.section : "Not assigned",
       sectionId: oldQuiz ? oldQuiz.sectionId : "",
       assignmentScope: oldQuiz ? quizAssignmentScope(oldQuiz) : "unassigned",
-      sourceFile: selectedFile ? selectedFile.name : (oldQuiz ? oldQuiz.sourceFile : "Uploaded source"),
+      sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || "Uploaded source",
       type,
       schemaVersion: 2,
       gradingMode: writtenQuestion(type) || type === "modified-true-false" ? "teacher-review" : "automatic",
@@ -444,6 +498,13 @@ const firestore = getFirestore(firebaseApp);
     else quizzes.unshift(quiz);
     saveQuizzes(quizzes);
     renderLibrary();
+    if (!oldQuiz && reviewedJob) {
+      const savedJobId = reviewedJob.id;
+      try {
+        await discardQuizJob(signedInUser.uid, savedJobId);
+        if (backgroundJob?.id === savedJobId) backgroundJob = undefined;
+      } catch { /* The saved quiz uses the same ID if cleanup has to be retried. */ }
+    }
     resetNewQuiz();
     if (quiz.assignmentScope === "unassigned") {
       librarySectionFilter.value = "";
@@ -593,6 +654,8 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     editingQuiz = quiz;
+    reviewedJob = undefined;
+    renderJob();
     editorQuestions = (editorQuestions || []).map((question) => ({
       ...question,
       id: question.id || makeId(),
@@ -628,6 +691,7 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
+    reviewedJob = undefined;
     selectedFile = null;
     fileError.textContent = "";
     fileInput.setAttribute("aria-invalid", "false");
@@ -655,6 +719,7 @@ const firestore = getFirestore(firebaseApp);
     showStatus(editorStatus, "", false);
     setView("create");
     setStep("setup");
+    renderJob();
   }
 
   loadSections();
@@ -668,6 +733,11 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    ++jobCheck;
+    clearTimeout(jobTimer);
+    backgroundJob = undefined;
+    reviewedJob = undefined;
+    renderJob();
     closeQuizReview();
     editRequest++;
     editingQuiz = null;
@@ -679,6 +749,7 @@ const firestore = getFirestore(firebaseApp);
     renderSectionFilter();
     quizCache = [];
     renderLibrary();
+    if (user) void refreshJob(user);
     await loadTeacherSections(user);
     if (user && teacherProfileId) await loadTeacherQuizzes(user);
     else if (user) {
@@ -747,6 +818,18 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("acceptAll").addEventListener("click", () => enterEditor(true));
   document.getElementById("discardAll").addEventListener("click", async () => {
     if (!await confirmAction({ title: "Discard all suggested questions?", message: "You’ll return to quiz setup and lose these suggestions.", confirmLabel: "Discard questions" })) return;
+    if (reviewedJob) {
+      try {
+        await discardQuizJob(auth.currentUser?.uid, reviewedJob.id);
+        backgroundJob = undefined;
+        reviewedJob = undefined;
+        renderJob();
+      } catch (error) {
+        jobStatus.hidden = false;
+        jobMessage.textContent = error.message;
+        return;
+      }
+    }
     generatedQuestions = [];
     setStep("setup");
   });

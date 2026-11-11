@@ -9,6 +9,9 @@
 .quiz-view-tabs { display: flex; gap: 8px; margin: 0 0 18px; border-bottom: 1px solid rgba(129,162,193,.25); }
 .quiz-view-tab { display: inline-flex; align-items: center; gap: 8px; padding: 11px 15px 12px; border: 0; border-bottom: 2px solid transparent; color: #6d7a8c; background: transparent; font-size: 13px; font-weight: 700; }
 .quiz-view-tab.active { border-color: var(--steel); color: #3f7198; }
+.quiz-job-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.quiz-job-status[hidden], .quiz-job-status button[hidden] { display: none; }
+.quiz-job-status p { margin: 0; font-size: 13px; }
 .quiz-stepper { display: flex; align-items: center; gap: 12px; max-width: 670px; margin: 0 auto 18px; padding: 0; list-style: none; }
 .quiz-stepper li { display: flex; align-items: center; gap: 8px; color: #8998aa; font-size: 12px; white-space: nowrap; }
 .quiz-stepper li span { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid #cfdae5; border-radius: 50%; background: rgba(255,255,255,.55); font-size: 11px; font-weight: 800; }

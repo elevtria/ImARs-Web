@@ -26,6 +26,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
   let authenticated, requested, results, showSlowMessage, finishGeneration, confirmDelete = false;
+  let job = { status: "none" };
   const context = {
     console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
     setTimeout: callback => { showSlowMessage = callback; return 1; },
@@ -42,9 +43,11 @@ test("generation, review, unassigned draft and all-section release use the actua
       requested = payload;
       return new Promise(resolve => { finishGeneration = resolve; });
     },
+    readQuizJob: async () => job,
+    discardQuizJob: async (_uid, id) => { assert.equal(id, job.id); job = { status: "none" }; },
     extractOfficeText:async()=>"Water freezes.", localStorage:{setItem(){}},
     closeQuizReview() {}, openQuizReview: (...args) => { results = args; },
-    window:{scrollTo(){},confirm:()=>true},
+    window:{scrollTo(){},addEventListener(){},confirm:()=>true},
     document:{getElementById:element,querySelectorAll:()=>[],querySelector:selector=>selector.includes("questionType") ? choice : availability}
   };
   vm.runInNewContext(readFileSync(new URL("../js/quiz-generator.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm,""),context);
@@ -114,4 +117,26 @@ test("generation, review, unassigned draft and all-section release use the actua
   confirmDelete = true;
   await element("quizLibraryList").listeners.click(deleteClick);
   assert.equal(quizzes.has(saves[0].id), false);
+
+  element("quizFile").files = [file];
+  element("quizFile").listeners.change();
+  const queued = element("generateQuiz").listeners.click();
+  await new Promise(setImmediate);
+  job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "queued" };
+  finishGeneration(job);
+  await queued;
+  assert.equal(element("quizGenerationStatusCard").open, false);
+  assert.match(element("quizJobMessage").textContent, /come back/);
+  assert.equal(element("generateQuiz").disabled, true);
+  job = { ...job, status: "complete", details: { title: "Water quiz", fileName: "water.pdf", questionType: "multiple-choice", difficulty: "Medium" },
+    questions: [{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }] };
+  await authenticated({ uid: "teacher-a" });
+  assert.equal(element("reviewQuizJob").hidden, false);
+  element("reviewQuizJob").listeners.click();
+  assert.equal(element("reviewStep").hidden, false);
+  assert.equal(element("quizTitle").value, "Water quiz");
+  element("acceptAll").listeners.click();
+  await element("saveQuiz").listeners.click();
+  assert.equal(job.status, "none");
+  assert.equal(saves.at(-1).sourceFile, "water.pdf");
 });

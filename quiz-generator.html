@@ -50,6 +50,10 @@
         <button class="quiz-view-tab active" id="createTab" type="button" role="tab" aria-selected="true">Create a quiz</button>
         <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
       </div>
+      <div class="quiz-job-status" id="quizJobStatus" hidden>
+        <p id="quizJobMessage" role="status"></p>
+        <button class="primary-btn quiz-primary" id="reviewQuizJob" type="button" hidden>Review questions</button>
+      </div>
 
       <section id="createView" class="quiz-view" data-auth-shell>
         <ol class="quiz-stepper" aria-label="Quiz creation progress">
