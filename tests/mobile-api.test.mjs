@@ -163,3 +163,22 @@ test("activity retry, monotonic checkpoints, offline submission and teacher repo
   assert.equal((await post("activity-submit", submit)).code, "SCOPE_CHANGED");
   assert.equal(results.size, 1);
 });
+
+test("the activity deadline closes unfinished attempts and keeps an earlier completed result", async () => {
+  const { post, at, records } = fixture();
+  records.set("users/S3", { uid: "third", role: "student", classCode: "A" });
+  const activityId = "states-of-matter", deviceId = "device-1";
+  at("2026-11-07T04:04:58Z");
+  const first = await post("activity-start", { requestId: "first-run", activityId, deviceId });
+  const unfinished = await post("activity-start", { requestId: "third-run", activityId, deviceId }, "third");
+  assert.equal(first.status, 200);
+  assert.equal(unfinished.status, 200);
+  const result = await post("activity-submit", { requestId: "first-submit", activityId, deviceId, runId: first.item.runId,
+    checkpointRevision: 1, checkpoint: "", rawScore: 4, rawMaximum: 5, durationSeconds: 1, timedOut: false,
+    completedAtUtc: "2026-11-07T04:04:59.000Z" });
+  assert.equal(result.persisted, true);
+  at("2026-11-07T04:05:00Z");
+  assert.equal((await post("activity-start", { requestId: "third-resume", activityId, deviceId }, "third")).code, "DEADLINE_PASSED");
+  assert.equal((await post("activity-results")).items[0].status, "completed");
+  assert.equal((await post("activity-results")).items[0].score, 80);
+});

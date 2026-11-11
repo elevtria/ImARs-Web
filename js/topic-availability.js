@@ -96,6 +96,13 @@ export function manualAccessUpdate(locked) {
   return { isLocked: locked, scheduledDate: "" };
 }
 
+export function updateSectionSchedule(lesson, sectionId, { isLocked, scheduledDate, activityDeadlineUtc }) {
+  const candidate = Object.hasOwn(lesson.sectionSchedules || {}, sectionId) ? lesson.sectionSchedules[sectionId] : null;
+  const existing = candidate && typeof candidate === "object" && !Array.isArray(candidate) ? candidate : {};
+  return { ...existing, isLocked, scheduledDate,
+    activityDeadlineUtc: validateActivityDeadlineUtc(activityDeadlineUtc === undefined ? existing.activityDeadlineUtc ?? "" : activityDeadlineUtc, scheduledDate) };
+}
+
 export function scheduledAccessUpdate(date, topic, today = todayISO()) {
   if (!date) return manualAccessUpdate(topicAvailability(topic, today).locked);
   if (!validDate(date) || date < today) throw new Error("Choose today or a future date.");

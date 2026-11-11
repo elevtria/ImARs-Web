@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { webData } from "../server/web-data.js";
+import { mobileApi } from "../server/mobile-api.js";
 import { FirestoreAdmin } from "../server/firestore-admin.js";
 import { requireStaff, protectWebsite, staffProfile } from "../server/web-auth.js";
 import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js";
@@ -8,6 +9,79 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
 const stamp = { $type: "serverTimestamp" };
+
+test("website and mobile topic locks share one durable, section-scoped schedule", async () => {
+  const app = fixture();
+  app.env.MOBILE_API_ENABLED = "true";
+  const cookie = await app.login();
+  app.store.identity = async uid => ({ localId: uid, email: uid + "@example.test", emailVerified: true });
+  const time = new Date("2026-11-11T02:00:00Z"), seconds = time.getTime() / 1000;
+  const part = value => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const mobile = async (action, uid, body = {}) => {
+    const token = part({ alg: "RS256", kid: "fixture" }) + "." + part({ aud: "imars-db-a733b",
+      iss: "https://securetoken.google.com/imars-db-a733b", sub: uid, exp: seconds + 600, iat: seconds - 60,
+      auth_time: seconds - 60, email_verified: true }) + ".fixture";
+    const request = app.request("/api/mobile/v1/" + action, body, null, { Authorization: "Bearer " + token });
+    const response = await mobileApi({ request, env: app.env }, { store: app.store, rate: async () => {}, now: () => time,
+      fetcher: async () => Response.json({ users: [{ localId: uid, emailVerified: true }] }) });
+    return { status: response.status, ...(await response.json()) };
+  };
+  const path = "terms/term_01/lessons/lesson_01";
+  app.data.set(path, { title: "Processes of Changes of State", isLocked: true, scheduledDate: "",
+    sectionSchedules: { A: { isLocked: true, scheduledDate: "2026-11-12", activityDeadlineUtc: "2026-11-13T00:00:00Z" },
+      B: { isLocked: true, scheduledDate: "2026-11-20" } } });
+  const webSave = isLocked => app.call({ action: "commit", writes: [{ operation: "update", path,
+    data: { sectionId: "A", isLocked, scheduledDate: "" } }] }, cookie);
+  const staffRead = () => mobile("staff-topic-schedules", "teacher-a");
+  const staffTopic = snapshot => snapshot.topics.find(topic => topic.termId === "term_01" && topic.lessonId === "lesson_01");
+  const first = await staffRead();
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.sections.map(section => section.id), ["A"]);
+  assert.equal(staffTopic(first).schedules[0].isLocked, true);
+  const deadlineOnly = { sectionId: "A", topics: [{ termId: "term_01", lessonId: "lesson_01", revision: staffTopic(first).revision }],
+    isLocked: false, scheduledDate: "", preserveAccess: true, setDeadline: true, activityDeadlineUtc: "2026-11-11T16:00:00Z" };
+  const invalidDeadline = await mobile("staff-topic-schedule-save", "teacher-a", deadlineOnly);
+  assert.equal(invalidDeadline.status, 400);
+  assert.match(invalidDeadline.error, /after its release date begins/i);
+  const changedDeadline = "2026-11-13T01:00:00Z";
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", { ...deadlineOnly, activityDeadlineUtc: changedDeadline })).saved, true);
+  assert.deepEqual(app.data.get(path).sectionSchedules.A, {
+    isLocked: true, scheduledDate: "2026-11-12", activityDeadlineUtc: changedDeadline
+  });
+
+  assert.equal((await webSave(false)).status, 200);
+  const refreshed = await staffRead();
+  assert.equal(staffTopic(refreshed).schedules[0].isLocked, false);
+  assert.equal((await mobile("schedules", "student-a")).items[0].isLocked, false);
+  assert.equal((await mobile("schedules", "student-b")).items[0].scheduledDate, "2026-11-20");
+  const relock = snapshot => ({ sectionId: "A", topics: [{ termId: "term_01", lessonId: "lesson_01", revision: staffTopic(snapshot).revision }],
+    isLocked: true, scheduledDate: "", setDeadline: false });
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", relock(first))).status, 409);
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-b", relock(refreshed))).status, 403);
+  assert.equal((await mobile("staff-topic-schedules", "student-a")).status, 403);
+  assert.equal((await mobile("staff-topic-schedule-save", "teacher-a", relock(refreshed))).saved, true);
+  const webRead = await app.call({ action: "get", reference: { kind: "document", path } }, cookie);
+  assert.equal(webRead.status, 200);
+  const own = (await webRead.json()).document.data.sectionSchedules.A;
+  assert.deepEqual(own, { isLocked: true, scheduledDate: "", activityDeadlineUtc: changedDeadline });
+  assert.equal(staffTopic(await staffRead()).schedules[0].isLocked, true);
+  assert.equal((await mobile("schedules", "student-a")).items[0].isLocked, true);
+
+  app.env.DASHBOARD_SUMMARIES_ENABLED = "true";
+  const state = app.env.WEB_LOGIN_STATE;
+  app.env.WEB_LOGIN_STATE = { ...state, get: name => name === "dashboard:teacher-a"
+    ? { fetch: async (_url, options) => {
+        const input = JSON.parse(options.body);
+        assert.deepEqual(input.sections.map(section => section.id), ["A"]);
+        return Response.json({ ready: true, summary: { total: 1 } });
+      } }
+    : state.get(name) };
+  const websiteStats = await app.call({ action: "dashboard-summary" }, cookie);
+  const mobileStats = await mobile("staff-dashboard", "teacher-a");
+  assert.equal(websiteStats.status, 200);
+  assert.deepEqual(mobileStats.summary, (await websiteStats.json()).summary);
+  assert.equal((await mobile("staff-dashboard", "student-a")).status, 403);
+});
 
 test("student activity averages use only the selected term and include a real zero", async () => {
   const app = fixture(), cookie = await app.login();
@@ -174,7 +248,8 @@ test("teacher mobile sessions work with legacy account login disabled and withou
   assert.equal((await mobile('login',{identifier:'TEACH1000',password:'correct'})).status,409,'do not enable the broader account migration');
   const opened=await mobile('teacher-session-login',{password:'correct'});assert.equal(opened.status,200);
   const {mobileSession}=await opened.json();assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
-  assert.equal([...app.data.keys()].some(key=>key.startsWith('_accountAccess/')),false);
+  // A legacy teacher may be activated during sign-in. No student account may be linked by that operation.
+  assert.equal([...app.data].some(([key, record])=>key.startsWith('_accountAccess/') && record.role === 'student'),false);
   await app.login();assert.equal((await mobile('mobile-session',{mobileSession})).status,401);
   validPassword=false;assert.equal((await mobile('teacher-session-login',{password:'wrong'})).status,401);
   uid='admin-a';assert.equal((await mobile('teacher-session-login',{password:'correct'})).status,403);

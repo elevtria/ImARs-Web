@@ -1,10 +1,11 @@
 import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { readLearningProgress, saveLearningProgress } from "./mobile-learning-progress.js";
+import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { activeProfile, authenticateStudent, validPart } from "./student-quiz-auth.js";
 import { checkTeacherSession } from "./teacher-sessions.js";
 import { readJson, requireStaff, stateCall } from "./web-auth.js";
-import { schoolTodayISO, sectionSchedule, topicAvailability, validateActivityDeadlineUtc } from "../js/topic-availability.js";
+import { schoolTodayISO, sectionSchedule, topicAvailability, updateSectionSchedule, validateActivityDeadlineUtc } from "../js/topic-availability.js";
 
 const termIdValid = value => typeof value === "string" && /^term_0[1-3]$/.test(value);
 const terms = ["term_01", "term_02", "term_03"];
@@ -122,7 +123,91 @@ async function scheduleResponse(store, scope, body, now) {
   return { scope, serverTimeUtc: now.toISOString(), schoolDate: schoolTodayISO(now), revision: await digest(items.map(item => item.revision)), items };
 }
 
-const readActions = ["me", "schedules"];
+const readActions = ["me", "schedules", "staff-topic-schedules", "staff-dashboard"];
+const scheduleSaveAction = "staff-topic-schedule-save";
+
+async function staffScheduleSections(store, scope) {
+  if (scope.role !== "teacher" && scope.role !== "admin") throw forbidden();
+  const filters = scope.role === "teacher" ? [{ field: "teacherId", value: scope.profileId }] : [];
+  const rows = await store.query("classes", { filters, limit: 201 });
+  if (rows.length > 200) throw unavailable();
+  return rows.filter(row => validPart(row.id) && activeProfile(row.data) &&
+    (scope.role === "admin" || row.data.teacherId === scope.profileId))
+    .map(row => ({ id: row.id, name: string(row.data.SectionName || row.data.sectionName) || row.id }));
+}
+
+async function staffScheduleResponse(store, scope, body, now) {
+  validateKeys(body, []);
+  const sections = await staffScheduleSections(store, scope);
+  const pairs = terms.flatMap(termId => lessons.map(lessonId => [termId, lessonId]));
+  const records = await store.getAll(pairs.map(pair => lessonPath(...pair)), { fieldPaths: scheduleFields });
+  const topics = pairs.map(([termId, lessonId]) => {
+    const row = records.get(lessonPath(termId, lessonId));
+    const data = row?.data || {};
+    return { termId, lessonId, title: string(data.title || data.name), revision: string(row?.updateTime),
+      schedules: sections.map(section => {
+        const hasOverride = Object.hasOwn(data.sectionSchedules || {}, section.id);
+        const saved = hasOverride ? data.sectionSchedules[section.id] : data;
+        const state = sectionSchedule(data, section.id);
+        try {
+          return { sectionId: section.id, hasOverride, ...state,
+            activityDeadlineUtc: validateActivityDeadlineUtc(saved?.activityDeadlineUtc ?? "", state.scheduledDate) };
+        } catch {
+          return { sectionId: section.id, hasOverride, isLocked: true, scheduledDate: "", activityDeadlineUtc: "" };
+        }
+      }) };
+  });
+  return { scope, schoolDate: schoolTodayISO(now), sections, topics };
+}
+
+async function saveStaffSchedules(store, scope, body, now) {
+  validateKeys(body, ["sectionId", "topics", "isLocked", "scheduledDate", "setDeadline", "activityDeadlineUtc", "preserveAccess"]);
+  if (typeof body.isLocked !== "boolean" || typeof body.setDeadline !== "boolean" ||
+      (body.sectionId !== "" && !validPart(body.sectionId)) || typeof body.scheduledDate !== "string" ||
+      !Array.isArray(body.topics) || body.topics.length < 1 || body.topics.length > 4 ||
+      (body.setDeadline && typeof body.activityDeadlineUtc !== "string") ||
+      (body.preserveAccess !== undefined && typeof body.preserveAccess !== "boolean") ||
+      (body.preserveAccess && !body.setDeadline)) throw invalid();
+  if (body.scheduledDate) {
+    const date = body.scheduledDate;
+    const at = new Date(date + "T00:00:00Z");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(at.getTime()) ||
+        at.toISOString().slice(0, 10) !== date || date < schoolTodayISO(now)) throw invalid();
+  }
+  if (body.setDeadline && body.activityDeadlineUtc && Date.parse(body.activityDeadlineUtc) <= now.getTime())
+    throw failure("INVALID_SCHEDULE", 400, "Choose a deadline in the future.");
+  const sections = (await staffScheduleSections(store, scope)).filter(section => !body.sectionId || section.id === body.sectionId);
+  if (!sections.length) throw forbidden();
+  // Track individual ownership reads inside the same transaction as the topic writes.
+  for (const section of sections) await permittedSection(store, scope, section.id);
+  const writes = [];
+  const paths = new Set();
+  for (const topic of body.topics) {
+    validateKeys(topic, ["termId", "lessonId", "revision"]);
+    if (!termIdValid(topic.termId) || !lessons.includes(topic.lessonId) ||
+        topic.termId !== body.topics[0].termId || typeof topic.revision !== "string" || !topic.revision) throw invalid();
+    const path = lessonPath(topic.termId, topic.lessonId);
+    if (paths.has(path)) throw invalid();
+    paths.add(path);
+    const row = await store.get(path);
+    if (!row || row.updateTime !== topic.revision) throw conflict("SCHEDULE_CHANGED", "The schedule changed. Review it and try again.");
+    const updates = [];
+    for (const section of sections) {
+      try {
+        const updated = updateSectionSchedule(row.data, section.id, {
+          ...(body.preserveAccess ? sectionSchedule(row.data, section.id)
+            : { isLocked: body.isLocked, scheduledDate: body.scheduledDate }),
+          ...(body.setDeadline ? { activityDeadlineUtc: body.activityDeadlineUtc } : {})
+        });
+        updates.push([section.id, updated]);
+      } catch (error) { throw failure("INVALID_SCHEDULE", 400, error.message); }
+    }
+    writes.push({ operation: "update", path, updateTime: row.updateTime,
+      data: { sectionSchedules: { ...row.data.sectionSchedules, ...Object.fromEntries(updates) } } });
+  }
+  await store.commit(writes);
+  return { scope, saved: true };
+}
 const reportAction = "staff-activity-results";
 const writeKeys = {
   "activity-start": ["requestId", "activityId", "deviceId"],
@@ -265,7 +350,8 @@ export async function mobileApi({ request, env, waitUntil }, dependencies = {}) 
   const activityEnabled = activityActions.includes(action) && activityDataset !== null;
   const learningEnabled = supabaseWebData(env) && activityDataset === "production" &&
     (action === "progress" || action === "lesson-progress");
-  if (env.MOBILE_API_ENABLED !== "true" || (!readActions.includes(action) && !activityEnabled && !learningEnabled)) return json({ code: "NOT_FOUND", error: "Mobile route not found." }, 404);
+  if (env.MOBILE_API_ENABLED !== "true" || (!readActions.includes(action) && !activityEnabled && !learningEnabled && action !== scheduleSaveAction))
+    return json({ code: "NOT_FOUND", error: "Mobile route not found." }, 404);
   if (request.method !== "POST") return json({ code: "INVALID_REQUEST", error: "Use POST." }, 405, { Allow: "POST" });
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ code: "FORBIDDEN", error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().match(/^application\/json(?:\s*;|$)/)) return json({ code: "INVALID_REQUEST", error: "Use JSON." }, 415);
@@ -307,6 +393,21 @@ export async function mobileApi({ request, env, waitUntil }, dependencies = {}) 
         else await update;
       }));
     }
+    if (action === "staff-topic-schedules") return json(await staffScheduleResponse(store, scope, body, now));
+    if (action === "staff-dashboard") {
+      validateKeys(body, []);
+      if (scope.role !== "teacher") throw forbidden();
+      return json({ scope, ...await teacherDashboardSummary(env, store, scope.profileId, scope.uid, row.data) });
+    }
+    if (action === scheduleSaveAction) {
+      if (scope.role !== "teacher" && scope.role !== "admin") throw forbidden();
+      await store.begin();
+      try {
+        const current = await linkedProfile(identity, env, store);
+        const { scope: currentScope } = await accountScope(request, env, store, current, identity.uid);
+        return json(await saveStaffSchedules(store, currentScope, body, now));
+      } finally { await store.rollback().catch(() => {}); }
+    }
     const activityStore = dependencies.activityStore || new MobileActivityStore(env, fetcher);
     if (action === reportAction) return json(await teacherActivityResults(env, scope, store, activityStore, body));
     if (action === "activity-results") {
@@ -322,7 +423,9 @@ export async function mobileApi({ request, env, waitUntil }, dependencies = {}) 
       error.status === 400 || error.status === 413 ? invalid() :
       error.status === 401 ? failure("UNAUTHENTICATED", 401, "Sign in again to continue.") :
       error.status === 403 ? forbidden() :
-      learningEnabled && error.status === 409 ? conflict("REVISION_CHANGED", "Learning progress changed. Please try again.") : unavailable();
+      learningEnabled && error.status === 409 ? conflict("REVISION_CHANGED", "Learning progress changed. Please try again.") :
+      action === scheduleSaveAction && error.status === 409
+        ? conflict("SCHEDULE_CHANGED", "The records changed. Reload and try again.") : unavailable();
     const extra = problem.status === 429 ? { "Retry-After": "60" } : {};
     return json({ code: problem.code, error: problem.message, ...(problem.status === 429 ? { retryAfterSeconds: 60 } : {}) }, problem.status, extra);
   }

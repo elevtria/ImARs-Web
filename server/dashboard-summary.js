@@ -1,4 +1,5 @@
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
+import { stateCall } from "./web-auth.js";
 import { lessonNotifications, latestNotifications } from "../js/test-notifications.js";
 
 const valid = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -9,6 +10,16 @@ const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postC
 const profileFields = ["active", "status", "role", "classCode", "displayName", "fullName"];
 const resultFields = ["isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isPostTestCompleted", "postTestScore", "postTestTotalQuestions", "postTestHeatmap",
   "preTestCompletedAt", "postTestCompletedAt", "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
+
+export async function teacherDashboardSummary(env, store, id, uid, profile) {
+  if (env.DASHBOARD_SUMMARIES_ENABLED !== "true") return { enabled: false };
+  const classes = await store.query("classes", { filters: [{ field: "teacherId", value: id }] });
+  const sections = classes.filter(row => active(row.data) && row.data.teacherId === id)
+    .map(row => ({ id: row.id, name: String(row.data.SectionName || row.id).slice(0, 300) }));
+  const cached = await stateCall(env, "dashboard:" + uid, "dashboard-get", { id, uid, sections });
+  if (!cached.ok) throw new Error("Dashboard unavailable");
+  return { enabled: true, ...cached.result, teacherName: profile?.displayName || profile?.fullName || "Teacher" };
+}
 export function dashboardScope(sections, env) {
   const scope = JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;

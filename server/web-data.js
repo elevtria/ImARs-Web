@@ -2,7 +2,8 @@ import { databaseQuotaFailure, FirestoreAdmin } from "./firestore-admin.js";
 import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
 import { QUIZ_TYPES, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope } from "../js/quiz-limits.js";
-import { validateActivityDeadlineUtc } from "../js/topic-availability.js";
+import { updateSectionSchedule } from "../js/topic-availability.js";
+import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
 import { activityPercent } from "../js/activity-score.js";
@@ -197,14 +198,13 @@ class Scope {
         input.operation === "update" && names(["sectionId", "isLocked", "scheduledDate", "activityDeadlineUtc"]) &&
         typeof data.isLocked === "boolean" && (data.scheduledDate === "" || date(data.scheduledDate))) {
       await this.ownsClass(data.sectionId);
-      const existing = object(previous.sectionSchedules?.[data.sectionId]) ? previous.sectionSchedules[data.sectionId] : {};
-      const activityDeadlineUtc = Object.hasOwn(data, "activityDeadlineUtc") ? data.activityDeadlineUtc : existing.activityDeadlineUtc ?? "";
-      try { validateActivityDeadlineUtc(activityDeadlineUtc, data.scheduledDate); }
+      let schedule;
+      try { schedule = updateSectionSchedule(previous, data.sectionId, data); }
       catch (error) { throw fail(error.message, 400); }
       // This document was read in the same transaction. Retain every other
       // section and the legacy default used by older mobile builds.
       return { ...input, data: { sectionSchedules: { ...previous.sectionSchedules,
-        [data.sectionId]: { ...existing, isLocked: data.isLocked, scheduledDate: data.scheduledDate, activityDeadlineUtc }
+        [data.sectionId]: schedule
       } }, updateTime: row.updateTime };
     }
     if (p[0] === "users" && p[2] === "test_results" && term(p[3]) && p[4] === "lessons" && lesson(p[5]) && p.length === 6 && actor.role === "teacher") {
@@ -573,12 +573,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     const scope = new Scope(transaction || store, actor);
     if (body.action === "dashboard-summary") {
       if (actor.role !== "teacher") throw fail();
-      if (env.DASHBOARD_SUMMARIES_ENABLED !== "true") return respond({ enabled: false });
-      const classes = await store.query("classes", { filters: [{ field: "teacherId", value: actor.id }] });
-      const sections = classes.map(row => ({ id: row.id, name: String(row.data.SectionName || row.id).slice(0, 300) }));
-      const cached = await stateCall(env, "dashboard:" + actor.uid, "dashboard-get", { id: actor.id, uid: actor.uid, sections });
-      if (!cached.ok) throw new Error("Dashboard unavailable");
-      return respond({ enabled: true, ...cached.result, teacherName: actor.profile?.displayName || actor.profile?.fullName || "Teacher" });
+      return respond(await teacherDashboardSummary(env, store, actor.id, actor.uid, actor.profile));
     }
     if (body.action === "student-page") return respond(await studentPage(scope, body));
     if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
