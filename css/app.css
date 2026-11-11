@@ -2071,7 +2071,6 @@ label {
 .stats .stat-link { display:block; position:relative; color:inherit; text-decoration:none; cursor:pointer; transition:background-color .18s ease,box-shadow .18s ease; }
 .stats .stat-link:hover { background:#fff; box-shadow:0 10px 28px #81a2c12e; }
 .stats .stat-link:focus-visible { outline:3px solid var(--steel); outline-offset:4px; }
-.stat-link-arrow { position:absolute; top:20px; right:22px; color:var(--steel); font-size:22px; line-height:1; }
 @media(prefers-reduced-motion:reduce) { .stats .stat-link { transition:none; } }
 
 /* Dashboard accents vary by purpose within the existing blue and gold palette. */
@@ -2086,7 +2085,6 @@ label {
 .summary-icon { position:absolute; top:22px; right:24px; width:40px; height:40px; display:grid; place-items:center; background:#bfc8e233; color:#476781; border-radius:12px; }
 .summary-icon svg { width:23px; height:23px; }
 :is(.teacher-dashboard,.admin-overview) .stat-link:nth-child(3) .summary-icon { background:#feb70526; color:#735400; }
-:is(.teacher-dashboard,.admin-overview) .stat-link-arrow { top:auto; bottom:18px; right:30px; color:#476781; font-size:19px; }
 .teacher-dashboard .section-head h2 { display:flex; align-items:center; gap:10px; }
 .teacher-dashboard .section-head h2::before { content:''; width:5px; height:20px; border-radius:4px; background:var(--steel); flex-shrink:0; }
 .teacher-dashboard .section:has(.actions) .section-head h2::before { background:var(--gold); }
