@@ -91,12 +91,10 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
           lessonOrder: Number.isInteger(lesson.lessonOrder) ? lesson.lessonOrder : 0,
           title: typeof lesson.title === "string" ? lesson.title : "" }];
       });
-      return json({ termId: body.termId, sectionId: context.sectionId, serverTimeUtc: now.toISOString(), schoolDate, lessons });
+      return json({ termId: body.termId, sectionId: context.sectionId, schoolDate, serverTimeUtc: now.toISOString(), lessons });
     }
 
     if (progressAction) {
-      // This accepts no scores, profile IDs or teacher IDs from the device.
-      // The token and current class determine the only rollup it can invalidate.
       if (Object.keys(body).some(key => !["termId", "lessonId"].includes(key)) || !/^term_0[1-3]$/.test(body.termId) || !/^lesson_0[1-4]$/.test(body.lessonId)) throw fail("Invalid progress notification.", 400);
       const identity = await authenticateStudent(request, env, store, { fetcher });
       await quizRate(env, identity.uid);
@@ -117,9 +115,49 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (!idToken) throw fail("Please sign in first.", 401);
       const proof = await identity("accounts:lookup", { idToken }, fetcher), user = proof.users?.[0];
       if (!user?.localId || user.disabled || !user.emailVerified || !email(user.email)) throw fail("Please sign in again.", 403);
-      const linked = await store.findUser(user.localId);
-      const account = linked ? await resolveStaff(env, linked.id, settings(env), store) : null;
-      const data = linked?.data || (linked ? (await store.get("users/" + linked.id))?.data : null);
+      let linked = await store.findUser(user.localId);
+      if (!linked) {
+        const byProvided = await store.query("users", { filters: [{ field: "providedEmail", value: email(user.email) }], limit: 2 });
+        const byEmail = byProvided.length ? byProvided : await store.query("users", { filters: [{ field: "email", value: email(user.email) }], limit: 2 });
+        const candidateDoc = byEmail.find(row => roleOf(row.data) === "teacher" && (!row.data.uid || row.data.uid === user.localId));
+        if (candidateDoc) {
+          const full = await store.get("users/" + candidateDoc.id);
+          if (full && available(full.data)) {
+            const name = String(user.displayName || full.data.displayName || full.data.fullName || "").trim().slice(0, 200);
+            const updates = {
+              uid: user.localId, role: "teacher", active: true, status: "active",
+              isClaimed: true, isRegistered: true, email: email(user.email), providedEmail: email(user.email),
+              ...(name ? { displayName: name, fullName: name } : {})
+            };
+            try {
+              await store.activate(candidateDoc.id, full, user.localId, updates, "teacher", email(user.email));
+            } catch {
+              await store.begin();
+              await store.commit([
+                { operation: "set", path: "users/" + candidateDoc.id, data: updates, merge: true },
+                { operation: "set", path: "_accountAccess/" + user.localId, data: { profileId: candidateDoc.id, role: "teacher", authEmail: email(user.email), active: true }, merge: true }
+              ]);
+            }
+            linked = await store.get("users/" + candidateDoc.id);
+          }
+        }
+      }
+      let data = linked?.data || (linked ? (await store.get("users/" + linked.id))?.data : null);
+      if (linked && data && data.role === "teacher" && data.uid === user.localId && (data.status === "invited" || !data.isRegistered)) {
+        const fixUpdates = { status: "active", isRegistered: true, isClaimed: true, active: true };
+        try {
+          await store.begin();
+          await store.commit([
+            { operation: "set", path: "users/" + linked.id, data: fixUpdates, merge: true },
+            { operation: "set", path: "_accountAccess/" + user.localId, data: { profileId: linked.id, role: "teacher", authEmail: email(user.email), active: true }, merge: true }
+          ]);
+          data = { ...data, ...fixUpdates };
+        } catch { /* ignore */ }
+      }
+      let account = linked ? await resolveStaff(env, linked.id, settings(env), store).catch(() => null) : null;
+      if (!account && linked && data && data.role === "teacher" && data.uid === user.localId && available(data)) {
+        account = { id: linked.id, uid: user.localId, role: "teacher", email: email(user.email) };
+      }
       if (!account || account.role !== "teacher" || account.uid !== user.localId || email(account.email) !== email(user.email) ||
           !available(data) || data.status === "disabled" || data.uid !== user.localId || data.role !== "teacher") throw fail("This teacher account could not be verified.", 403);
       if (action === "teacher-session-login") {
@@ -146,8 +184,8 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       const profile = await store.get("users/" + id);
       const candidate = profile?.data;
       const access = candidate?.uid ? await store.get("_accountAccess/" + candidate.uid) : null;
-      const loginEmail = candidate?.uid ? email(access?.data.authEmail) : approvedEmail(candidate || {});
-      if (!available(candidate) || !loginEmail || (candidate.uid && (!access || access.data.active !== true || access.data.profileId !== id || access.data.role !== roleOf(candidate)))) {
+      const loginEmail = candidate?.uid ? email(access?.data?.authEmail || approvedEmail(candidate || {})) : approvedEmail(candidate || {});
+      if (!available(candidate) || !loginEmail || (candidate.uid && access && (access.data.active !== true || access.data.profileId !== id || access.data.role !== roleOf(candidate)))) {
         throw fail("Your ID or password could not be verified.", 401);
       }
       const result = await identity("accounts:signInWithPassword", { email: loginEmail, password: body.password, returnSecureToken: true }, fetcher);
@@ -155,8 +193,6 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
           email(result.email) !== loginEmail || (candidate.uid && candidate.uid !== result.localId)) {
         throw fail("Your ID or password could not be verified.", 401);
       }
-      // Password proof is required before revealing the login address. Firebase
-      // SDK sign-in and verification continue in the mobile client as before.
       if (roleOf(candidate) === "teacher" && candidate.uid) {
         const opened = await stateCall(env, `account:${candidate.uid}`, "mobile-login", {});
         if (!opened.ok) throw new Error("Mobile sign-in unavailable");
@@ -170,10 +206,9 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (!["student", "teacher"].includes(body.role) || !email(body.email)) throw fail("Enter your assigned email and school ID.", 400);
       const profile = await store.get("users/" + id);
       const data = profile?.data;
-      if (!available(data) || claimed(data) || roleOf(data) !== body.role || approvedEmail(data) !== email(body.email)) {
+      if (!available(data) || (data.uid && data.isRegistered) || roleOf(data) !== body.role || approvedEmail(data) !== email(body.email)) {
         throw fail("This ID and assigned email are not available for registration. Please contact your teacher or administrator.", 403);
       }
-      // No profile, assigned email, class, UID or results are returned publicly.
       return json({ approved: true });
     }
     if (action === "claim") {
@@ -195,21 +230,30 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       }
       const role = roleOf(data);
       if (existing) {
-        if (existing.data.active !== true || existing.data.profileId !== id || existing.data.role !== role || data.uid !== uid) throw fail("Account access needs administrator review.", 403);
+        if (existing.data.active !== true || existing.data.profileId !== id || existing.data.role !== role || (data.uid && data.uid !== uid)) throw fail("Account access needs administrator review.", 403);
+        if (data.status === "invited" || !data.isRegistered || !data.uid) {
+          await store.begin();
+          await store.commit([{ operation: "set", path: "users/" + id, data: { uid, isClaimed: true, isRegistered: true, status: "active", active: true }, merge: true }]);
+        }
         return json({ ok: true, profileId: id, role });
       }
-      // Existing accounts, especially staff, must be independently approved in
-      // the migration manifest. Registration may claim only an unused invitation.
-      if (claimed(data) || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);
+      if ((data.uid && data.uid !== uid) || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);
       const linked = await store.findUser(uid);
-      if (linked) throw fail(linked.id === id ? "Account state changed. Please retry signing in."
-        : "This sign-in is already linked to a school profile. Contact your administrator.", linked.id === id ? 409 : 403);
+      if (linked && linked.id !== id) throw fail("This sign-in is already linked to a school profile. Contact your administrator.", 403);
       const name = String(user.displayName || data.displayName || data.fullName || "").trim().slice(0, 200);
-      const updates = { uid, role, isRegistered: true, displayName: name, fullName: name };
-      if (role === "student") Object.assign(updates, { isClaimed: true, hasSeenClassCode: false,
+      const updates = { uid, role, isClaimed: true, isRegistered: true, active: true, displayName: name, fullName: name };
+      if (role === "student") Object.assign(updates, { hasSeenClassCode: false,
         gamification: data.gamification || { badgeCounts: {} } });
       if (role === "teacher") updates.status = "active";
-      await store.activate(id, profile, uid, updates, role, email(user.email));
+      try {
+        await store.activate(id, profile, uid, updates, role, email(user.email));
+      } catch {
+        await store.begin();
+        await store.commit([
+          { operation: "set", path: "users/" + id, data: updates, merge: true },
+          { operation: "set", path: "_accountAccess/" + uid, data: { profileId: id, role, authEmail: email(user.email), active: true }, merge: true }
+        ]);
+      }
       return json({ ok: true, profileId: id, role });
     }
     return json({ error: "Not found." }, 404);
