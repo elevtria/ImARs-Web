@@ -1,4 +1,5 @@
-import { appStore } from "./supabase-app-store.js";
+import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
+import { readLearningProgress, saveLearningProgress } from "./mobile-learning-progress.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { activeProfile, authenticateStudent, validPart } from "./student-quiz-auth.js";
 import { checkTeacherSession } from "./teacher-sessions.js";
@@ -257,17 +258,22 @@ async function teacherActivityResults(env, scope, store, activityStore, body) {
   return { scope, items, nextCursor };
 }
 
-export async function mobileApi({ request, env }, dependencies = {}) {
+export async function mobileApi({ request, env, waitUntil }, dependencies = {}) {
   const url = new URL(request.url);
   const action = url.pathname.match(/^\/api\/mobile\/v1\/([a-z-]+)\/?$/)?.[1];
-  const activityEnabled = activityActions.includes(action) && activityStorageDataset(env) !== null;
-  if (env.MOBILE_API_ENABLED !== "true" || (!readActions.includes(action) && !activityEnabled)) return json({ code: "NOT_FOUND", error: "Mobile route not found." }, 404);
+  const activityDataset = activityStorageDataset(env);
+  const activityEnabled = activityActions.includes(action) && activityDataset !== null;
+  const learningEnabled = supabaseWebData(env) && activityDataset === "production" &&
+    (action === "progress" || action === "lesson-progress");
+  if (env.MOBILE_API_ENABLED !== "true" || (!readActions.includes(action) && !activityEnabled && !learningEnabled)) return json({ code: "NOT_FOUND", error: "Mobile route not found." }, 404);
   if (request.method !== "POST") return json({ code: "INVALID_REQUEST", error: "Use POST." }, 405, { Allow: "POST" });
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ code: "FORBIDDEN", error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().match(/^application\/json(?:\s*;|$)/)) return json({ code: "INVALID_REQUEST", error: "Use JSON." }, 415);
   try {
     const fetcher = dependencies.fetcher || fetch;
-    const store = dependencies.store || appStore(env, fetcher);
+    const store = dependencies.store || (learningEnabled
+      ? new SupabaseAppStore(env, fetcher, { mirrorToFirestore: false })
+      : appStore(env, fetcher));
     const now = dependencies.now?.() || new Date();
     const body = await readJson(request, action === "activity-checkpoint" || action === "activity-submit" ? 610_000 : 8_192);
     const browserStaff = action === reportAction && !request.headers.has("Authorization") && request.headers.has("Cookie");
@@ -280,6 +286,7 @@ export async function mobileApi({ request, env }, dependencies = {}) {
       if (limit.status === 429) throw failure("RATE_LIMITED", 429, "Too many requests. Please try again.");
       if (!limit.ok) throw unavailable();
     }
+    if (learningEnabled && action === "lesson-progress") await store.begin();
     const row = staff?.row || await linkedProfile(identity, env, store);
     const { scope, section } = await accountScope(request, env, store, row, identity.uid, !browserStaff);
     if (action === "me") {
@@ -287,6 +294,19 @@ export async function mobileApi({ request, env }, dependencies = {}) {
       return json(await profileResponse(scope, row, section, identity.email));
     }
     if (action === "schedules") return json(await scheduleResponse(store, scope, body, now));
+    if (learningEnabled) {
+      if (scope.role !== "student" || !scope.classCode) throw forbidden();
+      if (action === "progress") return json(await readLearningProgress(body, scope, row, store));
+      return json(await saveLearningProgress(request, body, scope, row, store, now, async (termId, lessonId) => {
+        if (env.DASHBOARD_SUMMARIES_ENABLED !== "true" || !env.WEB_LOGIN_STATE) return;
+        const update = stateCall(env, "dashboard:" + scope.teacherUid, "dashboard-dirty", {
+          ids: [scope.profileId], lesson: termId + "/lessons/" + lessonId
+        }).then(response => { if (!response.ok) throw unavailable(); })
+          .catch(() => console.warn("Learning-time dashboard update will retry on reconciliation."));
+        if (waitUntil) waitUntil(update);
+        else await update;
+      }));
+    }
     const activityStore = dependencies.activityStore || new MobileActivityStore(env, fetcher);
     if (action === reportAction) return json(await teacherActivityResults(env, scope, store, activityStore, body));
     if (action === "activity-results") {
@@ -301,7 +321,8 @@ export async function mobileApi({ request, env }, dependencies = {}) {
     const problem = error.code && error.status && error.status < 500 ? error :
       error.status === 400 || error.status === 413 ? invalid() :
       error.status === 401 ? failure("UNAUTHENTICATED", 401, "Sign in again to continue.") :
-      error.status === 403 ? forbidden() : unavailable();
+      error.status === 403 ? forbidden() :
+      learningEnabled && error.status === 409 ? conflict("REVISION_CHANGED", "Learning progress changed. Please try again.") : unavailable();
     const extra = problem.status === 429 ? { "Retry-After": "60" } : {};
     return json({ code: problem.code, error: problem.message, ...(problem.status === 429 ? { retryAfterSeconds: 60 } : {}) }, problem.status, extra);
   }

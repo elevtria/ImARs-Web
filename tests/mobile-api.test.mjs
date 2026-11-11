@@ -26,6 +26,10 @@ function fixture() {
   }));
   const row = path => records.has(path) ? { id: path.split("/").at(-1), data: records.get(path) } : null;
   const store = {
+    begin: async () => {},
+    commit: async writes => {
+      for (const { path, data, merge } of writes) records.set(path, { ...(merge ? records.get(path) : {}), ...data });
+    },
     get: async path => row(path),
     getAll: async paths => new Map(paths.map(path => [path, row(path)])),
     query: async (_path, { filters }) => [...records.keys()].filter(path => path.startsWith("users/") && records.get(path).uid === filters[0].value).map(row),
@@ -90,6 +94,38 @@ test("mobile profile and schedule are scoped to the verified Firebase account", 
   assert.notEqual(before.revision, after.revision);
   assert.equal(after.items[0].isLocked, true);
   assert.equal((await post("schedules", { sectionId: "A" }, "teacher")).code, "SESSION_REVOKED");
+});
+
+test("learning time adds revisits without changing scores or counting a retry twice", async () => {
+  const { env, post, records } = fixture();
+  const path = "users/S1/test_results/term_01/lessons/lesson_01";
+  records.set(path, { preTestScore: 2, postTestScore: 8, arTimeMinutes: 3,
+    learningTimeByDevice: { oldDevice: { lessonSeconds: 120 } } });
+  records.set(path.replace("S1", "S2"), { postTestScore: 9 });
+  const payload = (revision, lessonSeconds, arSeconds, deviceId = "phone") => ({
+    requestId: `${deviceId}-term_01-lesson_01-${revision}`, termId: "term_01", lessonId: "lesson_01", deviceId, revision,
+    expectedClassCode: "A", expectedTeacherProfileId: "T1", lessonSeconds, arSeconds, arNavigationSeconds: 0,
+    lessonDone: true, lessonOpened: true, arDone: true
+  });
+  assert.equal((await post("lesson-progress", payload(1, 60, 120))).status, 404);
+  Object.assign(env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  assert.equal((await post("lesson-progress", payload(1, 60, 120), "")).status, 401);
+  const first = await post("lesson-progress", payload(1, 60, 120));
+  assert.equal(first.status, 200);
+  assert.equal(first.item.lessonTimeMinutes, 3);
+  assert.equal(first.item.arTimeMinutes, 5);
+  assert.equal((await post("lesson-progress", payload(1, 60, 120))).item.arTimeMinutes, 5);
+  assert.equal((await post("lesson-progress", payload(1, 60, 121))).code, "IDEMPOTENCY_CONFLICT");
+  assert.equal((await post("lesson-progress", payload(2, 180, 180))).item.lessonTimeMinutes, 5);
+  assert.equal((await post("lesson-progress", payload(1, 60, 120))).acceptedRevision, 2);
+  assert.equal((await post("lesson-progress", payload(1, 60, 60, "tablet"))).item.arTimeMinutes, 7);
+  assert.equal((await post("lesson-progress", { ...payload(3, 200, 200), postTestScore: 10 })).status, 400);
+  assert.equal((await post("lesson-progress", payload(3, 200, 200), "second")).code, "SCOPE_CHANGED");
+  const { items } = await post("progress");
+  assert.equal(items.length, 1);
+  assert.deepEqual([items[0].lessonTimeMinutes, items[0].arTimeMinutes, items[0].preTestScore, items[0].postTestScore], [6, 7, 2, 8]);
+  assert.equal(items[0].learningTimeByDevice, undefined);
 });
 
 test("activity retry, monotonic checkpoints, offline submission and teacher report share one run", async () => {
