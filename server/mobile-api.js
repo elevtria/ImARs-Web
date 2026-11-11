@@ -261,8 +261,9 @@ async function teacherActivityResults(env, scope, store, activityStore, body) {
 export async function mobileApi({ request, env, waitUntil }, dependencies = {}) {
   const url = new URL(request.url);
   const action = url.pathname.match(/^\/api\/mobile\/v1\/([a-z-]+)\/?$/)?.[1];
-  const activityEnabled = activityActions.includes(action) && activityStorageDataset(env) !== null;
-  const learningEnabled = supabaseWebData(env) && env.MOBILE_LEARNING_PROGRESS_ENABLED === "true" &&
+  const activityDataset = activityStorageDataset(env);
+  const activityEnabled = activityActions.includes(action) && activityDataset !== null;
+  const learningEnabled = supabaseWebData(env) && activityDataset === "production" &&
     (action === "progress" || action === "lesson-progress");
   if (env.MOBILE_API_ENABLED !== "true" || (!readActions.includes(action) && !activityEnabled && !learningEnabled)) return json({ code: "NOT_FOUND", error: "Mobile route not found." }, 404);
   if (request.method !== "POST") return json({ code: "INVALID_REQUEST", error: "Use POST." }, 405, { Allow: "POST" });

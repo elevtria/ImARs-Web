@@ -108,7 +108,8 @@ test("learning time adds revisits without changing scores or counting a retry tw
     lessonDone: true, lessonOpened: true, arDone: true
   });
   assert.equal((await post("lesson-progress", payload(1, 60, 120))).status, 404);
-  Object.assign(env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_LEARNING_PROGRESS_ENABLED: "true" });
+  Object.assign(env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
   assert.equal((await post("lesson-progress", payload(1, 60, 120), "")).status, 401);
   const first = await post("lesson-progress", payload(1, 60, 120));
   assert.equal(first.status, 200);
