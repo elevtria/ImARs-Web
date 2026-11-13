@@ -22,6 +22,8 @@ const topicCompletionScope = document.getElementById("topicCompletionScope");
 const studentsPerPage = 25;
 let activitySection = "";
 const scoreHead = document.getElementById("scoreSummaryHead");
+const emptyScoreHeader = scoreHead.innerHTML;
+let scoreColumnCount = 2;
 const quizStatus = document.getElementById("teacherQuizStatus");
 const quizRetry = document.getElementById("teacherQuizRefresh");
 let quizPage;
@@ -199,6 +201,8 @@ function lessonCells(data = {}) {
 }
 
 function renderScores(refresh = true) {
+  if (!lastReport) return;
+  studentGrid.removeAttribute("aria-busy");
   const curriculum = lastReport?.curriculumSnap?.docs || [];
   const lessons = curriculum.map(lesson => {
     const data = lesson.data();
@@ -217,6 +221,7 @@ function renderScores(refresh = true) {
   const quizzes = quizPage?.quizzes || [];
   const quizColumnCount = Math.max(1, quizzes.length);
   const scoreLabels = ["Activity", "Pre-test", "Post-test"];
+  scoreColumnCount = 1 + quizColumnCount + lessons.length * scoreLabels.length;
   scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
     ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="${scoreLabels.length}">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="colgroup" colspan="${quizColumnCount}">Quiz</th></tr>
     <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}
@@ -234,7 +239,7 @@ function renderScores(refresh = true) {
       return `<td class="${index === 0 ? "score-quiz-column" : "score-lesson-start"}" role="cell">${value}</td>`;
     });
     return `<tr class="student-row" role="row">${name}${cells}${quizCells.join("") || '<td class="score-quiz-column" role="cell">—</td>'}</tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="${1 + quizColumnCount + lessons.length * scoreLabels.length}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="${scoreColumnCount}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
@@ -259,7 +264,7 @@ async function loadQuizScores(studentIds, force = false) {
   }, 60_000, true);
   const key = JSON.stringify([user.uid, currentTermFilter, activitySection, studentIds]);
   const old = quizPage;
-  if (!force && old?.key === key && Date.now() - old.checkedAt < 300_000) return;
+  if (!force && old?.key === key && !old.controller.signal.aborted && Date.now() - old.checkedAt < 300_000) return;
   old?.controller.abort();
   const page = { key, studentIds, checkedAt: Date.now(), loading: true, controller: new AbortController(),
     quizzes: old?.quizzes || [], scores: old?.scores || new Map() };
@@ -357,7 +362,16 @@ const report = createTeacherReport({ app,
     status.textContent = "";
     document.getElementById("analyticsTermLabel").textContent = termLabels[termId];
   },
-  failed: error => { console.error("Analytics update failed:", error); setLoadingState(document.getElementById("analyticsReportStatus"), false); document.getElementById("analyticsReportStatus").textContent = "Could not update results. Retrying automatically."; },
+  failed: error => {
+    console.error("Analytics update failed:", error);
+    const status = document.getElementById("analyticsReportStatus");
+    setLoadingState(status, false);
+    if (lastReport) status.textContent = "Could not update results. Retrying automatically.";
+    else {
+      studentGrid.removeAttribute("aria-busy");
+      studentGrid.innerHTML = `<tr class="empty-row"><td colspan="${scoreColumnCount}">Could not load scores. Retrying automatically.</td></tr>`;
+    }
+  },
   render: data => {
     if (data.termId !== currentTermFilter) return;
     const section = data.sections.find(row => selectedSection === "first" || row.classDoc.id === selectedSection);
@@ -399,7 +413,8 @@ const report = createTeacherReport({ app,
 });
 function openReport({ restoredPage = false } = {}) {
   if (!auth.currentUser) return;
-  if (lastAnalyticsTerm !== currentTermFilter) {
+  const termChanged = lastAnalyticsTerm !== currentTermFilter;
+  if (termChanged) {
     lastAnalyticsTerm = currentTermFilter;
     heatmapTopic = "";
     heatmapLessons = [];
@@ -413,13 +428,25 @@ function openReport({ restoredPage = false } = {}) {
   if (lastReport && (lastReport.termId !== currentTermFilter || (selectedSection !== "first" && selectedSection !== activitySection))) {
     lastReport = null; activitySection = "";
     resetQuizScores(); clearHeatmapResults(); showTopicsPending();
-    scoreHead.replaceChildren(); studentGrid.replaceChildren();
   }
   if (!lastReport) {
     sectionFilter.disabled = true;
+    if (termChanged) {
+      scoreHead.innerHTML = emptyScoreHeader;
+      scoreColumnCount = 2;
+    }
     studentCount.textContent = "—";
+    studentGrid.setAttribute("aria-busy", "true");
+    studentGrid.innerHTML = `<tr class="empty-row"><td colspan="${scoreColumnCount}"><span data-loading="true" role="status" aria-label="Loading scores"></span></td></tr>`;
+    document.getElementById("analyticsPrevious").disabled = true;
+    document.getElementById("analyticsNext").disabled = true;
+    document.getElementById("analyticsPageStatus").textContent = "";
   }
-  if (!restoredPage || !lastReport) setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");
+  if (!lastReport) {
+    const status = document.getElementById("analyticsReportStatus");
+    setLoadingState(status, false);
+    status.textContent = "";
+  }
   return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage });
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
@@ -435,7 +462,8 @@ onAuthStateChanged(auth, (user, { restored = false } = {}) => {
     selectedSection = "first"; tablePage = 0;
     resetQuizScores();
     activitySection = "";
-    scoreHead.replaceChildren();
+    scoreHead.innerHTML = emptyScoreHeader;
+    scoreColumnCount = 2;
     studentGrid.replaceChildren();
   }
   if (!user) { report.stop(); window.location.href = "login.html"; return; }

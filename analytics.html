@@ -55,8 +55,8 @@
         <button type="button" class="term-tab-btn" data-term="term_02" aria-pressed="false">Term 2</button>
         <button type="button" class="term-tab-btn" data-term="term_03" aria-pressed="false">Term 3</button>
       </div>
-      <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
-      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell data-await-content="analytics-students">
+      <p class="view-data-status" id="analyticsReportStatus" role="status"></p>
+      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
         <div class="section-head performance-head">
           <h2 data-auth-shell>Student Score Summary</h2>
         </div>
@@ -77,8 +77,8 @@
         </div>
         <div class="performance-table-wrap score-summary-wrap" role="region" aria-label="Student score table" tabindex="0">
           <table class="performance-table score-summary-table" id="studentGrid" role="table" aria-label="Student score summary">
-            <thead id="scoreSummaryHead" role="rowgroup"></thead>
-            <tbody id="studentTableBody" role="rowgroup"></tbody>
+            <thead id="scoreSummaryHead" role="rowgroup"><tr><th scope="col">Student / Section</th><th scope="col">Scores</th></tr></thead>
+            <tbody id="studentTableBody" role="rowgroup" aria-busy="true"><tr class="empty-row"><td colspan="2"><span data-loading="true" role="status" aria-label="Loading scores"></span></td></tr></tbody>
           </table>
         </div>
         <div class="student-detail-navigation" aria-label="Student performance pages">

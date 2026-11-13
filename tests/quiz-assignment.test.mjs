@@ -22,21 +22,20 @@ test("generation, review, unassigned draft and all-section release use the actua
   }
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
   const element = id => { assert.ok(elements.has(id), "Unknown page element: " + id); return elements.get(id); };
-  const termPicker = element("editorTerm");
-  termPicker.options = [...html.match(/<select[^>]*id="editorTerm"[^>]*>([\s\S]*?)<\/select>/)[1]
-    .matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }));
-  const choice = new Element(), availability = new Element(); choice.value = "multiple-choice"; availability.value = "draft";
+  assert.doesNotMatch(html, /id="(?:quizTerm|editorTerm|editorSectionSelect)"/);
+  const choice = new Element(); choice.value = "multiple-choice";
+  const browserEvents = {};
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
-  let authenticated, requested, transport, results, showSlowMessage, pollJob, finishGeneration, confirmDelete = false;
+  let authenticated, requested, transport, results, showSlowMessage, finishGeneration, confirmDelete = false;
   let job = { status: "none" };
   const context = {
     console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
     setTimeout: (callback, delay) => {
-      if (delay === 5000) { pollJob = callback; return 2; }
+      if (delay === 5000) return 2;
       showSlowMessage = callback; return 1;
     },
-    clearTimeout: id => { if (id === 1) showSlowMessage = null; else if (id === 2) pollJob = null; },
+    clearTimeout: id => { if (id === 1) showSlowMessage = null; },
     initializeApp:()=>({}), getAuth:()=>({currentUser:{uid:"teacher-a"}}), getFirestore:()=>({}),
     collection:(_db,path)=>path, query:(path)=>path, where:()=>null, doc:(_db,_collection,id)=>id,
     getDocs:async path=>path==="users" ? docs([["TEACH1",{role:"teacher"}]]) : path==="classes" ? docs([["A",{SectionName:"Section A"}],["C",{SectionName:"Section C"}]]) : docs([...quizzes]),
@@ -55,7 +54,8 @@ test("generation, review, unassigned draft and all-section release use the actua
     extractOfficeText:async()=>"Water freezes.", localStorage:{setItem(){}},
     closeQuizReview() {}, openQuizReview: (...args) => { results = args; },
     window:{scrollTo(){},addEventListener(){},confirm:()=>true},
-    document:{getElementById:element,querySelectorAll:()=>[],querySelector:selector=>selector.includes("questionType") ? choice : availability}
+    document:{getElementById:element,querySelectorAll:()=>[],querySelector:()=>choice,
+      addEventListener: (event, callback) => { browserEvents[event] = callback; }, visibilityState: "visible"}
   };
   vm.runInNewContext(readFileSync(new URL("../js/quiz-generator.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm,""),context);
   const loadingTeacher = authenticated({uid:"teacher-a"});
@@ -71,7 +71,6 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("quizFileError").textContent, "");
   assert.equal(element("generateQuiz").disabled,false);
   element("questionCount").value="1";
-  element("quizTerm").value = "term_02";
   const generation = element("generateQuiz").listeners.click();
   assert.equal(element("quizGenerationStatusCard").open, true);
   assert.match(element("quizGenerationStatus").textContent, /Preparing/);
@@ -84,22 +83,14 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("quizGenerationStatusCard").open, false);
   assert.equal(showSlowMessage, null);
   assert.equal(requested.sectionId,undefined);
-  assert.equal(requested.termId, "term_02");
-  assert.equal(transport.background, false);
+  assert.equal(requested.termId, undefined);
+  assert.equal(transport.background, true);
   assert.equal(element("reviewStep").hidden,false);
   element("acceptAll").listeners.click();
   assert.equal(element("editorStep").hidden,false);
-  assert.equal(element("quizAvailability").hidden,true);
-  assert.equal(termPicker.value, "term_02");
-  termPicker.value = "";
-  await element("saveQuiz").listeners.click();
-  assert.equal(saves.length, 0);
-  assert.match(element("editorStatus").textContent, /Choose a term/);
-  termPicker.value = "term_02";
   await element("saveQuiz").listeners.click();
   assert.equal(element("generateQuiz").disabled,true);
-  assert.equal(saves[0].termId, "term_02");
-  assert.match(element("quizLibraryList").innerHTML, /Term 2/);
+  assert.equal(saves[0].termId, undefined);
   assert.equal(saves[0].assignmentScope,"unassigned"); assert.equal(saves[0].sectionId,""); assert.equal(saves[0].availability,"draft");
   assert.match(element("quizLibraryList").innerHTML,/All my sections/);
   assert.doesNotMatch(element("quizLibraryList").innerHTML,/View results/);
@@ -132,24 +123,11 @@ test("generation, review, unassigned draft and all-section release use the actua
   await element("quizLibraryList").listeners.click({ target: { closest: selector =>
     selector === "[data-edit-quiz]" ? { dataset: { editQuiz: saves[0].id } } : null } });
   await new Promise(setImmediate);
-  const sectionPicker = element("editorSectionSelect");
-  assert.equal(termPicker.value, "term_02");
-  termPicker.value = "term_03";
-  assert.equal(sectionPicker.hidden, false);
-  assert.equal(sectionPicker.value, "A");
-  assert.match(sectionPicker.innerHTML, /All my sections/);
-  assert.match(sectionPicker.innerHTML, /Section A/);
-  assert.match(sectionPicker.innerHTML, /Section C/);
-  assert.doesNotMatch(sectionPicker.innerHTML, /Section B/);
-  sectionPicker.value = "*";
-  sectionPicker.listeners.change();
-  availability.value = "now";
   await element("saveQuiz").listeners.click();
   assert.equal(saves.at(-1).id, saves[0].id);
-  assert.equal(saves.at(-1).termId, "term_03");
-  assert.equal(saves.at(-1).assignmentScope, "all");
-  assert.equal(saves.at(-1).availability, "now");
-  availability.value = "draft";
+  assert.equal(saves.at(-1).termId, "term_02");
+  assert.equal(saves.at(-1).sectionId, "A");
+  assert.equal(saves.at(-1).availability, "scheduled");
   const deleteClick = { target: { closest: selector =>
     selector === "[data-delete-quiz]" ? { dataset: { deleteQuiz: saves[0].id } } : null } };
   await element("quizLibraryList").listeners.click(deleteClick);
@@ -161,26 +139,46 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("newQuizFromLibrary").listeners.click();
   element("quizFile").files = [file];
   element("quizFile").listeners.change();
-  element("quizTerm").value = "term_01";
   job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "queued" };
-  await authenticated({ uid: "teacher-a" });
+  const pending = element("generateQuiz").listeners.click();
+  await new Promise(setImmediate);
+  context.document.visibilityState = "hidden";
+  browserEvents.visibilitychange();
+  finishGeneration(job);
+  await pending;
   await new Promise(setImmediate);
   assert.equal(element("quizGenerationStatusCard").open, false);
   assert.match(element("quizJobMessage").textContent, /come back/);
   assert.equal(element("generateQuiz").disabled, true);
   job = { ...job, status: "complete", details: { title: "Water quiz", fileName: "water.pdf", questionType: "multiple-choice", difficulty: "Medium", termId: "term_01" },
     questions: [{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }] };
-  pollJob();
+  context.document.visibilityState = "visible";
+  browserEvents.visibilitychange();
   await new Promise(setImmediate);
-  assert.equal(element("reviewQuizJob").hidden, false);
-  element("reviewQuizJob").listeners.click();
   assert.equal(element("reviewStep").hidden, false);
   assert.equal(element("quizTitle").value, "Water quiz");
   element("acceptAll").listeners.click();
-  assert.equal(termPicker.value, "term_01");
   await element("saveQuiz").listeners.click();
   assert.equal(job.status, "none");
   assert.equal(saves.at(-1).sourceFile, "water.pdf");
+
+  element("newQuizFromLibrary").listeners.click();
+  element("quizFile").files = [file];
+  element("quizFile").listeners.change();
+  const interrupted = element("generateQuiz").listeners.click();
+  await new Promise(setImmediate);
+  assert.equal(transport.background, true);
+  job = { id: "6f9f2c8a-5303-465c-8005-81e51e6d5463", status: "queued" };
+  finishGeneration(job);
+  await interrupted;
+  await new Promise(setImmediate);
+  job = { ...job, status: "failed", errorCode: "JOB_DELIVERY_FAILED", error: "Interrupted." };
+  browserEvents.visibilitychange();
+  await new Promise(setImmediate);
+  assert.equal(transport.background, false);
+  finishGeneration([{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }]);
+  await new Promise(setImmediate);
+  assert.equal(element("reviewStep").hidden, false);
 
   job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "failed", errorCode: "JOB_DELIVERY_FAILED",
     error: "The background quiz job was interrupted." };
@@ -188,7 +186,6 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("newQuizFromLibrary").listeners.click();
   element("quizFile").files = [file];
   element("quizFile").listeners.change();
-  element("quizTerm").value = "term_03";
   const retry = element("generateQuiz").listeners.click();
   await new Promise(setImmediate);
   assert.equal(transport.background, false);

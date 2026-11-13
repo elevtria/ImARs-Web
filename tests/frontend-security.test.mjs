@@ -320,12 +320,20 @@ test("the summary includes all students and requests quizzes for the 25 visible 
 });
 
 test("a term switch keeps the section and ignores an older report", async () => {
-  const app = page("analytics.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
+  let finishTerm;
+  const app = page("analytics.js", null, input => {
+    const data = activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId });
+    if (input.termId === "term_03") return new Promise(resolve => { finishTerm = () => resolve(data); });
+    return data;
+  });
   await app.render();
   const filter = app.element("sectionFilter");
   filter.value = "B";
   await filter.events.change();
-  await app.termButtons[2].events.click();
+  const termChange = app.termButtons[2].events.click();
+  assert.match(app.element("#studentGrid tbody").html(), /colspan="2".*Loading scores/);
+  finishTerm();
+  await termChange;
   assert.equal(filter.value, "B");
   assert.equal(app.quizRequests.at(-1).termId, "term_03");
   const table = app.element("#studentGrid tbody").html();

@@ -23,9 +23,6 @@ const firestore = getFirestore(firebaseApp);
   const fileError = document.getElementById("quizFileError");
   const setupStatus = document.getElementById("setupStatus");
   const editorStatus = document.getElementById("editorStatus");
-  const editorSectionSelect = document.getElementById("editorSectionSelect");
-  const editorTerm = document.getElementById("editorTerm");
-  const quizTerm = document.getElementById("quizTerm");
   const suggestionList = document.getElementById("suggestionsList");
   const editorList = document.getElementById("questionEditorList");
   const libraryList = document.getElementById("quizLibraryList");
@@ -51,11 +48,14 @@ const firestore = getFirestore(firebaseApp);
   let reviewedJob;
   let jobTimer;
   let jobCheck = 0;
+  let activeGenerationId;
+  let retryUpload;
   const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
   const updateGenerateButton = () => { generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile; };
   const jobStatus = document.getElementById("quizJobStatus");
   const jobMessage = document.getElementById("quizJobMessage");
   const reviewJob = document.getElementById("reviewQuizJob");
+  const terms = [["term_01", "Term 1"], ["term_02", "Term 2"], ["term_03", "Term 3"]];
 
   function renderJob() {
     const status = backgroundJob?.status;
@@ -73,14 +73,22 @@ const firestore = getFirestore(firebaseApp);
       const result = await readQuizJob(user.uid);
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
       backgroundJob = result.status === "none" && activeJob()
-        ? { status: "failed", error: "The quiz job expired or was cleared. Generate it again." }
+        ? { status: "failed", id: backgroundJob.id, error: "The quiz job expired or was cleared. Generate it again." }
         : result;
       renderJob();
+      if (backgroundJob.id === activeGenerationId && !createView.hidden && !setupStep.hidden) {
+        if (backgroundJob.status === "complete") openCompletedJob();
+        else if (backgroundJob.errorCode === "JOB_DELIVERY_FAILED" && retryUpload && document.visibilityState !== "hidden") {
+          const payload = retryUpload;
+          retryUpload = undefined;
+          void startGeneration(payload);
+        }
+      }
     } catch {
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
       if (activeJob()) jobMessage.textContent = "Reconnecting to check quiz progress…";
     }
-    if (activeJob()) jobTimer = setTimeout(() => { void refreshJob(user); }, 5000);
+    if (activeJob() && document.visibilityState !== "hidden") jobTimer = setTimeout(() => { void refreshJob(user); }, 5000);
   }
 
   function openQuestions(questions) {
@@ -93,11 +101,11 @@ const firestore = getFirestore(firebaseApp);
 
   function openCompletedJob() {
     if (backgroundJob?.status !== "complete" || !Array.isArray(backgroundJob.questions)) return;
-    const { title, questionType, difficulty: level, termId } = backgroundJob.details;
+    const { title, questionType, difficulty: level } = backgroundJob.details;
+    activeGenerationId = undefined;
     resetNewQuiz();
     reviewedJob = backgroundJob;
     document.getElementById("quizTitle").value = title;
-    quizTerm.value = termId || "";
     const type = document.querySelector(`input[name='questionType'][value='${questionType}']`);
     if (type) type.checked = true;
     difficulty = level;
@@ -109,6 +117,10 @@ const firestore = getFirestore(firebaseApp);
   window.addEventListener("pagehide", () => {
     ++jobCheck;
     clearTimeout(jobTimer);
+  });
+  document.addEventListener("visibilitychange", () => {
+    const user = auth.currentUser;
+    if (document.visibilityState === "visible" && user && (activeJob() || retryUpload)) void refreshJob(user);
   });
 
   function escapeHtml(value) {
@@ -285,14 +297,13 @@ const firestore = getFirestore(firebaseApp);
     const count = Number(countInput.value);
     if (!selectedFile) return "Upload a PDF, DOCX, PPT, or PPTX file to continue.";
     if (!title) return "Add a title for this quiz.";
-    if (!quizTerm.value) return "Choose the term for this quiz.";
     if (!Number.isInteger(count) || count < 1 || count > 50) return "Choose between 1 and 50 questions.";
     return "";
   }
 
-  async function startGeneration() {
+  async function startGeneration(retryPayload) {
     if (generating || activeJob() || backgroundJob?.status === "complete") return;
-    const error = validateSetup();
+    const error = retryPayload ? "" : validateSetup();
     if (error) {
       showStatus(setupStatus, error, true);
       return;
@@ -309,7 +320,6 @@ const firestore = getFirestore(firebaseApp);
     const interruptedJobId = backgroundJob?.status === "failed" ? backgroundJob.id : undefined;
     const settings = {
       title: document.getElementById("quizTitle").value.trim(),
-      termId: quizTerm.value,
       questionCount: Number(document.getElementById("questionCount").value),
       difficulty,
       questionType: document.querySelector("input[name='questionType']:checked").value
@@ -325,17 +335,28 @@ const firestore = getFirestore(firebaseApp);
     showStatus(setupStatus, "", false);
     try {
       generationDialog.showModal();
-      const material = await prepareMaterial(file);
+      const payload = retryPayload || { ...(await prepareMaterial(file)), ...settings, fileName: file.name };
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
-      loadingStatus.textContent = material.pdfFile ? "Uploading your PDF…" : "Starting quiz generation…";
-      const questions = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid);
+      loadingStatus.textContent = payload.pdfFile ? "Uploading your PDF…" : "Starting quiz generation…";
+      const result = await requestQuiz(payload, user.uid, { background: !interruptedJobId });
       if (auth.currentUser?.uid !== user.uid) return;
-      backgroundJob = undefined;
-      renderJob();
-      openQuestions(questions);
-      if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
+      if (Array.isArray(result)) {
+        backgroundJob = undefined;
+        activeGenerationId = undefined;
+        retryUpload = undefined;
+        renderJob();
+        openQuestions(result);
+        if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
+      } else {
+        backgroundJob = result;
+        activeGenerationId = result.id;
+        retryUpload = payload;
+        renderJob();
+        void refreshJob(user);
+      }
     } catch (generationError) {
+      if (auth.currentUser?.uid !== user.uid) return;
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
       clearTimeout(slowMessage);
@@ -396,15 +417,9 @@ const firestore = getFirestore(firebaseApp);
     editingQuiz = null;
     editRequest++;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
-    editorTerm.value = quizTerm.value;
-    document.getElementById("editorSectionName").hidden = false;
-    editorSectionSelect.hidden = true;
-    document.getElementById("quizAvailability").hidden = true;
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value);
     document.getElementById("editorDemoNotice").hidden = false;
     document.getElementById("backToReview").hidden = false;
-    document.querySelector("input[name='availability'][value='draft']").checked = true;
-    updateReleaseSelection();
     setStep("editor");
   }
 
@@ -430,15 +445,6 @@ const firestore = getFirestore(firebaseApp);
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions · " + difficulty + " · " + questionTypeLabel(type);
   }
 
-  function updateReleaseSelection() {
-    document.querySelectorAll(".quiz-release-option").forEach((label) => {
-      const radio = label.querySelector("input");
-      label.classList.toggle("selected", radio.checked);
-    });
-    const scheduleSelected = document.querySelector("input[name='availability']:checked").value === "scheduled";
-    document.getElementById("scheduleFields").hidden = !scheduleSelected;
-  }
-
   function updateTypeSelection() {
     document.querySelectorAll(".quiz-type-option").forEach(label => label.classList.toggle("selected", label.querySelector("input").checked));
   }
@@ -451,12 +457,6 @@ const firestore = getFirestore(firebaseApp);
       document.getElementById("editorTitle").focus();
       return;
     }
-    const termId = editorTerm.value;
-    if (!termId) {
-      showStatus(editorStatus, "Choose a term before saving this quiz.", true);
-      editorTerm.focus();
-      return;
-    }
     if (editorQuestions.length < 1 || editorQuestions.length > 50) {
       showStatus(editorStatus, "A quiz must have between 1 and 50 questions.", true);
       return;
@@ -465,23 +465,6 @@ const firestore = getFirestore(firebaseApp);
     const normalizedQuestions = editorQuestions.map(question => normalizeQuizQuestion(question, type));
     if (normalizedQuestions.some(question => !question)) {
       showStatus(editorStatus, "Complete every question, answer choice, answer guide, and required correction before saving. Multiple-choice options must be distinct.", true);
-      return;
-    }
-    const assignment = selectedAssignment(editingQuiz ? editorSectionSelect.value : "");
-    if (!assignment) {
-      showStatus(editorStatus, "Choose one of your sections or All my sections.", true);
-      return;
-    }
-    const availability = assignment.assignmentScope === "unassigned" ? "draft" : document.querySelector("input[name='availability']:checked").value;
-    const availableAt = document.getElementById("availableAt").value;
-    if (availability === "scheduled" && !availableAt) {
-      showStatus(editorStatus, "Choose the date and time when the quiz should unlock.", true);
-      document.getElementById("availableAt").focus();
-      return;
-    }
-    if (availability === "scheduled" && new Date(availableAt).getTime() <= Date.now()) {
-      showStatus(editorStatus, "Choose a future date and time for the quiz to unlock.", true);
-      document.getElementById("availableAt").focus();
       return;
     }
     const signedInUser = auth.currentUser;
@@ -494,17 +477,19 @@ const firestore = getFirestore(firebaseApp);
     const quiz = {
       id: oldQuiz?.id || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
       title: title,
-      termId,
-      ...assignment,
+      section: oldQuiz?.section || "Not assigned",
+      sectionId: oldQuiz?.sectionId || "",
+      assignmentScope: oldQuiz ? quizAssignmentScope(oldQuiz) : "unassigned",
+      ...(oldQuiz?.termId ? { termId: oldQuiz.termId } : {}),
       sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || "Uploaded source",
       type,
       schemaVersion: 2,
       gradingMode: writtenQuestion(type) || type === "modified-true-false" ? "teacher-review" : "automatic",
       difficulty: difficulty,
       questions: normalizedQuestions.map((question, index) => ({ id: editorQuestions[index].id, ...question })),
-      availability: availability,
-      availableAt: availability === "scheduled" ? new Date(availableAt).toISOString() : "",
-      deadlineUtc: assignment.assignmentScope === "unassigned" ? "" : deadlineValue(document.getElementById("quizDeadline").value, oldQuiz?.deadlineUtc),
+      availability: oldQuiz?.availability || "draft",
+      availableAt: oldQuiz?.availableAt || "",
+      deadlineUtc: oldQuiz?.deadlineUtc || "",
       createdAt: oldQuiz ? oldQuiz.createdAt : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       demo: false
@@ -590,7 +575,7 @@ const firestore = getFirestore(firebaseApp);
     libraryList.hidden = quizzes.length === 0;
     libraryList.innerHTML = quizzes.map((quiz) => {
       const status = currentAvailability(quiz);
-      const termLabel = Array.from(editorTerm.options).find(option => option.value && option.value === quiz.termId)?.textContent || "Term not set";
+      const termLabel = terms.find(([id]) => id === quiz.termId)?.[1] || "Term not set";
       const resultsButton = teacherSections.some(section => quizAssignedToSection(quiz, section.id))
         ? `<button type="button" data-results-quiz="${escapeHtml(quiz.id)}">View results</button>` : "";
       const closed = status !== "draft" && Date.parse(quiz.deadlineUtc) <= Date.now();
@@ -608,7 +593,7 @@ const firestore = getFirestore(firebaseApp);
           </select></label>
           <label>Term <select name="termId" required>
             <option value="" ${quiz.termId ? "" : "selected"} disabled>Choose a term</option>
-            ${Array.from(editorTerm.options).filter(option => option.value).map(option => `<option value="${option.value}" ${option.value === quiz.termId ? "selected" : ""}>${escapeHtml(option.textContent)}</option>`).join("")}
+            ${terms.map(([id, label]) => `<option value="${id}" ${id === quiz.termId ? "selected" : ""}>${label}</option>`).join("")}
           </select></label>
           <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
             <option value="draft" ${status === "draft" ? "selected" : ""}>Keep locked</option>
@@ -717,12 +702,6 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("editorTitle").value = quiz.title || "";
-    editorTerm.value = quiz.termId || "";
-    document.getElementById("editorSectionName").hidden = true;
-    editorSectionSelect.hidden = false;
-    editorSectionSelect.innerHTML = '<option value="">Unassigned · draft only</option>' + sectionOptions(quiz);
-    editorSectionSelect.value = quizAssignmentScope(quiz) === "all" ? "*" : quiz.sectionId;
-    document.getElementById("quizAvailability").hidden = !editorSectionSelect.value;
     document.getElementById("editorDemoNotice").hidden = !quiz.demo;
     document.getElementById("backToReview").hidden = true;
     document.getElementById("quizTitle").value = quiz.title || "";
@@ -734,11 +713,6 @@ const firestore = getFirestore(firebaseApp);
     });
     document.querySelector("input[name='questionType'][value='" + (quiz.type || "multiple-choice") + "']").checked = true;
     updateTypeSelection();
-    const availability = currentAvailability(quiz);
-    document.querySelector("input[name='availability'][value='" + availability + "']").checked = true;
-    document.getElementById("availableAt").value = availability === "scheduled" ? toLocalDateTimeInput(quiz.availableAt) : "";
-    document.getElementById("quizDeadline").value = toLocalDateTimeInput(quiz.deadlineUtc);
-    updateReleaseSelection();
     document.getElementById("editorMeta").textContent = editorQuestions.length + " questions";
     setView("create");
     setStep("editor");
@@ -746,6 +720,7 @@ const firestore = getFirestore(firebaseApp);
 
   function resetNewQuiz() {
     reviewedJob = undefined;
+    retryUpload = undefined;
     selectedFile = null;
     fileError.textContent = "";
     fileInput.setAttribute("aria-invalid", "false");
@@ -757,7 +732,6 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("quizTitle").value = "";
-    quizTerm.value = "";
     document.getElementById("questionCount").value = "10";
     document.querySelector("input[name='questionType'][value='multiple-choice']").checked = true;
     updateTypeSelection();
@@ -767,10 +741,6 @@ const firestore = getFirestore(firebaseApp);
       button.setAttribute("aria-pressed", String(selected));
     });
     difficulty = "Medium";
-    document.querySelector("input[name='availability'][value='draft']").checked = true;
-    document.getElementById("availableAt").value = "";
-    document.getElementById("quizDeadline").value = "";
-    updateReleaseSelection();
     showStatus(setupStatus, "", false);
     showStatus(editorStatus, "", false);
     setView("create");
@@ -789,6 +759,8 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    activeGenerationId = undefined;
+    retryUpload = undefined;
     ++jobCheck;
     clearTimeout(jobTimer);
     backgroundJob = undefined;
@@ -839,7 +811,7 @@ const firestore = getFirestore(firebaseApp);
       fileInput.click();
     }
   });
-  document.getElementById("generateQuiz").addEventListener("click", startGeneration);
+  document.getElementById("generateQuiz").addEventListener("click", () => startGeneration());
   document.getElementById("questionCount").addEventListener("change", (event) => {
     const input = event.target;
     const count = Math.min(50, Math.max(1, Number(input.value) || 1));
@@ -937,10 +909,6 @@ const firestore = getFirestore(firebaseApp);
     });
     renderEditor();
     editorList.lastElementChild.querySelector("textarea").focus();
-  });
-  document.querySelectorAll("input[name='availability']").forEach((radio) => radio.addEventListener("change", updateReleaseSelection));
-  editorSectionSelect.addEventListener("change", () => {
-    document.getElementById("quizAvailability").hidden = !editorSectionSelect.value;
   });
   document.getElementById("saveQuiz").addEventListener("click", saveCurrentQuiz);
   document.getElementById("createTab").addEventListener("click", () => setView("create"));

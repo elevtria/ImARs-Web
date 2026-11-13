@@ -256,7 +256,8 @@ class Scope {
       if (!["multiple-choice", "true-false"].includes(data.type) && (data.schemaVersion !== 2 || data.gradingMode !== "teacher-review")) throw fail("Written-response quizzes need a teacher-review answer guide.", 400);
       const now = Date.now();
       const releaseAt = typeof data.availableAt === "string" && /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(data.availableAt) ? Date.parse(data.availableAt) : NaN;
-      if (data.availability === "scheduled" ? !Number.isFinite(releaseAt) || releaseAt <= now : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
+      const keepsSchedule = !releaseOnly && previous?.availability === "scheduled" && data.availableAt === previous.availableAt;
+      if (data.availability === "scheduled" ? !Number.isFinite(releaseAt) || (!keepsSchedule && releaseAt <= now) : data.availableAt !== "") throw fail("Choose a valid quiz release date.", 400);
       const deadline = Object.hasOwn(data, "deadlineUtc") ? data.deadlineUtc : previous?.deadlineUtc ?? "";
       let deadlineUtc = "";
       if (deadline !== "") {
