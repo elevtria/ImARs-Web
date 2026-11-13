@@ -290,7 +290,7 @@ test("the summary includes all students and requests quizzes for the 25 visible 
   const app = page("analytics.js", data);
   await app.render();
   const table = app.element("#studentGrid tbody");
-  assert.match(table.html(), /Learner A 24[\s\S]*?<dd>—<\/dd>/);
+  assert.match(table.html(), /Learner A 24[\s\S]*?<td>—<\/td>/);
   assert.equal(app.quizRequests.at(-1).studentIds.length, 25);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 1–25 of 30 students");
   app.element("analyticsNext").events.click();

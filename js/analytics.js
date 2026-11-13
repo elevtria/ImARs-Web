@@ -196,7 +196,7 @@ function lessonCells(data = {}) {
     ? raw(data.activityRawScore, data.activityRawMaximum)
     : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
   const gain = pre && post ? post.score - pre.score : null;
-  return `<dl class="score-values"><div><dt>Activity</dt><dd>${activity}</dd></div><div><dt>Pre-test</dt><dd>${raw(pre?.score, pre?.total)}</dd></div><div><dt>Post-test</dt><dd>${raw(post?.score, post?.total)}</dd></div><div><dt>Improvement</dt><dd>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</dd></div></dl>`;
+  return `<td>${activity}</td><td>${raw(pre?.score, pre?.total)}</td><td>${raw(post?.score, post?.total)}</td><td>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
 }
 
 function renderScores(refresh = true) {
@@ -212,12 +212,13 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  scoreHead.innerHTML = '<tr><th class="score-student" scope="col">Student name <span>Section</span></th><th scope="col">Lesson and quiz scores</th></tr>';
+  scoreHead.innerHTML = '<tr><th class="score-student" scope="col">Student / Section</th><th class="score-lesson" scope="col">Lesson</th><th scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th></tr>';
   studentGrid.innerHTML = visible.map(row => {
     const lessons = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(lesson => [lesson.id, lesson.data()]));
-    const lessonGroups = curriculum.map(lesson => {
+    const name = `<th class="score-student" scope="row" rowspan="${curriculum.length + 1}">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
+    const lessonRows = curriculum.map((lesson, index) => {
       const data = lesson.data();
-      return `<div class="score-group"><strong>${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</strong>${lessonCells(lessons.get(lesson.id))}</div>`;
+      return `<tr class="score-lesson-row${index === 0 ? " student-row" : ""}">${index === 0 ? name : ""}<th scope="row">${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</th>${lessonCells(lessons.get(lesson.id))}</tr>`;
     });
     const quizRows = quizzes.map(quiz => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
@@ -227,9 +228,9 @@ function renderScores(refresh = true) {
         : score;
       return `<div><dt>${escapeHtml(quiz.title || "Quiz")}</dt><dd>${value}</dd></div>`;
     });
-    return `<tr class="student-row"><th class="score-student" scope="row">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>
-      <td><div class="score-groups">${lessonGroups.join("")}<details class="score-group score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>Generated quizzes</summary><dl class="score-values">${quizRows.join("") || "<div><dt>No scores</dt><dd>—</dd></div>"}</dl></details></div></td></tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="2">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+    return `${lessonRows.join("")}<tr class="score-quiz-row${lessonRows.length ? "" : " student-row"}">${lessonRows.length ? "" : name}
+      <td colspan="5"><details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>Generated quizzes</summary><dl class="score-values">${quizRows.join("") || "<div><dt>No scores</dt><dd>—</dd></div>"}</dl></details></td></tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="6">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
