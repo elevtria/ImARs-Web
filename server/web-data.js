@@ -231,7 +231,7 @@ class Scope {
     if (p[0] === "generatedQuizzes" && p.length === 2 && actor.role === "teacher") {
       if (row) await this.quiz(p[1]);
       const releaseFields = ["section", "sectionId", "assignmentScope", "availability", "availableAt"];
-      const releaseOnly = input.operation === "update" && names([...releaseFields, "deadlineUtc"]);
+      const releaseOnly = input.operation === "update" && names([...releaseFields, "deadlineUtc", "termId"]);
       const release = releaseOnly ? data : null;
       if (releaseOnly) {
         if (!releaseFields.every(field => Object.hasOwn(release, field))) throw fail("Choose a section and release option.", 400);

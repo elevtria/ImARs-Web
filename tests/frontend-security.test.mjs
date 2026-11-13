@@ -265,7 +265,8 @@ test("all lessons and quiz scores appear together without another request", asyn
   assert.match(header.html(), /colspan="4">Circulatory System/);
   assert.match(header.html(), /score-quiz-column/);
   const grid = app.element("#studentGrid tbody");
-  assert.match(grid.html(), /Food Webs.*8\/10.*Circulatory System.*score-quiz-column/s);
+  assert.match(grid.html(), /8\/10.*score-quiz-column/s);
+  assert.equal((grid.html().match(/data-score-label="Activity"/g) || []).length, 2);
   assert.equal(app.requests.length, 1);
   assert.equal(app.quizRequests.length, 1);
 });

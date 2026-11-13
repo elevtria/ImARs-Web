@@ -73,7 +73,7 @@ export async function onRequestPost(context, { store, authenticate = requireStaf
         binaryPdf, uri, uploadedFile, executeBy: Date.now() + 5 * 60_000
       });
       const queued = await job.fetch("https://quiz-job.internal/", {
-        method: "POST", body: JSON.stringify({ id, details: { title, fileName, questionCount, questionType, difficulty }, callback })
+        method: "POST", body: JSON.stringify({ id, details: { title, fileName, questionCount, questionType, difficulty, termId: body.termId }, callback })
       });
       if (queued.status === 202) uploadedFile = undefined; // The background request now owns cleanup.
       if (queued.status === 202 || queued.status === 409) return jsonResponse(await queued.json(), 202);
@@ -131,8 +131,8 @@ export async function onRequestPost(context, { store, authenticate = requireStaf
         status: geminiResponse.status,
         message: upstreamMessage
       });
-      if (geminiResponse.status === 503 && index < GEMINI_MODELS.length - 1) {
-        console.warn("[Quiz Generator] Primary model is busy; trying the fallback.");
+      if ([404, 503].includes(geminiResponse.status) && index < GEMINI_MODELS.length - 1) {
+        console.warn("[Quiz Generator] Primary model is unavailable; trying the fallback.");
         continue;
       }
       break;
@@ -219,6 +219,7 @@ export const onRequestGet = context => accessJob(context);
 export const onRequestDelete = context => accessJob(context, true);
 
 function validateRequest(body, binaryPdf, gateway = false) {
+  if (body.termId !== undefined && (typeof body.termId !== "string" || !/^term_0[1-3]$/.test(body.termId))) return "Choose a valid quiz term.";
   if (!body || typeof body !== "object") return "The quiz request is incomplete.";
   if (!gateway && (typeof body.firebaseApiKey !== "string" || body.firebaseApiKey.length < 20)) return "The Firebase sign-in settings are missing.";
   if (body.sectionId !== undefined && (typeof body.sectionId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.sectionId))) return "Choose one of your sections.";

@@ -216,13 +216,13 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  const scoreLabels = ["Activity", "Pre-test", "Post-test", "Improvement"];
+  const scoreLabels = [["Activity", "Act."], ["Pre-test", "Pre"], ["Post-test", "Post"], ["Improvement", "Gain"]];
   scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
     ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="4">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="col">Quiz</th></tr>
-    <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}<th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
+    <tr role="row">${lessons.map(() => scoreLabels.map(([label, short], index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col" aria-label="${label}" title="${label}"><span class="score-label-full">${label}</span><span class="score-label-short" aria-hidden="true">${short}</span></th>`).join("")).join("")}<th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
   studentGrid.innerHTML = visible.map(row => {
     const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
-    const cells = lessons.map(lesson => `<td class="score-mobile-lesson" role="cell">${escapeHtml(lesson.title)}</td>${lessonCells(results.get(lesson.id))}`).join("");
+    const cells = lessons.map(lesson => lessonCells(results.get(lesson.id))).join("");
     const name = `<th class="score-student" scope="row" role="rowheader">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
     const quizRows = quizzes.map(quiz => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);

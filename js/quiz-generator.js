@@ -25,6 +25,7 @@ const firestore = getFirestore(firebaseApp);
   const editorStatus = document.getElementById("editorStatus");
   const editorSectionSelect = document.getElementById("editorSectionSelect");
   const editorTerm = document.getElementById("editorTerm");
+  const quizTerm = document.getElementById("quizTerm");
   const suggestionList = document.getElementById("suggestionsList");
   const editorList = document.getElementById("questionEditorList");
   const libraryList = document.getElementById("quizLibraryList");
@@ -50,6 +51,7 @@ const firestore = getFirestore(firebaseApp);
   let reviewedJob;
   let jobTimer;
   let jobCheck = 0;
+  let autoReviewJobId;
   const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
   const updateGenerateButton = () => { generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile; };
   const jobStatus = document.getElementById("quizJobStatus");
@@ -71,8 +73,13 @@ const firestore = getFirestore(firebaseApp);
     try {
       const result = await readQuizJob(user.uid);
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
-      backgroundJob = result;
+      backgroundJob = result.status === "none" && activeJob()
+        ? { status: "failed", error: "The quiz job expired or was cleared. Generate it again." }
+        : result;
       renderJob();
+      if (backgroundJob.status === "complete" && backgroundJob.id === autoReviewJobId && !createView.hidden && !setupStep.hidden) {
+        openCompletedJob();
+      }
     } catch {
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
       if (activeJob()) jobMessage.textContent = "Reconnecting to check quiz progress…";
@@ -88,19 +95,21 @@ const firestore = getFirestore(firebaseApp);
     setStep("review");
   }
 
-  reviewJob.addEventListener("click", () => {
+  function openCompletedJob() {
     if (backgroundJob?.status !== "complete" || !Array.isArray(backgroundJob.questions)) return;
-    const { title, questionType, difficulty: level } = backgroundJob.details;
+    const { title, questionType, difficulty: level, termId } = backgroundJob.details;
     resetNewQuiz();
     reviewedJob = backgroundJob;
     document.getElementById("quizTitle").value = title;
+    quizTerm.value = termId || "";
     const type = document.querySelector(`input[name='questionType'][value='${questionType}']`);
     if (type) type.checked = true;
     difficulty = level;
     updateTypeSelection();
     renderJob();
     openQuestions(backgroundJob.questions);
-  });
+  }
+  reviewJob.addEventListener("click", openCompletedJob);
   window.addEventListener("pagehide", () => {
     ++jobCheck;
     clearTimeout(jobTimer);
@@ -280,6 +289,7 @@ const firestore = getFirestore(firebaseApp);
     const count = Number(countInput.value);
     if (!selectedFile) return "Upload a PDF, DOCX, PPT, or PPTX file to continue.";
     if (!title) return "Add a title for this quiz.";
+    if (!quizTerm.value) return "Choose the term for this quiz.";
     if (!Number.isInteger(count) || count < 1 || count > 50) return "Choose between 1 and 50 questions.";
     return "";
   }
@@ -302,6 +312,7 @@ const firestore = getFirestore(firebaseApp);
     const file = selectedFile;
     const settings = {
       title: document.getElementById("quizTitle").value.trim(),
+      termId: quizTerm.value,
       questionCount: Number(document.getElementById("questionCount").value),
       difficulty,
       questionType: document.querySelector("input[name='questionType']:checked").value
@@ -325,7 +336,8 @@ const firestore = getFirestore(firebaseApp);
       if (auth.currentUser?.uid !== user.uid) return;
       if (Array.isArray(result)) openQuestions(result);
       else {
-        backgroundJob = { ...result, status: "queued" };
+        backgroundJob = result;
+        autoReviewJobId = result.id;
         renderJob();
         void refreshJob(user);
       }
@@ -390,7 +402,7 @@ const firestore = getFirestore(firebaseApp);
     editingQuiz = null;
     editRequest++;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
-    editorTerm.value = "";
+    editorTerm.value = quizTerm.value;
     document.getElementById("editorSectionName").hidden = false;
     editorSectionSelect.hidden = true;
     document.getElementById("quizAvailability").hidden = true;
@@ -600,6 +612,10 @@ const firestore = getFirestore(firebaseApp);
             ${quizAssignmentScope(quiz) === "all" || teacherSections.some(section => section.id === quiz.sectionId) ? "" : '<option value="" selected disabled>Choose a section</option>'}
             ${sectionOptions(quiz)}
           </select></label>
+          <label>Term <select name="termId" required>
+            <option value="" ${quiz.termId ? "" : "selected"} disabled>Choose a term</option>
+            ${Array.from(editorTerm.options).filter(option => option.value).map(option => `<option value="${option.value}" ${option.value === quiz.termId ? "selected" : ""}>${escapeHtml(option.textContent)}</option>`).join("")}
+          </select></label>
           <label>Access <select name="availability" aria-label="Access for ${escapeHtml(quiz.title)}">
             <option value="draft" ${status === "draft" ? "selected" : ""}>Keep locked</option>
             <option value="now" ${status === "now" ? "selected" : ""}>Available now</option>
@@ -623,6 +639,11 @@ const firestore = getFirestore(firebaseApp);
     const dateInput = form.elements.availableAt;
     const releaseDate = availability === "scheduled" ? new Date(dateInput.value) : null;
     const libraryStatus = document.getElementById("libraryStatus");
+    const termId = form.elements.termId.value;
+    if (!termId) {
+      showStatus(libraryStatus, "Choose the term for this quiz.", true);
+      return;
+    }
     const assignment = selectedAssignment(form.elements.sectionId.value);
     if (!assignment || assignment.assignmentScope === "unassigned") {
       showStatus(libraryStatus, "Choose one of your assigned sections for this quiz.", true);
@@ -643,6 +664,7 @@ const firestore = getFirestore(firebaseApp);
       const reference = doc(firestore, "generatedQuizzes", id);
       const updated = {
         ...assignment,
+        termId,
         availability,
         availableAt: availability === "scheduled" ? releaseDate.toISOString() : "",
         deadlineUtc: deadlineValue(form.elements.deadlineUtc?.value, quiz.deadlineUtc)
@@ -729,6 +751,7 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
+    autoReviewJobId = undefined;
     reviewedJob = undefined;
     selectedFile = null;
     fileError.textContent = "";
@@ -741,6 +764,7 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("quizTitle").value = "";
+    quizTerm.value = "";
     document.getElementById("questionCount").value = "10";
     document.querySelector("input[name='questionType'][value='multiple-choice']").checked = true;
     updateTypeSelection();
@@ -772,6 +796,7 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    autoReviewJobId = undefined;
     ++jobCheck;
     clearTimeout(jobTimer);
     backgroundJob = undefined;
