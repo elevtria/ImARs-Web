@@ -1127,16 +1127,17 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   font-weight: 700;
   white-space: nowrap;
 }
-.score-summary-wrap { max-width: 100%; overflow: visible; container-type: inline-size; }
+.score-summary-wrap { max-width: 100%; }
 .score-summary-controls { flex-wrap: wrap; }
 .score-summary-controls .select-wrap { flex: 1 1 11rem; min-width: 0; max-width: 100%; }
 .score-summary-controls .search { flex: 1 1 11rem; min-width: 0; }
-.score-summary-table { min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
-.score-summary-table th, .score-summary-table td { padding: 8px 5px; vertical-align: top; overflow-wrap: anywhere; }
+.score-summary-table { min-width: 0; border-collapse: separate; border-spacing: 0; }
+.score-summary-table th, .score-summary-table td { padding: 10px 12px; vertical-align: top; overflow-wrap: anywhere; }
 .score-summary-table thead th { letter-spacing: 0; text-transform: none; }
+.score-summary-table thead tr:last-child th { white-space: nowrap; }
 .score-summary-table tbody th { white-space: normal; }
 .score-summary-table .score-student {
-  width: 13%;
+  min-width: 150px;
   white-space: normal;
   border-inline-end: 1px solid var(--line);
 }
@@ -1144,8 +1145,7 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-summary-table :is(thead th, td):not(.score-student) { text-align: center; }
 .score-summary-table td { font-variant-numeric: tabular-nums; }
 .score-summary-table .score-lesson-start { border-inline-start: 1px solid #a8bdd4; }
-.score-summary-table .score-quiz-column { width: 16%; border-inline-start: 2px solid #81a2c1; }
-.score-label-short { display: none; }
+.score-summary-table .score-quiz-column { min-width: 160px; border-inline-start: 2px solid #81a2c1; }
 .score-quiz-group { text-align: start; }
 .score-quiz-group summary { cursor: pointer; font-size: 12px; font-weight: 700; }
 .score-quiz-group[open] summary { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -1155,17 +1155,6 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-values dt { color: var(--muted, #526a83); font-size: 12px; }
 .score-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
 .score-review { color: inherit; border: 0; background: none; padding: 2px; font: inherit; text-decoration: underline; cursor: pointer; }
-@container (max-width: 1240px) {
-  .score-summary-table th, .score-summary-table td { padding-inline: 2px; font-size: 12px; }
-  .score-label-full { display: none; }
-  .score-label-short { display: inline; }
-}
-@container (max-width: 720px) {
-  .score-summary-table th, .score-summary-table td { padding: 5px 1px; font-size: 10px; }
-  .score-quiz-group summary, .score-values dt { font-size: inherit; }
-  .score-values div { grid-template-columns: minmax(0, 1fr); gap: 1px; }
-  .score-values dd { text-align: start; }
-}
 .table-avatar {
   display: inline-grid;
   place-items: center;
