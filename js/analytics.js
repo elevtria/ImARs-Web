@@ -195,8 +195,7 @@ function lessonCells(data = {}) {
   const activity = Object.hasOwn(data, "activityRawMaximum")
     ? raw(data.activityRawScore, data.activityRawMaximum)
     : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
-  const gain = pre && post ? post.score - pre.score : null;
-  return `<td class="score-lesson-start" role="cell" data-score-label="Activity">${activity}</td><td role="cell" data-score-label="Pre-test">${raw(pre?.score, pre?.total)}</td><td role="cell" data-score-label="Post-test">${raw(post?.score, post?.total)}</td><td role="cell" data-score-label="Improvement">${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
+  return `<td class="score-lesson-start" role="cell" data-score-label="Activity">${activity}</td><td role="cell" data-score-label="Pre-test">${raw(pre?.score, pre?.total)}</td><td role="cell" data-score-label="Post-test">${raw(post?.score, post?.total)}</td>`;
 }
 
 function renderScores(refresh = true) {
@@ -216,9 +215,9 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  const scoreLabels = ["Activity", "Pre-test", "Post-test", "Improvement"];
+  const scoreLabels = ["Activity", "Pre-test", "Post-test"];
   scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
-    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="4">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="col">Quiz</th></tr>
+    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="${scoreLabels.length}">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="col">Quiz</th></tr>
     <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}<th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
   studentGrid.innerHTML = visible.map(row => {
     const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
@@ -234,7 +233,7 @@ function renderScores(refresh = true) {
     });
     const quiz = quizRows.length ? `<details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${collapsedQuizGroups.has(row.studentDoc.id) ? "" : " open"}><summary>View quizzes</summary><dl class="score-values">${quizRows.join("")}</dl></details>` : "—";
     return `<tr class="student-row" role="row">${name}${cells}<td class="score-quiz-column" role="cell">${quiz}</td></tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="${2 + lessons.length * 4}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="${2 + lessons.length * scoreLabels.length}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;

@@ -251,7 +251,7 @@ test("the score summary and quiz request use one section and term", async () => 
   app.element("studentSearch").events.input();
   assert.match(grid.html(), /data-quiz-group="B0">/);
   assertTextOnly(app.element("#studentGrid tbody").html());
-  assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*\+8.*2\/3/s);
+  assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*2\/3/s);
   assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
 });
 
@@ -261,8 +261,8 @@ test("all lessons and quiz scores appear together without another request", asyn
   const app = page("analytics.js", data);
   await app.render();
   const header = app.element("scoreSummaryHead");
-  assert.match(header.html(), /colspan="4">Food Webs/);
-  assert.match(header.html(), /colspan="4">Circulatory System/);
+  assert.match(header.html(), /colspan="3">Food Webs/);
+  assert.match(header.html(), /colspan="3">Circulatory System/);
   assert.match(header.html(), /score-quiz-column/);
   const grid = app.element("#studentGrid tbody");
   assert.match(grid.html(), /8\/10.*score-quiz-column/s);
