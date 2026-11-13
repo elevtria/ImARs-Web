@@ -60,7 +60,7 @@
         <div class="section-head performance-head">
           <h2 data-auth-shell>Student Score Summary</h2>
         </div>
-        <div class="performance-controls">
+        <div class="performance-controls score-summary-controls">
           <label class="select-wrap">
             <select id="sectionFilter" aria-label="Filter by section" aria-controls="studentGrid questionHeatmapRows topicsContainer" disabled>
               <option value="">Select a section</option>
@@ -73,6 +73,12 @@
               <path d="M20 20l-3.2-3.2" />
             </svg>
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
+          </label>
+          <label class="select-wrap">
+            <select id="scoreLessonFilter" aria-label="Lesson for score summary" aria-controls="studentGrid" disabled>
+              <option value="">Select a lesson</option>
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
           </label>
         </div>
         <div class="performance-table-wrap score-summary-wrap">

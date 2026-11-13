@@ -219,7 +219,7 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.ok(app.element("#studentGrid tbody").html().includes("3/4"));
   assertTextOnly(app.element("topicsContainer").html());
-  assert.match(app.element("#studentGrid tbody").html(), /<details[^>]*score-quiz-group[^>]*><summary>Generated quizzes<\/summary>/);
+  assert.match(app.element("#studentGrid tbody").html(), /<details[^>]*score-quiz-group[^>]*><summary>View quizzes<\/summary>/);
 });
 
 function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
@@ -252,6 +252,22 @@ test("the score summary and quiz request use one section and term", async () => 
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*\+8.*2\/3/s);
   assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
+});
+
+test("the lesson selector changes the grouped header without reloading results", async () => {
+  const data = activityReportData(["A"]);
+  data.curriculumSnap = snapshot([record("lesson_01", { title: "Food Webs" }), record("lesson_02", { title: "Circulatory System" })]);
+  const app = page("analytics.js", data);
+  await app.render();
+  const header = app.element("scoreSummaryHead");
+  assert.match(header.html(), /colspan="4">Food Webs/);
+  const filter = app.element("scoreLessonFilter");
+  filter.value = "lesson_02";
+  filter.events.change();
+  assert.match(header.html(), /colspan="4">Circulatory System/);
+  assert.match(header.html(), /score-quiz-column/);
+  assert.equal(app.requests.length, 1);
+  assert.equal(app.quizRequests.length, 1);
 });
 
 test("post-test heatmap escapes question text and switching loaded topics adds no report requests", async () => {

@@ -22,6 +22,7 @@ const topicCompletionScope = document.getElementById("topicCompletionScope");
 const studentsPerPage = 25;
 let activitySection = "";
 const scoreHead = document.getElementById("scoreSummaryHead");
+const scoreLessonFilter = document.getElementById("scoreLessonFilter");
 const quizStatus = document.getElementById("teacherQuizStatus");
 const quizRetry = document.getElementById("teacherQuizRefresh");
 let quizPage;
@@ -201,6 +202,23 @@ function lessonCells(data = {}) {
 
 function renderScores(refresh = true) {
   const curriculum = lastReport?.curriculumSnap?.docs || [];
+  const lessons = curriculum.map(lesson => {
+    const data = lesson.data();
+    return { id: lesson.id, title: data.title || data.name || data.topicTitle || lesson.id };
+  });
+  const selectedLesson = lessons.find(lesson => lesson.id === scoreLessonFilter.value) || lessons[0];
+  const signature = JSON.stringify(lessons);
+  if (scoreLessonFilter.dataset.lessons !== signature) {
+    scoreLessonFilter.replaceChildren(...lessons.map(lesson => {
+      const option = document.createElement("option");
+      option.value = lesson.id;
+      option.textContent = lesson.title;
+      return option;
+    }));
+    scoreLessonFilter.dataset.lessons = signature;
+  }
+  scoreLessonFilter.value = selectedLesson?.id || "";
+  scoreLessonFilter.disabled = lessons.length < 2;
   const section = lastReport?.sections.find(item => item.classDoc.id === activitySection);
   const termId = currentTermFilter;
   const query = search.value.trim().toLowerCase();
@@ -212,14 +230,12 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  scoreHead.innerHTML = '<tr><th class="score-student" scope="col">Student / Section</th><th class="score-lesson" scope="col">Lesson</th><th scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th></tr>';
+  scoreHead.innerHTML = `<tr><th class="score-student" scope="col" rowspan="2">Student / Section</th>
+    <th scope="colgroup" colspan="4">${escapeHtml(selectedLesson?.title || "Lesson scores")}</th><th class="score-quiz-column" scope="colgroup">Quiz</th></tr>
+    <tr><th scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th><th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
   studentGrid.innerHTML = visible.map(row => {
-    const lessons = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(lesson => [lesson.id, lesson.data()]));
-    const name = `<th class="score-student" scope="row" rowspan="${curriculum.length + 1}">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
-    const lessonRows = curriculum.map((lesson, index) => {
-      const data = lesson.data();
-      return `<tr class="score-lesson-row${index === 0 ? " student-row" : ""}">${index === 0 ? name : ""}<th scope="row">${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</th>${lessonCells(lessons.get(lesson.id))}</tr>`;
-    });
+    const lesson = row.results.find(result => result.termId === termId)?.lessonsSnap.docs.find(doc => doc.id === selectedLesson?.id);
+    const name = `<th class="score-student" scope="row">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
     const quizRows = quizzes.map(quiz => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
       const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
@@ -228,8 +244,8 @@ function renderScores(refresh = true) {
         : score;
       return `<div><dt>${escapeHtml(quiz.title || "Quiz")}</dt><dd>${value}</dd></div>`;
     });
-    return `${lessonRows.join("")}<tr class="score-quiz-row${lessonRows.length ? "" : " student-row"}">${lessonRows.length ? "" : name}
-      <td colspan="5"><details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>Generated quizzes</summary><dl class="score-values">${quizRows.join("") || "<div><dt>No scores</dt><dd>—</dd></div>"}</dl></details></td></tr>`;
+    const quiz = quizRows.length ? `<details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>View quizzes</summary><dl class="score-values">${quizRows.join("")}</dl></details>` : "—";
+    return `<tr class="student-row">${name}${lessonCells(lesson?.data())}<td class="score-quiz-column">${quiz}</td></tr>`;
   }).join("") || `<tr class="empty-row"><td colspan="6">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
@@ -297,6 +313,7 @@ studentGrid.addEventListener("click", event => {
   } });
 });
 search.addEventListener("input", () => { tablePage = 0; renderScores(); });
+scoreLessonFilter.addEventListener("change", () => renderScores(false));
 sectionFilter.addEventListener("change", () => {
   if (!lastReport?.classes.some(item => item.id === sectionFilter.value)) return;
   selectedSection = sectionFilter.value;
@@ -416,6 +433,7 @@ function openReport({ restoredPage = false } = {}) {
   }
   if (!lastReport) {
     sectionFilter.disabled = true;
+    scoreLessonFilter.disabled = true;
     studentCount.textContent = "—";
   }
   if (!restoredPage || !lastReport) setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");
