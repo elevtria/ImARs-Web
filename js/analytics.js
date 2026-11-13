@@ -25,6 +25,7 @@ const scoreHead = document.getElementById("scoreSummaryHead");
 const quizStatus = document.getElementById("teacherQuizStatus");
 const quizRetry = document.getElementById("teacherQuizRefresh");
 let quizPage;
+const expandedQuizGroups = new Set();
 window.addEventListener("pagehide", () => quizPage?.controller.abort());
 let currentTermFilter = "term_01";
 let lastAnalyticsTerm = currentTermFilter;
@@ -195,7 +196,7 @@ function lessonCells(data = {}) {
     ? raw(data.activityRawScore, data.activityRawMaximum)
     : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
   const gain = pre && post ? post.score - pre.score : null;
-  return `<td class="score-divider">${activity}</td><td>${raw(pre?.score, pre?.total)}</td><td>${raw(post?.score, post?.total)}</td><td>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
+  return `<dl class="score-values"><div><dt>Activity</dt><dd>${activity}</dd></div><div><dt>Pre-test</dt><dd>${raw(pre?.score, pre?.total)}</dd></div><div><dt>Post-test</dt><dd>${raw(post?.score, post?.total)}</dd></div><div><dt>Improvement</dt><dd>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</dd></div></dl>`;
 }
 
 function renderScores(refresh = true) {
@@ -211,24 +212,24 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  scoreHead.innerHTML = `<tr><th class="score-student" scope="col" rowspan="2">Student name</th><th scope="col" rowspan="2">Section</th>
-    ${curriculum.map(lesson => {
-      const data = lesson.data();
-      return `<th class="score-divider" scope="colgroup" colspan="4">${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</th>`;
-    }).join("")}<th class="score-divider" scope="colgroup" colspan="${Math.max(1, quizzes.length)}">Quiz</th></tr>
-    <tr>${curriculum.map(() => '<th class="score-divider" scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th>').join("")}
-    ${quizzes.length ? quizzes.map(quiz => `<th scope="col">${escapeHtml(quiz.title || "Quiz")}</th>`).join("") : '<th scope="col">Generated quizzes</th>'}</tr>`;
+  scoreHead.innerHTML = '<tr><th class="score-student" scope="col">Student name <span>Section</span></th><th scope="col">Lesson and quiz scores</th></tr>';
   studentGrid.innerHTML = visible.map(row => {
     const lessons = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(lesson => [lesson.id, lesson.data()]));
-    const quizCells = quizzes.map(quiz => {
+    const lessonGroups = curriculum.map(lesson => {
+      const data = lesson.data();
+      return `<div class="score-group"><strong>${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</strong>${lessonCells(lessons.get(lesson.id))}</div>`;
+    });
+    const quizRows = quizzes.map(quiz => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
       const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
-      return item?.attemptId
-        ? `<td><button class="score-review" type="button" data-quiz="${escapeHtml(quiz.id)}" data-student="${escapeHtml(row.studentDoc.id)}" aria-label="${escapeHtml(row.name)} · ${escapeHtml(quiz.title || "Quiz")} · ${score}. Open submission">${score}</button></td>`
-        : `<td>${score}</td>`;
+      const value = item?.attemptId
+        ? `<button class="score-review" type="button" data-quiz="${escapeHtml(quiz.id)}" data-student="${escapeHtml(row.studentDoc.id)}" aria-label="${escapeHtml(row.name)} · ${escapeHtml(quiz.title || "Quiz")} · ${score}. Open submission">${score}</button>`
+        : score;
+      return `<div><dt>${escapeHtml(quiz.title || "Quiz")}</dt><dd>${value}</dd></div>`;
     });
-    return `<tr class="student-row"><th class="score-student" scope="row">${escapeHtml(row.name)}</th><td>${escapeHtml(sectionSummary.textContent)}</td>${curriculum.map(lesson => lessonCells(lessons.get(lesson.id))).join("")}${quizCells.join("") || "<td>—</td>"}</tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="${2 + 4 * curriculum.length + Math.max(1, quizzes.length)}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+    return `<tr class="student-row"><th class="score-student" scope="row">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>
+      <td><div class="score-groups">${lessonGroups.join("")}<details class="score-group score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>Generated quizzes</summary><dl class="score-values">${quizRows.join("") || "<div><dt>No scores</dt><dd>—</dd></div>"}</dl></details></div></td></tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="2">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
@@ -236,6 +237,7 @@ function renderScores(refresh = true) {
 }
 
 function resetQuizScores() {
+  expandedQuizGroups.clear();
   quizPage?.controller.abort();
   quizPage = undefined;
   closeQuizReview();
@@ -271,6 +273,13 @@ async function loadQuizScores(studentIds, force = false) {
 }
 
 quizRetry.addEventListener("click", () => { if (quizPage) void loadQuizScores(quizPage.studentIds, true); });
+studentGrid.addEventListener("toggle", event => {
+  const group = event.target;
+  const studentId = group.dataset.quizGroup;
+  if (!studentId || !group.isConnected) return;
+  if (group.open) expandedQuizGroups.add(studentId);
+  else expandedQuizGroups.delete(studentId);
+}, true);
 studentGrid.addEventListener("click", event => {
   const button = event.target.closest("button[data-quiz]");
   const page = quizPage, user = auth.currentUser;

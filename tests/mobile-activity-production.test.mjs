@@ -48,6 +48,12 @@ test("production web report projects only the selected roster's activity grades 
   const path = profile[0] + "/test_results/term_01/lessons/lesson_01";
   app.data.set(path, { preTestScore: 4, isPreTestCompleted: true, activityTotalQuestions: 5 });
   let reads = 0;
+  const projections = new Map();
+  const query = app.store.query.bind(app.store);
+  app.store.query = (path, options) => {
+    projections.set(path, options.fieldPaths);
+    return query(path, options);
+  };
   const activityFetcher = async url => {
     reads++;
     assert.equal(url.pathname, "/rest/v1/imars_mobile_production_runs");
@@ -68,6 +74,9 @@ test("production web report projects only the selected roster's activity grades 
   assert.equal(fields.activityTotalQuestions, 100);
   assert.equal(fields.activityRawScore, 4);
   assert.equal(fields.activityRawMaximum, 5);
+  assert.ok(projections.get("classes").includes("teacherId"));
+  assert.ok(projections.get("users").includes("displayName"));
+  assert.ok(!projections.get("users").includes("email"));
   assert.equal(app.data.get(path).activityTotalQuestions, 5);
   assert.equal(reads, 1);
 });

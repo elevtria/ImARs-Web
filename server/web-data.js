@@ -23,6 +23,7 @@ const date = value => typeof value === "string" && /^\d{4}-\d\d-\d\d$/.test(valu
 const profileFields = ["uid", "schoolId", "role", "active", "status", "name", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName", "providedEmail", "email",
   "subject", "sections", "section", "classCode", "teacherId", "adviserId", "teacher", "gradeSection", "sectionName", "className", "school", "roleLabel",
   "department", "phone", "adminSince", "createdAt", "updatedAt", "lastUpdated", "lastQrSyncAt", "deletedAt", "archiveReason", "avatarId", "isRegistered", "isClaimed", "joined"];
+const classDisplayFields = ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"];
 const schoolYears = new WeakMap();
 const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
@@ -66,8 +67,8 @@ class Scope {
     if (!this.reads.has(path)) this.reads.set(path, this.store.get(path));
     return this.reads.get(path);
   }
-  assignedClasses() {
-    this.classes ||= this.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: this.actor.id }] });
+  assignedClasses(fieldPaths) {
+    this.classes ||= this.store.query("classes", { filters: [{ field: "teacherId", op: "==", value: this.actor.id }], fieldPaths });
     return this.classes;
   }
   async ownsClass(id) {
@@ -279,7 +280,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
   const source = row?.wire || row?.data;
   let data = source ?? null;
   if (source && /^users\/[^/]+$/.test(path)) data = pick(source, profileFields);
-  if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"]);
+  if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, classDisplayFields);
   if (source && /^generatedQuizzes\/[^/]+$/.test(path)) {
     data = pick(source, ["title", "termId", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "deadlineUtc", "createdAt", "demo", "teacherUid"]);
     data.questions = Array.isArray(source.questions) ? source.questions.filter(object).map(question =>
@@ -317,7 +318,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
     throw fail("Invalid student performance page.", 400);
   }
   if (body.includeTeacher !== undefined && typeof body.includeTeacher !== "boolean") throw fail("Invalid teacher details request.", 400);
-  const classes = await scope.assignedClasses();
+  const classes = await scope.assignedClasses(body.rawActivityScores === true ? ["teacherId", ...classDisplayFields] : undefined);
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   if (body.firstSection === true && !sectionId) sectionId = classes[0]?.id || "";
@@ -331,7 +332,8 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   const queued = new Map();
   const queueClass = (position, size) => {
     const queryFilters = [...filters(selected[position].id), ...(status === "archived" ? [{ field: "active", op: "==", value: false }] : [])];
-    queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined })
+    queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined,
+      ...(body.rawActivityScores === true ? { fieldPaths: ["uid", "teacherId", "active", "displayName", "fullName"] } : {}) })
       .then(rows => ({ rows }), error => ({ error })) });
   };
   const countPromise = body.includeCounts === false ? null : (async () => {
@@ -462,6 +464,7 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   const heatmap = body.heatmapLesson !== undefined;
   if (heatmap && (typeof body.heatmapLesson !== "string" || !lesson(body.heatmapLesson) || !body.sectionId || body.allTerms === true || batchSize !== 25)) throw fail("Choose one section and topic.", 400);
   const termIds = body.allTerms === true ? ["term_01", "term_02", "term_03"] : [body.termId];
+  if (body.rawActivityScores === true) scope.assignedClasses(["teacherId", ...classDisplayFields]);
   const curriculumPromise = heatmap || body.includeCurriculum === false ? null : (async () => {
     const path = "terms/" + body.termId;
     const [row, lessons, classes] = await Promise.all([scope.get(path), scope.store.query(path + "/lessons", { limit: 4 }), scope.assignedClasses()]);
@@ -473,6 +476,8 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   // their documents in batches of at most 100, only for verified roster rows.
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
+  const scoreFields = [...heatmapFields, "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isLessonCompleted", "isARCompleted", "completed",
+    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const gradeRequest = !heatmap && page.students.length
     ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))
@@ -480,7 +485,8 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   const records = new Map();
   for (let offset = 0; offset < paths.length; offset += 400) {
     const batches = [];
-    for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100), heatmap ? { fieldPaths: heatmapFields } : undefined));
+    for (let index = offset; index < Math.min(offset + 400, paths.length); index += 100) batches.push(scope.store.getAll(paths.slice(index, index + 100),
+      heatmap ? { fieldPaths: heatmapFields } : body.rawActivityScores === true ? { fieldPaths: scoreFields } : undefined));
     for (const rows of await Promise.all(batches)) for (const [path, record] of rows) records.set(path, record);
   }
   const gradeResult = await gradeRequest;

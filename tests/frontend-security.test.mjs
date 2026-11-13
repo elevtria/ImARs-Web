@@ -219,7 +219,7 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.ok(app.element("#studentGrid tbody").html().includes("3/4"));
   assertTextOnly(app.element("topicsContainer").html());
-  assertTextOnly(app.element("scoreSummaryHead").html());
+  assert.match(app.element("#studentGrid tbody").html(), /<details[^>]*score-quiz-group[^>]*><summary>Generated quizzes<\/summary>/);
 });
 
 function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
@@ -245,7 +245,11 @@ test("the score summary and quiz request use one section and term", async () => 
   assert.equal(filter.children, options);
   assert.equal(app.quizRequests.at(-1).sectionId, "B");
   assert.deepEqual(Array.from(app.quizRequests.at(-1).studentIds), ["B0"]);
-  assertTextOnly(app.element("scoreSummaryHead").html());
+  const grid = app.element("#studentGrid tbody");
+  grid.events.toggle({ target: { dataset: { quizGroup: "B0" }, isConnected: true, open: true } });
+  app.element("studentSearch").events.input();
+  assert.match(grid.html(), /data-quiz-group="B0" open>/);
+  assertTextOnly(app.element("#studentGrid tbody").html());
   assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*\+8.*2\/3/s);
   assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
 });
@@ -286,11 +290,11 @@ test("the summary includes all students and requests quizzes for the 25 visible 
   const app = page("analytics.js", data);
   await app.render();
   const table = app.element("#studentGrid tbody");
-  assert.match(table.html(), /Learner A 24<\/th>[\s\S]*?<td>—<\/td>/);
+  assert.match(table.html(), /Learner A 24[\s\S]*?<dd>—<\/dd>/);
   assert.equal(app.quizRequests.at(-1).studentIds.length, 25);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 1–25 of 30 students");
   app.element("analyticsNext").events.click();
-  assert.match(table.html(), /Learner A 29<\/th>/);
+  assert.match(table.html(), /Learner A 29<span>/);
   assert.equal(app.quizRequests.at(-1).studentIds.length, 5);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 26–30 of 30 students");
   assert.equal(app.requests.length, 1);

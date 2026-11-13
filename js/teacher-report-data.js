@@ -47,7 +47,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
         ...(options.rawActivityScores ? { rawActivityScores: true } : {}),
         ...(options.allTerms ? { allTerms: true } : {}),
-        firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor ? "cached" : false, includeCurriculum: options.includeCurriculum && !state.curriculumSnap,
+        firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor && !options.rawActivityScores ? "cached" : false, includeCurriculum: options.includeCurriculum && !state.curriculumSnap,
         ...(curriculumOnly ? { includeStudents: false, includeCounts: false } : {}) }, { signal: abort.signal });
       if (!current(token)) return;
       if (cache.version() !== version) {

@@ -1127,26 +1127,30 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   font-weight: 700;
   white-space: nowrap;
 }
-.score-summary-wrap { max-width: 100%; }
-.score-summary-table { border-collapse: separate; border-spacing: 0; }
-.score-summary-table th, .score-summary-table td { padding: 10px 12px; }
-.score-summary-table :is(th, td):not(.score-student) { text-align: center; white-space: nowrap; }
-.score-summary-table .score-divider { border-inline-start: 1px solid var(--line); }
+.score-summary-wrap { max-width: 100%; overflow: visible; }
+.score-summary-table { min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.score-summary-table th, .score-summary-table td { padding: 10px 12px; vertical-align: top; overflow-wrap: anywhere; }
 .score-summary-table .score-student {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  min-width: 140px;
-  max-width: 220px;
+  width: clamp(88px, 22%, 190px);
   white-space: normal;
-  background: #f7fbff;
   border-inline-end: 1px solid var(--line);
 }
+.score-student span { display: block; margin-top: 4px; color: var(--muted, #65788d); font-size: 0.85em; font-weight: 500; }
+.score-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: 8px; }
+.score-group { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.score-group strong { display: block; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.score-quiz-group { border-inline-start: 3px solid #668cac; }
+.score-quiz-group summary { cursor: pointer; font-size: 12px; font-weight: 700; }
+.score-quiz-group[open] summary { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.score-values { margin: 4px 0 0; }
+.score-values div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 8px; padding-block: 2px; }
+.score-values div + div { border-top: 1px solid var(--line); }
+.score-values dt { color: var(--muted, #526a83); font-size: 12px; }
+.score-values dd { margin: 0; max-width: 6ch; text-align: end; font-variant-numeric: tabular-nums; }
 .score-summary-table tbody tr:nth-child(even) { background: rgba(129, 162, 193, 0.08); }
 .score-review { color: inherit; border: 0; background: none; padding: 2px; font: inherit; text-decoration: underline; cursor: pointer; }
-[data-theme="dark"] .score-summary-table .score-student { background: var(--surface); }
 @media (max-width: 520px) {
-  .score-summary-table .score-student { min-width: 108px; max-width: 128px; }
+  .score-summary-table th, .score-summary-table td { padding: 8px; }
 }
 .table-avatar {
   display: inline-grid;
