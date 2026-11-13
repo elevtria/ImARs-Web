@@ -1,6 +1,8 @@
 import { quizJobIdPattern, quizJobLifetime, quizJobResponse as json } from "../server/quiz-background.js";
 
 const failed = "Quiz generation could not finish. Please try again.";
+const deliveryFailed = { status: "failed", errorCode: "JOB_DELIVERY_FAILED",
+  error: "The background quiz job was interrupted. Use Generate Quiz again to retry on this page." };
 const active = job => ["queued", "running"].includes(job?.status);
 
 export class QuizGenerationJob {
@@ -23,8 +25,8 @@ export class QuizGenerationJob {
     if (request.method === "GET") {
       const job = await this.storage.get("job");
       if (!job || job.expiresAt <= now) return json({ status: "none" });
-      const { id, status, details, questions, error } = job;
-      return json({ id, status, details, questions, error });
+      const { id, status, details, questions, error, errorCode } = job;
+      return json({ id, status, details, questions, error, errorCode });
     }
     if (request.method === "POST") {
       const { id, details, callback } = await request.json();
@@ -63,7 +65,7 @@ export class QuizGenerationJob {
       }
       if (current.status === "running") {
         const { callback, ...record } = current;
-        await txn.put("job", { ...record, status: "failed", error: failed });
+        await txn.put("job", { ...record, ...deliveryFailed });
         await txn.setAlarm(current.expiresAt);
         return null;
       }
@@ -83,11 +85,17 @@ export class QuizGenerationJob {
         headers: { "Content-Type": "application/json", "X-Imars-Quiz-Signature": job.callback.signature },
         body: job.callback.body
       });
-      const body = await response.json();
-      result = response.ok && Array.isArray(body.questions) && body.questions.length
+      const body = await response.json().catch(() => null);
+      result = response.ok && Array.isArray(body?.questions) && body.questions.length
         ? { status: "complete", questions: body.questions }
-        : { status: "failed", error: typeof body.error === "string" ? body.error : failed };
-    } catch { result = { status: "failed", error: failed }; }
+        : typeof body?.error === "string" && body.error !== failed && ![401, 409].includes(response.status)
+          ? { status: "failed", error: body.error }
+          : deliveryFailed;
+      if (result === deliveryFailed) console.warn("[Quiz Generator] Background callback could not deliver questions", { status: response.status });
+    } catch (error) {
+      console.warn("[Quiz Generator] Background callback interrupted", { type: error?.name });
+      result = deliveryFailed;
+    }
     await this.storage.transaction(async txn => {
       const current = await txn.get("job");
       if (current?.id !== job.id || current.status !== "running") return;

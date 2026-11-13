@@ -310,6 +310,10 @@ const firestore = getFirestore(firebaseApp);
     const loadingStatus = document.getElementById("quizGenerationStatus");
     const loadingHint = document.getElementById("quizGenerationHint");
     const file = selectedFile;
+    // Bypass the background callback on a deliberate retry after delivery fails.
+    const useBackground = backgroundJob?.status !== "failed" ||
+      (backgroundJob.errorCode !== "JOB_DELIVERY_FAILED" && backgroundJob.error !== "Quiz generation could not finish. Please try again.");
+    const interruptedJobId = useBackground ? undefined : backgroundJob.id;
     const settings = {
       title: document.getElementById("quizTitle").value.trim(),
       termId: quizTerm.value,
@@ -332,9 +336,14 @@ const firestore = getFirestore(firebaseApp);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
       loadingStatus.textContent = material.pdfFile ? "Uploading your PDF…" : "Starting quiz generation…";
-      const result = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid, { background: true });
+      const result = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid, { background: useBackground });
       if (auth.currentUser?.uid !== user.uid) return;
-      if (Array.isArray(result)) openQuestions(result);
+      if (Array.isArray(result)) {
+        backgroundJob = undefined;
+        renderJob();
+        openQuestions(result);
+        if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
+      }
       else {
         backgroundJob = result;
         autoReviewJobId = result.id;

@@ -28,7 +28,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   const choice = new Element(), availability = new Element(); choice.value = "multiple-choice"; availability.value = "draft";
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
-  let authenticated, requested, results, showSlowMessage, pollJob, finishGeneration, confirmDelete = false;
+  let authenticated, requested, transport, results, showSlowMessage, pollJob, finishGeneration, confirmDelete = false;
   let job = { status: "none" };
   const context = {
     console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
@@ -45,8 +45,9 @@ test("generation, review, unassigned draft and all-section release use the actua
     updateDoc:async (id,data)=>{assert.ok(!Object.hasOwn(data,"questions"));const updated={...quizzes.get(id),...data};quizzes.set(id,updated);saves.push(updated);}, deleteDoc:async id => { quizzes.delete(id); },
     confirmAction: async options => { assert.equal(options.title, "Delete quiz?"); return confirmDelete; },
     onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, showTeacherView:async ({load,render,painted})=>{render(await load());painted();},
-    requestQuiz: payload => {
+    requestQuiz: (payload, _uid, options) => {
       requested = payload;
+      transport = options;
       return new Promise(resolve => { finishGeneration = resolve; });
     },
     readQuizJob: async () => job,
@@ -180,4 +181,20 @@ test("generation, review, unassigned draft and all-section release use the actua
   await element("saveQuiz").listeners.click();
   assert.equal(job.status, "none");
   assert.equal(saves.at(-1).sourceFile, "water.pdf");
+
+  job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "failed", errorCode: "JOB_DELIVERY_FAILED",
+    error: "The background quiz job was interrupted." };
+  await authenticated({ uid: "teacher-a" });
+  element("newQuizFromLibrary").listeners.click();
+  element("quizFile").files = [file];
+  element("quizFile").listeners.change();
+  element("quizTerm").value = "term_03";
+  const retry = element("generateQuiz").listeners.click();
+  await new Promise(setImmediate);
+  assert.equal(transport.background, false);
+  finishGeneration([{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }]);
+  await retry;
+  assert.equal(element("reviewStep").hidden, false);
+  assert.equal(element("quizJobStatus").hidden, true);
+  assert.equal(job.status, "none");
 });
