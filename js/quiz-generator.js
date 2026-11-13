@@ -24,6 +24,7 @@ const firestore = getFirestore(firebaseApp);
   const setupStatus = document.getElementById("setupStatus");
   const editorStatus = document.getElementById("editorStatus");
   const editorSectionSelect = document.getElementById("editorSectionSelect");
+  const editorTerm = document.getElementById("editorTerm");
   const suggestionList = document.getElementById("suggestionsList");
   const editorList = document.getElementById("questionEditorList");
   const libraryList = document.getElementById("quizLibraryList");
@@ -209,8 +210,8 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function quizSummaries(quizzes) {
-    return quizzes.map(({ id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc, questionCount, questions }) => ({
-      id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc,
+    return quizzes.map(({ id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc, termId, questionCount, questions }) => ({
+      id, title, section, sectionId, assignmentScope, type, availability, availableAt, deadlineUtc, termId,
       questionCount: Number.isInteger(questionCount) ? questionCount : (questions?.length || 0)
     }));
   }
@@ -389,6 +390,7 @@ const firestore = getFirestore(firebaseApp);
     editingQuiz = null;
     editRequest++;
     document.getElementById("editorTitle").value = document.getElementById("quizTitle").value.trim();
+    editorTerm.value = "";
     document.getElementById("editorSectionName").hidden = false;
     editorSectionSelect.hidden = true;
     document.getElementById("quizAvailability").hidden = true;
@@ -443,6 +445,12 @@ const firestore = getFirestore(firebaseApp);
       document.getElementById("editorTitle").focus();
       return;
     }
+    const termId = editorTerm.value;
+    if (!termId) {
+      showStatus(editorStatus, "Choose a term before saving this quiz.", true);
+      editorTerm.focus();
+      return;
+    }
     if (editorQuestions.length < 1 || editorQuestions.length > 50) {
       showStatus(editorStatus, "A quiz must have between 1 and 50 questions.", true);
       return;
@@ -480,6 +488,7 @@ const firestore = getFirestore(firebaseApp);
     const quiz = {
       id: oldQuiz?.id || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
       title: title,
+      termId,
       ...assignment,
       sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || "Uploaded source",
       type,
@@ -575,6 +584,7 @@ const firestore = getFirestore(firebaseApp);
     libraryList.hidden = quizzes.length === 0;
     libraryList.innerHTML = quizzes.map((quiz) => {
       const status = currentAvailability(quiz);
+      const termLabel = Array.from(editorTerm.options).find(option => option.value && option.value === quiz.termId)?.textContent || "Term not set";
       const resultsButton = teacherSections.some(section => quizAssignedToSection(quiz, section.id))
         ? `<button type="button" data-results-quiz="${escapeHtml(quiz.id)}">View results</button>` : "";
       const closed = status !== "draft" && Date.parse(quiz.deadlineUtc) <= Date.now();
@@ -600,7 +610,7 @@ const firestore = getFirestore(firebaseApp);
           <button class="primary-btn quiz-primary" type="submit" ${scheduleBusy ? "disabled" : ""}>Save release</button>
         </div>
       </form>` : "";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span>${availability ? `<span>${availability}</span>` : ""}${deadline}</div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Assign / schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><div class="quiz-library-title-row"><h3>${escapeHtml(quiz.title)}</h3><span class="quiz-status-badge ${statusClass}">${statusLabel}</span></div><div class="quiz-library-details"><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${escapeHtml(termLabel)}</span><span>${quiz.questionCount} questions</span><span>${questionTypeLabel(quiz.type)}</span>${availability ? `<span>${availability}</span>` : ""}${deadline}</div></div><div class="quiz-library-actions">${resultsButton}<button type="button" data-schedule-quiz="${escapeHtml(quiz.id)}" aria-expanded="${expanded}" ${scheduleBusy ? "disabled" : ""}>Assign / schedule</button><button type="button" data-edit-quiz="${escapeHtml(quiz.id)}">Edit</button><button class="delete" type="button" data-delete-quiz="${escapeHtml(quiz.id)}">Delete</button></div>${scheduleForm}</article>`;
     }).join("");
   }
 
@@ -691,6 +701,7 @@ const firestore = getFirestore(firebaseApp);
     fileInput.value = "";
     selectedFileRow.hidden = true;
     document.getElementById("editorTitle").value = quiz.title || "";
+    editorTerm.value = quiz.termId || "";
     document.getElementById("editorSectionName").hidden = true;
     editorSectionSelect.hidden = false;
     editorSectionSelect.innerHTML = '<option value="">Unassigned · draft only</option>' + sectionOptions(quiz);

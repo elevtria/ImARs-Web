@@ -54,11 +54,11 @@ test("production web report projects only the selected roster's activity grades 
     assert.equal(url.searchParams.get("section_id"), "eq.A");
     assert.equal(url.searchParams.get("term_id"), "in.(term_01)");
     assert.ok(url.searchParams.get("student_id").slice(4, -1).split(",").includes(studentId));
-    return Response.json([{ studentId, termId: "term_01", lessonId: "lesson_01", score: 80, maximum: 100 }]);
+    return Response.json([{ studentId, termId: "term_01", lessonId: "lesson_01", score: 80, maximum: 100, rawScore: 4, rawMaximum: 5 }]);
   };
   const env = { ...app.env, ...project, ...production, MOBILE_API_ENABLED: "true" };
   const request = app.request("/api/web-data", { action: "teacher-report-page", termId: "term_01",
-    sectionId: "A", includeCurriculum: false }, cookie);
+    sectionId: "A", includeCurriculum: false, rawActivityScores: true }, cookie);
   const response = await webData({ request, env }, { store: app.store, activityFetcher });
   assert.equal(response.status, 200);
   const report = await response.json();
@@ -66,6 +66,8 @@ test("production web report projects only the selected roster's activity grades 
   assert.equal(fields.preTestScore, 4);
   assert.equal(fields.activityScore, 80);
   assert.equal(fields.activityTotalQuestions, 100);
+  assert.equal(fields.activityRawScore, 4);
+  assert.equal(fields.activityRawMaximum, 5);
   assert.equal(app.data.get(path).activityTotalQuestions, 5);
   assert.equal(reads, 1);
 });

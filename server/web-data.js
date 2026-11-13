@@ -236,11 +236,13 @@ class Scope {
         if (!releaseFields.every(field => Object.hasOwn(release, field))) throw fail("Choose a section and release option.", 400);
         data = { id: p[1], demo: false, ...previous, ...release };
       }
+      const termId = Object.hasOwn(data, "termId") ? data.termId : previous?.termId;
+      if (termId !== undefined && (typeof termId !== "string" || !term(termId))) throw fail("Choose a valid quiz term.", 400);
       const assignment = quizAssignmentScope(data);
       if (!assignment || (assignment === "unassigned" && data.availability !== "draft")) throw fail("Choose a section in the quiz schedule before releasing it.", 400);
       if (assignment === "section") await this.ownsClass(data.sectionId);
       if (assignment === "all" && !(await this.assignedClasses()).length) throw fail("You have no assigned sections for this quiz.", 400);
-      if (!releaseOnly && (!names(["id", "title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "deadlineUtc", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
+      if (!releaseOnly && (!names(["id", "title", "termId", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "questions", "availability", "availableAt", "deadlineUtc", "createdAt", "updatedAt", "demo", "teacherUid", "teacherProfileId", "schemaVersion", "gradingMode", "questionCount"]) ||
           !text(data.sourceFile, 240) || !["Easy", "Medium", "Hard"].includes(data.difficulty))) throw fail("Invalid quiz details.", 400);
       if (data.id !== p[1] || data.teacherUid !== actor.uid || data.teacherProfileId !== actor.id || !text(data.title, 500) || !text(data.section, 200) ||
           !Object.hasOwn(QUIZ_TYPES, data.type) || !["draft", "now", "scheduled"].includes(data.availability) || data.demo !== false ||
@@ -264,7 +266,7 @@ class Scope {
         deadlineUtc = new Date(deadlineAt).toISOString();
       }
       return { ...input, data: { ...(release || data), id: p[1], availableAt: data.availability === "scheduled" ? new Date(releaseAt).toISOString() : "",
-        deadlineUtc,
+        deadlineUtc, ...(termId === undefined ? {} : { termId }),
         questionCount: data.questions.length, createdAt: previous?.createdAt || new Date(now).toISOString(), updatedAt: new Date(now).toISOString() }, updateTime: row?.updateTime };
     }
     throw fail();
@@ -279,7 +281,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
   if (source && /^users\/[^/]+$/.test(path)) data = pick(source, profileFields);
   if (source && /^classes\/[^/]+$/.test(path)) data = pick(source, ["SectionName", "sectionName", "name", "gradeLevel", "GradeLevel", "grade", "Grade"]);
   if (source && /^generatedQuizzes\/[^/]+$/.test(path)) {
-    data = pick(source, ["title", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "deadlineUtc", "createdAt", "demo", "teacherUid"]);
+    data = pick(source, ["title", "termId", "section", "sectionId", "assignmentScope", "sourceFile", "type", "difficulty", "availability", "availableAt", "deadlineUtc", "createdAt", "demo", "teacherUid"]);
     data.questions = Array.isArray(source.questions) ? source.questions.filter(object).map(question =>
       pick(question, ["id", "text", "options", "correctIndex", "answer", "points", "rubric", "explanation", "correction"])) : [];
   }
@@ -295,7 +297,7 @@ function output(path, row, id = path.split("/").at(-1), sectionIds = []) {
 }
 
 function quizListEntry(row) {
-  const data = pick(row.data, ["title", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt", "deadlineUtc"]);
+  const data = pick(row.data, ["title", "termId", "section", "sectionId", "assignmentScope", "type", "availability", "availableAt", "deadlineUtc"]);
   return { id: row.id, path: "generatedQuizzes/" + row.id, data: { ...data, questionCount: Array.isArray(row.data.questions) ? row.data.questions.length : 0 } };
 }
 
@@ -419,7 +421,7 @@ async function reportActivityGrades(env, appData, students, termIds, fetcher, le
             data.maximum <= 0 || data.score < 0 || data.score > data.maximum) continue;
         const key = [student.classId, studentId, activity.termId, activity.lessonId].join("/");
         if (!grades.has(key) || grades.get(key).completedAt < completedAt) {
-          grades.set(key, { score: data.score, maximum: data.maximum, completedAt });
+          grades.set(key, { score: data.score, maximum: data.maximum, rawScore: data.rawScore, rawMaximum: data.rawMaximum, completedAt });
         }
       }
     }
@@ -489,7 +491,8 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
       const grade = activityGrades?.get([row.classId, row.document.id, termId, id].join("/"));
       if (grade) return [output(path, { data: { ...(record?.wire || record?.data),
-        activityScore: grade.score, activityTotalQuestions: grade.maximum, activityTotalPoints: grade.maximum } })];
+        activityScore: grade.score, activityTotalQuestions: grade.maximum, activityTotalPoints: grade.maximum,
+        ...(body.rawActivityScores === true ? { activityRawScore: grade.rawScore ?? null, activityRawMaximum: grade.rawMaximum ?? null } : {}) } })];
       return record ? [output(path, heatmap ? { data: pick(record.wire || record.data, heatmapFields) } : record)] : [];
     }) }));
     return { ...row, ...(heatmap ? { document: { ...row.document, data: {} } } : {}), ...(body.allTerms === true ? { termResults: results } : { lessons: results[0].lessons }) };

@@ -56,50 +56,14 @@
         <button type="button" class="term-tab-btn" data-term="term_03" aria-pressed="false">Term 3</button>
       </div>
       <p class="view-data-status" id="analyticsReportStatus" role="status" data-loading="true" aria-label="Loading results"></p>
-      <section class="card section" data-loading-path="users classes" data-loading-label="Loading class averages…" data-auth-shell data-await-content="analytics-summary">
-        <h2 data-auth-shell>Class Average</h2>
-        <div class="overall">
-          <div class="donut" aria-label="post-test average">
-            <svg viewBox="0 0 120 120">
-              <circle class="track" cx="60" cy="60" r="46" />
-              <!-- Added id="donutRing" for the SVG math -->
-              <circle id="donutRing" class="bar" cx="60" cy="60" r="46" stroke="#81A2C1" stroke-dasharray="0 289.03" />
-            </svg>
-            <div class="donut-label">
-              <!-- Added id="donutValue" -->
-              <strong id="donutValue">0%</strong>
-              <span>post-test avg</span>
-            </div>
-          </div>
-          <div class="meters">
-            <div class="meter-row">
-              <span>Pre-Test Average</span>
-              <!-- Added IDs for values and fill widths -->
-              <b id="overallPreVal">0%</b>
-              <div class="track"><div id="overallPreFill" class="fill blue" style="width:0%"></div></div>
-            </div>
-            <div class="meter-row">
-              <span>Post-Test Average</span>
-              <b class="c-green" id="overallPostVal">0%</b>
-              <div class="track"><div id="overallPostFill" class="fill green" style="width:0%"></div></div>
-            </div>
-            <div class="meter-row">
-              <span>Average Improvement</span>
-              <b class="c-purple" id="overallImpVal">0%</b>
-              <div class="track"><div id="overallImpFill" class="fill purple" style="width:0%"></div></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section class="section" style="padding: 8px 4px 20px;" data-auth-shell data-await-content="analytics-students">
         <div class="section-head performance-head">
-          <h2 data-auth-shell>Overall Individual Student Performance</h2>
+          <h2 data-auth-shell>Student Score Summary</h2>
         </div>
         <div class="performance-controls">
           <label class="select-wrap">
-            <select id="sectionFilter" aria-label="Filter by section" aria-controls="studentGrid teacherQuizBody">
-              <option value="all">All Sections</option>
+            <select id="sectionFilter" aria-label="Filter by section" aria-controls="studentGrid questionHeatmapRows topicsContainer" disabled>
+              <option value="">Select a section</option>
             </select>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </label>
@@ -111,15 +75,10 @@
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
           </label>
         </div>
-        <div class="performance-table-wrap" data-loading-path="users classes" data-loading-label="Loading student performance…">
-          <table class="performance-table" id="studentGrid">
-            <thead>
-              <tr><th scope="col">Student</th><th scope="col">Section</th><th scope="col">Pre-Test</th><th scope="col">Post-Test</th><th scope="col">Activity Score</th><th scope="col">Improvement</th></tr>
-            </thead>
-            <!-- Added id="studentTableBody" and cleared out hardcoded students -->
-            <tbody id="studentTableBody">
-              <tr class="empty-row" id="emptyState" hidden><td colspan="6">No students match that search.</td></tr>
-            </tbody>
+        <div class="performance-table-wrap score-summary-wrap" role="region" aria-label="Student score table" tabindex="0">
+          <table class="performance-table score-summary-table" id="studentGrid">
+            <thead id="scoreSummaryHead"></thead>
+            <tbody id="studentTableBody"></tbody>
           </table>
         </div>
         <div class="student-detail-navigation" aria-label="Student performance pages">
@@ -127,43 +86,10 @@
           <span id="analyticsPageStatus" role="status"></span>
           <button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button>
         </div>
-        <p class="scheduler-progress-copy">Activity Score is the average of recorded lesson activity scores. A dash means no score has been recorded.</p>
-      </section>
-
-      <section class="section student-activity-section" aria-labelledby="studentActivityHeading" data-auth-shell data-await-content="analytics-activities">
-        <div class="section-head performance-head">
-          <h2 id="studentActivityHeading" data-public-label>Student Activity Record</h2>
-          <div class="activity-record-filters">
-          <label class="activity-section-filter" for="activitySectionFilter">
-            <span>Section</span>
-            <span class="select-wrap">
-              <select id="activitySectionFilter" aria-controls="studentActivityBody questionHeatmapRows topicsContainer" disabled><option value="">Select a section</option></select>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6"/></svg>
-            </span>
-          </label>
-          </div>
-        </div>
+        <p class="scheduler-progress-copy">Scores show points earned out of points possible. A dash means no raw score is available. Improvement is post-test points minus pre-test points. Check both totals when comparing tests of different lengths.</p>
         <p id="activitySyncStatus" class="view-data-status" role="status" hidden></p>
-        <div class="performance-table-wrap">
-          <table class="performance-table activity-record-table">
-            <thead><tr><th scope="col">Activity</th><th scope="col">Section</th><th scope="col">Average duration</th><th scope="col">Learners</th><th scope="col">Activity submissions</th></tr></thead>
-            <tbody id="studentActivityBody"><tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="section student-activity-section" aria-labelledby="teacherQuizHeading" data-auth-shell>
-        <div class="section-head performance-head">
-          <h2 id="teacherQuizHeading" data-public-label>Teacher Quiz Results</h2>
-          <button id="teacherQuizRefresh" class="ghost-btn" type="button" disabled>Refresh</button>
-        </div>
         <p id="teacherQuizStatus" class="view-data-status" role="status"></p>
-        <div class="performance-table-wrap">
-          <table class="performance-table activity-record-table teacher-quiz-table">
-            <thead><tr><th scope="col">Quiz</th><th scope="col">Section</th><th scope="col">Average score</th><th scope="col">Learners</th><th scope="col">Quiz submissions</th></tr></thead>
-            <tbody id="teacherQuizBody"></tbody>
-          </table>
-        </div>
+        <button id="teacherQuizRefresh" class="ghost-btn" type="button" hidden>Retry quiz scores</button>
       </section>
 
       <section class="card section question-heatmap" aria-labelledby="questionHeatmapHeading" data-auth-shell>

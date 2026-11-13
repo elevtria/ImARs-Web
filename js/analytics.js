@@ -3,32 +3,29 @@ import { initializeApp } from "./firebase-auth.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
-import { activityPercent } from "./activity-score.js";
-import { buildStudentActivityRecords } from "./student-activity-record.js";
+import { buildStudentActivityRecords, testRawScore } from "./student-activity-record.js";
 import { buildPostTestHeatmap } from "./post-test-heatmap.js";
-import { setTeacherQuizSection } from "./teacher-quiz-analytics.js";
+import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
 
-const empty = document.getElementById("emptyState");
 const search = document.getElementById("studentSearch");
 const sectionFilter = document.getElementById("sectionFilter");
 const sectionSummary = document.getElementById("sectionSummary");
 const studentCount = document.getElementById("studentCount");
 const studentGrid = document.querySelector("#studentGrid tbody");
 const topicsContainer = document.getElementById("topicsContainer");
-const studentActivityBody = document.getElementById("studentActivityBody");
-const activitySectionFilter = document.getElementById("activitySectionFilter");
 const questionHeatmapScope = document.getElementById("questionHeatmapScope");
 const topicCompletionScope = document.getElementById("topicCompletionScope");
-const openActivities = new Set();
-const activityPages = new Map();
 const studentsPerPage = 25;
-let activitySection = "", activityRequest = "", activityData;
-
-let dynamicRows = [];
+let activitySection = "";
+const scoreHead = document.getElementById("scoreSummaryHead");
+const quizStatus = document.getElementById("teacherQuizStatus");
+const quizRetry = document.getElementById("teacherQuizRefresh");
+let quizPage;
+window.addEventListener("pagehide", () => quizPage?.controller.abort());
 let currentTermFilter = "term_01";
 let lastAnalyticsTerm = currentTermFilter;
 let selectedSection = "first", lastReport, tablePage = 0;
@@ -79,7 +76,7 @@ async function loadHeatmapTopics() {
   const uid = auth.currentUser?.uid, term = currentTermFilter;
   if (!uid || !activitySection) return;
   const key = uid + ":" + term;
-  const report = [lastReport, activityData].find(data => data?.termId === term && data.curriculumSnap);
+  const report = lastReport?.termId === term ? lastReport : null;
   const saved = report?.curriculumSnap;
   if (!heatmapQuestionLoads.has(key)) {
     const hasLabels = saved?.docs?.some(lesson => Array.isArray(lesson.data().postTest));
@@ -117,8 +114,8 @@ async function openQuestionHeatmap(loadMore = false) {
   const uid = auth.currentUser?.uid, termId = currentTermFilter, sectionId = activitySection;
   const selected = heatmapLessons.find(item => item.id === heatmapTopic);
   if (!uid || !sectionId || !selected) return;
-  const report = [activityData, lastReport].find(data => data?.termId === termId &&
-    data.sections.some(section => section.classDoc.id === sectionId));
+  const report = lastReport?.termId === termId &&
+    lastReport.sections.some(section => section.classDoc.id === sectionId) ? lastReport : null;
   if (report) {
     if (heatmapPage) clearHeatmapResults();
     const sections = report.sections.filter(section => section.classDoc.id === sectionId);
@@ -188,180 +185,116 @@ heatmapTopicSelect?.addEventListener("change", () => {
 });
 heatmapMore?.addEventListener("click", () => openQuestionHeatmap(true));
 
-const activityReport = createTeacherReport({ app,
-  render: data => {
-    if (data.termId !== currentTermFilter) return;
-    const section = data.sections.find(section => section.classDoc.id === activitySection);
-    if (section) renderActivityReport(data, section);
-  },
-  failed: error => {
-    console.error("Activity records update failed:", error);
-    studentActivityBody.removeAttribute("aria-busy");
-    if (!activityData) {
-      studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">Could not update activity records. Retrying automatically.</td></tr>';
-      revealContent("analytics-activities");
-    }
-    if (!activityData?.complete) renderTopics([], "Could not update topic completion rates.");
-  }
-});
-
-function updateActivitySections(data) {
-  if (!activitySectionFilter) return;
-  if (!data.classes.some(section => section.id === activitySection)) {
-    const preferredSection = (selectedSection && selectedSection !== "all" && selectedSection !== "first" && data.classes.some(c => c.id === selectedSection))
-      ? selectedSection
-      : (data.sections[0]?.classDoc.id || data.classes[0]?.id || "");
-    selectActivitySection(preferredSection);
-  }
-  const options = data.classes.map(section => ({ id: section.id, name: section.data().SectionName || section.data().sectionName || section.data().name || section.id }));
-  const key = JSON.stringify(options);
-  if (activitySectionFilter.dataset.sections !== key) {
-    activitySectionFilter.replaceChildren(...options.map(section => {
-      const option = document.createElement("option"); option.value = section.id; option.textContent = section.name; return option;
-    }));
-    activitySectionFilter.dataset.sections = key;
-  }
-  activitySectionFilter.value = activitySection;
-  activitySectionFilter.disabled = !options.length;
-  void openActivityReport();
+function raw(score, max) {
+  return Number.isFinite(score) && Number.isFinite(max) && max > 0 && score >= 0 && score <= max ? score + "/" + max : "—";
 }
 
-function selectActivitySection(sectionId) {
-  if (activitySection === sectionId) return;
-  activitySection = sectionId;
-  clearHeatmapResults();
-  heatmapStatus.textContent = heatmapTopic ? "" : "Choose a topic to view post-test results.";
-  showTopicsPending();
+function lessonCells(data = {}) {
+  const pre = testRawScore(data, "pre"), post = testRawScore(data, "post");
+  const activity = Object.hasOwn(data, "activityRawMaximum")
+    ? raw(data.activityRawScore, data.activityRawMaximum)
+    : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
+  const gain = pre && post ? post.score - pre.score : null;
+  return `<td class="score-divider">${activity}</td><td>${raw(pre?.score, pre?.total)}</td><td>${raw(post?.score, post?.total)}</td><td>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
 }
 
-function openActivityReport() {
-  if (!auth.currentUser || !studentActivityBody) return;
-  const classDoc = lastReport?.classes.find(section => section.id === activitySection);
-  const classData = classDoc?.data();
-  const sectionName = classData?.SectionName || classData?.sectionName || classData?.name || activitySection;
-  const scope = sectionName ? `${termLabels[currentTermFilter]} · ${sectionName}` : termLabels[currentTermFilter];
-  questionHeatmapScope.textContent = topicCompletionScope.textContent = scope;
-  const section = lastReport?.termId === currentTermFilter && lastReport.sections.find(section => section.classDoc.id === activitySection);
-  if (section && lastReport.curriculumSnap) {
-    activityReport.stop(); activityRequest = "";
-    renderActivityReport(lastReport, section);
-    return;
-  }
-  if (!activitySection) {
-    activityReport.stop(); activityRequest = ""; activityData = null;
-    studentActivityBody.removeAttribute("aria-busy");
-    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No sections assigned yet.</td></tr>';
-    revealContent("analytics-activities");
-    renderTopics([], "No sections assigned yet.");
-    updateHeatmap();
-    return;
-  }
-  const key = `${auth.currentUser.uid}:${currentTermFilter}:${activitySection}`;
-  if (activityRequest === key) return;
-  activityRequest = key; activityData = null;
-  studentActivityBody.setAttribute("aria-busy", "true");
-  studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
-  return activityReport.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: activitySection });
-}
-activitySectionFilter?.addEventListener("change", () => {
-  if (!lastReport?.classes.some(section => section.id === activitySectionFilter.value)) return;
-  if (activitySection === activitySectionFilter.value) return;
-  selectActivitySection(activitySectionFilter.value);
-  return openActivityReport();
-});
-
-function renderActivityReport(data, section) {
-  if (!data.curriculumSnap) return;
-  activityData = data;
-  const records = buildStudentActivityRecords([data.curriculumSnap], [section], termLabels, [data.termId]);
-  const status = document.getElementById("activitySyncStatus");
-  status.textContent = data.activitySyncPending ? "Showing saved scores. Recent submissions from older app versions could not be checked." : "";
-  status.hidden = !data.activitySyncPending;
-  studentActivityBody.removeAttribute("aria-busy");
-  renderStudentActivities(records, data.complete === false);
-  if (data.complete !== false) renderTopics(records);
-  updateHeatmap();
-}
-
-function renderStudentActivities(records, partial) {
-  if (!studentActivityBody) return;
-  if (!records.length) {
-    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5">No student activities found.</td></tr>';
-    revealContent("analytics-activities");
-    return;
-  }
-  studentActivityBody.innerHTML = records.map((record, index) => {
-    const key = record.key;
-    const open = openActivities.has(key);
-    const detailId = `studentActivityDetail${index}`;
-    const total = record.learners.length;
-    const page = Math.min(activityPages.get(key) || 0, Math.max(0, Math.ceil(total / studentsPerPage) - 1));
-    const start = page * studentsPerPage, end = Math.min(start + studentsPerPage, total);
-    const learners = open ? [...record.learners].sort((a, b) => Number(b.score !== null) - Number(a.score !== null)) : [];
-    const learnerRows = learners.slice(start, end).map(learner => {
-      const initials = learner.name.split(/\s+/).filter(Boolean).map(part => part[0]).slice(0, 2).join("").toUpperCase();
-      const rawCell = result => `<td><span class="activity-result-score${result === null ? " is-empty" : ""}">${result === null ? "—" : `${result.score}/${result.total}`}</span></td>`;
-      const activity = learner.score === null ? null : { score: learner.rawScore, total: learner.totalScore };
-      return `<tr><th scope="row"><span class="table-avatar">${escapeHtml(initials)}</span>${escapeHtml(learner.name)}</th>${rawCell(learner.preTest)}${rawCell(learner.postTest)}${rawCell(activity)}<td class="activity-result-time">${learner.minutes === null ? "—" : `${Math.round(learner.minutes)} min`}</td></tr>`;
-    }).join("");
-    return `<tr class="activity-record-row">
-      <th scope="row"><button class="activity-record-toggle" type="button" data-activity-index="${index}" aria-expanded="${open}" aria-controls="${detailId}"><span class="activity-record-chevron" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span><span>${escapeHtml(record.title)}<small>${escapeHtml(record.term)} · AR lesson</small></span></button></th>
-      <td>${escapeHtml(record.section)}</td><td>${record.averageMinutes === null ? "—" : `${record.averageMinutes} min`}</td><td>${record.learnerCount}</td>
-      <td><span class="activity-record-completed">${record.submittedCount}/${record.learnerCount} submitted</span></td>
-    </tr><tr class="activity-record-detail" id="${detailId}" ${open ? "" : "hidden"}><td colspan="5">
-      <div class="activity-record-detail-head"><div><strong>Topic Student Results</strong><small>${escapeHtml(record.title)} · ${studentPageLabel(start, end, total, partial)}</small></div></div>
-      ${learnerRows ? `<div class="activity-record-results-wrap"><table class="performance-table activity-record-results"><thead><tr><th scope="col">Student</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Activity score</th><th scope="col">Recorded time</th></tr></thead><tbody>${learnerRows}</tbody></table></div><p class="activity-record-empty">Scores show earned points / total points for this topic. A dash means a score or time is missing.</p>` : '<p class="activity-record-empty">No students to show for this section.</p>'}
-      ${open && total > studentsPerPage ? `<div class="student-detail-navigation"><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page - 1}" ${page === 0 ? "disabled" : ""}>Previous page</button><button type="button" class="ghost-btn activity-result-page" data-record="${index}" data-page="${page + 1}" ${end >= total ? "disabled" : ""}>Next page</button></div>` : ""}
-    </td></tr>`;
-  }).join("");
-  revealContent("analytics-activities");
-  studentActivityBody.querySelectorAll(".activity-record-toggle").forEach(button => {
-    button.addEventListener("click", () => {
-      const record = records[Number(button.dataset.activityIndex)];
-      const key = record.key;
-      const detail = document.getElementById(button.getAttribute("aria-controls"));
-      const open = button.getAttribute("aria-expanded") !== "true";
-      button.setAttribute("aria-expanded", String(open));
-      detail.hidden = !open;
-      if (open) openActivities.add(key); else openActivities.delete(key);
-      renderStudentActivities(records, partial);
+function renderScores(refresh = true) {
+  const curriculum = lastReport?.curriculumSnap?.docs || [];
+  const section = lastReport?.sections.find(item => item.classDoc.id === activitySection);
+  const termId = currentTermFilter;
+  const query = search.value.trim().toLowerCase();
+  const students = (section?.students || []).map(row => {
+    const student = row.studentDoc.data();
+    return { ...row, name: student.displayName || student.fullName || "Student" };
+  }).filter(row => row.name.toLowerCase().includes(query));
+  tablePage = Math.min(tablePage, Math.max(0, Math.ceil(students.length / studentsPerPage) - 1));
+  const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
+  if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
+  const quizzes = quizPage?.quizzes || [];
+  scoreHead.innerHTML = `<tr><th class="score-student" scope="col" rowspan="2">Student name</th><th scope="col" rowspan="2">Section</th>
+    ${curriculum.map(lesson => {
+      const data = lesson.data();
+      return `<th class="score-divider" scope="colgroup" colspan="4">${escapeHtml(data.title || data.name || data.topicTitle || lesson.id)}</th>`;
+    }).join("")}<th class="score-divider" scope="colgroup" colspan="${Math.max(1, quizzes.length)}">Quiz</th></tr>
+    <tr>${curriculum.map(() => '<th class="score-divider" scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th>').join("")}
+    ${quizzes.length ? quizzes.map(quiz => `<th scope="col">${escapeHtml(quiz.title || "Quiz")}</th>`).join("") : '<th scope="col">Generated quizzes</th>'}</tr>`;
+  studentGrid.innerHTML = visible.map(row => {
+    const lessons = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(lesson => [lesson.id, lesson.data()]));
+    const quizCells = quizzes.map(quiz => {
+      const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
+      const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
+      return item?.attemptId
+        ? `<td><button class="score-review" type="button" data-quiz="${escapeHtml(quiz.id)}" data-student="${escapeHtml(row.studentDoc.id)}" aria-label="${escapeHtml(row.name)} · ${escapeHtml(quiz.title || "Quiz")} · ${score}. Open submission">${score}</button></td>`
+        : `<td>${score}</td>`;
     });
-  });
-  studentActivityBody.querySelectorAll(".activity-result-page").forEach(button => button.addEventListener("click", () => {
-    activityPages.set(records[Number(button.dataset.record)].key, Math.max(0, Number(button.dataset.page)));
-    renderStudentActivities(records, partial);
-  }));
-}
-
-function studentPageLabel(start, end, total, partial) {
-  return total ? `Showing ${start + 1}–${end} of ${total} students${partial ? " loaded" : ""}` : "0 students";
-}
-
-const filterStudents = () => {
-  const queryText = (search?.value || "").trim().toLowerCase();
-  const matches = dynamicRows.filter(row => row.name.includes(queryText));
-  const maximum = Math.max(0, Math.ceil(matches.length / studentsPerPage) - 1);
-  tablePage = Math.min(tablePage, maximum);
-  const start = tablePage * studentsPerPage, end = Math.min(start + studentsPerPage, matches.length);
-  studentGrid.innerHTML = matches.slice(start, end).map(row => row.html).join("");
-  if (!matches.length) { empty.hidden = false; studentGrid.appendChild(empty); }
-  if (studentCount) studentCount.textContent = lastReport ? lastReport.total ?? "—" : matches.length;
-  document.getElementById("analyticsPageStatus").textContent = studentPageLabel(start, end, matches.length, lastReport?.complete === false);
+    return `<tr class="student-row"><th class="score-student" scope="row">${escapeHtml(row.name)}</th><td>${escapeHtml(sectionSummary.textContent)}</td>${curriculum.map(lesson => lessonCells(lessons.get(lesson.id))).join("")}${quizCells.join("") || "<td>—</td>"}</tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="${2 + 4 * curriculum.length + Math.max(1, quizzes.length)}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+  document.getElementById("analyticsPageStatus").textContent = students.length
+    ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
-  document.getElementById("analyticsNext").disabled = tablePage >= maximum;
-};
-search?.addEventListener("input", () => { tablePage = 0; filterStudents(); });
-sectionFilter?.addEventListener("change", () => {
-  selectedSection = sectionFilter.value;
-  setTeacherQuizSection(lastReport?.classes.find(section => section.id === selectedSection));
-  if (selectedSection && selectedSection !== "all" && activitySection !== selectedSection) {
-    selectActivitySection(selectedSection);
+  document.getElementById("analyticsNext").disabled = start + visible.length >= students.length;
+}
+
+function resetQuizScores() {
+  quizPage?.controller.abort();
+  quizPage = undefined;
+  closeQuizReview();
+  quizStatus.textContent = "";
+  quizRetry.hidden = true;
+}
+
+async function loadQuizScores(studentIds, force = false) {
+  const user = auth.currentUser;
+  if (!activitySection || !user) return;
+  const key = JSON.stringify([user.uid, currentTermFilter, activitySection, studentIds]);
+  const old = quizPage;
+  if (!force && old?.key === key && Date.now() - old.checkedAt < 300_000) return;
+  old?.controller.abort();
+  const page = { key, studentIds, checkedAt: Date.now(), controller: new AbortController(),
+    quizzes: old?.quizzes || [], scores: old?.scores || new Map() };
+  quizPage = page;
+  quizRetry.hidden = true;
+  quizStatus.textContent = page.quizzes.length ? "" : "Loading quiz scores…";
+  try {
+    const response = await requestQuizReview(user.uid, { action: "term-results", termId: currentTermFilter, sectionId: activitySection, studentIds }, page.controller.signal);
+    if (quizPage !== page) return;
+    page.quizzes = response.quizzes;
+    page.scores = new Map(response.quizzes.map(quiz => [quiz.id, new Map()]));
+    for (const item of response.items) page.scores.get(item.quizId)?.set(item.studentId, item);
+    quizStatus.textContent = response.quizzes.length ? "" : "No quizzes assigned to this term and section. Set a quiz’s term in My quizzes.";
+    renderScores(false);
+  } catch {
+    if (quizPage !== page || page.controller.signal.aborted) return;
+    quizStatus.textContent = "Could not load quiz scores.";
+    quizRetry.hidden = false;
   }
+}
+
+quizRetry.addEventListener("click", () => { if (quizPage) void loadQuizScores(quizPage.studentIds, true); });
+studentGrid.addEventListener("click", event => {
+  const button = event.target.closest("button[data-quiz]");
+  const page = quizPage, user = auth.currentUser;
+  if (!button || !page || !user) return;
+  const quiz = page.quizzes.find(item => item.id === button.dataset.quiz);
+  const submission = page.scores.get(quiz?.id)?.get(button.dataset.student);
+  if (!submission?.attemptId) return;
+  const section = { id: activitySection, label: sectionSummary.textContent, name: sectionSummary.textContent };
+  const student = lastReport?.sections.find(row => row.classDoc.id === section.id)?.students.find(row => row.studentDoc.id === submission.studentId)?.studentDoc.data();
+  void openQuizReview(user, quiz, [section], section.id, { submission: { ...submission, name: student?.displayName || student?.fullName }, onReviewed: grade => {
+    if (quizPage !== page) return;
+    Object.assign(submission, { score: grade.score, maximum: grade.maximum, status: "reviewed" });
+    renderScores(false);
+  } });
+});
+search.addEventListener("input", () => { tablePage = 0; renderScores(); });
+sectionFilter.addEventListener("change", () => {
+  if (!lastReport?.classes.some(item => item.id === sectionFilter.value)) return;
+  selectedSection = sectionFilter.value;
   tablePage = 0;
   return openReport();
 });
-document.getElementById("analyticsPrevious").addEventListener("click", () => { if (tablePage > 0) { tablePage--; filterStudents(); } });
-document.getElementById("analyticsNext").addEventListener("click", () => { tablePage++; filterStudents(); });
+document.getElementById("analyticsPrevious").addEventListener("click", () => { if (tablePage > 0) { tablePage--; renderScores(); } });
+document.getElementById("analyticsNext").addEventListener("click", () => { tablePage++; renderScores(); });
 
 function showTopicsPending() {
   topicsContainer.setAttribute("aria-busy", "true");
@@ -416,131 +349,41 @@ const report = createTeacherReport({ app,
   failed: error => { console.error("Analytics update failed:", error); setLoadingState(document.getElementById("analyticsReportStatus"), false); document.getElementById("analyticsReportStatus").textContent = "Could not update results. Retrying automatically."; },
   render: data => {
     if (data.termId !== currentTermFilter) return;
+    const section = data.sections.find(row => selectedSection === "first" || row.classDoc.id === selectedSection);
+    if (!section && data.classes.some(row => row.id === selectedSection)) return;
+    if (!section && data.classes.length && selectedSection !== "first") {
+      selectedSection = "first";
+      return openReport();
+    }
     lastReport = data;
-    const { sections, classes } = data;
-    dynamicRows = [];
-      let totalClassPrePercentageSum = 0;
-      let totalClassPostPercentageSum = 0;
-      let totalStudentTestsCount = 0;
-
-      if (sectionFilter) sectionFilter.innerHTML = '<option value="all">All Sections</option>';
-      if (studentGrid) {
-        studentGrid.innerHTML = "";
-        if (empty) studentGrid.appendChild(empty);
-      }
-
-      if (sectionFilter) {
-        for (const classDoc of classes) {
-          const option = document.createElement("option"); option.value = classDoc.id;
-          option.textContent = "Grade 6 – " + (classDoc.data().SectionName || classDoc.id);
-          sectionFilter.appendChild(option);
-        }
-        sectionFilter.value = selectedSection === "first" ? data.counts[0]?.classId || data.classes[0]?.id || "all" : selectedSection || "all";
-        if (sectionSummary) sectionSummary.textContent = sectionFilter.options[sectionFilter.selectedIndex]?.textContent || "All Sections";
-        setTeacherQuizSection(classes.find(section => section.id === sectionFilter.value));
-      }
-      for (const { classDoc, students } of sections) {
-        const classCode = classDoc.id;
-        const cData = classDoc.data();
-        const sectionName = cData.SectionName || cData.sectionName || cData.name || classCode;
-
-        for (const { studentDoc, results } of students) {
-          const sData = studentDoc.data();
-          const sName = sData.displayName || sData.fullName || "Student";
-
-          const nameParts = sName.split(" ");
-          let initials = nameParts[0] ? nameParts[0][0] : "?";
-          if (nameParts.length > 1) initials += nameParts[nameParts.length - 1][0];
-
-          let studentPreSum = 0;
-          let studentPostSum = 0;
-          let testCount = 0;
-          let studentActivitySum = 0;
-          let activityCount = 0;
-
-          for (const { lessonsSnap } of results) {
-            lessonsSnap.forEach((lessonDoc) => {
-              const tData = lessonDoc.data();
-              const activity = activityPercent(tData);
-              if (activity !== null) {
-                studentActivitySum += activity;
-                activityCount++;
-              }
-
-              if (tData.isPreTestCompleted && tData.preTestTotalQuestions > 0 && tData.isPostTestCompleted && tData.postTestTotalQuestions > 0) {
-                const prePercent = (tData.preTestScore / tData.preTestTotalQuestions) * 100;
-                const rawPostScore = tData.postTestScore !== undefined ? tData.postTestScore : (tData.postTestHeatmap ? tData.postTestHeatmap.filter(Boolean).length : 0);
-                const postPercent = (rawPostScore / tData.postTestTotalQuestions) * 100;
-
-                studentPreSum += prePercent;
-                studentPostSum += postPercent;
-                testCount++;
-              }
-            });
-          }
-
-          const avgPre = testCount ? Math.round(studentPreSum / testCount) : null;
-          const avgPost = testCount ? Math.round(studentPostSum / testCount) : null;
-          const avgActivity = activityCount ? Math.round(studentActivitySum / activityCount) : null;
-          const improvement = testCount ? avgPost - avgPre : null;
-
-          if (testCount) {
-            totalClassPrePercentageSum += avgPre;
-            totalClassPostPercentageSum += avgPost;
-            totalStudentTestsCount++;
-          }
-
-          const impClass = improvement > 0 ? "c-green" : improvement < 0 ? "c-danger" : "";
-          const impSign = improvement > 0 ? "+" : "";
-
-          const html = `<tr class="student-row">
-            <th scope="row"><span class="table-avatar">${escapeHtml(initials.toUpperCase())}</span>${escapeHtml(sName)}</th>
-            <td>Grade 6 – ${escapeHtml(sectionName)}</td>
-            <td>${avgPre === null ? "—" : `${avgPre}%`}</td>
-            <td>${avgPost === null ? "—" : `${avgPost}%`}</td>
-            <td>${avgActivity === null ? "—" : `${avgActivity}%`}</td>
-            <td><span class="improvement-value ${impClass}">${improvement === null ? "—" : `${impSign}${improvement}%`}</span></td>
-          </tr>`;
-
-          dynamicRows.push({ name: sName.toLowerCase(), html });
-        }
-      }
-
-      filterStudents();
-
-      {
-        const finalPre = totalStudentTestsCount ? Math.round(totalClassPrePercentageSum / totalStudentTestsCount) : 0;
-        const finalPost = totalStudentTestsCount ? Math.round(totalClassPostPercentageSum / totalStudentTestsCount) : 0;
-        const finalImp = finalPost - finalPre;
-
-        const preVal = document.getElementById("overallPreVal");
-        const preFill = document.getElementById("overallPreFill");
-        if (preVal) preVal.textContent = `${finalPre}%`;
-        if (preFill) preFill.style.width = `${finalPre}%`;
-
-        const postVal = document.getElementById("overallPostVal");
-        const postFill = document.getElementById("overallPostFill");
-        if (postVal) postVal.textContent = `${finalPost}%`;
-        if (postFill) postFill.style.width = `${finalPost}%`;
-
-        const impVal = document.getElementById("overallImpVal");
-        const impFill = document.getElementById("overallImpFill");
-        if (impVal) impVal.textContent = `${finalImp >= 0 ? "+" : ""}${finalImp}%`;
-        if (impFill) impFill.style.width = `${Math.min(100, Math.abs(finalImp))}%`;
-
-        const donutLabel = document.getElementById("donutValue");
-        if (donutLabel) donutLabel.textContent = `${finalPost}%`;
-
-        const donutRing = document.getElementById("donutRing");
-        if (donutRing) {
-          const donutFillAmount = (finalPost / 100) * 289.03;
-          donutRing.setAttribute("stroke-dasharray", `${donutFillAmount} 289.03`);
-        }
-      }
-
-      updateActivitySections(data);
-      revealContent("analytics-students");
-      if (data.complete) revealContent("analytics-summary");
+    const nextSection = section?.classDoc.id || "";
+    if (activitySection && activitySection !== nextSection) resetQuizScores();
+    activitySection = nextSection;
+    const options = data.classes.map(row => {
+      const option = document.createElement("option"), info = row.data();
+      option.value = row.id;
+      option.textContent = info.SectionName || info.sectionName || info.name || row.id;
+      return option;
+    });
+    const signature = JSON.stringify(options.map(option => [option.value, option.textContent]));
+    if (sectionFilter.dataset.sections !== signature) {
+      sectionFilter.replaceChildren(...options);
+      sectionFilter.dataset.sections = signature;
+    }
+    sectionFilter.value = activitySection;
+    sectionFilter.disabled = !activitySection;
+    sectionSummary.textContent = options.find(option => option.value === activitySection)?.textContent || "No section";
+    studentCount.textContent = data.total ?? "—";
+    const sync = document.getElementById("activitySyncStatus");
+    sync.hidden = !data.activitySyncPending;
+    sync.textContent = data.activitySyncPending ? "Recent submissions from older app versions could not be checked." : "";
+    renderScores();
+    const scope = activitySection ? termLabels[currentTermFilter] + " · " + sectionSummary.textContent : termLabels[currentTermFilter];
+    questionHeatmapScope.textContent = topicCompletionScope.textContent = scope;
+    if (!section) renderTopics([], "No sections are assigned to your account.");
+    else if (data.complete && data.curriculumSnap) renderTopics(buildStudentActivityRecords([data.curriculumSnap], [section], termLabels, [data.termId]));
+    updateHeatmap();
+    revealContent("analytics-students");
   }
 });
 function openReport({ restoredPage = false } = {}) {
@@ -555,12 +398,18 @@ function openReport({ restoredPage = false } = {}) {
     heatmapStatus.textContent = "";
     questionHeatmapScope.textContent = topicCompletionScope.textContent = termLabels[currentTermFilter];
     showTopicsPending();
-    activityReport.stop(); activityRequest = ""; activityData = null;
-    studentActivityBody.setAttribute("aria-busy", "true");
-    studentActivityBody.innerHTML = '<tr class="empty-row"><td colspan="5"><span data-loading="true" role="status" aria-label="Loading student activities"></span></td></tr>';
+  }
+  if (lastReport && (lastReport.termId !== currentTermFilter || (selectedSection !== "first" && selectedSection !== activitySection))) {
+    lastReport = null; activitySection = "";
+    resetQuizScores(); clearHeatmapResults(); showTopicsPending();
+    scoreHead.replaceChildren(); studentGrid.replaceChildren();
+  }
+  if (!lastReport) {
+    sectionFilter.disabled = true;
+    studentCount.textContent = "—";
   }
   if (!restoredPage || !lastReport) setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");
-  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection === "all" ? "" : selectedSection, restoredPage });
+  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage });
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   if (heatmapOwner !== user?.uid) {
@@ -571,9 +420,13 @@ onAuthStateChanged(auth, (user, { restored = false } = {}) => {
     heatmapTopic = "";
     heatmapTopicSelect.value = "";
     heatmapTopicSelect.disabled = true;
-    lastReport = activityData = null;
+    lastReport = null;
+    selectedSection = "first"; tablePage = 0;
+    resetQuizScores();
     activitySection = "";
+    scoreHead.replaceChildren();
+    studentGrid.replaceChildren();
   }
-  if (!user) { activityReport.stop(); activityData = null; window.location.href = "login.html"; return; }
+  if (!user) { report.stop(); window.location.href = "login.html"; return; }
   void openReport({ restoredPage: restored });
 });

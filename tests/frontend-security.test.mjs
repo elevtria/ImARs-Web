@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
-import { buildStudentActivityRecords } from "../js/student-activity-record.js";
+import { buildStudentActivityRecords, testRawScore } from "../js/student-activity-record.js";
 import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
 import { encodeView } from "../js/view-cache.js";
@@ -41,9 +41,9 @@ function page(file, report, resolveReport) {
   const element = key => { if (!elements.has(key)) elements.set(key, new Element()); return elements.get(key); };
   const termButtons = ["term_01", "term_02", "term_03"].map(term => Object.assign(new Element(), { dataset: { term } }));
   let authChanged, requested, controllerIndex = 0;
-  const requests = [], controllers = [], revealed = [], quizSections = [];
+  const requests = [], controllers = [], revealed = [], quizRequests = [];
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, buildPostTestHeatmap, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -52,7 +52,11 @@ function page(file, report, resolveReport) {
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
-    setTeacherQuizSection: classDoc => quizSections.push(classDoc?.id),
+    closeQuizReview() {}, openQuizReview() {},
+    requestQuizReview: async (_, input) => {
+      quizRequests.push(input);
+      return { quizzes: [{ id: "Q1", title: attack }], items: input.studentIds.slice(0, 1).map(studentId => ({ quizId: "Q1", studentId, status: "graded", score: 2, maximum: 3 })) };
+    },
     createTeacherReport: options => {
       const index = controllerIndex++; controllers.push(options);
       return { stop() {}, open: async input => { requested=input; requests.push({ index, ...input }); options.render(resolveReport ? await resolveReport(input, index) : report); } };
@@ -65,7 +69,8 @@ function page(file, report, resolveReport) {
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
   vm.runInContext(source(file), context);
-  return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, quizSections, render: () => authChanged({ uid: "teacher-a" }) };
+  return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, quizRequests,
+    async render() { await authChanged({ uid: "teacher-a" }); await new Promise(setImmediate); } };
 }
 
 function assertTextOnly(html) {
@@ -206,15 +211,15 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   const lesson = record("lesson_01", { isPreTestCompleted: true, preTestScore: 4, preTestTotalQuestions: 5,
     isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10,
     activityScore: 3, activityTotalQuestions: 4 });
-  const app = page("analytics.js", { curriculumSnap: snapshot([record("lesson_01", { title: attack })]), termId: "term_01", total: 1,
+  const app = page("analytics.js", { curriculumSnap: snapshot([record("lesson_01", { title: attack })]), termId: "term_01", total: 1, complete: true,
     classes: [record("A", { SectionName: attack })], counts: [{ classId: "A", active: 1 }],
     sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: record("S1", { displayName: attack }),
       results: [{ termId: "term_01", lessonsSnap: snapshot([lesson]) }] }] }] });
   await app.render();
   assertTextOnly(app.element("#studentGrid tbody").html());
-  assert.ok(app.element("#studentGrid tbody").html().includes("75%"));
+  assert.ok(app.element("#studentGrid tbody").html().includes("3/4"));
   assertTextOnly(app.element("topicsContainer").html());
-  assertTextOnly(app.element("studentActivityBody").html());
+  assertTextOnly(app.element("scoreSummaryHead").html());
 });
 
 function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
@@ -228,36 +233,21 @@ function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", class
     })) })) };
 }
 
-test("the main Analytics filter supplies the section for Teacher Quiz Results", async () => {
-  const app = page("analytics.js", activityReportData());
+test("the score summary and quiz request use one section and term", async () => {
+  const app = page("analytics.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
   await app.render();
-  assert.equal(app.quizSections.at(-1), "A");
+  assert.equal(app.quizRequests.at(-1).sectionId, "A");
   const filter = app.element("sectionFilter");
+  const options = filter.children;
   filter.value = "B";
   await filter.events.change();
-  assert.equal(app.quizSections.at(-1), "B");
-  filter.value = "all";
-  await filter.events.change();
-  assert.equal(app.quizSections.at(-1), undefined);
-});
-
-test("activity section dropdown shows each topic once and reuses loaded sections without extra requests", async () => {
-  const data = activityReportData(), app = page("analytics.js", data);
-  assert.equal(app.revealed.length, 0, "data cards must wait for the report");
-  await app.render();
-  assert.ok(["analytics-activities", "analytics-summary", "analytics-students", "analytics-topics"].every(group => app.revealed.includes(group)));
-  const dropdown = app.element("activitySectionFilter"), table = app.element("studentActivityBody");
-  assert.equal(dropdown.value, "A"); assert.equal(dropdown.disabled, false); assert.equal(dropdown.children.length, 2);
-  assert.equal((table.html().match(/class="activity-record-row"/g) || []).length, 1);
-  assert.ok(table.html().includes("Section A")); assert.ok(!table.html().includes("Section B"));
-  const options = dropdown.children, cards = app.element("avgPostVal").textContent;
-  dropdown.value = "B"; await dropdown.events.change();
-  assert.ok(table.html().includes("Section B")); assert.ok(!table.html().includes("Section A"));
-  assert.equal(app.requests.length, 1, "switching an already-loaded section must not reopen a report");
-  assert.equal(app.element("avgPostVal").textContent, cards);
-  app.controllers[1].render(data);
-  assert.equal(dropdown.children, options, "a background report update must not rebuild an unchanged dropdown");
-  assert.equal(dropdown.value, "B");
+  await new Promise(setImmediate);
+  assert.equal(filter.children, options);
+  assert.equal(app.quizRequests.at(-1).sectionId, "B");
+  assert.deepEqual(Array.from(app.quizRequests.at(-1).studentIds), ["B0"]);
+  assertTextOnly(app.element("scoreSummaryHead").html());
+  assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*\+8.*2\/3/s);
+  assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
 });
 
 test("post-test heatmap escapes question text and switching loaded topics adds no report requests", async () => {
@@ -290,69 +280,34 @@ test("the heatmap explains why attempts with invalid question order cannot be sh
   assert.doesNotMatch(app.element("questionHeatmapRows").html(), /0%/);
 });
 
-test("an activity-only section request keeps other analytics unchanged and student details paginated", async () => {
-  const main = activityReportData(["A"]), app = page("analytics.js", main, (input, index) => index === 0 ? activityReportData([input.sectionId], { termId: input.termId, count: 30 }) : main);
-  await app.render();
-  const before = app.element("#studentGrid tbody").html(), dropdown = app.element("activitySectionFilter");
-  vm.runInContext('openActivities.add("term_01|lesson_01|B")', app.context);
-  dropdown.value = "B"; await dropdown.events.change();
-  assert.equal(app.requests.length, 2); assert.equal(app.requests[1].index, 0); assert.equal(app.requests[1].sectionId, "B");
-  assert.equal(app.requests[1].termId, "term_01");
-  const table = app.element("studentActivityBody").html();
-  assert.ok(table.includes("Learner B 24")); assert.ok(!table.includes("Learner B 25")); assert.ok(table.includes("Next page")); assert.ok(table.includes("0/10"));
-  assert.ok(!table.includes("%"), "topic results display raw scores rather than percentages");
-  assert.ok(["Pre-test", "Post-test", "Activity score", "Recorded time"].every(label => table.includes(label)));
-  assert.ok(table.includes("0/5") && table.includes("8/10") && table.includes("2 min"), "the expanded topic uses that lesson's raw tests and recorded time");
-  assert.equal(app.element("#studentGrid tbody").html(), before);
-  dropdown.value = "A"; await dropdown.events.change();
-  app.controllers[0].render(activityReportData(["B"]));
-  assert.ok(!app.element("studentActivityBody").html().includes("Section B"), "late results must not replace the selected section");
-  dropdown.value = "foreign"; await dropdown.events.change(); assert.equal(app.requests.length, 2);
-});
-
-test("both Analytics tables include the full roster when only 24 students have results", async () => {
+test("the summary includes all students and requests quizzes for the 25 visible rows", async () => {
   const data = activityReportData(["A"], { count: 30 });
   for (const student of data.sections[0].students.slice(24)) student.results = [];
   const app = page("analytics.js", data);
-  vm.runInContext('openActivities.add("term_01|lesson_01|A")', app.context);
   await app.render();
-
-  const overall = app.element("#studentGrid tbody");
-  assert.match(overall.html(), /Learner A 24<\/th>[\s\S]*?<td>—<\/td>/);
+  const table = app.element("#studentGrid tbody");
+  assert.match(table.html(), /Learner A 24<\/th>[\s\S]*?<td>—<\/td>/);
+  assert.equal(app.quizRequests.at(-1).studentIds.length, 25);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 1–25 of 30 students");
   app.element("analyticsNext").events.click();
-  assert.match(overall.html(), /Learner A 29<\/th>/);
+  assert.match(table.html(), /Learner A 29<\/th>/);
+  assert.equal(app.quizRequests.at(-1).studentIds.length, 5);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 26–30 of 30 students");
-
-  const topic = app.element("studentActivityBody");
-  assert.match(topic.html(), /Showing 1–25 of 30 students/);
-  assert.match(topic.html(), /Learner A 24<\/th>[\s\S]*?activity-result-score is-empty">—/);
-  vm.runInContext('activityPages.set("term_01|lesson_01|A", 1); openActivityReport()', app.context);
-  assert.match(topic.html(), /Showing 26–30 of 30 students/);
-  assert.match(topic.html(), /Learner A 29<\/th>/);
-  assert.equal(app.requests.length, 1, "paging the roster reuses the loaded report");
+  assert.equal(app.requests.length, 1);
 });
 
-test("activity dropdown handles empty and removed assignments without retaining another section's results", async () => {
-  const data = activityReportData(), app = page("analytics.js", data); await app.render();
-  const dropdown = app.element("activitySectionFilter"); dropdown.value = "B"; await dropdown.events.change();
-  app.controllers[1].render(activityReportData(["A"], { classes: ["A"] }));
-  assert.equal(dropdown.value, "A"); assert.ok(!app.element("studentActivityBody").html().includes("Section B"));
-  app.controllers[1].render(activityReportData([], { classes: [] }));
-  assert.equal(dropdown.disabled, true); assert.match(app.element("studentActivityBody").html(), /No sections assigned yet/);
-});
-
-test("changing terms keeps the activity section and ignores results from the previous term", async () => {
+test("a term switch keeps the section and ignores an older report", async () => {
   const app = page("analytics.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
   await app.render();
-  const dropdown = app.element("activitySectionFilter"); dropdown.value = "B"; await dropdown.events.change();
-  await vm.runInContext('currentTermFilter = "term_03"; openReport()', app.context);
-  await Promise.resolve();
-  assert.equal(dropdown.value, "B");
-  assert.ok(app.requests.some(request => request.index === 0 && request.sectionId === "B" && request.termId === "term_03"));
-  const table = app.element("studentActivityBody").html(); assert.ok(table.includes("Term 3")); assert.ok(!table.includes("Term 1"));
+  const filter = app.element("sectionFilter");
+  filter.value = "B";
+  await filter.events.change();
+  await app.termButtons[2].events.click();
+  assert.equal(filter.value, "B");
+  assert.equal(app.quizRequests.at(-1).termId, "term_03");
+  const table = app.element("#studentGrid tbody").html();
   app.controllers[0].render(activityReportData(["B"], { termId: "term_01" }));
-  assert.equal(app.element("studentActivityBody").html(), table);
+  assert.equal(app.element("#studentGrid tbody").html(), table);
 });
 
 test("the shared term and activity section drive completion rates without another report", async () => {
@@ -365,11 +320,10 @@ test("the shared term and activity section drive completion rates without anothe
     return data;
   });
   await app.render();
-  const topics = app.element("topicsContainer"), section = app.element("activitySectionFilter");
+  const topics = app.element("topicsContainer"), section = app.element("sectionFilter");
   assert.match(topics.html(), /100%.*Topic for term_01/s);
   await app.termButtons[1].events.click();
   assert.match(topics.html(), /50%.*Topic for term_02/s);
-  assert.match(app.element("studentActivityBody").html(), /1\/2 submitted/);
   assert.equal(app.element("questionHeatmapScope").textContent, "Term 2 · Section A");
   await app.termButtons[1].events.click();
   assert.equal(app.requests.length, 2, "the current term must not start a duplicate report");

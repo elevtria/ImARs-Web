@@ -45,6 +45,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     try {
       abort = new AbortController();
       const result = await getTeacherReportPage({ termId: options.termId, sectionId: options.sectionId === "first" ? "" : options.sectionId,
+        ...(options.rawActivityScores ? { rawActivityScores: true } : {}),
         ...(options.allTerms ? { allTerms: true } : {}),
         firstSection: options.sectionId === "first", cursor, batchSize, includeCounts: !cursor ? "cached" : false, includeCurriculum: options.includeCurriculum && !state.curriculumSnap,
         ...(curriculumOnly ? { includeStudents: false, includeCounts: false } : {}) }, { signal: abort.signal });
@@ -93,15 +94,15 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, restoredPage = false }) {
-    const key = "teacher-report:" + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false }) {
+    const key = (rawActivityScores ? "teacher-raw-report:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
     const nextCache = prepareTeacherCache(app, account);
     const nextVersion = nextCache.version();
     const keep = restoredPage && user?.uid === account.uid && options?.key === key && options.termId === termId &&
       options.includeCurriculum === includeCurriculum && version === nextVersion && state?.pages.length && nextCache.get(account.uid, key);
     stop(); user = account; const token = generation;
     cache = nextCache; version = nextVersion;
-    options = { termId, sectionId, allTerms, includeCurriculum, key };
+    options = { termId, sectionId, allTerms, includeCurriculum, rawActivityScores, key };
     if (!keep) {
       state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
       const saved = cache.get(user.uid, options.key);
@@ -110,7 +111,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
         const pages = restored.pages.map(index => { const page = cache.get(user.uid, options.key + ":" + index); if (!page) throw new Error("Incomplete cached report"); return decodeView(page); });
         state = { ...restored, pages }; paint();
       } catch { cache.remove(options.key); }
-      if (!state.pages.length) {
+      if (!state.pages.length && !rawActivityScores) {
         const reused = reuseTeacherReport(cache, user.uid, { ...options, now: Date.now() });
         if (reused) {
           state = reused;

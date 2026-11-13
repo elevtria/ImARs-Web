@@ -1127,6 +1127,27 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   font-weight: 700;
   white-space: nowrap;
 }
+.score-summary-wrap { max-width: 100%; }
+.score-summary-table { border-collapse: separate; border-spacing: 0; }
+.score-summary-table th, .score-summary-table td { padding: 10px 12px; }
+.score-summary-table :is(th, td):not(.score-student) { text-align: center; white-space: nowrap; }
+.score-summary-table .score-divider { border-inline-start: 1px solid var(--line); }
+.score-summary-table .score-student {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 140px;
+  max-width: 220px;
+  white-space: normal;
+  background: #f7fbff;
+  border-inline-end: 1px solid var(--line);
+}
+.score-summary-table tbody tr:nth-child(even) { background: rgba(129, 162, 193, 0.08); }
+.score-review { color: inherit; border: 0; background: none; padding: 2px; font: inherit; text-decoration: underline; cursor: pointer; }
+[data-theme="dark"] .score-summary-table .score-student { background: var(--surface); }
+@media (max-width: 520px) {
+  .score-summary-table .score-student { min-width: 108px; max-width: 128px; }
+}
 .table-avatar {
   display: inline-grid;
   place-items: center;

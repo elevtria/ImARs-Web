@@ -77,7 +77,8 @@ export const invalidateTeacherViews = options => teacherViewCache().invalidate(o
 const DISPLAY_FIELDS = new Set([
   "displayName", "fullName", "active", "archiveReason", "SectionName", "sectionName", "name", "title", "topicTitle", "gradeLevel", "GradeLevel", "grade", "Grade", "lessonOrder", "isLocked", "scheduledDate", "sectionSchedules",
   "isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted", "isARCompleted", "completed", "preTestScore", "preTestTotalQuestions", "postTestScore", "postTestTotalQuestions", "postTestHeatmap", "postTestQuestionOrder", "activityScore", "activityTotalQuestions", "activityTotalPoints",
-  "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice", "timestamp", "lastUpdated", "completedAt"
+  "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice", "timestamp", "lastUpdated", "completedAt",
+  "activityRawScore", "activityRawMaximum"
 ]);
 
 // Store only the document contents needed for displaying a report, not SDK internals.

@@ -22,6 +22,9 @@ test("generation, review, unassigned draft and all-section release use the actua
   }
   const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([,id])=>[id,new Element()]));
   const element = id => { assert.ok(elements.has(id), "Unknown page element: " + id); return elements.get(id); };
+  const termPicker = element("editorTerm");
+  termPicker.options = [...html.match(/<select[^>]*id="editorTerm"[^>]*>([\s\S]*?)<\/select>/)[1]
+    .matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)].map(([, value, textContent]) => ({ value, textContent }));
   const choice = new Element(), availability = new Element(); choice.value = "multiple-choice"; availability.value = "draft";
   const quizzes = new Map(), saves = [];
   const docs = rows => ({ docs: rows.map(([id,data])=>({id,data:()=>data})), size: rows.length });
@@ -81,7 +84,13 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("editorStep").hidden,false);
   assert.equal(element("quizAvailability").hidden,true);
   await element("saveQuiz").listeners.click();
+  assert.equal(saves.length, 0);
+  assert.match(element("editorStatus").textContent, /Choose a term/);
+  termPicker.value = "term_02";
+  await element("saveQuiz").listeners.click();
   assert.equal(element("generateQuiz").disabled,true);
+  assert.equal(saves[0].termId, "term_02");
+  assert.match(element("quizLibraryList").innerHTML, /Term 2/);
   assert.equal(saves[0].assignmentScope,"unassigned"); assert.equal(saves[0].sectionId,""); assert.equal(saves[0].availability,"draft");
   assert.match(element("quizLibraryList").innerHTML,/All my sections/);
   assert.doesNotMatch(element("quizLibraryList").innerHTML,/View results/);
@@ -90,6 +99,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("quizLibraryList").listeners.submit({preventDefault(){},target:{closest:()=>form}});
   await new Promise(setImmediate);
   assert.equal(saves.at(-1).assignmentScope,"all"); assert.equal(saves.at(-1).sectionId,""); assert.equal(saves.at(-1).availability,"now");
+  assert.equal(saves.at(-1).termId, "term_02");
   assert.match(element("libraryStatus").textContent,/Release saved/);
   for(const section of ["A","C"]) {
     element("librarySectionFilter").value=section; element("librarySectionFilter").listeners.change();
@@ -114,6 +124,8 @@ test("generation, review, unassigned draft and all-section release use the actua
     selector === "[data-edit-quiz]" ? { dataset: { editQuiz: saves[0].id } } : null } });
   await new Promise(setImmediate);
   const sectionPicker = element("editorSectionSelect");
+  assert.equal(termPicker.value, "term_02");
+  termPicker.value = "term_03";
   assert.equal(sectionPicker.hidden, false);
   assert.equal(sectionPicker.value, "A");
   assert.match(sectionPicker.innerHTML, /All my sections/);
@@ -125,6 +137,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   availability.value = "now";
   await element("saveQuiz").listeners.click();
   assert.equal(saves.at(-1).id, saves[0].id);
+  assert.equal(saves.at(-1).termId, "term_03");
   assert.equal(saves.at(-1).assignmentScope, "all");
   assert.equal(saves.at(-1).availability, "now");
   availability.value = "draft";
@@ -154,6 +167,8 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(element("reviewStep").hidden, false);
   assert.equal(element("quizTitle").value, "Water quiz");
   element("acceptAll").listeners.click();
+  assert.equal(termPicker.value, "");
+  termPicker.value = "term_01";
   await element("saveQuiz").listeners.click();
   assert.equal(job.status, "none");
   assert.equal(saves.at(-1).sourceFile, "water.pdf");

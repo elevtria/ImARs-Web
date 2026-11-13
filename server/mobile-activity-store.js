@@ -12,7 +12,7 @@ export const activities = new Map([
   ["constellation", "Constellations", 3, 4]
 ].map(([activityId, title, term, lesson]) => [activityId, { activityId, title, termId: "term_0" + term, lessonId: "lesson_0" + lesson }]));
 
-export const legacyActivityFields = ["activityId", "classCode", "uid", "status", "score", "maximum", "completedAtUtc"];
+export const legacyActivityFields = ["activityId", "classCode", "uid", "status", "score", "maximum", "rawScore", "rawMaximum", "completedAtUtc"];
 
 const reportFields = [
   "activityId", "termId", "lessonId", "title", "runId", "studentId", "classCode", "deviceId", "status",
@@ -93,7 +93,7 @@ export class MobileActivityStore {
     return this.request(this.runs, {
       section_id: "eq." + sectionId, term_id: "in.(" + termIds.join(",") + ")",
       student_id: "in.(" + studentIds.join(",") + ")", status: "eq.completed",
-      select: "studentId:student_id,termId:term_id,lessonId:item->>lessonId,score:item->score,maximum:item->maximum",
+      select: "studentId:student_id,termId:term_id,lessonId:item->>lessonId,score:item->score,maximum:item->maximum,rawScore:item->rawScore,rawMaximum:item->rawMaximum",
       limit: String(studentIds.length * termIds.length * 4)
     });
   }

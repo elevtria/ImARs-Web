@@ -161,6 +161,44 @@ async function sectionResults(actor, store, quiz, body) {
   }));
   return { items: items.filter(Boolean), nextCursor: roster.length > limit ? roster[limit - 1].id : "" };
 }
+
+async function termResults(actor, store, { sectionId, termId, studentIds }) {
+  if (!validPart(sectionId) || !["term_01", "term_02", "term_03"].includes(termId) ||
+      !Array.isArray(studentIds) || studentIds.length > 25 || !studentIds.every(validPart) ||
+      new Set(studentIds).size !== studentIds.length) throw fail("INVALID_REQUEST", 400);
+  await ownedSection(actor, store, sectionId);
+  const [library, profiles] = await Promise.all([
+    store.query("generatedQuizzes", { filters: [{ field: "teacherUid", value: actor.uid }, { field: "termId", value: termId }],
+      fieldPaths: ["teacherUid", "teacherProfileId", "termId", "title", "type", "sectionId", "assignmentScope", "section", "createdAt"] }),
+    studentIds.length ? store.getAll(studentIds.map(id => "users/" + id), {
+      fieldPaths: ["role", "classCode", "active", "status", "teacherId"]
+    }) : new Map()
+  ]);
+  const eligible = studentIds.filter(id => {
+    const profile = profiles.get("users/" + id);
+    return profile?.data.role === "student" && profile.data.classCode === sectionId && rosterMember(actor, profile);
+  });
+  const quizzes = library.filter(({ data }) => data.teacherUid === actor.uid && data.teacherProfileId === actor.id &&
+    data.termId === termId && quizAssignedToSection(data, sectionId))
+    .sort((a, b) => String(a.data.createdAt || "").localeCompare(String(b.data.createdAt || "")) || a.id.localeCompare(b.id));
+  const items = [];
+  for (let offset = 0; offset < quizzes.length; offset += 4) {
+    if (!eligible.length) break;
+    const batch = await Promise.all(quizzes.slice(offset, offset + 4).map(async quiz => {
+      const results = store.quizReport
+        ? (await store.quizReport(actor, sectionId, quiz.id, eligible)).items
+        : (await Promise.all(eligible.map(async studentId => {
+          const [latest] = await store.scorePage(actor, studentId, sectionId, { quizId: quiz.id, limit: 1 });
+          return latest && { ...resultFor(latest), studentId };
+        }))).filter(Boolean);
+      return results.filter(item => eligible.includes(item.studentId)).map(({ studentId, attemptId, status, score, maximum }) =>
+        ({ quizId: quiz.id, studentId, attemptId, status, score, maximum }));
+    }));
+    items.push(...batch.flat());
+  }
+  return { quizzes: quizzes.map(({ id, data }) => ({ id, title: data.title, type: data.type })), items };
+}
+
 export async function quizReview({ request, env }, { store, authenticate = requireStaff, now = Date.now } = {}) {
   const respond = (value, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
   let transaction = false;
@@ -171,11 +209,12 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     store ??= supabaseWebData(env) ? appStore(env) : new QuizReviewStore(env);
     const initialActor = await authenticate(request, env, store);
     const body = await readJson(request, 65536);
-    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary"].includes(body.action) ||
+    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback", "termId", "studentIds"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary", "term-results"].includes(body.action) ||
         (body.sectionId !== undefined && body.sectionId !== "" && !validPart(body.sectionId))) throw fail("INVALID_REQUEST", 400);
     if (body.action === "grade") { await store.begin(); transaction = true; }
     const actor = transaction ? await authenticate(request, env, store) : initialActor;
     if (actor.role !== "teacher") throw fail("FORBIDDEN");
+    if (body.action === "term-results") return respond(await termResults(actor, store, body));
     if (body.action === "student-average") return respond(await studentAverage(actor, store, body.studentId));
     if (body.action === "section-summary") return respond(await sectionSummary(actor, store, body.sectionId));
     const q = await ownedQuiz(actor, store, body.quizId);

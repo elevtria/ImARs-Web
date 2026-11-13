@@ -549,11 +549,13 @@ test("quiz releases can change between assigned sections while preserving questi
   const app = fixture(), cookie = await app.login();
   app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "Section C" });
   const quiz = { id: "section-release", teacherUid: "teacher-a", teacherProfileId: "TEACH1000", sectionId: "A", section: "Section A", title: "Water", sourceFile: "water.pdf", type: "multiple-choice", difficulty: "Easy", questions: [{ id: "q1", text: "Which process turns ice into water?", options: ["Melting", "Freezing", "Evaporation", "Condensation"], correctIndex: 0 }], availability: "draft", availableAt: "", demo: false };
-  assert.equal((await app.call(save("generatedQuizzes/section-release", quiz, false), cookie)).status, 200);
+  assert.equal((await app.call(save("generatedQuizzes/section-release", { ...quiz, termId: "term_04" }, false), cookie)).status, 400);
+  assert.equal((await app.call(save("generatedQuizzes/section-release", { ...quiz, termId: "term_02" }, false), cookie)).status, 200);
   const assigned = { ...app.data.get("generatedQuizzes/section-release"), sectionId: "C", section: "Section C", availability: "scheduled", availableAt: "2099-10-20T01:30:00.000Z" };
   assert.equal((await app.call(save("generatedQuizzes/section-release", assigned, false), cookie)).status, 200);
   const saved = structuredClone(app.data.get("generatedQuizzes/section-release"));
   assert.equal(saved.sectionId, "C"); assert.equal(saved.section, "Section C");
+  assert.equal(saved.termId, "term_02");
   assert.equal(saved.availableAt, assigned.availableAt); assert.deepEqual(saved.questions, quiz.questions);
   assert.equal((await app.call(save("generatedQuizzes/section-release", { ...saved, sectionId: "B", section: "Section B" }, false), cookie)).status, 403);
   const other = await app.login("TEACH1001");
