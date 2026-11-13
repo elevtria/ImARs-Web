@@ -246,26 +246,26 @@ test("the score summary and quiz request use one section and term", async () => 
   assert.equal(app.quizRequests.at(-1).sectionId, "B");
   assert.deepEqual(Array.from(app.quizRequests.at(-1).studentIds), ["B0"]);
   const grid = app.element("#studentGrid tbody");
-  grid.events.toggle({ target: { dataset: { quizGroup: "B0" }, isConnected: true, open: true } });
-  app.element("studentSearch").events.input();
   assert.match(grid.html(), /data-quiz-group="B0" open>/);
+  grid.events.toggle({ target: { dataset: { quizGroup: "B0" }, isConnected: true, open: false } });
+  app.element("studentSearch").events.input();
+  assert.match(grid.html(), /data-quiz-group="B0">/);
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*\+8.*2\/3/s);
   assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
 });
 
-test("the lesson selector changes the grouped header without reloading results", async () => {
+test("all lessons and quiz scores appear together without another request", async () => {
   const data = activityReportData(["A"]);
   data.curriculumSnap = snapshot([record("lesson_01", { title: "Food Webs" }), record("lesson_02", { title: "Circulatory System" })]);
   const app = page("analytics.js", data);
   await app.render();
   const header = app.element("scoreSummaryHead");
   assert.match(header.html(), /colspan="4">Food Webs/);
-  const filter = app.element("scoreLessonFilter");
-  filter.value = "lesson_02";
-  filter.events.change();
   assert.match(header.html(), /colspan="4">Circulatory System/);
   assert.match(header.html(), /score-quiz-column/);
+  const grid = app.element("#studentGrid tbody");
+  assert.match(grid.html(), /Food Webs.*8\/10.*Circulatory System.*score-quiz-column/s);
   assert.equal(app.requests.length, 1);
   assert.equal(app.quizRequests.length, 1);
 });
@@ -306,7 +306,7 @@ test("the summary includes all students and requests quizzes for the 25 visible 
   const app = page("analytics.js", data);
   await app.render();
   const table = app.element("#studentGrid tbody");
-  assert.match(table.html(), /Learner A 24[\s\S]*?<td>—<\/td>/);
+  assert.match(table.html(), /Learner A 24[\s\S]*?<td[^>]*data-score-label="Activity">—<\/td>/);
   assert.equal(app.quizRequests.at(-1).studentIds.length, 25);
   assert.equal(app.element("analyticsPageStatus").textContent, "Showing 1–25 of 30 students");
   app.element("analyticsNext").events.click();

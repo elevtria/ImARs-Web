@@ -22,11 +22,10 @@ const topicCompletionScope = document.getElementById("topicCompletionScope");
 const studentsPerPage = 25;
 let activitySection = "";
 const scoreHead = document.getElementById("scoreSummaryHead");
-const scoreLessonFilter = document.getElementById("scoreLessonFilter");
 const quizStatus = document.getElementById("teacherQuizStatus");
 const quizRetry = document.getElementById("teacherQuizRefresh");
 let quizPage;
-const expandedQuizGroups = new Set();
+const collapsedQuizGroups = new Set();
 window.addEventListener("pagehide", () => quizPage?.controller.abort());
 let currentTermFilter = "term_01";
 let lastAnalyticsTerm = currentTermFilter;
@@ -197,7 +196,7 @@ function lessonCells(data = {}) {
     ? raw(data.activityRawScore, data.activityRawMaximum)
     : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
   const gain = pre && post ? post.score - pre.score : null;
-  return `<td>${activity}</td><td>${raw(pre?.score, pre?.total)}</td><td>${raw(post?.score, post?.total)}</td><td>${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
+  return `<td class="score-lesson-start" role="cell" data-score-label="Activity">${activity}</td><td role="cell" data-score-label="Pre-test">${raw(pre?.score, pre?.total)}</td><td role="cell" data-score-label="Post-test">${raw(post?.score, post?.total)}</td><td role="cell" data-score-label="Improvement">${gain === null ? "—" : (gain > 0 ? "+" : "") + gain}</td>`;
 }
 
 function renderScores(refresh = true) {
@@ -206,19 +205,6 @@ function renderScores(refresh = true) {
     const data = lesson.data();
     return { id: lesson.id, title: data.title || data.name || data.topicTitle || lesson.id };
   });
-  const selectedLesson = lessons.find(lesson => lesson.id === scoreLessonFilter.value) || lessons[0];
-  const signature = JSON.stringify(lessons);
-  if (scoreLessonFilter.dataset.lessons !== signature) {
-    scoreLessonFilter.replaceChildren(...lessons.map(lesson => {
-      const option = document.createElement("option");
-      option.value = lesson.id;
-      option.textContent = lesson.title;
-      return option;
-    }));
-    scoreLessonFilter.dataset.lessons = signature;
-  }
-  scoreLessonFilter.value = selectedLesson?.id || "";
-  scoreLessonFilter.disabled = lessons.length < 2;
   const section = lastReport?.sections.find(item => item.classDoc.id === activitySection);
   const termId = currentTermFilter;
   const query = search.value.trim().toLowerCase();
@@ -230,12 +216,14 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
-  scoreHead.innerHTML = `<tr><th class="score-student" scope="col" rowspan="2">Student / Section</th>
-    <th scope="colgroup" colspan="4">${escapeHtml(selectedLesson?.title || "Lesson scores")}</th><th class="score-quiz-column" scope="colgroup">Quiz</th></tr>
-    <tr><th scope="col">Activity</th><th scope="col">Pre-test</th><th scope="col">Post-test</th><th scope="col">Improvement</th><th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
+  const scoreLabels = ["Activity", "Pre-test", "Post-test", "Improvement"];
+  scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
+    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="4">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="col">Quiz</th></tr>
+    <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}<th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
   studentGrid.innerHTML = visible.map(row => {
-    const lesson = row.results.find(result => result.termId === termId)?.lessonsSnap.docs.find(doc => doc.id === selectedLesson?.id);
-    const name = `<th class="score-student" scope="row">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
+    const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
+    const cells = lessons.map(lesson => `<td class="score-mobile-lesson" role="cell">${escapeHtml(lesson.title)}</td>${lessonCells(results.get(lesson.id))}`).join("");
+    const name = `<th class="score-student" scope="row" role="rowheader">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
     const quizRows = quizzes.map(quiz => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
       const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
@@ -244,9 +232,9 @@ function renderScores(refresh = true) {
         : score;
       return `<div><dt>${escapeHtml(quiz.title || "Quiz")}</dt><dd>${value}</dd></div>`;
     });
-    const quiz = quizRows.length ? `<details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${expandedQuizGroups.has(row.studentDoc.id) ? " open" : ""}><summary>View quizzes</summary><dl class="score-values">${quizRows.join("")}</dl></details>` : "—";
-    return `<tr class="student-row">${name}${lessonCells(lesson?.data())}<td class="score-quiz-column">${quiz}</td></tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="6">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+    const quiz = quizRows.length ? `<details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${collapsedQuizGroups.has(row.studentDoc.id) ? "" : " open"}><summary>View quizzes</summary><dl class="score-values">${quizRows.join("")}</dl></details>` : "—";
+    return `<tr class="student-row" role="row">${name}${cells}<td class="score-quiz-column" role="cell">${quiz}</td></tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="${2 + lessons.length * 4}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
@@ -254,7 +242,7 @@ function renderScores(refresh = true) {
 }
 
 function resetQuizScores() {
-  expandedQuizGroups.clear();
+  collapsedQuizGroups.clear();
   quizPage?.controller.abort();
   quizPage = undefined;
   closeQuizReview();
@@ -294,8 +282,8 @@ studentGrid.addEventListener("toggle", event => {
   const group = event.target;
   const studentId = group.dataset.quizGroup;
   if (!studentId || !group.isConnected) return;
-  if (group.open) expandedQuizGroups.add(studentId);
-  else expandedQuizGroups.delete(studentId);
+  if (group.open) collapsedQuizGroups.delete(studentId);
+  else collapsedQuizGroups.add(studentId);
 }, true);
 studentGrid.addEventListener("click", event => {
   const button = event.target.closest("button[data-quiz]");
@@ -313,7 +301,6 @@ studentGrid.addEventListener("click", event => {
   } });
 });
 search.addEventListener("input", () => { tablePage = 0; renderScores(); });
-scoreLessonFilter.addEventListener("change", () => renderScores(false));
 sectionFilter.addEventListener("change", () => {
   if (!lastReport?.classes.some(item => item.id === sectionFilter.value)) return;
   selectedSection = sectionFilter.value;
@@ -433,7 +420,6 @@ function openReport({ restoredPage = false } = {}) {
   }
   if (!lastReport) {
     sectionFilter.disabled = true;
-    scoreLessonFilter.disabled = true;
     studentCount.textContent = "—";
   }
   if (!restoredPage || !lastReport) setLoadingState(document.getElementById("analyticsReportStatus"), true, "Loading results");

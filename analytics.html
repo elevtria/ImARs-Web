@@ -74,17 +74,11 @@
             </svg>
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
           </label>
-          <label class="select-wrap">
-            <select id="scoreLessonFilter" aria-label="Lesson for score summary" aria-controls="studentGrid" disabled>
-              <option value="">Select a lesson</option>
-            </select>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-          </label>
         </div>
         <div class="performance-table-wrap score-summary-wrap">
-          <table class="performance-table score-summary-table" id="studentGrid">
-            <thead id="scoreSummaryHead"></thead>
-            <tbody id="studentTableBody"></tbody>
+          <table class="performance-table score-summary-table" id="studentGrid" role="table" aria-label="Student score summary">
+            <thead id="scoreSummaryHead" role="rowgroup"></thead>
+            <tbody id="studentTableBody" role="rowgroup"></tbody>
           </table>
         </div>
         <div class="student-detail-navigation" aria-label="Student performance pages">
