@@ -45,7 +45,7 @@ test("generation, review, unassigned draft and all-section release use the actua
     updateDoc:async (id,data)=>{assert.ok(!Object.hasOwn(data,"questions"));const updated={...quizzes.get(id),...data};quizzes.set(id,updated);saves.push(updated);}, deleteDoc:async id => { quizzes.delete(id); },
     confirmAction: async options => { assert.equal(options.title, "Delete quiz?"); return confirmDelete; },
     onAuthStateChanged:(_auth,callback)=>{authenticated=callback;}, showTeacherView:async ({load,render,painted})=>{render(await load());painted();},
-    requestQuiz: (payload, _uid, options) => {
+    requestQuiz: (payload, _uid, options = { background: false }) => {
       requested = payload;
       transport = options;
       return new Promise(resolve => { finishGeneration = resolve; });
@@ -85,6 +85,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(showSlowMessage, null);
   assert.equal(requested.sectionId,undefined);
   assert.equal(requested.termId, "term_02");
+  assert.equal(transport.background, false);
   assert.equal(element("reviewStep").hidden,false);
   element("acceptAll").listeners.click();
   assert.equal(element("editorStep").hidden,false);
@@ -161,11 +162,8 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("quizFile").files = [file];
   element("quizFile").listeners.change();
   element("quizTerm").value = "term_01";
-  const queued = element("generateQuiz").listeners.click();
-  await new Promise(setImmediate);
   job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "queued" };
-  finishGeneration(job);
-  await queued;
+  await authenticated({ uid: "teacher-a" });
   await new Promise(setImmediate);
   assert.equal(element("quizGenerationStatusCard").open, false);
   assert.match(element("quizJobMessage").textContent, /come back/);
@@ -174,6 +172,8 @@ test("generation, review, unassigned draft and all-section release use the actua
     questions: [{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }] };
   pollJob();
   await new Promise(setImmediate);
+  assert.equal(element("reviewQuizJob").hidden, false);
+  element("reviewQuizJob").listeners.click();
   assert.equal(element("reviewStep").hidden, false);
   assert.equal(element("quizTitle").value, "Water quiz");
   element("acceptAll").listeners.click();

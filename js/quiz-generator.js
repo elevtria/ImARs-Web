@@ -51,7 +51,6 @@ const firestore = getFirestore(firebaseApp);
   let reviewedJob;
   let jobTimer;
   let jobCheck = 0;
-  let autoReviewJobId;
   const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
   const updateGenerateButton = () => { generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile; };
   const jobStatus = document.getElementById("quizJobStatus");
@@ -77,9 +76,6 @@ const firestore = getFirestore(firebaseApp);
         ? { status: "failed", error: "The quiz job expired or was cleared. Generate it again." }
         : result;
       renderJob();
-      if (backgroundJob.status === "complete" && backgroundJob.id === autoReviewJobId && !createView.hidden && !setupStep.hidden) {
-        openCompletedJob();
-      }
     } catch {
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
       if (activeJob()) jobMessage.textContent = "Reconnecting to check quiz progress…";
@@ -310,10 +306,7 @@ const firestore = getFirestore(firebaseApp);
     const loadingStatus = document.getElementById("quizGenerationStatus");
     const loadingHint = document.getElementById("quizGenerationHint");
     const file = selectedFile;
-    // Bypass the background callback on a deliberate retry after delivery fails.
-    const useBackground = backgroundJob?.status !== "failed" ||
-      (backgroundJob.errorCode !== "JOB_DELIVERY_FAILED" && backgroundJob.error !== "Quiz generation could not finish. Please try again.");
-    const interruptedJobId = useBackground ? undefined : backgroundJob.id;
+    const interruptedJobId = backgroundJob?.status === "failed" ? backgroundJob.id : undefined;
     const settings = {
       title: document.getElementById("quizTitle").value.trim(),
       termId: quizTerm.value,
@@ -336,20 +329,12 @@ const firestore = getFirestore(firebaseApp);
       if (auth.currentUser?.uid !== user.uid) throw new Error("Your sign-in expired. Please sign in again.");
 
       loadingStatus.textContent = material.pdfFile ? "Uploading your PDF…" : "Starting quiz generation…";
-      const result = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid, { background: useBackground });
+      const questions = await requestQuiz({ ...material, ...settings, fileName: file.name }, user.uid);
       if (auth.currentUser?.uid !== user.uid) return;
-      if (Array.isArray(result)) {
-        backgroundJob = undefined;
-        renderJob();
-        openQuestions(result);
-        if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
-      }
-      else {
-        backgroundJob = result;
-        autoReviewJobId = result.id;
-        renderJob();
-        void refreshJob(user);
-      }
+      backgroundJob = undefined;
+      renderJob();
+      openQuestions(questions);
+      if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
     } catch (generationError) {
       showStatus(setupStatus, generationError.message || "Quiz generation failed. Please try again.", true);
     } finally {
@@ -760,7 +745,6 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
-    autoReviewJobId = undefined;
     reviewedJob = undefined;
     selectedFile = null;
     fileError.textContent = "";
@@ -805,7 +789,6 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
-    autoReviewJobId = undefined;
     ++jobCheck;
     clearTimeout(jobTimer);
     backgroundJob = undefined;
