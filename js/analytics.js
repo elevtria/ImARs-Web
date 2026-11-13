@@ -1,4 +1,4 @@
-import { escapeHtml } from "./teacher-view.js";
+import { escapeHtml, watchVisibleData } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
@@ -25,7 +25,7 @@ const scoreHead = document.getElementById("scoreSummaryHead");
 const quizStatus = document.getElementById("teacherQuizStatus");
 const quizRetry = document.getElementById("teacherQuizRefresh");
 let quizPage;
-const collapsedQuizGroups = new Set();
+let stopQuizRefresh;
 window.addEventListener("pagehide", () => quizPage?.controller.abort());
 let currentTermFilter = "term_01";
 let lastAnalyticsTerm = currentTermFilter;
@@ -215,25 +215,26 @@ function renderScores(refresh = true) {
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
+  const quizColumnCount = Math.max(1, quizzes.length);
   const scoreLabels = ["Activity", "Pre-test", "Post-test"];
   scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
-    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="${scoreLabels.length}">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="col">Quiz</th></tr>
-    <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}<th class="score-quiz-column" scope="col">Generated quizzes</th></tr>`;
+    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="${scoreLabels.length}">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="colgroup" colspan="${quizColumnCount}">Quiz</th></tr>
+    <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}
+    ${quizzes.length ? quizzes.map((quiz, index) => `<th class="score-quiz-title${index === 0 ? " score-quiz-column" : " score-lesson-start"}" scope="col">${escapeHtml(quiz.title || "Quiz")}</th>`).join("") : '<th class="score-quiz-title score-quiz-column" scope="col">Generated quizzes</th>'}</tr>`;
   studentGrid.innerHTML = visible.map(row => {
     const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
     const cells = lessons.map(lesson => lessonCells(results.get(lesson.id))).join("");
     const name = `<th class="score-student" scope="row" role="rowheader">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
-    const quizRows = quizzes.map(quiz => {
+    const quizCells = quizzes.map((quiz, index) => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
       const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
       const value = item?.attemptId
         ? `<button class="score-review" type="button" data-quiz="${escapeHtml(quiz.id)}" data-student="${escapeHtml(row.studentDoc.id)}" aria-label="${escapeHtml(row.name)} · ${escapeHtml(quiz.title || "Quiz")} · ${score}. Open submission">${score}</button>`
         : score;
-      return `<div><dt>${escapeHtml(quiz.title || "Quiz")}</dt><dd>${value}</dd></div>`;
+      return `<td class="${index === 0 ? "score-quiz-column" : "score-lesson-start"}" role="cell">${value}</td>`;
     });
-    const quiz = quizRows.length ? `<details class="score-quiz-group" data-quiz-group="${escapeHtml(row.studentDoc.id)}"${collapsedQuizGroups.has(row.studentDoc.id) ? "" : " open"}><summary>View quizzes</summary><dl class="score-values">${quizRows.join("")}</dl></details>` : "—";
-    return `<tr class="student-row" role="row">${name}${cells}<td class="score-quiz-column" role="cell">${quiz}</td></tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="${2 + lessons.length * scoreLabels.length}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
+    return `<tr class="student-row" role="row">${name}${cells}${quizCells.join("") || '<td class="score-quiz-column" role="cell">—</td>'}</tr>`;
+  }).join("") || `<tr class="empty-row"><td colspan="${1 + quizColumnCount + lessons.length * scoreLabels.length}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
   document.getElementById("analyticsPageStatus").textContent = students.length
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
@@ -241,7 +242,8 @@ function renderScores(refresh = true) {
 }
 
 function resetQuizScores() {
-  collapsedQuizGroups.clear();
+  stopQuizRefresh?.();
+  stopQuizRefresh = undefined;
   quizPage?.controller.abort();
   quizPage = undefined;
   closeQuizReview();
@@ -252,11 +254,14 @@ function resetQuizScores() {
 async function loadQuizScores(studentIds, force = false) {
   const user = auth.currentUser;
   if (!activitySection || !user) return;
+  stopQuizRefresh ||= watchVisibleData(app, user, () => {
+    if (quizPage && !quizPage.loading) return loadQuizScores(quizPage.studentIds, true);
+  }, 60_000, true);
   const key = JSON.stringify([user.uid, currentTermFilter, activitySection, studentIds]);
   const old = quizPage;
   if (!force && old?.key === key && Date.now() - old.checkedAt < 300_000) return;
   old?.controller.abort();
-  const page = { key, studentIds, checkedAt: Date.now(), controller: new AbortController(),
+  const page = { key, studentIds, checkedAt: Date.now(), loading: true, controller: new AbortController(),
     quizzes: old?.quizzes || [], scores: old?.scores || new Map() };
   quizPage = page;
   quizRetry.hidden = true;
@@ -273,17 +278,10 @@ async function loadQuizScores(studentIds, force = false) {
     if (quizPage !== page || page.controller.signal.aborted) return;
     quizStatus.textContent = "Could not load quiz scores.";
     quizRetry.hidden = false;
-  }
+  } finally { page.loading = false; }
 }
 
 quizRetry.addEventListener("click", () => { if (quizPage) void loadQuizScores(quizPage.studentIds, true); });
-studentGrid.addEventListener("toggle", event => {
-  const group = event.target;
-  const studentId = group.dataset.quizGroup;
-  if (!studentId || !group.isConnected) return;
-  if (group.open) collapsedQuizGroups.delete(studentId);
-  else collapsedQuizGroups.add(studentId);
-}, true);
 studentGrid.addEventListener("click", event => {
   const button = event.target.closest("button[data-quiz]");
   const page = quizPage, user = auth.currentUser;

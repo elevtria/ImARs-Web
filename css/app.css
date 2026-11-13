@@ -1145,15 +1145,8 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-summary-table :is(thead th, td):not(.score-student) { text-align: center; }
 .score-summary-table td { font-variant-numeric: tabular-nums; }
 .score-summary-table .score-lesson-start { border-inline-start: 1px solid #a8bdd4; }
-.score-summary-table .score-quiz-column { min-width: 160px; border-inline-start: 2px solid #81a2c1; }
-.score-quiz-group { text-align: start; }
-.score-quiz-group summary { cursor: pointer; font-size: 12px; font-weight: 700; }
-.score-quiz-group[open] summary { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.score-values { margin: 4px 0 0; }
-.score-values div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, max-content); align-items: baseline; gap: 4px 8px; padding-block: 2px; }
-.score-values div + div { border-top: 1px solid var(--line); }
-.score-values dt { color: var(--muted, #526a83); font-size: 12px; }
-.score-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
+.score-summary-table .score-quiz-column { border-inline-start: 2px solid #81a2c1; }
+.score-summary-table thead tr:last-child .score-quiz-title { min-width: 130px; max-width: 230px; white-space: normal; }
 .score-review { color: inherit; border: 0; background: none; padding: 2px; font: inherit; text-decoration: underline; cursor: pointer; }
 .table-avatar {
   display: inline-grid;

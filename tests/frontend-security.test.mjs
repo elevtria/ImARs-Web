@@ -42,6 +42,7 @@ function page(file, report, resolveReport) {
   const termButtons = ["term_01", "term_02", "term_03"].map(term => Object.assign(new Element(), { dataset: { term } }));
   let authChanged, requested, controllerIndex = 0;
   const requests = [], controllers = [], revealed = [], quizRequests = [];
+  let refreshQuizzes;
   const timing = { data: action => action(), render: action => action(), finish() {} };
   const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
@@ -53,9 +54,10 @@ function page(file, report, resolveReport) {
     currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
     closeQuizReview() {}, openQuizReview() {},
+    watchVisibleData: (_app, _user, refresh) => { refreshQuizzes = refresh; return () => {}; },
     requestQuizReview: async (_, input) => {
       quizRequests.push(input);
-      return { quizzes: [{ id: "Q1", title: attack }], items: input.studentIds.slice(0, 1).map(studentId => ({ quizId: "Q1", studentId, status: "graded", score: 2, maximum: 3 })) };
+      return { quizzes: [{ id: "Q1", title: attack }, { id: "Q2", title: "Scheduled Quiz" }], items: input.studentIds.slice(0, 1).map(studentId => ({ quizId: "Q1", studentId, status: "graded", score: 2, maximum: 3 })) };
     },
     createTeacherReport: options => {
       const index = controllerIndex++; controllers.push(options);
@@ -70,6 +72,7 @@ function page(file, report, resolveReport) {
   });
   vm.runInContext(source(file), context);
   return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, quizRequests,
+    refreshQuizzes: () => refreshQuizzes(),
     async render() { await authChanged({ uid: "teacher-a" }); await new Promise(setImmediate); } };
 }
 
@@ -219,7 +222,7 @@ test("analytics names, sections, and topic titles cannot inject HTML into report
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.ok(app.element("#studentGrid tbody").html().includes("3/4"));
   assertTextOnly(app.element("topicsContainer").html());
-  assert.match(app.element("#studentGrid tbody").html(), /<details[^>]*score-quiz-group[^>]*><summary>View quizzes<\/summary>/);
+  assertTextOnly(app.element("scoreSummaryHead").html());
 });
 
 function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
@@ -245,12 +248,11 @@ test("the score summary and quiz request use one section and term", async () => 
   assert.equal(filter.children, options);
   assert.equal(app.quizRequests.at(-1).sectionId, "B");
   assert.deepEqual(Array.from(app.quizRequests.at(-1).studentIds), ["B0"]);
-  const grid = app.element("#studentGrid tbody");
-  assert.match(grid.html(), /data-quiz-group="B0" open>/);
-  grid.events.toggle({ target: { dataset: { quizGroup: "B0" }, isConnected: true, open: false } });
-  app.element("studentSearch").events.input();
-  assert.match(grid.html(), /data-quiz-group="B0">/);
-  assertTextOnly(app.element("#studentGrid tbody").html());
+  assertTextOnly(app.element("scoreSummaryHead").html());
+  assert.match(app.element("scoreSummaryHead").html(), /colspan="2">Quiz.*Scheduled Quiz/s);
+  assert.match(app.element("#studentGrid tbody").html(), /2\/3<\/td><td[^>]*>—<\/td>/);
+  await app.refreshQuizzes();
+  assert.equal(app.quizRequests.at(-1).sectionId, "B");
   assert.match(app.element("#studentGrid tbody").html(), /Learner B 0.*0\/10.*0\/5.*8\/10.*2\/3/s);
   assert.doesNotMatch(app.element("#studentGrid tbody").html(), /Learner A|%/);
 });

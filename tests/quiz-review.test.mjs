@@ -83,19 +83,24 @@ test("a teacher can adjust an automatically graded submission within its origina
 test("term results return only raw scores for the selected term and eligible roster rows", async () => {
   const f = await setup("multiple-choice", { termId: "term_02" });
   f.put("generatedQuizzes/other-term", quiz("other-term", "multiple-choice", { termId: "term_01" }));
+  f.put("generatedQuizzes/scheduled", quiz("scheduled", "multiple-choice", {
+    title: "Scheduled Quiz", termId: "term_02", availability: "scheduled", availableAt: "2099-01-01T00:00:00Z"
+  }));
   const original = f.store.get.bind(f.store);
   f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await original(path)])));
   f.store.quizReport = async (_actor, sectionId, quizId, studentIds) => {
     assert.equal(sectionId, "A");
-    assert.equal(quizId, "quiz1");
     assert.deepEqual(studentIds, ["S1"]);
+    if (quizId === "scheduled") return { items: [] };
+    assert.equal(quizId, "quiz1");
     return { items: [{ studentId: "S1", status: "graded", score: 1, maximum: 1, answers: ["private"] }] };
   };
   const input = { action: "term-results", termId: "term_02", sectionId: "A", studentIds: ["S1", "S2"] };
   const response = await f.callReview(input);
   assert.equal(response.status, 200);
   const result = await response.json();
-  assert.deepEqual(result.quizzes.map(item => item.id), ["quiz1"]);
+  assert.deepEqual(result.quizzes.map(item => item.id), ["quiz1", "scheduled"]);
+  assert.equal(result.quizzes[1].title, "Scheduled Quiz");
   assert.deepEqual(result.items, [{ quizId: "quiz1", studentId: "S1", status: "graded", score: 1, maximum: 1 }]);
   assert.equal((await f.callReview({ ...input, sectionId: "B" })).status, 403);
   assert.equal((await f.callReview({ ...input, termId: "term_04" })).status, 400);
