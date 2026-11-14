@@ -1158,6 +1158,11 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .document-export-button:hover:not(:disabled) { background: #0b50cd; color: #fff; box-shadow: 0 3px 9px #1060ed28; }
 .document-export-button:focus-visible { outline: 3px solid #93bdff; outline-offset: 3px; }
 .document-export-button:disabled { opacity: .6; cursor: not-allowed; }
+.score-summary-actions .document-export-actions { display: flex; flex-wrap: wrap; gap: 8px; width: auto; }
+.score-summary-actions .document-export-button { flex-direction: column; gap: 4px; width: auto; min-height: 58px; padding: 8px 16px; border: 1px solid #91b6df; border-radius: 999px; background: #edf5ff; color: #214f7e; font-size: 13px; }
+.score-summary-actions .document-export-button:hover:not(:disabled) { background: #dcecff; color: #214f7e; box-shadow: none; }
+[data-theme="dark"] .score-summary-actions .document-export-button { background: #223249; border-color: #49617e; color: #c4dfff; }
+[data-theme="dark"] .score-summary-actions .document-export-button:hover:not(:disabled) { background: #2b4059; }
 @media (max-width: 640px) {
   .score-summary-actions { width: 100%; }
   .score-summary-actions .document-export-actions { width: 100%; }
