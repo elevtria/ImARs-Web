@@ -75,6 +75,7 @@
             <input id="studentSearch" type="search" placeholder="Search student..." aria-label="Search student" />
           </label>
         </div>
+        <div class="table-top-scroll" data-scroll-target="studentGrid" role="region" aria-label="Scroll student scores horizontally" aria-controls="studentGrid" tabindex="0" hidden><div></div></div>
         <div class="performance-table-wrap score-summary-wrap" role="region" aria-label="Student score table" tabindex="0">
           <table class="performance-table score-summary-table" id="studentGrid" role="table" aria-label="Student score summary">
             <thead id="scoreSummaryHead" role="rowgroup"><tr><th scope="col">Student / Section</th><th scope="col">Scores</th></tr></thead>
@@ -190,6 +191,7 @@
   <script src="js/ui.js"></script>
   <!-- Updated to type="module" -->
   <script type="module" src="js/analytics.js"></script>
+  <script type="module" src="js/table-top-scroll.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>

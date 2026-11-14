@@ -1093,6 +1093,17 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   margin-bottom: 14px;
 }
 .performance-controls .search { width: min(320px, 100%); }
+.table-top-scroll {
+  height: 20px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.table-top-scroll[hidden] { display: none; }
+.table-top-scroll > div { height: 1px; }
+.table-top-scroll:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
 .performance-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
