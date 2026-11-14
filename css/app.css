@@ -1148,6 +1148,13 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 }
 .score-summary-wrap { max-width: 100%; }
 .score-summary-controls { flex-wrap: wrap; }
+.score-summary-head { flex-wrap: wrap; }
+.score-summary-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.score-summary-actions .ghost-btn { white-space: nowrap; }
+@media (max-width: 640px) {
+  .score-summary-actions { width: 100%; }
+  .score-summary-actions .ghost-btn { flex: 1 1 auto; }
+}
 .score-summary-controls .select-wrap { flex: 1 1 11rem; min-width: 0; max-width: 100%; }
 .score-summary-controls .search { flex: 1 1 11rem; min-width: 0; }
 .score-summary-table { min-width: 0; border-collapse: separate; border-spacing: 0; }

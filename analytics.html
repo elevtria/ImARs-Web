@@ -57,9 +57,13 @@
       </div>
       <p class="view-data-status" id="analyticsReportStatus" role="status"></p>
       <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
-        <div class="section-head performance-head">
+        <div class="section-head performance-head score-summary-head">
           <h2 data-auth-shell>Student Score Summary</h2>
-          <button class="ghost-btn" id="editScores" type="button" aria-pressed="false" aria-controls="studentGrid" disabled>Edit scores</button>
+          <div class="score-summary-actions" role="group" aria-label="Score summary actions">
+            <button class="ghost-btn" id="editScores" type="button" aria-pressed="false" aria-controls="studentGrid" disabled>Edit scores</button>
+            <button class="ghost-btn" id="printScoreReport" type="button" disabled>Print report</button>
+            <button class="ghost-btn" id="downloadScoreReport" type="button" disabled>Download PDF</button>
+          </div>
         </div>
         <div class="performance-controls score-summary-controls">
           <label class="select-wrap">
@@ -90,6 +94,7 @@
         </div>
         <p class="scheduler-progress-copy">Scores show points earned out of points possible. A dash means no raw score is available. Choose Edit scores to update an activity, pre-test, or post-test score.</p>
         <p id="scoreEditStatus" class="view-data-status" role="status" aria-live="polite"></p>
+        <p id="scoreReportStatus" class="view-data-status" role="status" aria-live="polite"></p>
         <p id="activitySyncStatus" class="view-data-status" role="status" hidden></p>
         <p id="teacherQuizStatus" class="view-data-status" role="status"></p>
         <button id="teacherQuizRefresh" class="ghost-btn" type="button" hidden>Retry quiz scores</button>

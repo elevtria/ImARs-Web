@@ -4,6 +4,7 @@ node_modules/
 .wrangler/
 .netlify/
 dist/
+tmp/
 .vs/
 .vscode/.vs/
 firebase-debug.log*

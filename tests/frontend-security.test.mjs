@@ -84,6 +84,31 @@ function assertTextOnly(html) {
   assert.ok(!html.includes("<svg/onload"), "database text must not create an SVG/event handler");
 }
 
+test("report actions capture the selected scope and cancel before delivering a report after a term change", async () => {
+  const app = page("analytics.js", null, input => activityReportData(["A"], { termId: input.termId, count: 2 }));
+  const prepared = [], delivered = [];
+  app.context.createScoreReportOutput = async options => { prepared.push(options); return { students: 2, pageCount: 3 }; };
+  app.context.showScoreReport = async (output, options) => delivered.push({ output, options });
+  await app.render();
+  app.element("studentSearch").value = "Learner";
+  await vm.runInContext('exportScoreReport("download")', app.context);
+  assert.equal(prepared[0].sectionId, "A");
+  assert.equal(prepared[0].termId, "term_01");
+  assert.equal(prepared[0].search, "Learner");
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].options.mode, "download");
+  assert.match(app.element("scoreReportStatus").textContent, /PDF downloaded/);
+  let finish;
+  app.context.createScoreReportOutput = options => { prepared.push(options); return new Promise(resolve => { finish = resolve; }); };
+  const pending = vm.runInContext('exportScoreReport("download")', app.context);
+  assert.equal(app.element("downloadScoreReport").disabled, true);
+  await app.termButtons[1].events.click();
+  assert.equal(prepared.at(-1).signal.aborted, true);
+  finish({ students: 2, pageCount: 3 });
+  await pending;
+  assert.equal(delivered.length, 1, "a report from the previous term cannot be delivered");
+});
+
 test("score editing requires the Edit scores button and saves the selected student, term, and topic", async () => {
   const data = activityReportData(["A"], { count: 1 });
   data.sections[0].students[0].studentDoc = record("S1", { displayName: attack });

@@ -8,7 +8,8 @@ import { buildPostTestHeatmap } from "./post-test-heatmap.js";
 import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
 import { scoreOverride } from "./lesson-score.js";
 import { openLessonScoreEditor, closeLessonScoreEditor } from "./lesson-score-editor.js";
-import { doc, setDoc, serverTimestamp } from "./firebase-data.js";
+import { doc, getDoc, setDoc, serverTimestamp } from "./firebase-data.js";
+import { openScorePrintWindow, createScoreReportOutput, showScoreReport } from "./score-report-actions.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -22,6 +23,16 @@ const studentGrid = document.querySelector("#studentGrid tbody");
 const editScores = document.getElementById("editScores");
 const scoreEditStatus = document.getElementById("scoreEditStatus");
 let editingScores = false;
+const printScoreReport = document.getElementById("printScoreReport");
+const downloadScoreReport = document.getElementById("downloadScoreReport");
+const scoreReportStatus = document.getElementById("scoreReportStatus");
+let scoreReportExport;
+function cancelScoreReport() {
+  scoreReportExport?.controller.abort();
+  scoreReportExport?.preview?.close();
+  scoreReportExport = null;
+}
+window.addEventListener("pagehide", cancelScoreReport);
 const topicsContainer = document.getElementById("topicsContainer");
 const questionHeatmapScope = document.getElementById("questionHeatmapScope");
 const topicCompletionScope = document.getElementById("topicCompletionScope");
@@ -230,6 +241,7 @@ function renderScores(refresh = true) {
   tablePage = Math.min(tablePage, Math.max(0, Math.ceil(students.length / studentsPerPage) - 1));
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   editScores.disabled = !lessons.length || !visible.length;
+  printScoreReport.disabled = downloadScoreReport.disabled = editScores.disabled || Boolean(scoreReportExport);
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
   const quizColumnCount = Math.max(1, quizzes.length);
@@ -258,6 +270,43 @@ function renderScores(refresh = true) {
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
   document.getElementById("analyticsNext").disabled = start + visible.length >= students.length;
 }
+
+async function exportScoreReport(mode) {
+  const user = auth.currentUser;
+  if (!user || !activitySection || !lastReport || scoreReportExport) return;
+  let preview;
+  try { if (mode === "print") preview = openScorePrintWindow(); }
+  catch (error) { scoreReportStatus.textContent = error.message; return; }
+  const controller = new AbortController(), task = { controller, preview };
+  scoreReportExport = task;
+  printScoreReport.disabled = downloadScoreReport.disabled = true;
+  scoreReportStatus.textContent = "Preparing the complete section report…";
+  const termId = currentTermFilter, sectionId = activitySection;
+  try {
+    const output = await createScoreReportOutput({ termId, sectionId, search: search.value,
+      teacherName: user.displayName || lastReport.teacherName || "Signed-in teacher", signal: controller.signal,
+      onProgress: count => { if (scoreReportExport === task) scoreReportStatus.textContent = `Preparing report: ${count} students loaded…`; }
+    }, {
+      fetchPage: options => getTeacherReportPage(options, { signal: controller.signal }),
+      fetchQuizzes: studentIds => requestQuizReview(user.uid, { action: "term-results", termId, sectionId, studentIds }, controller.signal),
+      fetchSchoolYear: async () => (await getDoc(doc(heatmapDatabase(app), "webSettings", "schoolYear"))).data()?.startYear
+    });
+    controller.signal.throwIfAborted();
+    if (auth.currentUser?.uid !== user.uid || currentTermFilter !== termId || activitySection !== sectionId) return;
+    await showScoreReport(output, { mode, preview, signal: controller.signal });
+    scoreReportStatus.textContent = `${output.students} students · ${output.pageCount} pages. ${mode === "print" ? "Report ready to print." : "PDF downloaded."}`;
+  } catch (error) {
+    preview?.close();
+    if (scoreReportExport === task && !controller.signal.aborted) scoreReportStatus.textContent = error.message || "Could not prepare the report. Please try again.";
+  } finally {
+    if (scoreReportExport === task) {
+      scoreReportExport = null;
+      printScoreReport.disabled = downloadScoreReport.disabled = editScores.disabled;
+    }
+  }
+}
+printScoreReport.addEventListener("click", () => { void exportScoreReport("print"); });
+downloadScoreReport.addEventListener("click", () => { void exportScoreReport("download"); });
 
 editScores.addEventListener("click", () => {
   editingScores = !editingScores;
@@ -464,6 +513,8 @@ const report = createTeacherReport({ app,
   }
 });
 function openReport({ restoredPage = false } = {}) {
+  cancelScoreReport();
+  scoreReportStatus.textContent = "";
   closeLessonScoreEditor();
   if (!auth.currentUser) return;
   const termChanged = lastAnalyticsTerm !== currentTermFilter;
@@ -484,6 +535,7 @@ function openReport({ restoredPage = false } = {}) {
   }
   if (!lastReport) {
     editScores.disabled = true;
+    printScoreReport.disabled = downloadScoreReport.disabled = true;
     sectionFilter.disabled = true;
     if (termChanged) {
       scoreHead.innerHTML = emptyScoreHeader;
@@ -505,6 +557,8 @@ function openReport({ restoredPage = false } = {}) {
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   if (heatmapOwner !== user?.uid) {
+    cancelScoreReport();
+    scoreReportStatus.textContent = "";
     closeLessonScoreEditor();
     editingScores = false;
     editScores.setAttribute("aria-pressed", "false");
