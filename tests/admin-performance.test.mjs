@@ -7,6 +7,38 @@ import { summarizeAdminReports } from "../server/admin-report-data.js";
 
 const stripImports = source => source.replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
 const source = file => stripImports(readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8"));
+
+test("teacher snapshot labels distinguish the tests and tooltips explain counts and missing scores on keyboard focus", () => {
+  const elements = new Map(), documentEvents = {};
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { style: {}, events: {}, hidden: true, children: [],
+      addEventListener(name, callback) { this.events[name] = callback; },
+      getBoundingClientRect: () => ({ width: 280, height: 80 }),
+      appendChild(child) { this.children.push(...(child.fragment ? child.children : [child])); } });
+    return elements.get(id);
+  };
+  const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
+    formatAdminPercent: value => Number.isFinite(value) ? `${value}%` : "—", formatAdminGain: value => Number.isFinite(value) ? `${value} pp` : "—",
+    document: { getElementById: element, addEventListener: (name, callback) => { documentEvents[name] = callback; },
+      createElement: () => ({ innerHTML: "" }), createDocumentFragment: () => ({ fragment: true, children: [], appendChild(row) { this.children.push(row); } }) },
+    window: { innerWidth: 1000, innerHeight: 600, addEventListener() {} } });
+  vm.runInContext(source("admin-dashboard.js"), context);
+  const hint = vm.runInContext("snapshotScoreHint", context);
+  assert.match(hint({ pre: 0, preCount: 12 }, "pre"), /Pre-test average: 0%.*12 completed.*before learning/);
+  assert.match(hint({ post: 80, postCount: 10 }, "post"), /Post-test average: 80%.*10 completed.*after learning/);
+  assert.match(hint({ pre: null }, "pre"), /No completed pre-test.*rather than counted as zero/);
+  const trigger = { dataset: { performanceTip: "Pre-test results before learning" }, getBoundingClientRect: () => ({ left: 930, top: 20, width: 50, bottom: 40 }) };
+  element("teacherSnapshot").events.focusin({ target: { closest: () => trigger } });
+  assert.equal(element("teacherPerformanceTooltip").hidden, false);
+  assert.equal(element("teacherPerformanceTooltip").textContent, trigger.dataset.performanceTip);
+  assert.equal(element("teacherPerformanceTooltip").style.left, "708px");
+  documentEvents.keydown({ key: "Escape" });
+  assert.equal(element("teacherPerformanceTooltip").hidden, true);
+  const html = readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
+  assert.ok(html.includes("Pre-test average"));
+  assert.ok(html.includes("Post-test average"));
+  assert.ok(html.includes('role="tooltip"'));
+});
 test("admin summaries preserve score rounding, heatmap fallback, attribution, sections, and AR time", () => {
   const teachers = [{ id: "T1", data: { fullName: "First Teacher", displayName: "Teacher One", sections: ["A", "B"], email: "one@example.test", password: "never-cache" } },
     { id: "T2", data: { name: "Second Teacher", active: false, section: "C" } }];

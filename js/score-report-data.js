@@ -18,9 +18,12 @@ export function reportLessonScores(data = {}) {
 }
 
 // Read a fresh, complete section instead of exporting only the current screen's 25 rows.
-export async function collectScoreReport({ termId, sectionId, search = "", teacherName, signal, now = new Date(), onProgress = () => {} },
+export async function collectScoreReport({ termId, sectionId, search = "", teacherName, signal, now = new Date(), onProgress = () => {}, onStage = () => {} },
   { fetchPage, fetchQuizzes, fetchSchoolYear }) {
   const check = () => signal?.throwIfAborted();
+  check();
+  onStage("Loading student scores…");
+  const schoolYearRequest = Promise.resolve().then(fetchSchoolYear).then(value => ({ value }), error => ({ error }));
   const students = new Map(), seen = new Set();
   let cursor = null, lessons, sectionName, activitySyncPending = false;
   do {
@@ -54,19 +57,28 @@ export async function collectScoreReport({ termId, sectionId, search = "", teach
     return (data.displayName || data.fullName || "Student").toLowerCase().includes(query);
   });
   if (!selected.length) throw new Error("No students match the selected section and search.");
+  onStage("Loading quiz results…");
   const scores = new Map();
   let quizzes, quizSignature;
-  for (let offset = 0; offset < selected.length; offset += 25) {
+  for (let offset = 0; offset < selected.length; offset += 75) {
     check();
-    const batch = await fetchQuizzes(selected.slice(offset, offset + 25).map(row => row.studentDoc.id));
+    const requests = [];
+    for (let index = offset; index < Math.min(offset + 75, selected.length); index += 25) {
+      requests.push(fetchQuizzes(selected.slice(index, index + 25).map(row => row.studentDoc.id)));
+    }
+    const batches = await Promise.all(requests);
     check();
-    const signature = JSON.stringify(batch.quizzes.map(quiz => [quiz.id, quiz.title]));
-    if (quizSignature && quizSignature !== signature) throw new Error("Quiz assignments changed while preparing the report. Please try again.");
-    quizSignature = signature;
-    quizzes = batch.quizzes;
-    for (const item of batch.items) scores.set(`${item.studentId}/${item.quizId}`, item);
+    for (const batch of batches) {
+      const signature = JSON.stringify(batch.quizzes.map(quiz => [quiz.id, quiz.title]));
+      if (quizSignature && quizSignature !== signature) throw new Error("Quiz assignments changed while preparing the report. Please try again.");
+      quizSignature = signature;
+      quizzes = batch.quizzes;
+      for (const item of batch.items) scores.set(`${item.studentId}/${item.quizId}`, item);
+    }
   }
-  const year = await fetchSchoolYear();
+  const schoolYearResult = await schoolYearRequest;
+  if (schoolYearResult.error) throw schoolYearResult.error;
+  const year = schoolYearResult.value;
   check();
   const schoolYear = Number.isInteger(year) && year >= 2000 && year <= 2100 ? `${year}-${year + 1}` : "Not configured";
   return {

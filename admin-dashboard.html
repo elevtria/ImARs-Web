@@ -101,15 +101,15 @@
         <span class="teacher-count" id="tableTeacherCount"></span>
       </div>
       <div class="table-scroll">
-        <table>
+        <table id="teacherSnapshot">
           <thead>
             <tr>
               <th scope="col">Teacher</th>
               <th scope="col">Students</th>
-              <th scope="col">Avg Pre</th>
-              <th scope="col">Avg Post</th>
+              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Pre-test average: completed test scores before learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Pre-test average <span class="snapshot-info" aria-hidden="true">i</span></span></th>
+              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Post-test average: completed test scores after learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Post-test average <span class="snapshot-info" aria-hidden="true">i</span></span></th>
               <th scope="col">AR Time</th>
-              <th scope="col">Gain</th>
+              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Post-test average minus pre-test average, measured in percentage points (pp). Both averages are needed to calculate the change.">Gain <span class="snapshot-info" aria-hidden="true">i</span></span></th>
             </tr>
           </thead>
           <tbody id="teacherTableBody">
@@ -153,5 +153,6 @@
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
+  <div id="teacherPerformanceTooltip" class="performance-tooltip" role="tooltip" hidden></div>
 </body>
 </html>

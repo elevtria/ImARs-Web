@@ -55,6 +55,8 @@ function page(file, report, resolveReport) {
     currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
     closeQuizReview() {}, openQuizReview() {}, scoreOverride, closeLessonScoreEditor() {}, openLessonScoreEditor() {},
+    warmScoreReportResources() {},
+    installAnalyticsPrint: () => () => {},
     watchVisibleData: (_app, _user, refresh) => { refreshQuizzes = refresh; return () => {}; },
     requestQuizReview: async (_, input) => {
       quizRequests.push(input);

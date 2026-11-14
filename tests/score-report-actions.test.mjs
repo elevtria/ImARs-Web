@@ -1,23 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { openScorePrintWindow, showScoreReport } from "../js/score-report-actions.js";
+import { readFile } from "node:fs/promises";
+import { showScoreReport, createScoreReportOutput } from "../js/score-report-actions.js";
 
-test("Print opens a dedicated report window and waits for fonts before opening the print dialog", async () => {
-  const calls = [];
-  const preview = { closed: false, document: { body: {}, fonts: { ready: Promise.resolve() },
-    open: () => calls.push("open"), write: value => calls.push(value), close: () => calls.push("close") },
-    requestAnimationFrame: callback => callback(), focus: () => calls.push("focus"), print: () => calls.push("print") };
-  const original = globalThis.window;
-  globalThis.window = { open: () => preview };
+test("repeated exports reuse only public fonts and logo while fetching fresh scores each time", async () => {
+  const original = globalThis.fetch;
+  let assetReads = 0, studentReads = 0, quizReads = 0, yearReads = 0;
+  globalThis.fetch = async url => {
+    assetReads++;
+    assert.ok(studentReads > 0, "student fetching starts before public resources finish loading");
+    return new Response(await readFile(url));
+  };
+  const doc = (id, data) => ({ id, data: () => data });
+  const services = {
+    fetchPage: async () => {
+      studentReads++;
+      return { classes: [doc("A", { SectionName: "A" })], students: [{ classId: "A", studentDoc: doc("S1", { displayName: "Demo Student" }), results: [] }],
+        curriculum: { curriculumSnap: { docs: [doc("lesson_01", { title: "Topic" })] } }, cursor: null };
+    },
+    fetchQuizzes: async () => { quizReads++; return { quizzes: [], items: [] }; },
+    fetchSchoolYear: async () => { yearReads++; return 2026; }
+  };
+  const options = { sectionId: "A", termId: "term_01", teacherName: "Teacher", signal: new AbortController().signal };
   try {
-    assert.equal(openScorePrintWindow(), preview);
-    assert.equal(preview.opener, null);
-    assert.match(preview.document.body.textContent, /Preparing/);
-    await showScoreReport({ html: "<html>Report only</html>" }, { mode: "print", preview, signal: new AbortController().signal });
-    assert.deepEqual(calls, ["open", "<html>Report only</html>", "close", "focus", "print"]);
-    globalThis.window.open = () => null;
-    assert.throws(openScorePrintWindow, /Allow pop-ups/);
-  } finally { globalThis.window = original; }
+    const download = await createScoreReportOutput({ ...options, mode: "download" }, services);
+    assert.ok(download.pdfBytes);
+    assert.equal(download.html, undefined);
+    const print = await createScoreReportOutput({ ...options, mode: "print" }, services);
+    assert.ok(print.html);
+    assert.equal(print.pdfBytes, undefined);
+    assert.equal(assetReads, 3);
+    assert.equal(studentReads, 2);
+    assert.equal(quizReads, 2);
+    assert.equal(yearReads, 2);
+  } finally { globalThis.fetch = original; }
 });
 
 test("Download creates a real PDF file; cancellation cannot download or print stale results", async () => {

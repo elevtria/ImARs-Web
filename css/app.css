@@ -1149,11 +1149,42 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-summary-wrap { max-width: 100%; }
 .score-summary-controls { flex-wrap: wrap; }
 .score-summary-head { flex-wrap: wrap; }
-.score-summary-actions { display: flex; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.score-summary-actions { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 12px; max-width: 100%; }
 .score-summary-actions .ghost-btn { white-space: nowrap; }
+#analyticsPrintReport { display: none; }
+.document-export-actions { display: grid; gap: 8px; width: 190px; max-width: 100%; }
+.document-export-button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 42px; width: 100%; padding: 11px 16px; border: 0; border-radius: 13px; background: #1060ed; color: #fff; font: inherit; font-size: 14px; font-weight: 700; line-height: 1.3; text-decoration: none; cursor: pointer; transition: background-color .15s, box-shadow .15s; }
+.document-export-button svg { flex-shrink: 0; }
+.document-export-button:hover:not(:disabled) { background: #0b50cd; color: #fff; box-shadow: 0 3px 9px #1060ed28; }
+.document-export-button:focus-visible { outline: 3px solid #93bdff; outline-offset: 3px; }
+.document-export-button:disabled { opacity: .6; cursor: not-allowed; }
 @media (max-width: 640px) {
   .score-summary-actions { width: 100%; }
-  .score-summary-actions .ghost-btn { flex: 1 1 auto; }
+  .score-summary-actions .document-export-actions { width: 100%; }
+}
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  body.analytics-printing { background: #fff !important; color: #172b49; }
+  body.analytics-printing > :not(#analyticsPrintReport) { display: none !important; }
+  body.analytics-printing #analyticsPrintReport { display: block; font-family: Arial, sans-serif; }
+  .analytics-print-panel { break-after: page; }
+  .analytics-print-panel:last-child { break-after: auto; }
+  .analytics-print-panel table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
+  .analytics-print-panel thead { display: table-header-group; }
+  .analytics-print-panel tfoot { display: table-footer-group; }
+  .analytics-print-panel tr { break-inside: avoid; }
+  .analytics-print-panel th, .analytics-print-panel td { padding: 7pt 5pt; border: .5pt solid #cbd4e3; overflow-wrap: anywhere; text-align: center; }
+  .analytics-print-panel thead th { background: #eaf0fa !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .analytics-print-panel tbody th { text-align: left; }
+  .analytics-print-panel thead .analytics-print-cover { width: auto; padding: 0 0 12pt; border: 0; background: #fff !important; text-align: left; font-weight: 400; }
+  .analytics-print-heading { display: flex; align-items: center; gap: 20pt; padding-bottom: 10pt; border-bottom: 2pt solid #3d4e98; }
+  .analytics-print-heading div { flex: 1; text-align: center; }
+  .analytics-print-heading strong { display: block; font-size: 15pt; text-transform: uppercase; color: #3d4e98; }
+  .analytics-print-heading span { display: block; margin-top: 5pt; }
+  .analytics-print-heading h1 { margin: 10pt 0 0; font-size: 13pt; }
+  .analytics-print-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 16pt; margin: 10pt 0; font-size: 8pt; }
+  .analytics-print-panel h2 { margin: 8pt 0 0; font-size: 10pt; }
+  .analytics-print-panel tfoot td { padding: 10pt 0; border: 0; font-size: 7pt; text-align: left; }
 }
 .score-summary-controls .select-wrap { flex: 1 1 11rem; min-width: 0; max-width: 100%; }
 .score-summary-controls .search { flex: 1 1 11rem; min-width: 0; }
@@ -1857,6 +1888,7 @@ label[for="activityTermFilter"] .select-wrap { width:120px; }
 .manual-meta-row { justify-content: flex-start; color: #5b6e84; font-size: 9px; font-weight: 800; letter-spacing: 0.08em; }
 .manual-meta-row i { width: 4px; height: 4px; border-radius: 50%; background: var(--gold); }
 .manual-cover-actions { display: grid; gap: 9px; min-width: 145px; }
+.manual-cover-actions.document-export-actions { gap: 8px; min-width: 0; }
 .manual-cover-actions .banner-btn { justify-content: center; background: var(--steel); color: #fff; }
 .manual-cover-actions .manual-print-btn { background: #fff; color: #3f5c78; border: 1px solid var(--line); }
 .manual-sheet-heading { display: flex; align-items: center; gap: 14px; padding: 22px 8px 16px; }

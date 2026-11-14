@@ -9,7 +9,8 @@ import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-revie
 import { scoreOverride } from "./lesson-score.js";
 import { openLessonScoreEditor, closeLessonScoreEditor } from "./lesson-score-editor.js";
 import { doc, getDoc, setDoc, serverTimestamp } from "./firebase-data.js";
-import { openScorePrintWindow, createScoreReportOutput, showScoreReport } from "./score-report-actions.js";
+import { createScoreReportOutput, showScoreReport, warmScoreReportResources } from "./score-report-actions.js";
+import { installAnalyticsPrint } from "./analytics-print.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -29,7 +30,6 @@ const scoreReportStatus = document.getElementById("scoreReportStatus");
 let scoreReportExport;
 function cancelScoreReport() {
   scoreReportExport?.controller.abort();
-  scoreReportExport?.preview?.close();
   scoreReportExport = null;
 }
 window.addEventListener("pagehide", cancelScoreReport);
@@ -271,20 +271,18 @@ function renderScores(refresh = true) {
   document.getElementById("analyticsNext").disabled = start + visible.length >= students.length;
 }
 
-async function exportScoreReport(mode) {
+async function exportScoreReport() {
   const user = auth.currentUser;
   if (!user || !activitySection || !lastReport || scoreReportExport) return;
-  let preview;
-  try { if (mode === "print") preview = openScorePrintWindow(); }
-  catch (error) { scoreReportStatus.textContent = error.message; return; }
-  const controller = new AbortController(), task = { controller, preview };
+  const controller = new AbortController(), task = { controller };
   scoreReportExport = task;
   printScoreReport.disabled = downloadScoreReport.disabled = true;
   scoreReportStatus.textContent = "Preparing the complete section report…";
   const termId = currentTermFilter, sectionId = activitySection;
   try {
-    const output = await createScoreReportOutput({ termId, sectionId, search: search.value,
+    const output = await createScoreReportOutput({ mode: "download", termId, sectionId, search: search.value,
       teacherName: user.displayName || lastReport.teacherName || "Signed-in teacher", signal: controller.signal,
+      onStage: message => { if (scoreReportExport === task) scoreReportStatus.textContent = message; },
       onProgress: count => { if (scoreReportExport === task) scoreReportStatus.textContent = `Preparing report: ${count} students loaded…`; }
     }, {
       fetchPage: options => getTeacherReportPage(options, { signal: controller.signal }),
@@ -293,10 +291,9 @@ async function exportScoreReport(mode) {
     });
     controller.signal.throwIfAborted();
     if (auth.currentUser?.uid !== user.uid || currentTermFilter !== termId || activitySection !== sectionId) return;
-    await showScoreReport(output, { mode, preview, signal: controller.signal });
-    scoreReportStatus.textContent = `${output.students} students · ${output.pageCount} pages. ${mode === "print" ? "Report ready to print." : "PDF downloaded."}`;
+    await showScoreReport(output, { mode: "download", signal: controller.signal });
+    scoreReportStatus.textContent = `${output.students} students · ${output.pageCount} pages. PDF downloaded.`;
   } catch (error) {
-    preview?.close();
     if (scoreReportExport === task && !controller.signal.aborted) scoreReportStatus.textContent = error.message || "Could not prepare the report. Please try again.";
   } finally {
     if (scoreReportExport === task) {
@@ -305,8 +302,19 @@ async function exportScoreReport(mode) {
     }
   }
 }
-printScoreReport.addEventListener("click", () => { void exportScoreReport("print"); });
-downloadScoreReport.addEventListener("click", () => { void exportScoreReport("download"); });
+const printAnalytics = installAnalyticsPrint({
+  available: () => Boolean(auth.currentUser && lastReport && !printScoreReport.disabled),
+  notify: message => { scoreReportStatus.textContent = message; },
+  readView: () => ({ table: document.getElementById("studentGrid"), section: sectionSummary.textContent,
+    term: termLabels[currentTermFilter], schoolYear: document.querySelector("[data-school-year]")?.textContent || "",
+    teacher: auth.currentUser.displayName || lastReport.teacherName || "Signed-in teacher",
+    scope: document.getElementById("analyticsPageStatus").textContent,
+    generatedLabel: new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Taipei" }).format(new Date()) })
+});
+printScoreReport.addEventListener("click", printAnalytics);
+downloadScoreReport.addEventListener("click", () => { void exportScoreReport(); });
+downloadScoreReport.addEventListener("mouseenter", warmScoreReportResources);
+downloadScoreReport.addEventListener("focus", warmScoreReportResources);
 
 editScores.addEventListener("click", () => {
   editingScores = !editingScores;

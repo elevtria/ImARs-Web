@@ -53,6 +53,34 @@ test("a search is explicitly recorded and filters the complete roster, not only 
   assert.deepEqual(data.quizzes[0], ["S52"]);
 });
 
+test("quiz batches overlap with a limit of three requests while keeping the full class", async () => {
+  const data = source({ count: 151 });
+  const releases = [], milestones = new Map();
+  const started = [3, 6, 7].map(count => new Promise(resolve => milestones.set(count, resolve)));
+  let active = 0, peak = 0, requests = 0;
+  const pending = collectScoreReport(data.options, { ...data.services, fetchQuizzes: async ids => {
+    assert.ok(ids.length <= 25);
+    active++; peak = Math.max(peak, active); requests++;
+    const gate = new Promise(resolve => releases.push(resolve));
+    milestones.get(requests)?.();
+    await gate;
+    active--;
+    return { quizzes: [], items: [] };
+  } });
+  await started[0];
+  assert.equal(active, 3);
+  releases.slice(0, 3).forEach(resolve => resolve());
+  await started[1];
+  assert.equal(active, 3);
+  releases.slice(3, 6).forEach(resolve => resolve());
+  await started[2];
+  releases[6]();
+  const report = await pending;
+  assert.equal(report.students.length, 151);
+  assert.equal(peak, 3);
+  assert.equal(requests, 7);
+});
+
 test("exports stop on missing pages, cancellation, foreign sections, or changed quiz assignments", async () => {
   const data = source();
   const controller = new AbortController();
@@ -112,4 +140,11 @@ test("the download is a real landscape PDF with embedded fonts and school logo; 
   assert.ok(!output.html.includes('<img src=x onerror="alert(1)">'));
   assert.ok(output.html.includes("data:image/png;base64,"));
   assert.ok(output.html.includes("@page{size:A4 landscape"));
+  const download = await renderScoreReport(report, { logo, regular, bold }, { mode: "download" });
+  assert.equal(download.html, undefined, "PDF downloads do not also build the print document");
+  assert.equal(download.pageCount, output.pageCount);
+  const print = await renderScoreReport(report, { logo, regular, bold }, { mode: "print" });
+  assert.equal(print.pdfBytes, undefined, "printing does not also encode a PDF");
+  assert.equal(print.pageCount, output.pageCount);
+  assert.ok(print.html.includes("data:image/png;base64,"));
 });

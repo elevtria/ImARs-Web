@@ -136,7 +136,7 @@ export function scoreReportHtml(report, pages, assets) {
 
 export async function loadScoreReportAssets(signal) {
   const read = async url => {
-    const response = await fetch(url, { signal });
+    const response = await fetch(url, { signal: signal || AbortSignal.timeout(20_000) });
     if (!response.ok) throw new Error("The school logo or report fonts could not be loaded. Please try again.");
     return new Uint8Array(await response.arrayBuffer());
   };
@@ -148,15 +148,17 @@ export async function loadScoreReportAssets(signal) {
   return { logo, regular, bold };
 }
 
-export async function renderScoreReport(report, assets) {
+export async function renderScoreReport(report, assets, { mode = "both" } = {}) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   pdf.setTitle(`${report.schoolName} - ${report.section} - ${report.term} Student Score Summary`);
   pdf.setAuthor(report.teacherName);
   pdf.setCreator("ImARs");
   pdf.setCreationDate(new Date(report.generatedAt));
-  const [regular, bold, logo] = await Promise.all([pdf.embedFont(assets.regular, { subset: true }), pdf.embedFont(assets.bold, { subset: true }), pdf.embedPng(assets.logo)]);
+  const [regular, bold] = await Promise.all([pdf.embedFont(assets.regular, { subset: true }), pdf.embedFont(assets.bold, { subset: true })]);
   const fonts = { regular, bold }, pages = layoutScoreReport(report, fonts);
+  if (mode === "print") return { html: scoreReportHtml(report, pages, assets), pageCount: pages.length };
+  const logo = await pdf.embedPng(assets.logo);
   for (const layout of pages) {
     const page = pdf.addPage([REPORT_PAGE.width, REPORT_PAGE.height]);
     for (const op of layout.ops) {
@@ -170,5 +172,5 @@ export async function renderScoreReport(report, assets) {
       }
     }
   }
-  return { pdfBytes: await pdf.save(), html: scoreReportHtml(report, pages, assets), pageCount: pages.length };
+  return { pdfBytes: await pdf.save(), ...(mode === "both" ? { html: scoreReportHtml(report, pages, assets) } : {}), pageCount: pages.length };
 }
