@@ -59,7 +59,11 @@ const getInitials = (name) => {
 
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
-function performanceCard({ name, details, initials, color, pre, post, gain }) {
+function performanceCard({ name, details, initials, color, pre, post, gain, preCount, postCount, students }) {
+  const countLabel = count => Number.isInteger(count) && count >= 0 ? `${count} completed lesson test result${count === 1 ? "" : "s"}` : "Completed-result count unavailable";
+  const preHint = `Pre-test: results before learning each topic. ${countLabel(preCount)} across all three terms. Missing tests are excluded.`;
+  const postHint = `Post-test: results after learning each topic. ${countLabel(postCount)} across all three terms. Missing tests are excluded.`;
+  const gainHint = "Post-test average minus pre-test average, measured in percentage points (pp). Both averages are needed.";
   return `
     <article class="teacher-analytics-card" style="--teacher-color:${color};--score:${post ?? 0}%">
       <span class="analytics-avatar">${escapeHtml(initials)}</span>
@@ -68,12 +72,24 @@ function performanceCard({ name, details, initials, color, pre, post, gain }) {
       <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}">
         <div class="analytics-donut-inner" aria-hidden="true"></div>
       </div>
-      <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
-      <span class="analytics-post-label">avg post-test</span>
-      <div class="analytics-card-footer">
-        <span>Pre: <strong>${formatAdminPercent(pre)}</strong></span>
-        <span class="teacher-gain">${formatAdminGain(gain)}</span>
+      <div class="analytics-metric-help analytics-post-result" tabindex="0" aria-describedby="${initials}-post-help">
+        <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
+        <span class="analytics-post-label">Post-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span>
+        <small class="analytics-test-stage">After learning</small>
+        <span class="analytics-card-tooltip" id="${initials}-post-help" role="tooltip">${escapeHtml(postHint)}</span>
       </div>
+      <div class="analytics-card-footer">
+        <div class="analytics-metric-help" tabindex="0" aria-describedby="${initials}-pre-help"><span>Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong>${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
+        <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Learning gain <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
+      </div>
+      <details class="analytics-performance-details"><summary>View performance details</summary><dl>
+        <div><dt>Students included</dt><dd>${Number.isInteger(students) ? students : "Not available"}</dd></div>
+        <div><dt>Pre-test · Before learning</dt><dd>${formatAdminPercent(pre)} · ${countLabel(preCount)}</dd></div>
+        <div><dt>Post-test · After learning</dt><dd>${formatAdminPercent(post)} · ${countLabel(postCount)}</dd></div>
+        <div><dt>Learning gain</dt><dd>${formatAdminGain(gain)}${Number.isFinite(pre) && Number.isFinite(post) ? ` (${formatAdminPercent(post)} minus ${formatAdminPercent(pre)})` : " · Both test averages are needed"}</dd></div>
+        <div><dt>Reporting period</dt><dd>All three terms</dd></div>
+        </dl><p>Averages use completed lesson test results. Missing tests are excluded rather than counted as zero. Gain is measured in percentage points (pp).</p>
+      </details>
     </article>
   `;
 }
@@ -97,10 +113,13 @@ function renderSchoolAnalytics(report) {
     const overallPre = teacherTotals.preCount ? Math.round(teacherTotals.preSum / teacherTotals.preCount) : null;
     const overallPost = teacherTotals.postCount ? Math.round(teacherTotals.postSum / teacherTotals.postCount) : null;
     const overallGain = overallPre === null || overallPost === null ? null : overallPost - overallPre;
+    const schoolCounts = report.sections.reduce((totals, section) => ({ pre: totals.pre + (section.preCount || 0), post: totals.post + (section.postCount || 0) }), { pre: 0, post: 0 });
     if (overallContainer) {
       overallContainer.innerHTML = [
-        performanceCard({ name: "Overall Teacher Performance", details: "Students assigned to teachers", initials: "TR", color: "#7048ff", pre: overallPre, post: overallPost, gain: overallGain }),
-        performanceCard({ name: "Average School Performance", details: "All students across the school", initials: "SC", color: "#247bce", pre: report.pre, post: report.post, gain: report.gain })
+        performanceCard({ name: "Overall Teacher Performance", details: "Students assigned to teachers", initials: "TR", color: "#7048ff", pre: overallPre, post: overallPost, gain: overallGain,
+          preCount: teacherTotals.preCount, postCount: teacherTotals.postCount, students: report.teachers.reduce((sum, teacher) => sum + teacher.students, 0) }),
+        performanceCard({ name: "Average School Performance", details: "All students across the school", initials: "SC", color: "#247bce", pre: report.pre, post: report.post, gain: report.gain,
+          preCount: schoolCounts.pre, postCount: schoolCounts.post, students: report.totalStudents })
       ].join("");
     }
 

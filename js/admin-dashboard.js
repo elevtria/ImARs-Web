@@ -7,6 +7,32 @@ import { createPagePerformance } from "./page-performance.js";
 const app = initializeApp();
 const auth = getAuth(app);
 
+// Match the reference's cursor-following card tilt on the four admin summaries.
+const summaryCards = Array.from(document.querySelectorAll(".admin-overview .stats .stat-link"));
+const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+const finePointer = window.matchMedia?.("(hover: hover) and (pointer: fine)");
+function resetSummaryCard(card) {
+  delete card.dataset.tiltActive;
+  for (const name of ["--summary-rotate-x", "--summary-rotate-y", "--summary-glow-x", "--summary-glow-y"]) card.style.removeProperty(name);
+}
+summaryCards.forEach(card => {
+  card.addEventListener("pointermove", event => {
+    if (event.pointerType === "touch" || reducedMotion?.matches || (finePointer && !finePointer.matches)) return;
+    const bounds = card.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const x = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+    const y = Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height));
+    card.style.setProperty("--summary-rotate-x", `${(0.5 - y) * 8}deg`);
+    card.style.setProperty("--summary-rotate-y", `${(x - 0.5) * 8}deg`);
+    card.style.setProperty("--summary-glow-x", `${x * 100}%`);
+    card.style.setProperty("--summary-glow-y", `${y * 100}%`);
+    card.dataset.tiltActive = "true";
+  });
+  card.addEventListener("pointerleave", () => resetSummaryCard(card));
+  card.addEventListener("pointercancel", () => resetSummaryCard(card));
+});
+reducedMotion?.addEventListener("change", () => summaryCards.forEach(resetSummaryCard));
+
 const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
 // Helper: Extract Initials from Teacher Name
@@ -27,6 +53,20 @@ function snapshotScoreHint(teacher, kind) {
 
 // A single tooltip sits outside the scrolling table so its text cannot be clipped.
 const snapshot = document.getElementById("teacherSnapshot");
+const expandedPerformance = new Set();
+snapshot?.addEventListener("click", event => {
+  const button = event.target.closest(".snapshot-details-toggle");
+  if (!button) return;
+  const detail = document.getElementById(button.getAttribute("aria-controls"));
+  if (!detail) return;
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = `${expanded ? "Hide" : "View"} performance details`;
+  button.setAttribute("aria-label", `${expanded ? "Hide" : "View"} performance details for ${button.dataset.teacherName}`);
+  detail.hidden = !expanded;
+  if (expanded) expandedPerformance.add(button.dataset.teacherId);
+  else expandedPerformance.delete(button.dataset.teacherId);
+});
 const performanceTooltip = document.getElementById("teacherPerformanceTooltip");
 let activeMetric;
 function hidePerformanceTooltip() {
@@ -112,8 +152,12 @@ function renderDashboard(report) {
       }
 
       const rows = document.createDocumentFragment();
-      teachersMap.forEach((teacher) => {
+      let detailIndex = 0;
+      teachersMap.forEach((teacher, teacherId) => {
+        const detailId = `teacherPerformanceDetails-${detailIndex++}`;
+        const expanded = expandedPerformance.has(teacherId);
         const row = document.createElement("tr");
+        row.className = "snapshot-teacher-row";
         row.innerHTML = `
           <td>
             <div class="teacher-cell">
@@ -121,6 +165,7 @@ function renderDashboard(report) {
               <span>
                 <strong>${escapeHtml(teacher.name)}</strong>
                 <small>${escapeHtml(teacher.meta)}</small>
+                <button class="snapshot-details-toggle" type="button" aria-expanded="${expanded}" aria-controls="${detailId}" aria-label="${expanded ? "Hide" : "View"} performance details for ${escapeHtml(teacher.name)}" data-teacher-id="${escapeHtml(teacherId)}" data-teacher-name="${escapeHtml(teacher.name)}">${expanded ? "Hide" : "View"} performance details</button>
               </span>
             </div>
           </td>
@@ -131,6 +176,18 @@ function renderDashboard(report) {
           <td><span class="gain-chip snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="${escapeHtml(Number.isFinite(teacher.gain) ? `Change in average: ${formatAdminGain(teacher.gain)}. Post-test average minus pre-test average; measured in percentage points.` : "Gain is unavailable until both pre-test and post-test averages have recorded results.")}">${formatAdminGain(teacher.gain)}</span></td>
         `;
         rows.appendChild(row);
+        const detail = document.createElement("tr");
+        detail.id = detailId;
+        detail.hidden = !expanded;
+        detail.className = "snapshot-detail-row";
+        const resultCount = count => Number.isInteger(count) && count >= 0 ? `${count} completed lesson test result${count === 1 ? "" : "s"}` : "Completed-result count unavailable";
+        detail.innerHTML = `<td colspan="6"><div class="snapshot-details"><h3>Performance details for ${escapeHtml(teacher.name)}</h3><dl>
+          <div><dt>Pre-test · Before learning</dt><dd><strong>${formatAdminPercent(teacher.pre)}</strong><span>${resultCount(teacher.preCount)}</span></dd></div>
+          <div><dt>Post-test · After learning</dt><dd><strong>${formatAdminPercent(teacher.post)}</strong><span>${resultCount(teacher.postCount)}</span></dd></div>
+          <div><dt>Learning gain</dt><dd><strong>${formatAdminGain(teacher.gain)}</strong><span>${Number.isFinite(teacher.pre) && Number.isFinite(teacher.post) ? `${formatAdminPercent(teacher.post)} post-test minus ${formatAdminPercent(teacher.pre)} pre-test` : "Both test averages are needed"}</span></dd></div>
+          <div><dt>Assigned students</dt><dd>${teacher.studentCount}</dd></div><div><dt>Recorded AR time</dt><dd>${escapeHtml(teacher.hours)}</dd></div>
+          </dl><p>Based on this teacher’s students across all three terms. Averages use completed lesson test results; missing tests are excluded rather than counted as zero. Gain is measured in percentage points (pp).</p></div></td>`;
+        rows.appendChild(detail);
       });
       tableBody.appendChild(rows);
     }

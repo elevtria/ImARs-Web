@@ -12,6 +12,7 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   const elements = new Map(), documentEvents = {};
   const element = id => {
     if (!elements.has(id)) elements.set(id, { style: {}, events: {}, hidden: true, children: [],
+      setAttribute() {},
       addEventListener(name, callback) { this.events[name] = callback; },
       getBoundingClientRect: () => ({ width: 280, height: 80 }),
       appendChild(child) { this.children.push(...(child.fragment ? child.children : [child])); } });
@@ -19,7 +20,7 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   };
   const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
     formatAdminPercent: value => Number.isFinite(value) ? `${value}%` : "—", formatAdminGain: value => Number.isFinite(value) ? `${value} pp` : "—",
-    document: { getElementById: element, addEventListener: (name, callback) => { documentEvents[name] = callback; },
+    document: { getElementById: element, querySelectorAll: () => [], addEventListener: (name, callback) => { documentEvents[name] = callback; },
       createElement: () => ({ innerHTML: "" }), createDocumentFragment: () => ({ fragment: true, children: [], appendChild(row) { this.children.push(row); } }) },
     window: { innerWidth: 1000, innerHeight: 600, addEventListener() {} } });
   vm.runInContext(source("admin-dashboard.js"), context);
@@ -38,6 +39,79 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   assert.ok(html.includes("Pre-test average"));
   assert.ok(html.includes("Post-test average"));
   assert.ok(html.includes('role="tooltip"'));
+  assert.ok(html.includes("Before learning"));
+  assert.ok(html.includes("After learning"));
+  context.report = { teachers: [{ id: "T1", name: "Teacher", meta: "Science", students: 132, pre: 46, preCount: 120, post: 75, postCount: 110, gain: 29, hours: "9 min" }],
+    totalStudents: 132, pre: 46, post: 75, gain: 29, hours: "9 min" };
+  vm.runInContext("renderDashboard(report)", context);
+  const detail = element("teacherTableBody").children[1];
+  assert.equal(detail.hidden, true);
+  assert.match(detail.innerHTML, /120 completed lesson test results/);
+  assert.match(detail.innerHTML, /110 completed lesson test results/);
+  assert.match(detail.innerHTML, /75% post-test minus 46% pre-test/);
+  elements.set(detail.id, detail);
+  const attributes = { "aria-controls": detail.id, "aria-expanded": "false" };
+  const button = { dataset: { teacherId: "T1", teacherName: "Teacher" }, getAttribute: name => attributes[name], setAttribute: (name, value) => { attributes[name] = value; } };
+  element("teacherSnapshot").events.click({ target: { closest: () => button } });
+  assert.equal(detail.hidden, false);
+  assert.equal(attributes["aria-expanded"], "true");
+  element("teacherSnapshot").events.click({ target: { closest: () => button } });
+  assert.equal(detail.hidden, true);
+});
+
+test("admin summary cards follow the pointer, reset on leave, and respect reduced motion and touch", () => {
+  const properties = new Map(), events = {};
+  const card = { dataset: {}, style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name) },
+    addEventListener: (name, callback) => { events[name] = callback; }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }) };
+  const reduced = { matches: false, addEventListener() {} };
+  const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
+    document: { querySelectorAll: () => [card], getElementById: () => null, addEventListener() {} },
+    window: { matchMedia: query => query.includes("reduced-motion") ? reduced : { matches: true }, addEventListener() {} } });
+  vm.runInContext(source("admin-dashboard.js"), context);
+  events.pointermove({ pointerType: "mouse", clientX: 200, clientY: 0 });
+  assert.equal(card.dataset.tiltActive, "true");
+  assert.equal(properties.get("--summary-rotate-x"), "4deg");
+  assert.equal(properties.get("--summary-rotate-y"), "4deg");
+  assert.equal(properties.get("--summary-glow-x"), "100%");
+  events.pointerleave();
+  assert.equal(card.dataset.tiltActive, undefined);
+  assert.equal(properties.size, 0);
+  reduced.matches = true;
+  events.pointermove({ pointerType: "mouse", clientX: 100, clientY: 50 });
+  assert.equal(properties.size, 0);
+  reduced.matches = false;
+  events.pointermove({ pointerType: "touch", clientX: 100, clientY: 50 });
+  assert.equal(properties.size, 0);
+});
+
+test("both admin School Analytics cards show before/after labels, hover explanations, and expandable calculation details", () => {
+  const elements = new Map();
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { style: {}, addEventListener() {} });
+    return elements.get(id);
+  };
+  const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
+    formatAdminPercent: value => Number.isFinite(value) ? `${value}%` : "—", formatAdminGain: value => Number.isFinite(value) ? `+${value} pp` : "—",
+    document: { getElementById: element, querySelectorAll: () => [] } });
+  vm.runInContext(source("school-analytics.js"), context);
+  context.report = { totalStudents: 132, pre: 46, post: 75, gain: 29,
+    teachers: [{ id: "T1", analyticsName: "Teacher One", sections: ["A"], students: 132, pre: 46, post: 75, gain: 29,
+      preCount: 20, prePctSum: 920, postCount: 20, postPctSum: 1500, active: true }],
+    sections: [{ name: "A", students: 132, pre: 46, post: 75, gain: 29, preCount: 20, postCount: 20 }] };
+  vm.runInContext("renderSchoolAnalytics(report)", context);
+  const html = element("overallAnalytics").innerHTML;
+  assert.equal((html.match(/class="analytics-performance-details"/g) || []).length, 2);
+  assert.equal((html.match(/View performance details/g) || []).length, 2);
+  assert.ok(html.includes("Overall Teacher Performance") && html.includes("Average School Performance"));
+  assert.match(html, /Pre-test average/);
+  assert.match(html, /Post-test average/);
+  assert.match(html, /Before learning/);
+  assert.match(html, /After learning/);
+  assert.match(html, /20 completed lesson test results/);
+  assert.match(html, /75% minus 46%/);
+  assert.match(html, /Students included/);
+  assert.match(html, /role="tooltip"/);
+  assert.doesNotMatch(html, /avg post-test|>Pre:/);
 });
 test("admin summaries preserve score rounding, heatmap fallback, attribution, sections, and AR time", () => {
   const teachers = [{ id: "T1", data: { fullName: "First Teacher", displayName: "Teacher One", sections: ["A", "B"], email: "one@example.test", password: "never-cache" } },

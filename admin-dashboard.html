@@ -100,14 +100,15 @@
         <h2 id="teacherTitle" data-public-label>Teacher Performance Snapshot</h2>
         <span class="teacher-count" id="tableTeacherCount"></span>
       </div>
+      <p class="snapshot-guide">Pre-test measures results <strong>before learning</strong>; post-test measures results <strong>after learning</strong>. Hover over a score or choose <strong>View performance details</strong> for counts and calculations.</p>
       <div class="table-scroll">
         <table id="teacherSnapshot">
           <thead>
             <tr>
               <th scope="col">Teacher</th>
               <th scope="col">Students</th>
-              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Pre-test average: completed test scores before learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Pre-test average <span class="snapshot-info" aria-hidden="true">i</span></span></th>
-              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Post-test average: completed test scores after learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Post-test average <span class="snapshot-info" aria-hidden="true">i</span></span></th>
+              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Pre-test average: completed test scores before learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Pre-test average <span class="snapshot-info" aria-hidden="true">i</span><small class="snapshot-stage">Before learning</small></span></th>
+              <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Post-test average: completed test scores after learning each topic, expressed as a percentage across all three terms. Missing tests are excluded.">Post-test average <span class="snapshot-info" aria-hidden="true">i</span><small class="snapshot-stage">After learning</small></span></th>
               <th scope="col">AR Time</th>
               <th scope="col"><span class="snapshot-help" tabindex="0" aria-describedby="teacherPerformanceTooltip" data-performance-tip="Post-test average minus pre-test average, measured in percentage points (pp). Both averages are needed to calculate the change.">Gain <span class="snapshot-info" aria-hidden="true">i</span></span></th>
             </tr>

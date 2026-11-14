@@ -72,6 +72,29 @@ td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-siz
 .teacher-cell small { margin-top: 3px; color: var(--admin-muted); font-size: 11px; }
 .post-score { color: #00a96b; font-weight: 700; }
 .snapshot-help { cursor: help; }
+.snapshot-guide { margin: 0 0 14px; color: var(--admin-muted); font-size: 12px; line-height: 1.6; }
+.snapshot-stage { display: block; margin-top: 4px; font-size: 10px; font-weight: 500; }
+.snapshot-details-toggle { display: inline-block; margin-top: 6px; padding: 2px 0; border: 0; background: none; color: #2464ad; font-size: 11px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.snapshot-details-toggle:focus-visible { outline: 2px solid var(--steel); outline-offset: 3px; }
+.snapshot-detail-row[hidden] { display: none; }
+.snapshot-detail-row > td { padding: 0 10px 16px; white-space: normal; text-align: left !important; }
+.snapshot-details { padding: 18px; border: 1px solid var(--admin-line); border-radius: 12px; background: var(--surface, #f6f9ff); }
+.snapshot-details h3 { margin: 0 0 14px; color: var(--admin-ink); font-size: 13px; }
+.snapshot-details dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 0; }
+.snapshot-details dt { color: var(--admin-muted); font-size: 11px; }
+.snapshot-details dd { display: grid; gap: 4px; margin: 5px 0 0; color: var(--admin-ink); font-size: 13px; }
+.snapshot-details dd strong { font-size: 20px; }
+.snapshot-details dd span, .snapshot-details p { color: var(--admin-muted); font-size: 11px; line-height: 1.6; }
+.snapshot-details p { margin: 16px 0 0; }
+[data-theme="dark"] .snapshot-details-toggle { color: #b8ddff; }
+@media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root body.admin-overview .app main .stats .stat-link { position: relative; overflow: hidden; transform: perspective(900px) rotateX(0deg) rotateY(0deg); transition: transform 220ms cubic-bezier(.2,.65,.3,1), border-color 220ms ease, box-shadow 220ms ease; }
+  :root body.admin-overview .app main .stats .stat-link[data-tilt-active] { transform: perspective(900px) rotateX(var(--summary-rotate-x, 0deg)) rotateY(var(--summary-rotate-y, 0deg)) translateY(-4px); }
+  .admin-overview .stats .stat-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at var(--summary-glow-x, 50%) var(--summary-glow-y, 50%), #ffffff80, transparent 65%); opacity: 0; pointer-events: none; transition: opacity 220ms ease; }
+  .admin-overview .stats .stat-link[data-tilt-active]::after { opacity: .65; }
+  .admin-overview .stats .stat-link :is(.label, .value, .hint) { position: relative; z-index: 1; }
+  .admin-overview .stats .stat-link .summary-icon { z-index: 1; }
+}
 .snapshot-help:focus-visible { outline: 2px solid var(--steel); outline-offset: 4px; border-radius: 5px; }
 .snapshot-info { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 3px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; font-style: normal; }
 .snapshot-score { display: inline-block; min-width: 54px; padding: 5px 9px; border-radius: 7px; font-weight: 700; }
