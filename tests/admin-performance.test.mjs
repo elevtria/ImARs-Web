@@ -59,15 +59,19 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   assert.equal(detail.hidden, true);
 });
 
-test("admin summary cards follow the pointer, reset on leave, and respect reduced motion and touch", () => {
+test("admin and teacher summary cards share pointer movement, reset, and reduced-motion behavior", () => {
   const properties = new Map(), events = {};
   const card = { dataset: {}, style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name) },
     addEventListener: (name, callback) => { events[name] = callback; }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }) };
   const reduced = { matches: false, addEventListener() {} };
   const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
-    document: { querySelectorAll: () => [card], getElementById: () => null, addEventListener() {} },
+    document: { querySelectorAll: selector => {
+      assert.ok(selector.includes(".admin-overview .stats .stat-link"));
+      assert.ok(selector.includes(".teacher-dashboard .stats .stat-link"));
+      return [card];
+    }, getElementById: () => null, addEventListener() {} },
     window: { matchMedia: query => query.includes("reduced-motion") ? reduced : { matches: true }, addEventListener() {} } });
-  vm.runInContext(source("admin-dashboard.js"), context);
+  vm.runInContext(source("dashboard-card-hover.js"), context);
   events.pointermove({ pointerType: "mouse", clientX: 200, clientY: 0 });
   assert.equal(card.dataset.tiltActive, "true");
   assert.equal(properties.get("--summary-rotate-x"), "4deg");

@@ -1,4 +1,12 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
+@media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link { position: relative; overflow: hidden; transform: perspective(900px) rotateX(0deg) rotateY(0deg); transition: transform 220ms cubic-bezier(.2,.65,.3,1), border-color 220ms ease, box-shadow 220ms ease; }
+  :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link[data-tilt-active] { transform: perspective(900px) rotateX(var(--summary-rotate-x, 0deg)) rotateY(var(--summary-rotate-y, 0deg)) translateY(-4px); }
+  :is(.admin-overview, .teacher-dashboard) .stats .stat-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at var(--summary-glow-x, 50%) var(--summary-glow-y, 50%), #ffffff80, transparent 65%); opacity: 0; pointer-events: none; transition: opacity 220ms ease; }
+  :is(.admin-overview, .teacher-dashboard) .stats .stat-link[data-tilt-active]::after { opacity: .65; }
+  :is(.admin-overview, .teacher-dashboard) .stats .stat-link :is(.label, .value, .hint) { position: relative; z-index: 1; }
+  :is(.admin-overview, .teacher-dashboard) .stats .stat-link .summary-icon { z-index: 1; }
+}
 @media screen and (min-width:1000px) and (prefers-reduced-motion:no-preference) {
   @view-transition { navigation:auto; }
   :root { view-transition-name:none; }
