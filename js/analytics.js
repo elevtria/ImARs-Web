@@ -6,6 +6,9 @@ import { createTeacherReport } from "./teacher-report-data.js";
 import { buildStudentActivityRecords, testRawScore } from "./student-activity-record.js";
 import { buildPostTestHeatmap } from "./post-test-heatmap.js";
 import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
+import { scoreOverride } from "./lesson-score.js";
+import { openLessonScoreEditor, closeLessonScoreEditor } from "./lesson-score-editor.js";
+import { doc, setDoc, serverTimestamp } from "./firebase-data.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
 
 const app = initializeApp();
@@ -16,6 +19,9 @@ const sectionFilter = document.getElementById("sectionFilter");
 const sectionSummary = document.getElementById("sectionSummary");
 const studentCount = document.getElementById("studentCount");
 const studentGrid = document.querySelector("#studentGrid tbody");
+const editScores = document.getElementById("editScores");
+const scoreEditStatus = document.getElementById("scoreEditStatus");
+let editingScores = false;
 const topicsContainer = document.getElementById("topicsContainer");
 const questionHeatmapScope = document.getElementById("questionHeatmapScope");
 const topicCompletionScope = document.getElementById("topicCompletionScope");
@@ -192,12 +198,18 @@ function raw(score, max) {
   return Number.isFinite(score) && Number.isFinite(max) && max > 0 && score >= 0 && score <= max ? score + "/" + max : "—";
 }
 
-function lessonCells(data = {}) {
+function lessonCells(data = {}, student, lesson) {
   const pre = testRawScore(data, "pre"), post = testRawScore(data, "post");
-  const activity = Object.hasOwn(data, "activityRawMaximum")
+  const edited = scoreOverride(data, "activity");
+  const activity = edited ? raw(edited.score, edited.maximum) : Object.hasOwn(data, "activityRawMaximum")
     ? raw(data.activityRawScore, data.activityRawMaximum)
     : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
-  return `<td class="score-lesson-start" role="cell" data-score-label="Activity">${activity}</td><td role="cell" data-score-label="Pre-test">${raw(pre?.score, pre?.total)}</td><td role="cell" data-score-label="Post-test">${raw(post?.score, post?.total)}</td>`;
+  return [["activity", "Activity", activity], ["pre", "Pre-test", raw(pre?.score, pre?.total)], ["post", "Post-test", raw(post?.score, post?.total)]].map(([kind, label, value], index) => {
+    const content = editingScores
+      ? `<button class="score-edit" type="button" data-edit-score="${kind}" data-student="${escapeHtml(student.studentDoc.id)}" data-lesson="${escapeHtml(lesson.id)}" aria-label="${escapeHtml(`Edit ${label.toLowerCase()} score for ${student.name} · ${lesson.title}: ${value}`)}">${value}<span aria-hidden="true"> ✎</span></button>`
+      : value;
+    return `<td class="${index === 0 ? "score-lesson-start" : ""}" role="cell" data-score-label="${label}">${content}</td>`;
+  }).join("");
 }
 
 function renderScores(refresh = true) {
@@ -217,6 +229,7 @@ function renderScores(refresh = true) {
   }).filter(row => row.name.toLowerCase().includes(query));
   tablePage = Math.min(tablePage, Math.max(0, Math.ceil(students.length / studentsPerPage) - 1));
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
+  editScores.disabled = !lessons.length || !visible.length;
   if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
   const quizzes = quizPage?.quizzes || [];
   const quizColumnCount = Math.max(1, quizzes.length);
@@ -228,7 +241,7 @@ function renderScores(refresh = true) {
     ${quizzes.length ? quizzes.map((quiz, index) => `<th class="score-quiz-title${index === 0 ? " score-quiz-column" : " score-lesson-start"}" scope="col">${escapeHtml(quiz.title || "Quiz")}</th>`).join("") : '<th class="score-quiz-title score-quiz-column" scope="col">Generated quizzes</th>'}</tr>`;
   studentGrid.innerHTML = visible.map(row => {
     const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
-    const cells = lessons.map(lesson => lessonCells(results.get(lesson.id))).join("");
+    const cells = lessons.map(lesson => lessonCells(results.get(lesson.id), row, lesson)).join("");
     const name = `<th class="score-student" scope="row" role="rowheader">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
     const quizCells = quizzes.map((quiz, index) => {
       const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
@@ -244,6 +257,44 @@ function renderScores(refresh = true) {
     ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
   document.getElementById("analyticsPrevious").disabled = tablePage === 0;
   document.getElementById("analyticsNext").disabled = start + visible.length >= students.length;
+}
+
+editScores.addEventListener("click", () => {
+  editingScores = !editingScores;
+  editScores.setAttribute("aria-pressed", String(editingScores));
+  editScores.textContent = editingScores ? "Done editing" : "Edit scores";
+  scoreEditStatus.textContent = editingScores ? "Choose a score to edit, including a dash to add a missing score." : "";
+  renderScores(false);
+});
+function editLessonScore(event) {
+  const button = event.target.closest("button[data-edit-score]");
+  const user = auth.currentUser;
+  if (!button || !editingScores || !user || !lastReport) return;
+  const kind = button.dataset.editScore, termId = currentTermFilter, sectionId = activitySection;
+  const row = lastReport.sections.find(section => section.classDoc.id === sectionId)?.students.find(row => row.studentDoc.id === button.dataset.student);
+  const lesson = lastReport.curriculumSnap?.docs.find(lesson => lesson.id === button.dataset.lesson);
+  if (!row || !lesson) return;
+  const result = row.results.find(result => result.termId === termId)?.lessonsSnap.docs.find(doc => doc.id === lesson.id)?.data() || {};
+  const edited = scoreOverride(result, kind);
+  const test = kind === "activity" ? null : testRawScore(result, kind);
+  const score = edited?.score ?? (test ? test.score : kind === "activity" ? (Object.hasOwn(result, "activityRawMaximum") ? result.activityRawScore : result.activityScore) : null);
+  const maximum = edited?.maximum ?? (kind === "pre" ? 5 : kind === "post" ? 10 : Object.hasOwn(result, "activityRawMaximum") ? result.activityRawMaximum : result.activityTotalQuestions ?? result.activityTotalPoints);
+  const details = row.studentDoc.data(), topic = lesson.data();
+  const current = () => auth.currentUser?.uid === user.uid && currentTermFilter === termId && activitySection === sectionId;
+  openLessonScoreEditor({ kind, studentName: details.displayName || details.fullName || "Student", lessonTitle: topic.title || topic.name || lesson.id,
+    score, maximum,
+    onSave: async value => {
+      if (!current()) throw new Error("The selected class or sign-in changed. Reopen the score to try again.");
+      await setDoc(doc(heatmapDatabase(app), "users", row.studentDoc.id, "test_results", termId, "lessons", lesson.id), {
+        lessonId: lesson.id, timestamp: serverTimestamp(), teacherScoreOverrides: { [kind]: value }
+      }, { merge: true });
+    },
+    onSaved: () => {
+      if (!current()) return;
+      scoreEditStatus.textContent = "Score saved.";
+      void openReport();
+    }
+  });
 }
 
 function resetQuizScores() {
@@ -288,6 +339,7 @@ async function loadQuizScores(studentIds, force = false) {
 
 quizRetry.addEventListener("click", () => { if (quizPage) void loadQuizScores(quizPage.studentIds, true); });
 studentGrid.addEventListener("click", event => {
+  if (event.target.closest("button[data-edit-score]")) { editLessonScore(event); return; }
   const button = event.target.closest("button[data-quiz]");
   const page = quizPage, user = auth.currentUser;
   if (!button || !page || !user) return;
@@ -412,6 +464,7 @@ const report = createTeacherReport({ app,
   }
 });
 function openReport({ restoredPage = false } = {}) {
+  closeLessonScoreEditor();
   if (!auth.currentUser) return;
   const termChanged = lastAnalyticsTerm !== currentTermFilter;
   if (termChanged) {
@@ -430,6 +483,7 @@ function openReport({ restoredPage = false } = {}) {
     resetQuizScores(); clearHeatmapResults(); showTopicsPending();
   }
   if (!lastReport) {
+    editScores.disabled = true;
     sectionFilter.disabled = true;
     if (termChanged) {
       scoreHead.innerHTML = emptyScoreHeader;
@@ -451,6 +505,11 @@ function openReport({ restoredPage = false } = {}) {
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   if (heatmapOwner !== user?.uid) {
+    closeLessonScoreEditor();
+    editingScores = false;
+    editScores.setAttribute("aria-pressed", "false");
+    editScores.textContent = "Edit scores";
+    scoreEditStatus.textContent = "";
     heatmapOwner = user?.uid;
     clearHeatmapResults();
     heatmapQuestionLoads.clear();

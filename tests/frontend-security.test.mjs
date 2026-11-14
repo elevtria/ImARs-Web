@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
+import { scoreOverride } from "../js/lesson-score.js";
 import { buildStudentActivityRecords, testRawScore } from "../js/student-activity-record.js";
 import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
@@ -53,7 +54,7 @@ function page(file, report, resolveReport) {
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
-    closeQuizReview() {}, openQuizReview() {},
+    closeQuizReview() {}, openQuizReview() {}, scoreOverride, closeLessonScoreEditor() {}, openLessonScoreEditor() {},
     watchVisibleData: (_app, _user, refresh) => { refreshQuizzes = refresh; return () => {}; },
     requestQuizReview: async (_, input) => {
       quizRequests.push(input);
@@ -82,6 +83,39 @@ function assertTextOnly(html) {
   assert.ok(!html.includes("<img src=x"), "database text must not create an image/event handler");
   assert.ok(!html.includes("<svg/onload"), "database text must not create an SVG/event handler");
 }
+
+test("score editing requires the Edit scores button and saves the selected student, term, and topic", async () => {
+  const data = activityReportData(["A"], { count: 1 });
+  data.sections[0].students[0].studentDoc = record("S1", { displayName: attack });
+  const app = page("analytics.js", data);
+  const editors = [], writes = [];
+  app.context.openLessonScoreEditor = options => editors.push(options);
+  app.context.doc = (_, ...parts) => ({ path: parts.join("/") });
+  app.context.serverTimestamp = () => ({ $type: "serverTimestamp" });
+  app.context.setDoc = async (reference, data, options) => writes.push({ reference, data, options });
+  await app.render();
+  const grid = app.element("#studentGrid tbody"), edit = app.element("editScores");
+  assert.equal(edit.disabled, false);
+  assert.doesNotMatch(grid.html(), /data-edit-score=/);
+  await edit.events.click();
+  assert.equal(edit.textContent, "Done editing");
+  assert.match(grid.html(), /data-edit-score="activity"/);
+  assert.match(grid.html(), /data-edit-score="pre"/);
+  assert.match(grid.html(), /data-edit-score="post"/);
+  assertTextOnly(grid.html());
+  const report = vm.runInContext("lastReport", app.context);
+  const button = { dataset: { editScore: "pre", student: report.sections[0].students[0].studentDoc.id, lesson: report.curriculumSnap.docs[0].id } };
+  await grid.events.click({ target: { closest: selector => selector === "button[data-edit-score]" ? button : null } });
+  assert.equal(editors.length, 1);
+  assert.equal(editors[0].maximum, 5);
+  assert.equal(writes.length, 0);
+  await editors[0].onSave({ score: 0, maximum: 5 });
+  assert.equal(writes[0].reference.path, `users/${button.dataset.student}/test_results/term_01/lessons/${button.dataset.lesson}`);
+  assert.equal(writes[0].data.teacherScoreOverrides.pre.score, 0);
+  assert.equal(writes[0].options.merge, true);
+  await edit.events.click();
+  assert.doesNotMatch(grid.html(), /data-edit-score=/);
+});
 
 function batchPage({rows=[],existing=[]}={}) {
   const elements=new Map(),calls=[],writes=[],imports=[],checkedIds=[],auth={currentUser:{uid:'teacher-a',id:'TEACH1000'}};let changed,finishCount,download;

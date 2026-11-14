@@ -59,6 +59,7 @@
       <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
         <div class="section-head performance-head">
           <h2 data-auth-shell>Student Score Summary</h2>
+          <button class="ghost-btn" id="editScores" type="button" aria-pressed="false" aria-controls="studentGrid" disabled>Edit scores</button>
         </div>
         <div class="performance-controls score-summary-controls">
           <label class="select-wrap">
@@ -87,7 +88,8 @@
           <span id="analyticsPageStatus" role="status"></span>
           <button type="button" class="ghost-btn" id="analyticsNext" disabled>Next page</button>
         </div>
-        <p class="scheduler-progress-copy">Scores show points earned out of points possible. A dash means no raw score is available.</p>
+        <p class="scheduler-progress-copy">Scores show points earned out of points possible. A dash means no raw score is available. Choose Edit scores to update an activity, pre-test, or post-test score.</p>
+        <p id="scoreEditStatus" class="view-data-status" role="status" aria-live="polite"></p>
         <p id="activitySyncStatus" class="view-data-status" role="status" hidden></p>
         <p id="teacherQuizStatus" class="view-data-status" role="status"></p>
         <button id="teacherQuizRefresh" class="ghost-btn" type="button" hidden>Retry quiz scores</button>

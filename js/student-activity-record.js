@@ -1,8 +1,11 @@
 import { activityPercent } from "./activity-score.js";
+import { scoreOverride } from "./lesson-score.js";
 
 const asMinutes = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 
 export function testRawScore(result, kind) {
+  const edited = scoreOverride(result, kind);
+  if (edited) return { score: edited.score, total: edited.maximum };
   const prefix = kind === "pre" ? "preTest" : "postTest";
   if (result?.[kind === "pre" ? "isPreTestCompleted" : "isPostTestCompleted"] !== true) return null;
   const total = result[prefix + "TotalQuestions"];

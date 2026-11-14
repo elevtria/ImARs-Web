@@ -13,6 +13,7 @@ document.querySelectorAll("[data-scroll-target]").forEach(scrollbar => {
 
   const update = () => {
     scrollbar.hidden = viewport.scrollWidth <= viewport.clientWidth;
+    scrollbar.style.width = `${viewport.clientWidth}px`;
     spacer.style.width = `${viewport.scrollWidth}px`;
     sync(viewport, scrollbar);
   };

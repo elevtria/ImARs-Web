@@ -7,6 +7,7 @@ import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
 import { activityPercent } from "../js/activity-score.js";
+import { scoreOverride, validLessonScore } from "../js/lesson-score.js";
 import { activeProfile } from "./student-quiz-auth.js";
 
 const json = (value, status = 200, headers = {}) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store", ...headers } });
@@ -211,6 +212,22 @@ class Scope {
     }
     if (p[0] === "users" && p[2] === "test_results" && term(p[3]) && p[4] === "lessons" && lesson(p[5]) && p.length === 6 && actor.role === "teacher") {
       await this.student(p[1]);
+      if (Object.hasOwn(data, "teacherScoreOverrides")) {
+        const edits = data.teacherScoreOverrides;
+        if (!names(["lessonId", "timestamp", "teacherScoreOverrides"]) || data.lessonId !== p[5] || !timestamp(data.timestamp) ||
+            !object(edits) || Object.keys(edits).length !== 1) throw fail("Choose one score to edit.", 400);
+        const [kind, value] = Object.entries(edits)[0];
+        if (!object(value) || !fields(value, ["score", "maximum"]) || !validLessonScore(kind, value.score, value.maximum)) throw fail("Enter a score within the allowed total.", 400);
+        const points = kind === "activity"
+          ? { activityScore: value.score, activityTotalQuestions: value.maximum, activityTotalPoints: value.maximum,
+              activityRawScore: value.score, activityRawMaximum: value.maximum }
+          : { [kind === "pre" ? "preTestScore" : "postTestScore"]: value.score,
+              [kind === "pre" ? "preTestTotalQuestions" : "postTestTotalQuestions"]: value.maximum,
+              [kind === "pre" ? "isPreTestCompleted" : "isPostTestCompleted"]: true };
+        return { ...input, data: { ...data, ...points,
+          teacherScoreOverrides: { ...previous?.teacherScoreOverrides, [kind]: value },
+          teacherScoreEditedBy: actor.id, teacherScoreEditedAt: data.timestamp }, updateTime: row?.updateTime };
+      }
       if (!names(["lessonId", "timestamp", "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isPostTestCompleted", "isLessonCompleted", "postTestScore", "postTestTotalQuestions"]) ||
           data.lessonId !== p[5] || !timestamp(data.timestamp)) throw fail("Invalid result fields.", 400);
       for (const key of ["isPreTestCompleted", "isPostTestCompleted", "isLessonCompleted"]) if (data[key] !== undefined && data[key] !== true) throw fail("Invalid completion value.", 400);
@@ -478,7 +495,7 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const scoreFields = [...heatmapFields, "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isLessonCompleted", "isARCompleted", "completed",
-    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum"];
+    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum", "teacherScoreOverrides"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const gradeRequest = !heatmap && page.students.length
     ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))
@@ -497,7 +514,7 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
     const results = termIds.map(termId => ({ termId, lessons: lessonIds.flatMap(id => {
       const path = `users/${row.document.id}/test_results/${termId}/lessons/${id}`, record = records.get(path);
       const grade = activityGrades?.get([row.classId, row.document.id, termId, id].join("/"));
-      if (grade) return [output(path, { data: { ...(record?.wire || record?.data),
+      if (grade && !scoreOverride(record?.data, "activity")) return [output(path, { data: { ...(record?.wire || record?.data),
         activityScore: grade.score, activityTotalQuestions: grade.maximum, activityTotalPoints: grade.maximum,
         ...(body.rawActivityScores === true ? { activityRawScore: grade.rawScore ?? null, activityRawMaximum: grade.rawMaximum ?? null } : {}) } })];
       return record ? [output(path, heatmap ? { data: pick(record.wire || record.data, heatmapFields) } : record)] : [];
@@ -527,6 +544,8 @@ async function studentActivityAverage(scope, body, env, fetcher, legacyFetcher) 
   ]);
   const scores = ids.map(id => {
     const grade = grades.get([section, body.studentId, body.termId, id].join("/"));
+    const edited = scoreOverride(lessons.get(base + id)?.data, "activity");
+    if (edited) return edited.score / edited.maximum * 100;
     return grade ? grade.score / grade.maximum * 100 : activityPercent(lessons.get(base + id)?.data);
   }).filter(score => score !== null);
   return { average: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null };

@@ -1094,16 +1094,24 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 }
 .performance-controls .search { width: min(320px, 100%); }
 .table-top-scroll {
-  height: 20px;
+  height: 12px;
   overflow-x: scroll;
   overflow-y: hidden;
-  margin-bottom: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  margin: 0 0 10px;
+  border-radius: 999px;
 }
 .table-top-scroll[hidden] { display: none; }
 .table-top-scroll > div { height: 1px; }
-.table-top-scroll:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+.table-top-scroll::-webkit-scrollbar { height: 8px; }
+.table-top-scroll::-webkit-scrollbar-track { background: var(--line); border-radius: 999px; }
+.table-top-scroll::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 999px; }
+.table-top-scroll::-webkit-scrollbar-thumb:hover { background: #527fa7; }
+.table-top-scroll::-webkit-scrollbar-button { display: none; width: 0; }
+.table-top-scroll:focus { outline: none; }
+.table-top-scroll:focus-visible { box-shadow: 0 0 0 2px var(--steel); }
+@supports not selector(::-webkit-scrollbar) {
+  .table-top-scroll { scrollbar-width: thin; scrollbar-color: var(--steel) var(--line); }
+}
 .performance-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -1159,6 +1167,17 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-summary-table .score-quiz-column { border-inline-start: 2px solid #81a2c1; }
 .score-summary-table thead tr:last-child .score-quiz-title { min-width: 130px; max-width: 230px; white-space: normal; }
 .score-review { color: inherit; border: 0; background: none; padding: 2px; font: inherit; text-decoration: underline; cursor: pointer; }
+.score-edit { color: inherit; border: 1px dashed var(--steel); border-radius: 6px; background: transparent; padding: 3px 6px; font: inherit; white-space: nowrap; cursor: pointer; }
+.score-edit:hover { background: var(--ice); }
+.score-edit:focus-visible { outline: 2px solid var(--steel); outline-offset: 2px; }
+#editScores[aria-pressed="true"] { background: var(--steel); color: #fff; }
+.lesson-score-dialog { max-width: 440px; background: var(--surface, #fff); color: var(--ink); }
+.lesson-score-dialog .quiz-review-form { display: grid; gap: 16px; }
+.lesson-score-dialog :is(h2, p) { margin: 0; }
+.lesson-score-dialog label { display: grid; gap: 8px; color: var(--muted); }
+.lesson-score-dialog input { width: 100%; box-sizing: border-box; font: inherit; color: var(--ink); }
+.lesson-score-dialog .quiz-review-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.lesson-score-dialog .quiz-review-actions .score-save { background: #3f5c78; color: #fff; }
 .table-avatar {
   display: inline-grid;
   place-items: center;
