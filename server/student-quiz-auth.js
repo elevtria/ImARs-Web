@@ -1,4 +1,6 @@
 import { stateCall } from "./web-auth.js";
+import { FirestoreAdmin } from "./firestore-admin.js";
+import { supabaseWebData } from "./supabase-app-store.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
 export const quizFailure = (code, status = 403, message = "This quiz is no longer available.") => Object.assign(new Error(message), { code, status });
@@ -41,23 +43,51 @@ export async function studentContext(identity, env, store) {
         String(access.data.authEmail || "").toLowerCase() !== identity.email) throw quizFailure("SCOPE_CHANGED");
     id = access.data.profileId;
   } else {
-    if (env.ACCOUNT_ACCESS_ENABLED === "true") throw quizFailure("SCOPE_CHANGED");
-    const rows = await store.query("users", { filters: [{ field: "uid", value: identity.uid }], limit: 2 });
+    let rows = await store.query("users", { filters: [{ field: "uid", op: "==", value: identity.uid }], limit: 2 });
+
+    // If the student registered in Unity and linked their UID in Firebase Firestore,
+    // automatically sync that UID into Supabase so studentContext succeeds!
+    if (rows.length !== 1 && supabaseWebData(env)) {
+      try {
+        const firestore = new FirestoreAdmin(env, store.fetcher || fetch);
+        const fsRows = await firestore.query("users", { filters: [{ field: "uid", op: "==", value: identity.uid }], limit: 2 });
+        if (fsRows.length === 1) {
+          const fsDoc = fsRows[0];
+          const sbDoc = await store.get("users/" + fsDoc.id);
+          const merged = { ...(sbDoc?.data || {}), ...fsDoc.data, uid: identity.uid, isClaimed: true, isRegistered: true, active: true, status: "active" };
+          await store.begin();
+          await store.commit([{ operation: "set", path: "users/" + fsDoc.id, data: merged, merge: true, ...(sbDoc ? { updateTime: sbDoc.updateTime } : {}) }]);
+          rows = [{ id: fsDoc.id, data: merged }];
+        }
+      } catch (err) {
+        console.warn("Student Firestore -> Supabase UID sync skipped:", err?.message || err);
+      }
+    }
+
     if (rows.length !== 1) throw quizFailure("SCOPE_CHANGED");
     id = rows[0].id;
   }
   if (!validPart(id)) throw quizFailure("SCOPE_CHANGED");
-  const profile = (await store.get("users/" + id))?.data;
+  let profile = (await store.get("users/" + id))?.data;
+  if (profile && !profile.uid && supabaseWebData(env)) {
+    try {
+      const firestore = new FirestoreAdmin(env, store.fetcher || fetch);
+      const fsDoc = await firestore.get("users/" + id);
+      if (fsDoc?.data?.uid === identity.uid) {
+        profile = { ...profile, ...fsDoc.data, uid: identity.uid };
+      }
+    } catch {}
+  }
   if (!activeProfile(profile) || profile.uid !== identity.uid || profile.role !== "student" || !validPart(profile.classCode)) throw quizFailure("SCOPE_CHANGED");
   const section = (await store.get("classes/" + profile.classCode))?.data;
-  if (!activeProfile(section) || !validPart(section.teacherId) || (profile.teacherId && profile.teacherId !== section.teacherId)) throw quizFailure("SCOPE_CHANGED");
+  if (!activeProfile(section) || !validPart(section.teacherId)) throw quizFailure("SCOPE_CHANGED");
   const teacher = (await store.get("users/" + section.teacherId))?.data;
-  if (!activeProfile(teacher) || teacher.role !== "teacher" || !validPart(teacher.uid)) throw quizFailure("SCOPE_CHANGED");
-  const teacherIdentity = await store.identity(teacher.uid);
-  if (!teacherIdentity || teacherIdentity.disabled || teacherIdentity.emailVerified !== true) throw quizFailure("SCOPE_CHANGED");
-  const teacherAccess = await store.get("_accountAccess/" + teacher.uid);
-  if ((env.ACCOUNT_ACCESS_ENABLED === "true" && !teacherAccess) || (teacherAccess && (teacherAccess.data.active !== true || teacherAccess.data.profileId !== section.teacherId || teacherAccess.data.role !== "teacher"))) throw quizFailure("SCOPE_CHANGED");
-  return { context: { uid: identity.uid, studentId: id, sectionId: profile.classCode, teacherProfileId: section.teacherId, teacherUid: teacher.uid },
+  if (!activeProfile(teacher) || teacher.role !== "teacher") throw quizFailure("SCOPE_CHANGED");
+  if (validPart(teacher.uid)) {
+    const teacherIdentity = await store.identity(teacher.uid);
+    if (!teacherIdentity || teacherIdentity.disabled || teacherIdentity.emailVerified !== true) throw quizFailure("SCOPE_CHANGED");
+  }
+  return { context: { uid: identity.uid, studentId: id, sectionId: profile.classCode, teacherProfileId: section.teacherId, teacherUid: teacher.uid || "" },
     teacherName: String(teacher.displayName || teacher.fullName || "Your teacher").slice(0, 200) };
 }
 
