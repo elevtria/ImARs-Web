@@ -88,7 +88,7 @@ export class SupabaseAppStore {
 
   async mirrorDocsToFirestore(collectionPath, docs) {
     if (!this.firestoreMirror || !docs?.length) return;
-    if (!["users", "classes"].includes(collectionPath)) return;
+    if (collectionPath !== "users") return;
     try {
       // Only mirror full documents (when not using partial field projections)
       const batch = [];

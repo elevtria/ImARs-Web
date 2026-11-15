@@ -29,6 +29,77 @@ const schoolYears = new WeakMap();
 const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
 
+let lastFirestoreClassSync = 0;
+
+async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
+  if (!supabaseWebData(env) || Date.now() - lastFirestoreClassSync < 15_000) return;
+  lastFirestoreClassSync = Date.now();
+  try {
+    const firestore = new FirestoreAdmin(env, fetcher);
+    const [fsClasses, fsTeachers, sbClasses, sbTeachers] = await Promise.all([
+      firestore.query("classes", { limit: 100 }),
+      firestore.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 }),
+      store.query("classes", { limit: 100 }),
+      store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 })
+    ]);
+
+    const sbClassMap = new Map(sbClasses.map(row => [row.id, row]));
+    const sbTeacherMap = new Map(sbTeachers.map(row => [row.id, row]));
+    const writes = [];
+    const affectedTeacherUids = new Set();
+
+    // 1. Sync any class ownership or section changes from Firebase Firestore -> Supabase
+    for (const fsClass of fsClasses) {
+      if (!fsClass?.id || !fsClass?.data) continue;
+      const sbClass = sbClassMap.get(fsClass.id);
+      if (!sbClass || sbClass.data.teacherId !== fsClass.data.teacherId || sbClass.data.SectionName !== fsClass.data.SectionName) {
+        writes.push({
+          operation: "set",
+          path: "classes/" + fsClass.id,
+          data: fsClass.data,
+          merge: true,
+          ...(sbClass ? { updateTime: sbClass.updateTime } : {})
+        });
+      }
+    }
+
+    // 2. Sync teacher sections array and active/registered status from Firebase Firestore -> Supabase
+    for (const fsTeacher of fsTeachers) {
+      if (!fsTeacher?.id || !fsTeacher?.data) continue;
+      const sbTeacher = sbTeacherMap.get(fsTeacher.id);
+      if (fsTeacher.data.uid) affectedTeacherUids.add(fsTeacher.data.uid);
+      if (sbTeacher?.data?.uid) affectedTeacherUids.add(sbTeacher.data.uid);
+
+      const fsSections = JSON.stringify(fsTeacher.data.sections || []);
+      const sbSections = JSON.stringify(sbTeacher?.data?.sections || []);
+      if (!sbTeacher || fsSections !== sbSections || sbTeacher.data.uid !== fsTeacher.data.uid || sbTeacher.data.status !== fsTeacher.data.status) {
+        writes.push({
+          operation: "set",
+          path: "users/" + fsTeacher.id,
+          data: {
+            ...(sbTeacher?.data || {}),
+            ...fsTeacher.data,
+            sections: Array.isArray(fsTeacher.data.sections) ? fsTeacher.data.sections : (sbTeacher?.data?.sections || [])
+          },
+          merge: true,
+          ...(sbTeacher ? { updateTime: sbTeacher.updateTime } : {})
+        });
+      }
+    }
+
+    if (writes.length) {
+      await store.begin();
+      await store.commit(writes);
+      // Invalidate cached dashboard summaries so updated sections show immediately
+      for (const uid of affectedTeacherUids) {
+        await stateCall(env, "dashboard:" + uid, "dashboard-dirty", { ids: ["_section_sync"] }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn("Firestore -> Supabase class sync skipped:", err?.message || err);
+  }
+}
+
 async function readSchoolYear(store) {
   const key = schoolYearCacheKey(store);
   let entry = schoolYears.get(key);
@@ -84,7 +155,6 @@ class Scope {
     if (!row || row.data.role !== "student") throw fail();
     if (this.actor.role !== "admin") {
       await this.ownsClass(row.data.classCode);
-      if (row.data.teacherId && row.data.teacherId !== this.actor.id) throw fail();
     }
     return row;
   }
@@ -204,8 +274,6 @@ class Scope {
       let schedule;
       try { schedule = updateSectionSchedule(previous, data.sectionId, data); }
       catch (error) { throw fail(error.message, 400); }
-      // This document was read in the same transaction. Retain every other
-      // section and the legacy default used by older mobile builds.
       return { ...input, data: { sectionSchedules: { ...previous.sectionSchedules,
         [data.sectionId]: schedule
       } }, updateTime: row.updateTime };
@@ -367,8 +435,6 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   })().catch(error => ({ error }));
   while (body.includeStudents !== false && index < selected.length && students.length < maximum && scanned < 100) {
     const classId = selected[index].id, size = Math.min(maximum - students.length + 1, 100 - scanned);
-    // Empty sections must not add one network round trip each. Probe at most
-    // three following sections with eight rows; the visible page stays bounded.
     for (let position = index; position < Math.min(index + 4, selected.length); position++) {
       if (!queued.has(position)) queueClass(position, position === index ? size : Math.min(8, size));
     }
@@ -380,7 +446,6 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
     for (const row of rows) {
       if (students.length === maximum) break;
       after = row.id; consumed++; scanned++;
-      if (row.data.teacherId && row.data.teacherId !== scope.actor.id) continue;
       const archived = row.data.active === false;
       const matches = !search || [row.id, row.data.displayName, row.data.fullName, row.data.firstName, row.data.lastName]
         .filter(Boolean).join(" ").toLowerCase().includes(search);
@@ -392,8 +457,6 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   const page = { classes: classes.map(row => output("classes/" + row.id, row)), students, scanned,
     cursor: body.includeStudents !== false && index < selected.length ? { classId: selected[index].id, id: after || null } : null };
   if (body.includeTeacher === true) page.teacher = output("users/" + scope.actor.id, await scope.get("users/" + scope.actor.id));
-  // Reports can start their lesson batches as soon as roster ownership is
-  // verified, while independent section totals are still being calculated.
   if (deferCounts) return { ...page, pendingCounts: countPromise };
   if (body.includeResults && students.length) {
     const visible = students.slice(0, body.includeResults.limit), termId = body.includeResults.termId;
@@ -405,8 +468,6 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
         row.lessons = paths.filter(path => path.startsWith(`users/${row.document.id}/`)).flatMap(path => results.get(path) ? [output(path, results.get(path))] : []);
       }
     } catch {
-      // Optional performance reads must not hide a successfully authorized roster.
-      // Omitted results retain each card's existing lazy-load/retry behavior.
       page.performanceUnavailable = true;
     }
   }
@@ -490,8 +551,6 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
     return { term: output(path, row), lessons: lessons.map(lesson => output(path + "/lessons/" + lesson.id, lesson, lesson.id, sectionIds)) };
   })().then(value => ({ value }), error => ({ error }));
   const { pendingCounts, ...page } = await studentPage(scope, { ...body, ...(heatmap ? { includeCounts: false } : {}), status: "active", search: "", limit: batchSize }, { deferCounts: true, maximumLimit: 100 });
-  // Lesson IDs are the four fixed IDs already enforced by this gateway. Fetch
-  // their documents in batches of at most 100, only for verified roster rows.
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const scoreFields = [...heatmapFields, "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isLessonCompleted", "isARCompleted", "completed",
@@ -579,6 +638,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
   const settingsStore = () => supabaseSettings ? new SupabaseAppStore(env, settingsFetcher) : store;
   try {
     store ??= appStore(env, settingsFetcher);
+    await syncClassesAndTeachersFromFirestore(store, env, settingsFetcher);
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
       return respond(await readSchoolYear(settingsStore()));
     }
@@ -596,8 +656,6 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       } else transaction = store;
       await transaction.begin();
     }
-    // Re-read the actor inside the transaction so disabling the actor or
-    // reassigning a class races safely with the write rather than granting it.
     const actor = transaction ? await authenticate(request, env, store) : actorBefore;
     authenticationMs = Date.now() - requestStarted;
     const scope = new Scope(transaction || store, actor);
@@ -630,8 +688,6 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       const teacher = { schoolId: invitation.id, displayName: profile.name, fullName: profile.name, providedEmail: invitation.email, email: invitation.email,
         subject: profile.subject, sections: profile.sections, role: "teacher", active: true, status: "invited", isRegistered: false,
         webInvitationNonce: invitation.nonce, createdAt: { $type: "serverTimestamp" } };
-      // The private reservation's nonce is committed only by this action.
-      // Mobile registration merges UID fields into the existing invitation.
       await scope.get("users/" + invitation.id);
       await transaction.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); transaction = null;
       return respond({ id: invitation.id });
@@ -654,16 +710,11 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       });
       const resultQueries = refs.filter(ref => ref.kind === "query" && /^users\/[A-Za-z0-9_-]+\/test_results\/term_0[1-3]\/lessons$/.test(ref.path) &&
         !ref.filters.length && !ref.order.length && ref.limit >= 4);
-      // A visible group shares two batch reads: current student profiles for
-      // ownership, then their fixed lesson documents. Never return any results
-      // until every reference in the request has passed authorization.
       if (resultQueries.length > 1) {
         const paths = [...new Set(resultQueries.map(ref => "users/" + ref.parts[1]))];
         const profiles = await store.getAll(paths);
         for (const path of paths) scope.reads.set(path, Promise.resolve(profiles.get(path)));
       }
-      // Authorize the whole group before returning any records; memoized class
-      // checks are shared across a page's concurrent report requests.
       await Promise.all(refs.map(ref => scope.authorizeRead(ref)));
       const sectionIds = actor.role === "teacher" && refs.some(ref => ref.parts[0] === "terms" && ref.parts[2] === "lessons")
         ? (await scope.assignedClasses()).map(section => section.id) : [];
@@ -689,8 +740,6 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
         }
         let records = ref.path === "classes" ? (await scope.assignedClasses()).slice(0, ref.limit) : await store.query(ref.path, ref);
         if (ref.path === "generatedQuizzes") {
-          // Old or forged UID matches never grant access to another profile's
-          // quizzes or sections after a teacher account has been replaced.
           records = (await Promise.all(records.map(async row => {
             if (row.data.teacherProfileId !== actor.id) return null;
             try {
