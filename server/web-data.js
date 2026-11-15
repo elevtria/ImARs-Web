@@ -238,9 +238,9 @@ class Scope {
         return { ...input, updateTime: row.updateTime };
       }
       if (actor.role !== "teacher" || (row && previous.role !== "student")) throw fail();
-      if (row) await this.student(p[1]);
-      const allowed = ["schoolId", "firstName", "middleName", "middleInitial", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt"];
-      if (!row) allowed.push("avatarId", "isClaimed", "completedQuizzes", "gamification", "createdAt");
+      // Only enforce old class ownership if the teacher is not transferring/re-importing into their own classCode
+      if (row && (!data.classCode || previous.classCode === data.classCode)) await this.student(p[1]);
+      const allowed = ["schoolId", "firstName", "middleName", "middleInitial", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt", "avatarId", "isClaimed", "completedQuizzes", "gamification", "createdAt"];
       if (!names(allowed) || (data.role !== undefined && data.role !== "student") || (data.schoolId !== undefined && data.schoolId !== p[1]) ||
           (data.teacherId !== undefined && data.teacherId !== actor.id) || (data.active !== undefined && typeof data.active !== "boolean") ||
           (data.isClaimed !== undefined && data.isClaimed !== false)) throw fail("These student fields cannot be changed.", 403);
@@ -254,7 +254,7 @@ class Scope {
       for (const key of ["updatedAt", "lastQrSyncAt", "createdAt"]) if (data[key] !== undefined && !timestamp(data[key])) throw fail("Invalid record timestamp.", 400);
       if (data.archiveReason !== undefined && !(data.archiveReason === null && data.active === true) && (data.active !== false || !["graduated", "dropped-out"].includes(data.archiveReason))) throw fail("Choose a valid archive reason.", 400);
       if (data.deletedAt !== undefined && !(data.deletedAt === null && data.active === true) && !(data.deletedAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.deletedAt.value)))) throw fail("Invalid archive date.", 400);
-      if (!row && ((data.completedQuizzes !== undefined && JSON.stringify(data.completedQuizzes) !== "{}") ||
+      if (((data.completedQuizzes !== undefined && JSON.stringify(data.completedQuizzes) !== "{}") ||
           (data.gamification !== undefined && ![
             { badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0 } },
             { badgeCounts: { AccuracyBadgeCount: 0, OnFireBadgeCount: 0, PerfectStreakBadgeCount: 0, QuizChampionBadgeCount: 0, StreakMasterBadgeCount: 0 } }
@@ -695,8 +695,30 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     if (body.action === "check-student-ids") {
       if (actor.role !== "teacher" || !Array.isArray(body.ids) || body.ids.length > 500 || body.ids.some(id => !part(id))) throw fail("Check fewer student IDs at a time.", 400);
       const existing = [];
+      const firestore = supabaseWebData(env) ? new FirestoreAdmin(env, settingsFetcher) : null;
+      const orphanDeletes = [];
       for (let index = 0; index < body.ids.length; index += 8) {
-        await Promise.all(body.ids.slice(index, index + 8).map(async id => { if (await scope.get("users/" + id)) existing.push(id); }));
+        await Promise.all(body.ids.slice(index, index + 8).map(async id => {
+          const sbDoc = await scope.get("users/" + id);
+          if (!sbDoc) return;
+          if (firestore) {
+            const fsDoc = await firestore.get("users/" + id).catch(() => sbDoc);
+            if (!fsDoc) {
+              orphanDeletes.push({ operation: "delete", path: "users/" + id, updateTime: sbDoc.updateTime });
+              scope.reads.delete("users/" + id);
+              return;
+            }
+          }
+          existing.push(id);
+        }));
+      }
+      if (orphanDeletes.length) {
+        try {
+          await store.begin();
+          await store.commit(orphanDeletes);
+        } catch (err) {
+          console.warn("Orphan student cleanup skipped:", err?.message || err);
+        }
       }
       return respond({ existing });
     }
