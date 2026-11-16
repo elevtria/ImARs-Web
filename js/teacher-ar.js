@@ -25,6 +25,10 @@ function buttons() {
   element("arPresentation").disabled = !scanning || startingCamera;
   element("arRefresh").disabled = !scanning || startingCamera;
   element("arNarration").disabled = !modelReady || muted || !(selectedLabel?.audio || selectedLabel?.interactiveAudio);
+  element("arDissect").hidden = !selected?.dissection;
+  element("arDissect").disabled = !modelReady;
+  element("arDissect").textContent = scene?.dissected ? "Show whole model" : "Show inside";
+  element("arDissect").setAttribute("aria-pressed", String(Boolean(scene?.dissected)));
 }
 function placeholder(title, text) {
   element("arPlaceholderTitle").textContent = title; element("arPlaceholderText").textContent = text; element("arPlaceholder").hidden = false;
@@ -69,7 +73,7 @@ function engine() { return enginePromise ||= import("./teacher-ar-scene.js").cat
 async function ensureScene(account) {
   const { TeacherARScene } = await engine(); if (!owner || owner !== account) return null;
   scene ||= new TeacherARScene({ stage: element("arStage"), overlay: element("arHotspots"), onStatus: say, onTracking: tracking,
-    onSelect: selectLabel, onModelDetected: id => { void recognizeModel(id); } });
+    onSelect: selectLabel, onModelDetected: id => { void recognizeModel(id); }, onDissection: buttons });
   return scene;
 }
 async function recognizeModel(id) {
@@ -81,6 +85,7 @@ async function recognizeModel(id) {
   narration.stop(); selectedLabel = null; selected = item; ready = false; loadingModel = true;
   element("arRetry").hidden = true; element("arDescription").hidden = true;
   element("arTitle").textContent = item.title; element("arTopicName").textContent = item.topic; element("arMarkerDetails").hidden = false;
+  element("arHint").textContent = item.dissection ? "Click the model to open or close its cutaway. Click a pulsing spot to hear its narration." : "Click a pulsing spot to hear its narration. Drag to rotate; Show labels displays each part’s name.";
   element("arMarkerImage").src = item.marker; element("arMarkerImage").alt = `${item.title} marker`;
   element("arMarkerDownload").href = item.marker; element("arMarkerDownload").download = `ImARs-${item.title.replace(/[^a-z0-9]+/gi, "-")}-marker.png`;
   const parts = element("arParts"); parts.replaceChildren();
@@ -130,6 +135,7 @@ element("arRotateRight").addEventListener("click", () => scene?.rotate(1));
 element("arZoom").addEventListener("input", event => scene?.setZoom(event.target.value));
 element("arReset").addEventListener("click", () => { scene?.reset(); element("arZoom").value = "1"; clearSelection(); });
 element("arFullModel").addEventListener("click", clearSelection);
+element("arDissect").addEventListener("click", () => { if (ready && scene) scene.setDissected(!scene.dissected); });
 element("arLabels").addEventListener("click", () => { labelsVisible = !labelsVisible; scene?.setLabels(labelsVisible); element("arLabels").textContent = labelsVisible ? "Hide labels" : "Show labels"; element("arLabels").setAttribute("aria-pressed", String(labelsVisible)); });
 element("arPause").addEventListener("click", () => { scene?.setPaused(!scene.paused); buttons(); });
 element("arPresentation").addEventListener("click", () => setPresentation(!scene?.presenting));

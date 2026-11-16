@@ -39,6 +39,14 @@
 .ar-subtitles { position: absolute; z-index: 6; bottom: 76px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(85%, 760px); padding: 12px 18px; border-radius: 12px; background: #10233be6; color: #fff; box-shadow: 0 3px 14px #0002; font-size: clamp(13px, 1.1vw, 17px); font-weight: 600; line-height: 1.6; text-align: center; pointer-events: none; }
 .ar-hotspot, .teacher-ar-hotspot { position: absolute; max-width: 160px; padding: 6px 10px; transform: translate(-50%, -100%); border: 1px solid #95b6df; border-radius: 9px; background: #ffffffed; color: #153a68; font: inherit; font-size: 11px; font-weight: 700; box-shadow: 0 3px 12px #16395a18; pointer-events: auto; cursor: pointer; }
 .teacher-ar-hotspot[hidden] { display: none; }
+.teacher-ar-hotspot { display: inline-flex; align-items: center; gap: 7px; min-width: 30px; min-height: 30px; }
+.teacher-ar-hotspot::before { content: ""; flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: #1262e8; box-shadow: 0 0 0 3px #1262e822; }
+.teacher-ar-hotspot[data-labels="false"] { width: 32px; height: 32px; padding: 0; justify-content: center; font-size: 0; border: 2px solid white; border-radius: 50%; background: #ffffffed; transform: translate(-50%, -50%); box-shadow: 0 2px 10px #10233b66; }
+.teacher-ar-hotspot[data-labels="false"]::after { content: ""; position: absolute; inset: -9px; border: 2px solid #ffffffdf; border-radius: 50%; background: #1262e818; animation: ar-tap-pulse 1.6s ease-out infinite; pointer-events: none; }
+.teacher-ar-hotspot[aria-pressed="true"] { border-color: #1262e8; background: #e3f1ff; }
+.teacher-ar-hotspot:hover::before { background: #084bc0; box-shadow: 0 0 0 5px #1262e833; }
+@keyframes ar-tap-pulse { 0% { transform: scale(.7); opacity: .95; } 100% { transform: scale(1.4); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .teacher-ar-hotspot[data-labels="false"]::after { animation: none; opacity: .65; } }
 .ar-lesson-panel { padding: 22px; border-radius: 24px; }
 .ar-eyebrow { color: #52789f; font-size: 10px; letter-spacing: .1em; font-weight: 800; }
 .ar-panel-heading h2 { margin: 8px 0; color: var(--ink); font-size: 22px; line-height: 1.25; }
@@ -61,7 +69,7 @@
 .ar-preferences { display: grid; gap: 14px; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
 .ar-stage-card.is-presenting { position: fixed; inset: 0; z-index: 300; border: 0; border-radius: 0; }
 .ar-stage-card.is-presenting .ar-stage { height: 100dvh; min-height: 0; }
-.ar-stage-card.is-presenting :is(.ar-model-controls, .ar-hint, .ar-stage-top, .ar-hotspots) { display: none; }
+.ar-stage-card.is-presenting :is(.ar-model-controls, .ar-hint, .ar-stage-top) { display: none; }
 body.ar-presenting { overflow: hidden; }
 [data-theme="dark"] .ar-stage { background: radial-gradient(ellipse at 50% 35%, #28496d, #101d30 80%); }
 @media (max-width: 1000px) { .ar-classroom { grid-template-columns: minmax(0, 1fr); } .ar-lesson-panel { width: 100%; } .ar-stage { height: 55vh; min-height: 360px; } }

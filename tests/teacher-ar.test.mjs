@@ -14,10 +14,11 @@ test("all 27 app markers have compiled tracking targets, embedded 3D models, and
   assert.deepEqual(new Set(teacherARScanner.targetModels), new Set(teacherARCatalog.map(item => item.id)), "one scanner covers every model without a lesson selector");
   const files = new Set();
   for (const item of teacherARCatalog) {
+    const assets = [...item.models, ...(item.dissection ? [item.dissection.model] : [])];
     assert.ok(item.title && item.topic && item.markerName);
     assert.ok(item.labels.length);
     assert.ok(item.targetCount >= 1 && item.markerSources.length);
-    for (const path of [item.marker, item.target, ...item.models.map(model => model.url), ...item.labels.flatMap(label => [label.audio, label.interactiveAudio]).filter(Boolean)]) {
+    for (const path of [item.marker, item.target, ...assets.map(model => model.url), ...item.labels.flatMap(label => [label.audio, label.interactiveAudio]).filter(Boolean)]) {
       assert.match(path, /^\/assets\/(teacher-ar|showcase)\/[a-z0-9.-]+$/);
       assert.ok(existsSync(new URL(`..${path}`, import.meta.url)), path);
       files.add(path);
@@ -25,7 +26,7 @@ test("all 27 app markers have compiled tracking targets, embedded 3D models, and
     const target = readFileSync(new URL(`..${item.target}`, import.meta.url));
     assert.equal(target[0], 0x82, "MindAR target is a MessagePack map");
     assert.ok(target.includes(Buffer.from("dataList")));
-    for (const model of item.models) {
+    for (const model of assets) {
       const bytes = readFileSync(new URL(`..${model.url}`, import.meta.url));
       assert.equal(bytes.toString("ascii", 0, 4), "glTF");
       assert.equal(bytes.readUInt32LE(4), 2);
@@ -44,6 +45,19 @@ test("all 27 app markers have compiled tracking targets, embedded 3D models, and
     }
   }
   assert.ok(files.size > 100, "complete original marker and narration set is included");
+});
+
+test("heart and volcano load the whole model first and include their own mobile cutaway separately", () => {
+  for (const title of ["Heart", "Volcano"]) {
+    const item = teacherARCatalog.find(item => item.title === title);
+    assert.equal(item.models.length, 1, "alternate views are never arranged side by side");
+    assert.equal(item.dissection.kind, title.toLowerCase());
+    assert.notEqual(item.models[0].url, item.dissection.model.url);
+  }
+  const heart = teacherARCatalog.find(item => item.title === "Heart");
+  assert.match(heart.dissection.model.url, /heart-cutaway-[a-f0-9]+\.glb$/);
+  assert.deepEqual(heart.labels.find(label => label.title === "Mitral valve").parts.map(part => part.model), [heart.dissection.model.name]);
+  assert.equal(teacherARCatalog.find(item => item.title === "Volcano").dissection.model.root, "Original volcano BACK half");
 });
 
 test("nested constellation markers keep their own models and narration instead of appearing together", () => {
@@ -188,7 +202,7 @@ test("refresh ignores old tracking callbacks and stopping never reveals a standa
   scene.draw(); assert.equal(scene.model.visible, false);
 });
 
-test("teaching labels stay steady through mesh animation but follow model rotation and zoom", async () => {
+async function engineMath() {
   // Use the shipped engine's actual vector, bounds and projection math without
   // constructing a renderer or opening a camera.
   const previousWindow = globalThis.window, previousDocument = globalThis.document;
@@ -200,7 +214,12 @@ test("teaching labels stay steady through mesh animation but follow model rotati
     if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
     if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;
   }
-  const context = vm.createContext({ THREE, MindARThree: class {}, document: { createElement: () => ({ style: {}, addEventListener() {} }) } });
+  return THREE;
+}
+
+test("teaching labels stay steady through mesh animation but follow model rotation and zoom", async () => {
+  const THREE = await engineMath();
+  const context = vm.createContext({ THREE, MindARThree: class {}, document: { createElement: () => ({ style: {}, dataset: {}, setAttribute() {}, addEventListener() {} }) } });
   vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
   const Scene = vm.runInContext("TeacherARScene", context);
   const model = new THREE.Group(), content = new THREE.Group(); model.add(content);
@@ -220,7 +239,78 @@ test("teaching labels stay steady through mesh animation but follow model rotati
   model.scale.setScalar(1.5); model.updateMatrixWorld(true);
   assert.notDeepEqual(position(), rotated, "zooming the complete model moves its label with it");
   assert.match(first.left, /^\d+px$/); assert.match(first.top, /^\d+px$/);
+  scene.setLabels(false); assert.equal(scene.hotspots[0].button.hidden, false, "narration indicators stay visible with text labels off");
+  assert.equal(scene.hotspots[0].button.dataset.labels, "false");
+  scene.presenting = true; scene.positionHotspots(); assert.equal(scene.hotspots[0].button.hidden, false, "presentation mode keeps narration discoverable");
+  scene.tracked = false; scene.positionHotspots(); assert.equal(scene.hotspots[0].button.hidden, true, "no floating tap targets after marker loss");
   part.geometry.dispose(); part.material.dispose();
+});
+
+test("clicking a heart or volcano swaps whole and interior views, with correct label visibility and reset", async () => {
+  const math = await engineMath();
+  const node = () => ({ style: {}, dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, addEventListener() {}, remove() {} });
+  for (const title of ["Heart", "Volcano"]) {
+    let scene;
+    const item = teacherARCatalog.find(item => item.title === title), cameras = { camera: new math.PerspectiveCamera() };
+    cameras.camera.position.set(0, 0, 8); cameras.camera.lookAt(0, 0, 0); cameras.camera.updateMatrixWorld(true);
+    const resources = [];
+    class Loader {
+      async parseAsync(url) {
+        const group = new math.Group();
+        const mesh = () => {
+          const geometry = new math.BoxGeometry(1, 2, .7), material = new math.MeshStandardMaterial();
+          resources.push(geometry, material); return new math.Mesh(geometry, material);
+        };
+        if (url === item.dissection.model.url && item.dissection.model.root) {
+          const inside = new math.Group(), magma = mesh(); magma.name = "Inside_magma";
+          inside.name = "Original_volcano_BACK_half"; inside.add(magma);
+          group.add(inside, mesh(), mesh());
+          return { scene: group, animations: [new math.AnimationClip("Cutaway", 1, [
+            new math.VectorKeyframeTrack("Original_volcano_BACK_half.position", [0, 1], [0, 0, 0, 9, 0, 0]),
+            new math.VectorKeyframeTrack("Inside_magma.position", [0, 1], [0, 0, 0, 0, .1, 0])
+          ])] };
+        } else group.add(mesh());
+        return { scene: group, animations: [] };
+      }
+    }
+    const THREE = { ...math, Raycaster: class {
+      setFromCamera() {}
+      intersectObject() { return scene.modelFrames.map(model => ({ object: model.root.children[0] })); }
+    } };
+    const context = vm.createContext({ THREE, GLTFLoader: Loader, MindARThree: class {}, AbortController,
+      fetch: async url => ({ ok: true, arrayBuffer: async () => url }), document: { createElement: node } });
+    vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
+    const Scene = vm.runInContext("TeacherARScene", context);
+    scene = Object.assign(Object.create(Scene.prototype), { scene: new math.Scene(), generation: 0, highlighted: [], hotspots: [],
+      tracker: cameras, activeAnchor: { modelId: item.id, group: new math.Group() }, overlay: { append() {} },
+      stage: { clientWidth: 800, clientHeight: 500, setPointerCapture() {}, hasPointerCapture: () => false, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 500 }) },
+      pointers: new Map(), onTracking() {}, onSelect() {}, draw() {} });
+    assert.equal(await scene.load(item), true);
+    assert.equal(scene.tracker, cameras, "loading a cutaway retains the active camera");
+    assert.equal(scene.wholeFrame.visible, true); assert.equal(scene.cutawayFrame.visible, false);
+    assert.equal(scene.wholeFrame.position.x, scene.cutawayFrame.position.x, "alternate views share the marker centre");
+    if (title === "Volcano") {
+      assert.equal(scene.modelFrames[1].root.children.length, 1, "comparison-scene labels and the second volcano half are omitted");
+      assert.equal(scene.modelFrames[1].root.children[0].name, "Original_volcano_BACK_half");
+      scene.mixers[1].update(.5);
+      assert.equal(scene.modelFrames[1].root.children[0].position.x, 0, "the source comparison animation cannot slide the interior off the marker");
+    }
+    const tap = () => {
+      const event = { pointerId: 1, clientX: 400, clientY: 250, target: { closest: () => null } };
+      scene.pointer({ ...event, type: "pointerdown" }); scene.pointer({ ...event, type: "pointerup" });
+    };
+    tap(); assert.equal(scene.dissected, true); assert.equal(scene.wholeFrame.visible, false); assert.equal(scene.cutawayFrame.visible, true);
+    tap(); assert.equal(scene.dissected, false); assert.equal(scene.wholeFrame.visible, true);
+    if (title === "Heart") {
+      const valve = scene.hotspots.find(hotspot => hotspot.label.title === "Mitral valve");
+      assert.equal(valve.button.hidden, true, "internal valve indicators stay hidden on the whole heart");
+      scene.selectLabel(valve.label.id); assert.equal(scene.dissected, true); assert.equal(valve.button.hidden, false, "choosing an internal part opens the heart");
+    } else { scene.selectLabel(item.labels[0].id); assert.equal(scene.dissected, true); }
+    scene.selectLabel(null); assert.equal(scene.dissected, false, "Full model restores the whole view");
+    scene.setDissected(true); scene.reset(); assert.equal(scene.dissected, false);
+    scene.clearModel(); assert.equal(scene.cutawayFrame, null); assert.equal(scene.model, null);
+    resources.forEach(resource => resource.dispose());
+  }
 });
 
 function classroom() {
@@ -254,6 +344,7 @@ function classroom() {
     clearModel() { this.model = null; }
     setLabels(value) { this.labelsVisible = value; } setQuality(value) { this.quality = value; }
     setPaused(value) { this.paused = value; } setZoom(value) { this.zoom = value; }
+    setDissected(value) { this.dissected = value; this.options.onDissection(); }
     selectLabel(value) { this.label = value; } reset() {} resize() {}
     async startScanning(device, scanner) { this.scanner = scanner; this.starts++; this.tracker = { stream: { getVideoTracks: () => [{ getSettings: () => ({ deviceId: "camera" }) }] } }; return true; }
     stopScanning() { this.tracker = null; this.tracked = false; this.stops = (this.stops || 0) + 1; this.options.onTracking(false); }
@@ -307,6 +398,11 @@ test("scan-only classroom loads models automatically and keeps teacher controls 
   page.element("arFullModel").emit("click"); assert.equal(scene.label, null);
   assert.equal(page.element("arDescription").hidden, true);
   assert.equal(page.document.body.classList.values.has("ar-presenting"), false);
+  assert.equal(page.element("arDissect").hidden, true);
+  scene.detect(teacherARCatalog.find(item => item.title === "Heart").id); await page.settle();
+  assert.equal(page.element("arDissect").hidden, false); assert.equal(page.element("arDissect").disabled, false);
+  page.element("arDissect").emit("click"); assert.equal(scene.dissected, true); assert.equal(page.element("arDissect").textContent, "Show whole model");
+  page.element("arDissect").emit("click"); assert.equal(scene.dissected, false);
 });
 
 test("hidden pages and sign-out stop the teacher camera and dispose the old classroom", async () => {

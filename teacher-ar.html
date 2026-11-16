@@ -43,11 +43,12 @@
             <button class="ghost-btn" type="button" id="arRotateLeft" aria-label="Rotate model left" disabled>↶</button><button class="ghost-btn" type="button" id="arRotateRight" aria-label="Rotate model right" disabled>↷</button>
             <label>Zoom<input id="arZoom" type="range" min="0.5" max="2" step="0.05" value="1" disabled /></label>
             <button class="ghost-btn" id="arReset" type="button" disabled>Reset view</button>
+            <button class="ghost-btn" id="arDissect" type="button" aria-pressed="false" hidden disabled>Show inside</button>
             <button class="ghost-btn" id="arLabels" type="button" aria-pressed="false" disabled>Show labels</button>
             <button class="ghost-btn" id="arScreenshot" type="button" disabled>Screenshot</button>
             <button class="ghost-btn" id="arRefresh" type="button" disabled>Refresh tracking</button>
           </div>
-          <p class="ar-hint" id="arHint">Keep the whole marker near the centre of the camera. When its model appears, drag to rotate or select a label to hear its narration.</p>
+          <p class="ar-hint" id="arHint">Keep the whole marker near the centre of the camera. Click a pulsing spot on the model to hear its narration.</p>
         </section>
         <aside class="ar-lesson-panel card" aria-label="Lesson descriptions and marker">
           <div class="ar-panel-heading"><span class="ar-eyebrow">TEACHER VIEW</span><h2 id="arTitle">Scan a lesson marker</h2><p id="arTopicName">Its model, labels and narration will appear automatically.</p></div>

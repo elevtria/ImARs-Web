@@ -13,6 +13,10 @@ teacher portal. Admin and student accounts cannot open it.
   restarting the camera. Only the recognized model's files are loaded. Expand
   **View this model’s marker** to check or download its image.
 - Drag to rotate, use the zoom slider or rotation buttons, and **Reset view**.
+- Click the heart or volcano to toggle its interior cutaway, or use **Show inside**.
+  **Full model** and **Reset view** restore the whole model. Selecting an internal
+  heart part opens the interior automatically; the cutaway and whole view share
+  the same marker position rather than appearing side by side.
 - **Stop camera** hides and releases the model and returns to the scan prompt.
 - **Pause animation** / **Resume animation** freezes the model's animation clips.
   Models without clips show **Static model**.
@@ -24,6 +28,10 @@ teacher portal. Admin and student accounts cannot open it.
 - Teaching labels use stable attachment points in the complete model's coordinate
   frame. They follow manual rotation/zoom and marker positioning while staying
   steady during mesh animations such as moving rain, clouds or machine parts.
+- Pulsing narration spots stay visible when text labels are off and in presentation
+  mode. Click a spot to start narration; **Show labels** adds the part names.
+  Spots for internal heart anatomy appear only in the cutaway. The pulse respects
+  the device's reduced-motion preference.
 - **Show labels**, **Full model**, narration mute, and graphics quality controls
   support teaching and presentation.
 - **Presentation mode** fills the window with the model/camera and hides the other
@@ -40,7 +48,7 @@ The feature does not create student scores, completion records or AR-time record
 ## Teaching assets
 
 All 27 image targets from the Unity app's `Assets/SCENEAR.unity` are represented,
-including multi-model volcano content. The catalog includes 79
+including the heart and volcano interior views. The catalog includes 79
 original description/narration bindings. Runtime assets are self-hosted.
 
 Models and label bindings belong to their nearest image target in Unity's
@@ -55,8 +63,11 @@ are included, together with the app's exact caption cue times and answer boundar
 `js/teacher-ar-catalog.js` maps original marker names to their images, compiled
 MindAR targets, models and recorded narration. New copied files use content hashes
 under `assets/teacher-ar/`; ten previously optimized models reuse the web showcase.
-Full-size Unity originals are unchanged. Multi-model content is framed together
-on its marker. Unity-specific particle/shader effects are not executed by
+Full-size Unity originals are unchanged. The heart's FBX interior is converted to
+a standalone GLB with embedded textures and reduced mesh density. The volcano's
+cutaway uses only the interior half of its source comparison scene. Its model-level
+comparison animation is omitted while smoke and lava continue animating.
+Unity-specific particle/shader effects are not executed by
 the browser; GLB animation clips are used.
 
 Each model recognizes its classroom image plus matching versions from the existing
@@ -95,6 +106,12 @@ changing the original Unity content. Run from the repository root.
    `node scripts/build-teacher-ar-runtime.mjs`. Review the title mapping when
    adding or rearranging Unity targets.
 6. Run the AR tests and `npm run build`.
+
+When updating `half.fbx`, run Blender in background mode with
+`--python scripts/prepare-teacher-heart.py -- <path-to-half.fbx>` before step 5.
+This writes the content-hashed GLB and `scripts/teacher-ar-converted-models.json`.
+The catalog builder checks the source fingerprint so an outdated conversion cannot
+silently replace a newer mobile cutaway.
 
 The runtime contains two small MindAR integration fixes: the resize callback is
 retained for cleanup, and asynchronous tracking-start failures reject normally.

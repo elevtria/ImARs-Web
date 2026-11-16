@@ -69,8 +69,8 @@ export class TeacherMarkerTracker extends MindARThree {
 
 const safeName = name => THREE.PropertyBinding.sanitizeNodeName(name || "").toLowerCase();
 export class TeacherARScene {
-  constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected }) {
-    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect, onModelDetected });
+  constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection }) {
+    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection });
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
     this.quality = "medium";
@@ -101,19 +101,21 @@ export class TeacherARScene {
     const generation = ++this.generation;
     this.clearModel(); this.item = item; this.paused = false; this.zoom = 1;
     const loader = new GLTFLoader(), results = [];
+    const assets = [...item.models, ...(item.dissection ? [item.dissection.model] : [])];
     try {
       // Load models one by one to limit peak memory on classroom phones.
-      for (const asset of item.models) {
+      for (const asset of assets) {
         const response = await fetch(asset.url, { signal });
         if (!response.ok) throw new Error("The model could not be loaded. Please try again.");
         const gltf = await loader.parseAsync(await response.arrayBuffer(), "");
         results.push(gltf);
+        if (asset.root) this.isolateModel(gltf, asset.root);
         if (this.closed || generation !== this.generation) { results.forEach(result => this.disposeObject(result.scene)); return false; }
       }
     } catch (error) { results.forEach(result => this.disposeObject(result.scene)); throw error; }
     this.model = new THREE.Group();
     this.content = new THREE.Group(); this.model.add(this.content);
-    this.mixers = [];
+    this.mixers = []; this.modelFrames = [];
     results.forEach((gltf, index) => {
       const box = new THREE.Box3().setFromObject(gltf.scene), size = box.getSize(new THREE.Vector3());
       const scale = 1.35 / Math.max(size.x, size.y, size.z, .001);
@@ -122,8 +124,9 @@ export class TeacherARScene {
       const center = box.getCenter(new THREE.Vector3());
       gltf.scene.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
       frame.add(gltf.scene);
-      if (results.length > 1) frame.position.set((index % 2 - .5) * 1.6, 0, Math.floor(index / 2) * 1.6 - .8);
+      if (!item.dissection && results.length > 1) frame.position.set((index % 2 - .5) * 1.6, 0, Math.floor(index / 2) * 1.6 - .8);
       this.content.add(frame);
+      this.modelFrames.push({ frame, root: gltf.scene, name: assets[index].name });
       const mixer = new THREE.AnimationMixer(gltf.scene);
       // GLB tracks and clips come from the original teaching models.
       gltf.animations.forEach(clip => mixer.clipAction(clip).play());
@@ -134,6 +137,10 @@ export class TeacherARScene {
     this.content.scale.setScalar(scale);
     this.scene.add(this.model);
     this.animated = results.some(result => result.animations.length);
+    if (item.dissection) {
+      this.wholeFrame = this.modelFrames[0].frame;
+      this.cutawayFrame = this.modelFrames.at(-1).frame;
+    }
     this.buildHotspots(item.labels);
     this.reset(); this.model.visible = false;
     if (this.tracker && this.activeAnchor?.modelId === item.id && this.activeAnchor.group.visible) {
@@ -143,11 +150,29 @@ export class TeacherARScene {
     this.draw();
     return true;
   }
+  isolateModel(gltf, name) {
+    let selected;
+    gltf.scene.traverse(node => { if (safeName(node.name) === safeName(name)) selected = node; });
+    if (!selected) throw new Error("The cutaway model could not be found.");
+    // The teaching source includes a comparison scene. Keep the actual interior
+    // half only, so opening the model never adds a second complete volcano.
+    gltf.scene.attach(selected);
+    for (const child of [...gltf.scene.children]) if (child !== selected) { child.removeFromParent(); this.disposeObject(child); }
+    gltf.animations = gltf.animations.map(clip => {
+      const filtered = clip.clone();
+      filtered.tracks = filtered.tracks.filter(track => {
+        const node = THREE.PropertyBinding.findNode(gltf.scene, THREE.PropertyBinding.parseTrackName(track.name).nodeName);
+        return node && node !== selected; // Keep the interior centred while smoke/lava animate.
+      });
+      return filtered;
+    }).filter(clip => clip.tracks.length);
+  }
   findPart(part) {
+    const root = this.modelFrames?.find(frame => frame.name === part.model)?.root || this.content;
     const name = safeName(part.path?.split("/").pop());
-    if (!name || name === "node_0") return this.content;
+    if (!name || name === "node_0") return root;
     let found;
-    this.content.traverse(node => { if (!found && safeName(node.name) === name) found = node; });
+    root.traverse(node => { if (!found && safeName(node.name) === name) found = node; });
     return found;
   }
   buildHotspots(labels) {
@@ -165,6 +190,8 @@ export class TeacherARScene {
       });
       const button = document.createElement("button");
       button.type = "button"; button.className = "teacher-ar-hotspot"; button.textContent = label.title;
+      button.setAttribute("aria-label", `Play narration: ${label.title}`);
+      button.title = `Click to hear about ${label.title}`;
       button.hidden = true;
       button.addEventListener("click", event => { event.stopPropagation(); this.onSelect(label.id); });
       this.overlay.append(button);
@@ -172,13 +199,18 @@ export class TeacherARScene {
     });
   }
   setLabels(visible) { this.labelsVisible = visible; this.positionHotspots(); }
+  partVisible(node) {
+    for (let current = node; current && current !== this.model; current = current.parent) if (!current.visible) return false;
+    return true;
+  }
   positionHotspots() {
     if (!this.model) return;
     const camera = this.tracker?.camera;
     for (const hotspot of this.hotspots) {
-      const part = hotspot.parts[0];
-      const visible = this.labelsVisible && !this.presenting && this.tracker && this.tracked && Boolean(part);
+      const part = hotspot.parts.find(part => this.partVisible(part.node));
+      const visible = this.tracker && this.tracked && Boolean(part);
       hotspot.button.hidden = !visible;
+      hotspot.button.dataset.labels = String(Boolean(this.labelsVisible && !this.presenting));
       if (!visible) continue;
       const point = this.model.localToWorld(part.modelPoint.clone());
       point.project(camera);
@@ -190,6 +222,9 @@ export class TeacherARScene {
   selectLabel(id) {
     this.restoreHighlight();
     const hotspot = this.hotspots.find(item => item.label.id === id);
+    if (id === null) this.setDissected(false);
+    else if (this.item?.dissection && hotspot && (this.item.dissection.kind === "volcano" || hotspot.parts.every(part => !this.partVisible(part.node)))) this.setDissected(true);
+    this.hotspots.forEach(item => item.button.setAttribute("aria-pressed", String(item === hotspot)));
     for (const part of hotspot?.parts || []) {
       if (part.node === this.content) continue;
       part.node.traverse(node => {
@@ -212,11 +247,18 @@ export class TeacherARScene {
     }
     this.highlighted = [];
   }
+  setDissected(value) {
+    if (!this.cutawayFrame || !this.wholeFrame) return;
+    this.dissected = Boolean(value);
+    this.wholeFrame.visible = !this.dissected; this.cutawayFrame.visible = this.dissected;
+    this.positionHotspots(); this.onDissection?.();
+  }
   reset() {
     if (!this.model) return;
     this.model.rotation.set(Math.PI / 2, 0, 0);
     this.zoom = 1; this.model.scale.setScalar(1);
     this.restoreHighlight();
+    this.setDissected(false);
   }
   setZoom(value) { this.zoom = Math.max(.5, Math.min(2, Number(value) || 1)); this.model?.scale.setScalar(this.zoom); }
   rotate(direction) { if (this.model) this.model.rotateY(direction * Math.PI / 12); }
@@ -306,8 +348,9 @@ export class TeacherARScene {
     const box = this.stage.getBoundingClientRect();
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2((event.clientX - box.left) / box.width * 2 - 1, -(event.clientY - box.top) / box.height * 2 + 1), this.tracker.camera);
-    const hit = ray.intersectObject(this.model, true)[0];
+    const hit = ray.intersectObject(this.model, true).find(hit => this.partVisible(hit.object));
     if (!hit) return;
+    if (this.cutawayFrame) { this.setDissected(!this.dissected); return; }
     const parents = new Set(); for (let node = hit.object; node; node = node.parent) parents.add(node);
     const hotspot = this.hotspots.find(item => item.parts.some(part => part.node !== this.content && parents.has(part.node)))
       || this.hotspots.filter(item => item.parts.some(part => part.node === this.content)).sort((first, second) => {
@@ -356,7 +399,7 @@ export class TeacherARScene {
     this.mixers?.forEach(mixer => { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); });
     this.mixers = [];
     if (this.model) { this.model.removeFromParent(); this.disposeObject(this.model); }
-    this.model = null;
+    this.model = null; this.modelFrames = []; this.wholeFrame = this.cutawayFrame = null; this.dissected = false;
     this.hotspots?.forEach(hotspot => hotspot.button.remove()); this.hotspots = [];
   }
   dispose() {

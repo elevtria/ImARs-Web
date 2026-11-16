@@ -1476,6 +1476,13 @@ export const teacherARCatalog = [
         "name": "Pumping._heart_final (1)"
       }
     ],
+    "dissection": {
+      "kind": "heart",
+      "model": {
+        "url": "/assets/teacher-ar/heart-cutaway-cd821c4389b69f5e.glb",
+        "name": "half"
+      }
+    },
     "labels": [
       {
         "id": "label-1",
@@ -1507,7 +1514,8 @@ export const teacherARCatalog = [
               "x": 0.3636558,
               "y": 0.7880288,
               "z": -0.37073666
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1515,7 +1523,8 @@ export const teacherARCatalog = [
               "x": 0.6855433,
               "y": 0.117507,
               "z": -0.48561352
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1549,7 +1558,8 @@ export const teacherARCatalog = [
               "x": 0.4056162,
               "y": -0.2517314,
               "z": 0.3676921
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1557,7 +1567,8 @@ export const teacherARCatalog = [
               "x": 0.3290462,
               "y": 0.9036803,
               "z": 0.38585472
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1595,7 +1606,8 @@ export const teacherARCatalog = [
               "x": -0.3776427,
               "y": -0.4049594,
               "z": 0.5903332
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1603,7 +1615,8 @@ export const teacherARCatalog = [
               "x": -0.6437861,
               "y": 0.6877696,
               "z": 0.47996593
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1637,7 +1650,8 @@ export const teacherARCatalog = [
               "x": 0.6154176,
               "y": 0.345857,
               "z": -0.24342567
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1645,7 +1659,8 @@ export const teacherARCatalog = [
               "x": 0.8011559,
               "y": 0.6730342,
               "z": -0.06587803
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1679,7 +1694,8 @@ export const teacherARCatalog = [
               "x": -0.44757652,
               "y": 0.5362973,
               "z": -0.121537864
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1687,7 +1703,8 @@ export const teacherARCatalog = [
               "x": -0.48641604,
               "y": 0.597735,
               "z": -0.4705558
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1721,7 +1738,8 @@ export const teacherARCatalog = [
               "x": -0.82521915,
               "y": 0.207952,
               "z": 0.0441564
-            }
+            },
+            "model": "half"
           },
           {
             "path": "node_0",
@@ -1729,7 +1747,8 @@ export const teacherARCatalog = [
               "x": -0.7582371,
               "y": 0.41988528,
               "z": -0.30492026
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           }
         ]
       },
@@ -1763,7 +1782,8 @@ export const teacherARCatalog = [
               "x": 0.5342944,
               "y": 0.13571608,
               "z": 0.20998669
-            }
+            },
+            "model": "half"
           }
         ]
       },
@@ -1797,7 +1817,8 @@ export const teacherARCatalog = [
               "x": -0.31889832,
               "y": 0.050346136,
               "z": 0.2708776
-            }
+            },
+            "model": "half"
           }
         ]
       },
@@ -1835,7 +1856,8 @@ export const teacherARCatalog = [
               "x": 0,
               "y": -0.8,
               "z": 0
-            }
+            },
+            "model": "Pumping._heart_final (1)"
           },
           {
             "path": "",
@@ -1843,7 +1865,8 @@ export const teacherARCatalog = [
               "x": 0,
               "y": -0.8,
               "z": 0
-            }
+            },
+            "model": "half"
           }
         ]
       }
@@ -1863,14 +1886,18 @@ export const teacherARCatalog = [
     ],
     "models": [
       {
-        "url": "/assets/teacher-ar/asset-3f04f31d72c0b7d8.glb",
-        "name": "half volcano"
-      },
-      {
         "url": "/assets/showcase/volcano.glb",
         "name": "VulcanoSure"
       }
     ],
+    "dissection": {
+      "kind": "volcano",
+      "model": {
+        "url": "/assets/teacher-ar/asset-3f04f31d72c0b7d8.glb",
+        "name": "half volcano",
+        "root": "Original volcano BACK half"
+      }
+    },
     "labels": [
       {
         "id": "label-1",
