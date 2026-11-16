@@ -1351,6 +1351,9 @@ label[for="activityTermFilter"] .select-wrap { width:120px; }
 }
 
 .topic { text-align: center; width: 160px; }
+.class-analytics .topics { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+.class-analytics .topics > .topic { flex: 0 1 180px; max-width: 100%; }
+.class-analytics .topics > p { width: 100%; text-align: center; }
 .topic .mini-wrap { width: 128px; height: 128px; margin: 0 auto 10px; }
 .topic strong {
   display: block;
