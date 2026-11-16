@@ -29,6 +29,7 @@
       <div class="ar-classroom">
         <section class="ar-stage-card" id="arStageCard" aria-label="Interactive teaching model">
           <div class="ar-stage" id="arStage" aria-label="Drag to rotate the model. Use the zoom and rotate buttons for keyboard controls.">
+            <div class="ar-viewport" id="arViewport">
             <div class="ar-stage-top" id="arStageTop"><span class="ar-mode" id="arMode">Camera off</span><span id="arTracking" hidden>Looking for a lesson marker</span></div>
             <div class="ar-hotspots" id="arHotspots"></div>
             <div class="ar-subtitles" id="arSubtitles" role="status" aria-live="polite" aria-atomic="true" hidden></div>
@@ -38,6 +39,16 @@
               <button type="button" id="arPause" aria-pressed="false" disabled>Pause animation</button>
               <button type="button" id="arExitCamera" hidden>Stop camera</button>
             </div>
+            </div>
+            <aside class="ar-callout-rail" id="arCalloutRail" aria-label="Model labels and descriptions" hidden>
+              <div class="ar-description-head"><h3>Model details</h3><button class="ghost-btn" id="arFullModel" type="button" disabled>Full model</button></div>
+              <div class="ar-parts" id="arParts" role="group" aria-label="Model parts and descriptions" hidden></div>
+              <article class="ar-description" id="arDescription" hidden aria-live="polite"><h3 id="arDescriptionTitle"></h3><p id="arDescriptionText"></p><button class="ar-primary" id="arNarration" type="button">Play narration</button><audio id="arAudio" preload="none"></audio></article>
+            </aside>
+            <svg class="ar-description-arrow" id="arDescriptionArrow" aria-hidden="true" focusable="false" hidden>
+              <defs><marker id="arArrowTip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#119ca6" /></marker></defs>
+              <path id="arDescriptionLine" fill="none" stroke="#119ca6" stroke-width="2" stroke-linejoin="round" marker-end="url(#arArrowTip)" />
+            </svg>
           </div>
           <div class="ar-model-controls" id="arModelControls" aria-label="Model controls">
             <button class="ghost-btn" type="button" id="arRotateLeft" aria-label="Rotate model left" disabled>↶</button><button class="ghost-btn" type="button" id="arRotateRight" aria-label="Rotate model right" disabled>↷</button>
@@ -45,6 +56,7 @@
             <button class="ghost-btn" id="arReset" type="button" disabled>Reset view</button>
             <button class="ghost-btn" id="arDissect" type="button" aria-pressed="false" hidden disabled>Show inside</button>
             <button class="ghost-btn" id="arLabels" type="button" aria-pressed="false" disabled>Show labels</button>
+            <button class="ghost-btn" id="arIndicators" type="button" aria-pressed="true" disabled>Hide indicators</button>
             <button class="ghost-btn" id="arScreenshot" type="button" disabled>Screenshot</button>
             <button class="ghost-btn" id="arRefresh" type="button" disabled>Refresh tracking</button>
           </div>
@@ -53,9 +65,7 @@
         <aside class="ar-lesson-panel card" aria-label="Lesson descriptions and marker">
           <div class="ar-panel-heading"><span class="ar-eyebrow">TEACHER VIEW</span><h2 id="arTitle">Scan a lesson marker</h2><p id="arTopicName">Its model, labels and narration will appear automatically.</p></div>
           <details class="ar-marker-details" id="arMarkerDetails" hidden><summary>View this model’s marker</summary><img id="arMarkerImage" alt="Recognized teaching model marker" /><a class="ghost-btn" id="arMarkerDownload" download>Download marker</a><p>Print the marker or show it on another screen, then point your camera at it.</p></details>
-          <div class="ar-description-head"><h3>Explore the model</h3><button class="ghost-btn" id="arFullModel" type="button" disabled>Full model</button></div>
-          <div class="ar-parts" id="arParts" role="group" aria-label="Model parts and descriptions"></div>
-          <article class="ar-description" id="arDescription" hidden aria-live="polite"><h3 id="arDescriptionTitle"></h3><p id="arDescriptionText"></p><button class="ar-primary" id="arNarration" type="button">Play narration</button><audio id="arAudio" preload="none"></audio></article>
+          <p class="ar-panel-help">Click a pulsing circle to see the part’s description and hear its narration. Show labels opens the list beside the model.</p>
           <div class="ar-preferences"><label>Graphics<select id="arQuality"><option value="low">Low — smoother on older devices</option><option value="medium" selected>Balanced</option><option value="high">High</option></select></label><button class="ghost-btn" id="arMute" type="button" aria-pressed="false">Mute narration</button></div>
         </aside>
       </div>

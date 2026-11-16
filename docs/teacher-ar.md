@@ -28,10 +28,16 @@ teacher portal. Admin and student accounts cannot open it.
 - Teaching labels use stable attachment points in the complete model's coordinate
   frame. They follow manual rotation/zoom and marker positioning while staying
   steady during mesh animations such as moving rain, clouds or machine parts.
-- Pulsing narration spots stay visible when text labels are off and in presentation
-  mode. Click a spot to start narration; **Show labels** adds the part names.
-  Spots for internal heart anatomy appear only in the cutaway. The pulse respects
-  the device's reduced-motion preference.
+- Small, transparent ripple circles mark narration spots, including in presentation
+  mode. **Hide indicators** / **Show indicators** toggles them independently of
+  narration and the label list. Internal heart indicators appear only in the cutaway.
+  The pulse respects the device's reduced-motion preference.
+- **Show labels** opens the part names in a separate side panel. Selecting a part
+  displays its title and original mobile description there, with an arrow to its
+  anchor on the model. The camera/model viewport resizes to reserve space for the
+  panel, so text never overlays it. Narrow screens put the panel below the view.
+  The same layout works in presentation mode. Arrows follow rotation, zoom and
+  tracking, and disappear when their part is offscreen or the marker is lost.
 - **Show labels**, **Full model**, narration mute, and graphics quality controls
   support teaching and presentation.
 - **Presentation mode** fills the window with the model/camera and hides the other

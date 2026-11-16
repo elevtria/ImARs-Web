@@ -1,12 +1,16 @@
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { teacherARCatalog, teacherARScanner } from "./teacher-ar-catalog.js";
 import { TeacherARNarration } from "./teacher-ar-narration.js";
+import { TeacherARCallout } from "./teacher-ar-callout.js";
 
 const auth = getAuth(initializeApp());
 const element = id => document.getElementById(id);
 const status = element("arStatus"), audio = element("arAudio");
 let scene, owner, selected, selectedLabel, ready = false, loadingModel = false, startingCamera = false;
 let muted = false, labelsVisible = false, modelJob = 0, cameraJob = 0, currentDevice = "", enginePromise;
+let indicatorsVisible = true;
+const callout = new TeacherARCallout({ frame: element("arStage"), viewport: element("arViewport"), rail: element("arCalloutRail"),
+  card: element("arDescription"), svg: element("arDescriptionArrow"), path: element("arDescriptionLine") });
 const say = message => { status.textContent = message; };
 const narration = new TeacherARNarration(audio, {
   onSubtitle: text => { const subtitle = element("arSubtitles"); if (subtitle.textContent !== text) subtitle.textContent = text; subtitle.hidden = !text; },
@@ -17,7 +21,7 @@ function buttons() {
   const scanning = Boolean(scene?.tracker), modelReady = ready && !loadingModel;
   element("arScan").disabled = !owner || startingCamera || scanning;
   element("arScan").textContent = startingCamera ? "Starting camera…" : scanning ? "Scanning markers" : "Scan markers";
-  for (const id of ["arRotateLeft", "arRotateRight", "arZoom", "arReset", "arLabels", "arScreenshot", "arFullModel"]) element(id).disabled = !modelReady;
+  for (const id of ["arRotateLeft", "arRotateRight", "arZoom", "arReset", "arLabels", "arIndicators", "arScreenshot", "arFullModel"]) element(id).disabled = !modelReady;
   element("arParts").querySelectorAll("button").forEach(button => { button.disabled = !modelReady; });
   element("arPause").disabled = !modelReady || !scene?.animated;
   element("arPause").textContent = selected && !scene?.animated ? "Static model" : scene?.paused ? "Resume animation" : "Pause animation";
@@ -29,6 +33,12 @@ function buttons() {
   element("arDissect").disabled = !modelReady;
   element("arDissect").textContent = scene?.dissected ? "Show whole model" : "Show inside";
   element("arDissect").setAttribute("aria-pressed", String(Boolean(scene?.dissected)));
+  const panelVisible = Boolean(modelReady && (labelsVisible || selectedLabel));
+  const rail = element("arCalloutRail");
+  if (rail.hidden === panelVisible) { rail.hidden = !panelVisible; callout.refresh(); }
+  element("arStage").classList.toggle("has-details", panelVisible);
+  element("arParts").hidden = !labelsVisible;
+  callout.setEnabled(Boolean(modelReady && selectedLabel));
 }
 function placeholder(title, text) {
   element("arPlaceholderTitle").textContent = title; element("arPlaceholderText").textContent = text; element("arPlaceholder").hidden = false;
@@ -43,6 +53,7 @@ function selectLabel(id) {
   narration.stop(); selectedLabel = label;
   element("arDescriptionTitle").textContent = label.title; element("arDescriptionText").textContent = label.description; element("arDescription").hidden = false;
   element("arParts").querySelectorAll("button").forEach(button => button.setAttribute("aria-pressed", String(button.dataset.label === id)));
+  callout.refresh();
   scene.selectLabel(id); buttons(); void narration.start(label);
 }
 function tracking(found) {
@@ -55,7 +66,7 @@ function setPresentation(value) {
   if (!scene && value) return;
   element("arStageCard").classList.toggle("is-presenting", value); document.body.classList.toggle("ar-presenting", value);
   element("arPresentation").setAttribute("aria-pressed", String(value)); element("arPresentation").textContent = value ? "Show controls" : "Presentation mode";
-  if (scene) { scene.presenting = value; scene.resize(); }
+  callout.refresh(); if (scene) { scene.presenting = value; scene.resize(); }
 }
 function resetLesson() {
   selected = null; element("arTitle").textContent = "Scan a lesson marker";
@@ -72,8 +83,8 @@ function stopCamera(message = "Camera stopped. Choose Scan markers when you’re
 function engine() { return enginePromise ||= import("./teacher-ar-scene.js").catch(error => { enginePromise = null; throw error; }); }
 async function ensureScene(account) {
   const { TeacherARScene } = await engine(); if (!owner || owner !== account) return null;
-  scene ||= new TeacherARScene({ stage: element("arStage"), overlay: element("arHotspots"), onStatus: say, onTracking: tracking,
-    onSelect: selectLabel, onModelDetected: id => { void recognizeModel(id); }, onDissection: buttons });
+  scene ||= new TeacherARScene({ stage: element("arViewport"), overlay: element("arHotspots"), onStatus: say, onTracking: tracking,
+    onSelect: selectLabel, onModelDetected: id => { void recognizeModel(id); }, onDissection: buttons, onLabelAnchor: anchor => callout.update(anchor) });
   return scene;
 }
 async function recognizeModel(id) {
@@ -97,7 +108,7 @@ async function recognizeModel(id) {
   let failed = false;
   try {
     const loaded = await scene.load(item); if (!loaded || job !== modelJob || owner !== account || scene?.tracker !== tracker) return;
-    scene.setLabels(labelsVisible); scene.setQuality(element("arQuality").value); element("arZoom").value = "1"; element("arPlaceholder").hidden = true;
+    scene.setLabels(labelsVisible); scene.setIndicators(indicatorsVisible); scene.setQuality(element("arQuality").value); element("arZoom").value = "1"; element("arPlaceholder").hidden = true;
   } catch (error) {
     if (job !== modelJob || owner !== account || error.name === "AbortError") return;
     failed = true; say("The marker was recognized, but its model could not load. Check your connection and show the marker again.");
@@ -136,7 +147,8 @@ element("arZoom").addEventListener("input", event => scene?.setZoom(event.target
 element("arReset").addEventListener("click", () => { scene?.reset(); element("arZoom").value = "1"; clearSelection(); });
 element("arFullModel").addEventListener("click", clearSelection);
 element("arDissect").addEventListener("click", () => { if (ready && scene) scene.setDissected(!scene.dissected); });
-element("arLabels").addEventListener("click", () => { labelsVisible = !labelsVisible; scene?.setLabels(labelsVisible); element("arLabels").textContent = labelsVisible ? "Hide labels" : "Show labels"; element("arLabels").setAttribute("aria-pressed", String(labelsVisible)); });
+element("arLabels").addEventListener("click", () => { labelsVisible = !labelsVisible; scene?.setLabels(labelsVisible); element("arLabels").textContent = labelsVisible ? "Hide labels" : "Show labels"; element("arLabels").setAttribute("aria-pressed", String(labelsVisible)); buttons(); callout.refresh(); });
+element("arIndicators").addEventListener("click", () => { indicatorsVisible = !indicatorsVisible; scene?.setIndicators(indicatorsVisible); element("arIndicators").textContent = indicatorsVisible ? "Hide indicators" : "Show indicators"; element("arIndicators").setAttribute("aria-pressed", String(indicatorsVisible)); });
 element("arPause").addEventListener("click", () => { scene?.setPaused(!scene.paused); buttons(); });
 element("arPresentation").addEventListener("click", () => setPresentation(!scene?.presenting));
 element("arQuality").addEventListener("change", event => scene?.setQuality(event.target.value));

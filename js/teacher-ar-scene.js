@@ -69,12 +69,12 @@ export class TeacherMarkerTracker extends MindARThree {
 
 const safeName = name => THREE.PropertyBinding.sanitizeNodeName(name || "").toLowerCase();
 export class TeacherARScene {
-  constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection }) {
-    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection });
+  constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection, onLabelAnchor }) {
+    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection, onLabelAnchor });
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
     this.quality = "medium";
-    this.paused = false; this.zoom = 1; this.highlighted = []; this.hotspots = [];
+    this.paused = false; this.zoom = 1; this.highlighted = []; this.hotspots = []; this.indicatorsVisible = true;
     this.generation = 0; this.scanGeneration = 0;
     this.pointers = new Map();
     this.abort = new AbortController();
@@ -199,28 +199,35 @@ export class TeacherARScene {
     });
   }
   setLabels(visible) { this.labelsVisible = visible; this.positionHotspots(); }
+  setIndicators(visible) { this.indicatorsVisible = visible; this.positionHotspots(); }
   partVisible(node) {
     for (let current = node; current && current !== this.model; current = current.parent) if (!current.visible) return false;
     return true;
   }
   positionHotspots() {
-    if (!this.model) return;
+    if (!this.model) { this.onLabelAnchor?.(null); return; }
     const camera = this.tracker?.camera;
+    let anchor = null;
     for (const hotspot of this.hotspots) {
       const part = hotspot.parts.find(part => this.partVisible(part.node));
       const visible = this.tracker && this.tracked && Boolean(part);
       hotspot.button.hidden = !visible;
-      hotspot.button.dataset.labels = String(Boolean(this.labelsVisible && !this.presenting));
+      // Names and descriptions live beside the view. Only light rings sit on it.
+      hotspot.button.dataset.labels = "false";
       if (!visible) continue;
       const point = this.model.localToWorld(part.modelPoint.clone());
       point.project(camera);
-      hotspot.button.hidden = point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1;
-      hotspot.button.style.left = `${Math.round((point.x + 1) * this.stage.clientWidth / 2)}px`;
-      hotspot.button.style.top = `${Math.round((1 - point.y) * this.stage.clientHeight / 2)}px`;
+      const inView = point.z >= -1 && point.z <= 1 && Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
+      const x = Math.round((point.x + 1) * this.stage.clientWidth / 2), y = Math.round((1 - point.y) * this.stage.clientHeight / 2);
+      hotspot.button.hidden = !inView || this.indicatorsVisible === false;
+      hotspot.button.style.left = `${x}px`; hotspot.button.style.top = `${y}px`;
+      if (inView && hotspot.label.id === this.selectedLabelId) anchor = { x, y };
     }
+    this.onLabelAnchor?.(anchor);
   }
   selectLabel(id) {
     this.restoreHighlight();
+    this.selectedLabelId = id;
     const hotspot = this.hotspots.find(item => item.label.id === id);
     if (id === null) this.setDissected(false);
     else if (this.item?.dissection && hotspot && (this.item.dissection.kind === "volcano" || hotspot.parts.every(part => !this.partVisible(part.node)))) this.setDissected(true);
@@ -239,6 +246,7 @@ export class TeacherARScene {
         this.highlighted.push({ node, original });
       });
     }
+    this.positionHotspots();
   }
   restoreHighlight() {
     for (const { node, original } of this.highlighted) {
@@ -399,8 +407,9 @@ export class TeacherARScene {
     this.mixers?.forEach(mixer => { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); });
     this.mixers = [];
     if (this.model) { this.model.removeFromParent(); this.disposeObject(this.model); }
-    this.model = null; this.modelFrames = []; this.wholeFrame = this.cutawayFrame = null; this.dissected = false;
+    this.model = null; this.modelFrames = []; this.wholeFrame = this.cutawayFrame = null; this.dissected = false; this.selectedLabelId = null;
     this.hotspots?.forEach(hotspot => hotspot.button.remove()); this.hotspots = [];
+    this.onLabelAnchor?.(null);
   }
   dispose() {
     if (this.closed) return;

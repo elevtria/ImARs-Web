@@ -15,7 +15,11 @@
 .ar-status { min-height: 24px; margin: 12px 4px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .ar-classroom { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
 .ar-stage-card { min-width: 0; border: 1px solid #91bce0; border-radius: 24px; overflow: hidden; background: var(--surface, #fff); }
-.ar-stage { position: relative; isolation: isolate; min-height: 440px; height: min(60vh, 640px); overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #fff, #e3f1ff 75%); touch-action: none; }
+.ar-stage { position: relative; isolation: isolate; display: flex; min-height: 440px; height: min(60vh, 640px); overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #fff, #e3f1ff 75%); }
+.ar-viewport { position: relative; flex: 1 1 0; min-width: 0; height: 100%; overflow: hidden; touch-action: none; }
+.ar-callout-rail { position: relative; z-index: 4; flex: 0 0 clamp(220px, 24vw, 280px); height: 100%; min-width: 0; padding: 18px 16px; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid #9dd1d8; background: var(--surface, #fff); color: var(--ink); }
+.ar-description-arrow { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; filter: drop-shadow(0 0 1px white); }
+.ar-panel-help { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .teacher-ar-canvas { position: absolute; inset: 0; z-index: 1; display: block; }
 .teacher-ar-canvas[hidden] { display: none; }
 .teacher-ar-camera { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -37,16 +41,14 @@
 .ar-hint { padding: 7px 18px 18px; color: var(--muted); text-align: center; font-size: 12px; line-height: 1.5; }
 .ar-hotspots { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
 .ar-subtitles { position: absolute; z-index: 6; bottom: 76px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(85%, 760px); padding: 12px 18px; border-radius: 12px; background: #10233be6; color: #fff; box-shadow: 0 3px 14px #0002; font-size: clamp(13px, 1.1vw, 17px); font-weight: 600; line-height: 1.6; text-align: center; pointer-events: none; }
-.ar-hotspot, .teacher-ar-hotspot { position: absolute; max-width: 160px; padding: 6px 10px; transform: translate(-50%, -100%); border: 1px solid #95b6df; border-radius: 9px; background: #ffffffed; color: #153a68; font: inherit; font-size: 11px; font-weight: 700; box-shadow: 0 3px 12px #16395a18; pointer-events: auto; cursor: pointer; }
+.teacher-ar-hotspot { position: absolute; display: block; width: 28px; height: 28px; padding: 0; transform: translate(-50%, -50%); border: 0; border-radius: 50%; background: transparent; color: transparent; font-size: 0; box-shadow: none; pointer-events: auto; cursor: pointer; }
 .teacher-ar-hotspot[hidden] { display: none; }
-.teacher-ar-hotspot { display: inline-flex; align-items: center; gap: 7px; min-width: 30px; min-height: 30px; }
-.teacher-ar-hotspot::before { content: ""; flex: 0 0 9px; width: 9px; height: 9px; border-radius: 50%; background: #1262e8; box-shadow: 0 0 0 3px #1262e822; }
-.teacher-ar-hotspot[data-labels="false"] { width: 32px; height: 32px; padding: 0; justify-content: center; font-size: 0; border: 2px solid white; border-radius: 50%; background: #ffffffed; transform: translate(-50%, -50%); box-shadow: 0 2px 10px #10233b66; }
-.teacher-ar-hotspot[data-labels="false"]::after { content: ""; position: absolute; inset: -9px; border: 2px solid #ffffffdf; border-radius: 50%; background: #1262e818; animation: ar-tap-pulse 1.6s ease-out infinite; pointer-events: none; }
-.teacher-ar-hotspot[aria-pressed="true"] { border-color: #1262e8; background: #e3f1ff; }
-.teacher-ar-hotspot:hover::before { background: #084bc0; box-shadow: 0 0 0 5px #1262e833; }
-@keyframes ar-tap-pulse { 0% { transform: scale(.7); opacity: .95; } 100% { transform: scale(1.4); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .teacher-ar-hotspot[data-labels="false"]::after { animation: none; opacity: .65; } }
+.teacher-ar-hotspot::before, .teacher-ar-hotspot::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none; }
+.teacher-ar-hotspot::before { inset: 9px; border: 1.5px solid #ffffffc4; background: #119ca615; box-shadow: 0 0 0 1px #084f6d99; }
+.teacher-ar-hotspot::after { inset: 4px; border: 1px solid #ffffffa6; box-shadow: 0 0 0 1px #119ca64d; animation: ar-tap-pulse 1.8s ease-out infinite; }
+.teacher-ar-hotspot[aria-pressed="true"]::before, .teacher-ar-hotspot:hover::before { border-color: #d3ffff; box-shadow: 0 0 0 1.5px #119ca6; }
+@keyframes ar-tap-pulse { 0% { transform: scale(.55); opacity: .65; } 100% { transform: scale(1.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .teacher-ar-hotspot::after { animation: none; opacity: .4; } }
 .ar-lesson-panel { padding: 22px; border-radius: 24px; }
 .ar-eyebrow { color: #52789f; font-size: 10px; letter-spacing: .1em; font-weight: 800; }
 .ar-panel-heading h2 { margin: 8px 0; color: var(--ink); font-size: 22px; line-height: 1.25; }
@@ -62,7 +64,7 @@
 .ar-parts { display: flex; flex-wrap: wrap; gap: 7px; }
 .ar-parts button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--ice, #eff7ff); font: inherit; font-size: 11px; cursor: pointer; }
 .ar-parts button[aria-pressed="true"] { color: white; background: #1262e8; border-color: #1262e8; }
-.ar-description { margin-top: 15px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--ice, #eff7ff); }
+.ar-description { margin-top: 15px; padding: 14px; border-radius: 12px; border: 1px solid #81c8cf; border-left: 3px solid #119ca6; background: var(--ice, #effbfc); }
 .ar-description h3 { color: var(--ink); font-size: 14px; }
 .ar-description p { margin: 8px 0 14px; color: var(--ink); font-size: 12px; line-height: 1.7; }
 .ar-description button { font-size: 12px; }
@@ -76,3 +78,11 @@ body.ar-presenting { overflow: hidden; }
 @media (max-width: 520px) { .ar-stage { min-height: 340px; } .ar-picker { padding: 16px; } .ar-picker-actions { width: 100%; } .ar-picker-actions button { flex: 1; } .ar-stage-top { top: 12px; left: 12px; right: 12px; } .ar-toolbar { bottom: 12px; } .ar-toolbar button { padding: 8px 11px; font-size: 11px; } }
 @media print { .ar-classroom, .ar-picker, .ar-status { display: none; } }
 @media (max-width: 520px) { .ar-subtitles { bottom: 110px; max-width: calc(100% - 32px); padding: 10px 14px; font-size: 13px; } }
+@media (max-width: 650px) {
+  .ar-stage.has-details { flex-direction: column; height: auto; min-height: 0; }
+  .ar-stage.has-details .ar-viewport { flex: none; width: 100%; height: 55vh; min-height: 340px; }
+  .ar-callout-rail { flex: none; width: 100%; height: auto; max-height: 240px; border-left: 0; border-top: 1px solid #9dd1d8; }
+  .ar-stage-card.is-presenting .ar-stage { height: 100dvh; }
+  .ar-stage-card.is-presenting .ar-viewport { flex: 1 1 0; height: auto; min-height: 0; }
+  .ar-stage-card.is-presenting .ar-callout-rail { max-height: 35dvh; }
+}

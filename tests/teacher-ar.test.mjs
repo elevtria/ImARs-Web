@@ -242,7 +242,12 @@ test("teaching labels stay steady through mesh animation but follow model rotati
   scene.setLabels(false); assert.equal(scene.hotspots[0].button.hidden, false, "narration indicators stay visible with text labels off");
   assert.equal(scene.hotspots[0].button.dataset.labels, "false");
   scene.presenting = true; scene.positionHotspots(); assert.equal(scene.hotspots[0].button.hidden, false, "presentation mode keeps narration discoverable");
+  let anchor; scene.onLabelAnchor = value => { anchor = value; }; scene.selectedLabelId = "rain";
+  scene.setIndicators(false); assert.equal(scene.hotspots[0].button.hidden, true);
+  assert.equal(anchor.x, parseInt(scene.hotspots[0].button.style.left));
+  assert.equal(anchor.y, parseInt(scene.hotspots[0].button.style.top), "a hidden indicator still provides the selected description's arrow target");
   scene.tracked = false; scene.positionHotspots(); assert.equal(scene.hotspots[0].button.hidden, true, "no floating tap targets after marker loss");
+  assert.equal(anchor, null, "the description arrow clears on marker loss");
   part.geometry.dispose(); part.material.dispose();
 });
 
@@ -343,6 +348,7 @@ function classroom() {
     detect(id) { this.detected = id; this.tracked = Boolean(this.model && this.item.id === id); this.options.onTracking(this.tracked); this.options.onModelDetected(id); }
     clearModel() { this.model = null; }
     setLabels(value) { this.labelsVisible = value; } setQuality(value) { this.quality = value; }
+    setIndicators(value) { this.indicatorsVisible = value; }
     setPaused(value) { this.paused = value; } setZoom(value) { this.zoom = value; }
     setDissected(value) { this.dissected = value; this.options.onDissection(); }
     selectLabel(value) { this.label = value; } reset() {} resize() {}
@@ -350,7 +356,8 @@ function classroom() {
     stopScanning() { this.tracker = null; this.tracked = false; this.stops = (this.stops || 0) + 1; this.options.onTracking(false); }
     dispose() { this.disposed = true; this.stopScanning(); }
   }
-  const context = vm.createContext({ document, window, teacherARCatalog, teacherARScanner, TeacherARNarration, initializeApp: () => ({}), getAuth: () => ({}),
+  const context = vm.createContext({ document, window, teacherARCatalog, teacherARScanner, TeacherARNarration,
+    TeacherARCallout: class { refresh() {} setEnabled() {} update() {} }, initializeApp: () => ({}), getAuth: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; },
     loadEngine: async () => { engineLoads++; return { TeacherARScene: Scene }; },
     navigator: { mediaDevices: { getUserMedia() {}, enumerateDevices: async () => [{ kind: "videoinput", deviceId: "camera" }] } },
@@ -378,11 +385,16 @@ test("scan-only classroom loads models automatically and keeps teacher controls 
   page.element("arPause").emit("click"); assert.equal(scene.paused, true);
   page.element("arPause").emit("click"); assert.equal(scene.paused, false);
   page.element("arLabels").emit("click"); assert.equal(scene.labelsVisible, true);
+  assert.equal(page.element("arCalloutRail").hidden, false); assert.equal(page.element("arParts").hidden, false);
+  page.element("arIndicators").emit("click"); assert.equal(scene.indicatorsVisible, false); assert.equal(page.element("arIndicators").textContent, "Show indicators");
+  page.element("arIndicators").emit("click"); assert.equal(scene.indicatorsVisible, true);
   page.element("arPresentation").emit("click"); assert.equal(scene.presenting, true);
   page.document.events.keydown({ key: "Escape" }); assert.equal(scene.presenting, false);
   const part = page.element("arParts").children[0]; part.emit("click");
   assert.equal(scene.label, scene.item.labels[0].id);
   assert.equal(page.element("arDescriptionText").textContent, scene.item.labels[0].description);
+  page.element("arLabels").emit("click");
+  assert.equal(page.element("arParts").hidden, true); assert.equal(page.element("arCalloutRail").hidden, false, "the selected side description stays open when the label list is closed");
   assert.equal(page.element("arAudio").paused, false, "selecting the label starts its narration immediately");
   await page.element("arNarration").emit("click"); assert.equal(page.element("arAudio").paused, true);
   await page.element("arNarration").emit("click"); assert.equal(page.element("arAudio").paused, false);
@@ -397,6 +409,7 @@ test("scan-only classroom loads models automatically and keeps teacher controls 
   assert.equal(page.element("arNarration").disabled, true);
   page.element("arFullModel").emit("click"); assert.equal(scene.label, null);
   assert.equal(page.element("arDescription").hidden, true);
+  assert.equal(page.element("arCalloutRail").hidden, true);
   assert.equal(page.document.body.classList.values.has("ar-presenting"), false);
   assert.equal(page.element("arDissect").hidden, true);
   scene.detect(teacherARCatalog.find(item => item.title === "Heart").id); await page.settle();
