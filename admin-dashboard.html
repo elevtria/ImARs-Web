@@ -95,6 +95,32 @@
       </div>
     </section>
 
+    <section class="panel comparison-panel" aria-labelledby="comparisonTitle" data-auth-shell data-await-content="admin-report">
+      <div class="panel-heading">
+        <div>
+          <h2 id="comparisonTitle" data-public-label>Teacher Data at a Glance</h2>
+          <p class="comparison-intro">Compare the scores and student counts behind the school totals.</p>
+        </div>
+        <a class="comparison-link" href="school-analytics.html">View School Analytics</a>
+      </div>
+      <p class="comparison-scope" id="comparisonScope" role="status"></p>
+      <div class="comparison-grid">
+        <div class="comparison-chart" aria-labelledby="scoreChartTitle">
+          <h3 id="scoreChartTitle">Test scores by teacher</h3>
+          <p>Average of completed lesson tests across all three terms.</p>
+          <div class="comparison-legend" aria-hidden="true"><span><i class="legend-pre"></i>Pre-test</span><span><i class="legend-post"></i>Post-test</span></div>
+          <div id="teacherScoreChart" class="score-chart" aria-live="polite"></div>
+          <p class="chart-footnote">Each bar uses a 0–100% scale. A dash means no completed score.</p>
+        </div>
+        <div class="comparison-chart" aria-labelledby="studentChartTitle">
+          <h3 id="studentChartTitle">Students by teacher</h3>
+          <p>Assigned learners represented in the school summary.</p>
+          <div id="teacherStudentChart" class="student-chart" aria-live="polite"></div>
+          <p class="chart-footnote">Bars share the same scale; the number shows the exact student count.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="panel teacher-panel" aria-labelledby="teacherTitle" data-auth-shell data-await-content="admin-report">
       <div class="panel-heading">
         <h2 id="teacherTitle" data-public-label>Teacher Performance Snapshot</h2>

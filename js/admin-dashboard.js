@@ -67,6 +67,43 @@ window.addEventListener("scroll", hidePerformanceTooltip, true);
 window.addEventListener("resize", hidePerformanceTooltip);
 document.addEventListener("keydown", event => { if (event.key === "Escape") hidePerformanceTooltip(); });
 
+function renderComparisonCharts(teachers) {
+  const scoreChart = document.getElementById("teacherScoreChart");
+  const studentChart = document.getElementById("teacherStudentChart");
+  const scope = document.getElementById("comparisonScope");
+  if (!scoreChart || !studentChart || !scope) return;
+
+  const studentCount = teacher => Number.isFinite(teacher.students) ? Math.max(0, teacher.students) : 0;
+  const shown = [...teachers].sort((a, b) => studentCount(b) - studentCount(a) || String(a.name).localeCompare(String(b.name))).slice(0, 6);
+  scope.textContent = teachers.length > shown.length
+    ? `Showing the ${shown.length} teachers with the most assigned students, out of ${teachers.length}. View School Analytics for the full list.`
+    : `Showing ${shown.length} ${shown.length === 1 ? "teacher" : "teachers"}.`;
+  if (!shown.length) {
+    scoreChart.textContent = "No teachers registered yet.";
+    studentChart.textContent = "No teachers registered yet.";
+    return;
+  }
+
+  const scoreBar = (teacher, kind, label) => {
+    const score = teacher[kind];
+    const value = Number.isFinite(score) ? formatAdminPercent(score) : "—";
+    const width = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) : 0;
+    return `<div class="comparison-score-line"><span>${label}</span><div class="comparison-track" aria-hidden="true"><i class="comparison-fill ${kind}" style="width:${width}%"></i></div><strong>${value}</strong></div>`;
+  };
+  scoreChart.innerHTML = `<ul class="comparison-list">${shown.map(teacher => `
+    <li class="comparison-item"><strong class="comparison-name">${escapeHtml(teacher.name)}</strong>
+      ${scoreBar(teacher, "pre", "Pre")}${scoreBar(teacher, "post", "Post")}
+    </li>`).join("")}</ul>`;
+
+  const maxStudents = Math.max(1, ...shown.map(studentCount));
+  studentChart.innerHTML = `<ul class="comparison-list">${shown.map(teacher => {
+    const count = studentCount(teacher);
+    return `<li class="comparison-item"><div class="comparison-student-heading"><strong class="comparison-name">${escapeHtml(teacher.name)}</strong><span>${count} ${count === 1 ? "student" : "students"}</span></div>
+      <div class="comparison-track" aria-hidden="true"><i class="comparison-fill students" style="width:${count / maxStudents * 100}%"></i></div>
+    </li>`;
+  }).join("")}</ul>`;
+}
+
 function renderDashboard(report) {
     const totalTeachers = report.teachers.length;
     const teacherValEl = document.getElementById("totalTeachersVal");
@@ -114,6 +151,8 @@ function renderDashboard(report) {
       ringEl.setAttribute("aria-label", avgPostPct === null ? "No completed post-tests" : `School average post-test score: ${avgPostPct}%`);
       ringEl.style.background = `conic-gradient(var(--steel) ${avgPostPct ?? 0}%, var(--chart-track, #e2e8f0) 0%)`;
     }
+
+    renderComparisonCharts(report.teachers);
 
     // 5. Populate Teacher Performance Snapshot Table
     const tableBody = document.getElementById("teacherTableBody");

@@ -44,6 +44,13 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   context.report = { teachers: [{ id: "T1", name: "Teacher", meta: "Science", students: 132, pre: 46, preCount: 120, post: 75, postCount: 110, gain: 29, hours: "9 min" }],
     totalStudents: 132, pre: 46, post: 75, gain: 29, hours: "9 min" };
   vm.runInContext("renderDashboard(report)", context);
+  assert.match(element("teacherScoreChart").innerHTML, /width:46%/);
+  assert.match(element("teacherScoreChart").innerHTML, /width:75%/);
+  assert.match(element("teacherStudentChart").innerHTML, /132 students/);
+  assert.match(element("teacherStudentChart").innerHTML, /width:100%/);
+  vm.runInContext('renderComparisonCharts([{ name: "No Results", students: 0, pre: null, post: null }])', context);
+  assert.match(element("teacherScoreChart").innerHTML, /<strong>—<\/strong>/);
+  assert.doesNotMatch(element("teacherScoreChart").innerHTML, /width:NaN%/);
   const detail = element("teacherTableBody").children[1];
   assert.equal(detail.hidden, true);
   assert.match(detail.innerHTML, /120 completed lesson test results/);
