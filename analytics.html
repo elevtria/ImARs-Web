@@ -17,7 +17,7 @@
   <link rel="stylesheet" href="css/theme.css" />
   <link rel="preload" as="image" href="assets/school-logo.png" />
 </head>
-<body data-auth-pending>
+<body class="class-analytics" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
     <header class="topbar">
@@ -92,6 +92,7 @@
         <div class="table-top-scroll" data-scroll-target="studentGrid" role="region" aria-label="Scroll student scores horizontally" aria-controls="studentGrid" tabindex="0" hidden><div></div></div>
         <div class="performance-table-wrap score-summary-wrap" role="region" aria-label="Student score table" tabindex="0">
           <table class="performance-table score-summary-table" id="studentGrid" role="table" aria-label="Student score summary">
+            <colgroup><col class="score-student-column" /></colgroup>
             <thead id="scoreSummaryHead" role="rowgroup"><tr><th scope="col">Student / Section</th><th scope="col">Scores</th></tr></thead>
             <tbody id="studentTableBody" role="rowgroup" aria-busy="true"><tr class="empty-row"><td colspan="2"><span data-loading="true" role="status" aria-label="Loading scores"></span></td></tr></tbody>
           </table>
