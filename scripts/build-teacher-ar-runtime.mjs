@@ -1,0 +1,11 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {build} from 'esbuild';
+import {resolve} from 'node:path';
+const p='tmp/ar-tools/mind/package/dist/mindar-image-three.prod.js';
+let s=readFileSync(p,'utf8');
+s=s.replace('window.addEventListener("resize", this.resize.bind(this))','window.addEventListener("resize", this.boundResize = this.resize.bind(this))');
+s=s.replace('_startAR() {\n    return new Promise(async (e, t) => {','async _startAR() {');
+s=s.replace('this.controller.processVideo(this.video), e();\n    });','this.controller.processVideo(this.video);');
+writeFileSync(p,s);
+await build({entryPoints:['scripts/teacher-ar-runtime-entry.mjs'],nodePaths:[resolve('tmp/ar-tools/node_modules')],outfile:'js/vendor/teacher-ar-engine.js',bundle:true,format:'esm',minify:true,legalComments:'inline',external:['fs','util','buffer']});
+console.log('Built self-hosted AR engine');

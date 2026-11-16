@@ -98,6 +98,19 @@ test("security headers also cover redirects from protected routes", async () => 
   assert.equal(response.headers.get("Content-Security-Policy"), CONTENT_SECURITY_POLICY);
 });
 
+test("AR Classroom only opens with a verified teacher session", async () => {
+  const app = fixture();
+  const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  for (const [cookie, expected] of [[null, 302], [admin, 403], [teacher, 200]]) {
+    let opened = false;
+    const response = await protectWebsite({ env: app.env, request: new Request("https://imars.example.test/teacher-ar", { headers: cookie ? { Cookie: cookie } : {} }),
+      next: async () => { opened = true; return new Response("Teacher AR classroom", { headers: { "Content-Type": "text/html" } }); } });
+    assert.equal(response.status, expected);
+    assert.equal(opened, expected === 200);
+  }
+});
+
 test("only verified static portal shells can be revalidated for history reuse", async () => {
   const app = fixture();
   const teacher = app.cookieOf(await app.login("TEACH1000", "correct"));

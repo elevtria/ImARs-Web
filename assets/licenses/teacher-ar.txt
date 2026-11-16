@@ -1,0 +1,19 @@
+ImARs Teacher AR Classroom
+
+The self-hosted js/vendor/teacher-ar-engine.js bundles MindAR 1.2.5 and Three.js
+0.160.1. Its inline third-party copyright and license notices are retained.
+
+MindAR: Copyright (c) hiukim. MIT License.
+Source: https://github.com/hiukim/mind-ar-js/tree/v1.2.5
+
+Three.js: Copyright (c) 2010-2024 three.js authors. MIT License.
+Source: https://github.com/mrdoob/three.js/tree/r160
+
+MindAR's distribution includes TensorFlow.js (Google LLC, Apache-2.0) and its
+mathematical and serialization dependencies. Their attribution notices are
+retained in the bundled runtime. The Apache-2.0 license is supplied in
+teacher-ar-Apache-2.0.txt. The full MIT notices are in teacher-ar-MIT.txt.
+
+Models, original marker art, teaching descriptions and recorded narration were
+copied from the user's existing ImARs Unity app. The Unity originals have not
+been modified. See docs/teacher-ar.md for the source mapping and rebuild steps.

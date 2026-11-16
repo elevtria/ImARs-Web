@@ -24,9 +24,10 @@ export async function onRequest(context) {
   // The self-hosted 3D viewer initializes a WebAssembly decoder. Keep this
   // permission on the login displays only; JavaScript eval remains forbidden.
   const showcase = /^\/(?:admin-)?login(?:\.html)?\/?$/.test(new URL(context.request.url).pathname);
+  const teacherAR = /^\/teacher-ar(?:\.html)?\/?$/.test(new URL(context.request.url).pathname);
   secured.headers.set("Content-Security-Policy", showcase
     ? CONTENT_SECURITY_POLICY.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'").replace("connect-src 'self'", "connect-src 'self' blob:")
-    : CONTENT_SECURITY_POLICY);
+    : teacherAR ? CONTENT_SECURITY_POLICY.replace("connect-src 'self'", "connect-src 'self' blob:") : CONTENT_SECURITY_POLICY);
   secured.headers.set("X-Content-Type-Options", "nosniff");
   secured.headers.set("X-Frame-Options", "DENY");
   secured.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");

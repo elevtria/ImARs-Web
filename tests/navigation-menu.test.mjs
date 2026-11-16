@@ -35,10 +35,11 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
   const accountButton = target(), accountMenu = { hidden: true };
   const outside = { matches: () => false }, focusedLink = { inside: true, matches: () => true, blur: () => { document.activeElement = outside; } };
   document.activeElement = outside;
+  document.body = target();
   panel.contains = element => element === panel || element?.inside === true;
   panel.matches = () => inheritedHover;
   panel.querySelector = () => ({ focus() {} }); panel.querySelectorAll = () => [];
-  drawer.querySelector = () => panel;
+  drawer.querySelector = selector => selector === ".drawer-panel" ? panel : null;
   document.getElementById = id => ({ drawer, menuBtn: button, accountBtn: accountButton, accountMenu })[id];
   document.querySelectorAll = () => []; document.createElement = () => target(); document.head = { append() {} };
   const screen = Object.assign(target(), { matches: desktop }), pointer = Object.assign(target(), { matches: true });

@@ -13,7 +13,7 @@ export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const reusableShells = new WeakSet();
 export const isReusablePortalShell = response => reusableShells.has(response);
 const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
-  "/offline-sync", "/sync-offline-results", "/teacher-manual", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
+  "/offline-sync", "/sync-offline-results", "/teacher-ar", "/teacher-manual", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
