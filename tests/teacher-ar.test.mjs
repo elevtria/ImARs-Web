@@ -46,6 +46,22 @@ test("all 27 app markers have compiled tracking targets, embedded 3D models, and
   assert.ok(files.size > 100, "complete original marker and narration set is included");
 });
 
+test("nested constellation markers keep their own models and narration instead of appearing together", () => {
+  const zodiac = teacherARCatalog.find(item => item.markerName === "Constellation Marker");
+  assert.deepEqual(zodiac.models.map(model => model.name), ["Zodiac_Raised_3D"]);
+  assert.equal(zodiac.labels.length, 12);
+  assert.equal(new Set(zodiac.labels.map(label => label.title)).size, 12);
+  for (const label of zodiac.labels) for (const part of label.parts) assert.match(part.path, /^Zodiac_Raised_3D_AR_Root\/Constellation_/);
+  for (const [title, model] of [["Big Dipper", "Dippers_AR 1"], ["Orion", "Orion_AR"], ["Polaris", "Sparkling_Star_AR"]]) {
+    const item = teacherARCatalog.find(item => item.title === title);
+    assert.deepEqual(item.models.map(asset => asset.name), [model]);
+    assert.equal(item.labels.length, 2, `${title} retains its own narration`);
+    assert.ok(teacherARScanner.targetModels.includes(item.id));
+    assert.ok(!zodiac.models.some(asset => asset.url === item.models[0].url));
+    assert.ok(!zodiac.labels.some(label => item.labels.some(own => own.audio === label.audio)));
+  }
+});
+
 function trackerHarness(getUserMedia) {
   const events = {}, video = { remove() { this.removed = true; }, play: async () => {},
     set srcObject(value) { this.stream = value; queueMicrotask(() => this.onloadedmetadata()); }, get srcObject() { return this.stream; } };

@@ -40,8 +40,12 @@ The feature does not create student scores, completion records or AR-time record
 ## Teaching assets
 
 All 27 image targets from the Unity app's `Assets/SCENEAR.unity` are represented,
-including multi-model constellation/volcano content. The catalog includes 85
+including multi-model volcano content. The catalog includes 79
 original description/narration bindings. Runtime assets are self-hosted.
+
+Models and label bindings belong to their nearest image target in Unity's
+hierarchy. The zodiac marker shows its zodiac model; the nested Orion, Dipper,
+and Polaris image targets show only when their own markers are recognized.
 
 Narration and timed caption data were refreshed from the local Unity workspace
 at changeset 440, verified against Alliona Barcelon's November 16, 2026 check-in.
