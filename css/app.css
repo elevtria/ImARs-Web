@@ -1175,24 +1175,25 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   body.analytics-printing { background: #fff !important; color: #172b49; }
   body.analytics-printing > :not(#analyticsPrintReport) { display: none !important; }
   body.analytics-printing #analyticsPrintReport { display: block; page: analyticsReport; font-family: Arial, sans-serif; }
-  .analytics-print-panel { padding-inline: 12mm; break-after: page; }
+  .analytics-print-panel { padding: 10mm 12mm; break-after: page; }
   .analytics-print-panel:last-child { break-after: auto; }
-  .analytics-print-panel table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9pt; }
+  .analytics-print-panel table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 8pt; }
   .analytics-print-panel thead { display: table-header-group; }
   .analytics-print-panel tfoot { display: table-footer-group; }
   .analytics-print-panel tr { break-inside: avoid; }
-  .analytics-print-panel th, .analytics-print-panel td { padding: 7pt 5pt; border: .5pt solid #cbd4e3; overflow-wrap: anywhere; text-align: center; }
+  .analytics-print-panel th, .analytics-print-panel td { padding: 5pt 3pt; border: .5pt solid #cbd4e3; overflow-wrap: anywhere; text-align: center; }
   .analytics-print-panel thead th { background: #eaf0fa !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .analytics-print-panel tbody th { text-align: left; }
-  .analytics-print-panel thead .analytics-print-cover { width: auto; padding: 12mm 0 12pt; border: 0; background: #fff !important; text-align: left; font-weight: 400; }
   .analytics-print-heading { display: flex; align-items: center; gap: 20pt; padding-bottom: 10pt; border-bottom: 2pt solid #3d4e98; }
+  .analytics-print-logo { display: block; flex: 0 0 auto; width: 76pt; height: auto; clip-path: circle(46% at 49% 49%); }
   .analytics-print-heading div { flex: 1; text-align: center; }
   .analytics-print-heading strong { display: block; font-size: 15pt; text-transform: uppercase; color: #3d4e98; }
   .analytics-print-heading span { display: block; margin-top: 5pt; }
   .analytics-print-heading h1 { margin: 10pt 0 0; font-size: 13pt; }
   .analytics-print-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 5pt 16pt; margin: 10pt 0; font-size: 8pt; }
-  .analytics-print-panel h2 { margin: 8pt 0 0; font-size: 10pt; }
-  .analytics-print-panel tfoot td { padding: 10pt 0 12mm; border: 0; font-size: 7pt; text-align: left; }
+  .analytics-print-panel h2 { margin: 8pt 0; font-size: 10pt; }
+  .analytics-print-footer { display: flex; justify-content: space-between; gap: 12pt; margin-top: 10pt; font-size: 7pt; }
+  .analytics-print-footer > :last-child { flex-shrink: 0; }
 }
 .score-summary-controls .select-wrap { flex: 1 1 11rem; min-width: 0; max-width: 100%; }
 .score-summary-controls .search { flex: 1 1 11rem; min-width: 0; }
@@ -1213,10 +1214,11 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .score-summary-table .score-quiz-column { border-inline-start: 2px solid #81a2c1; }
 .score-summary-table thead tr:last-child .score-quiz-title { min-width: 130px; max-width: 230px; white-space: normal; }
 @media screen and (min-width: 1000px) {
-  .class-analytics .content { max-width: none; padding-inline: 24px; }
+  .class-analytics .content { max-width: 1600px; padding-inline: clamp(24px, 3vw, 56px); }
   .class-analytics .score-summary-table { table-layout: fixed; }
-  .class-analytics .score-student-column { width: clamp(120px, 14%, 190px); }
-  .class-analytics .score-summary-table :is(th, td) { padding: 10px 4px; }
+  .class-analytics .score-student-column { width: clamp(160px, 16%, 220px); }
+  .class-analytics .score-summary-table :is(th, td) { padding: 8px 4px; vertical-align: middle; }
+  .class-analytics .score-summary-table td { font-size: 13px; }
   .class-analytics .score-summary-table .score-student { min-width: 0; padding-inline: 10px; }
   .class-analytics .score-summary-table thead th { line-height: 1.4; }
   .class-analytics .score-summary-table thead tr:last-child th { min-width: 0; max-width: none; white-space: normal; }
