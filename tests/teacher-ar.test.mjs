@@ -137,6 +137,41 @@ test("refresh ignores old tracking callbacks and preview explicitly restores the
   scene.draw(); assert.equal(scene.renderer.lastModelVisible, true);
 });
 
+test("teaching labels stay steady through mesh animation but follow model rotation and zoom", async () => {
+  // Use the shipped engine's actual vector, bounds and projection math without
+  // constructing a renderer or opening a camera.
+  const previousWindow = globalThis.window, previousDocument = globalThis.document;
+  let THREE;
+  try {
+    globalThis.window = { document: {} }; globalThis.document = globalThis.window.document;
+    ({ THREE } = await import("../js/vendor/teacher-ar-engine.js"));
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window; else globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document; else globalThis.document = previousDocument;
+  }
+  const context = vm.createContext({ THREE, MindARThree: class {}, document: { createElement: () => ({ style: {}, addEventListener() {} }) } });
+  vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
+  const Scene = vm.runInContext("TeacherARScene", context);
+  const model = new THREE.Group(), content = new THREE.Group(); model.add(content);
+  const part = new THREE.Mesh(new THREE.BoxGeometry(.3, .3, .3), new THREE.MeshBasicMaterial());
+  part.name = "Animated rain"; part.position.set(.8, .3, .1); content.add(part);
+  const camera = new THREE.PerspectiveCamera(38, 2, .1, 100);
+  camera.position.set(0, 0, 8); camera.lookAt(0, 0, 0); camera.updateMatrixWorld(true);
+  const scene = Object.assign(Object.create(Scene.prototype), { model, content, camera, labelsVisible: true,
+    stage: { clientWidth: 1000, clientHeight: 500 }, overlay: { append() {} } });
+  scene.buildHotspots([{ id: "rain", title: "Precipitation", parts: [{ path: part.name, point: { x: 0, y: 0, z: 0 } }] }]);
+  const position = () => { scene.positionHotspots(); return { ...scene.hotspots[0].button.style }; };
+  const first = position();
+  part.position.set(-.5, -1, .2); part.scale.setScalar(.2); part.updateMatrixWorld(true);
+  assert.deepEqual(position(), first, "animated child transforms must not shake the teaching label");
+  model.rotation.z = Math.PI / 4; model.updateMatrixWorld(true);
+  const rotated = position(); assert.notDeepEqual(rotated, first, "rotating the complete model moves its label with it");
+  model.scale.setScalar(1.5); model.updateMatrixWorld(true);
+  assert.notDeepEqual(position(), rotated, "zooming the complete model moves its label with it");
+  assert.match(first.left, /^\d+px$/); assert.match(first.top, /^\d+px$/);
+  part.geometry.dispose(); part.material.dispose();
+});
+
 function classroom() {
   class Element {
     events = {}; children = []; attributes = new Map(); dataset = {}; value = ""; hidden = false; disabled = true; paused = true;

@@ -154,6 +154,10 @@ export class TeacherARScene {
         const box = new THREE.Box3().setFromObject(part.node).applyMatrix4(part.node.matrixWorld.clone().invert());
         const extent = box.getSize(new THREE.Vector3()).multiplyScalar(.5);
         part.localPoint = box.getCenter(new THREE.Vector3()).add(new THREE.Vector3(part.point.x, part.point.y, part.point.z).multiply(extent));
+        // Rain, clouds, waves and moving machine parts animate independently.
+        // Keep the teaching label in the model's rigid frame, like the app's
+        // frozen animation anchors, rather than following each animated mesh.
+        part.modelPoint = this.model.worldToLocal(part.node.localToWorld(part.localPoint.clone()));
       });
       const button = document.createElement("button");
       button.type = "button"; button.className = "teacher-ar-hotspot"; button.textContent = label.title;
@@ -172,11 +176,11 @@ export class TeacherARScene {
       const visible = this.labelsVisible && !this.presenting && (!ar || this.tracked) && Boolean(part);
       hotspot.button.hidden = !visible;
       if (!visible) continue;
-      const point = part.node.localToWorld(part.localPoint.clone());
+      const point = this.model.localToWorld(part.modelPoint.clone());
       point.project(camera);
       hotspot.button.hidden = point.z < -1 || point.z > 1 || Math.abs(point.x) > 1 || Math.abs(point.y) > 1;
-      hotspot.button.style.left = `${(point.x + 1) * 50}%`;
-      hotspot.button.style.top = `${(1 - point.y) * 50}%`;
+      hotspot.button.style.left = `${Math.round((point.x + 1) * this.stage.clientWidth / 2)}px`;
+      hotspot.button.style.top = `${Math.round((1 - point.y) * this.stage.clientHeight / 2)}px`;
     }
   }
   selectLabel(id) {
@@ -304,7 +308,7 @@ export class TeacherARScene {
     const parents = new Set(); for (let node = hit.object; node; node = node.parent) parents.add(node);
     const hotspot = this.hotspots.find(item => item.parts.some(part => part.node !== this.content && parents.has(part.node)))
       || this.hotspots.filter(item => item.parts.some(part => part.node === this.content)).sort((first, second) => {
-        const distance = item => Math.min(...item.parts.map(part => part.node.localToWorld(part.localPoint.clone()).distanceToSquared(hit.point)));
+        const distance = item => Math.min(...item.parts.map(part => this.model.localToWorld(part.modelPoint.clone()).distanceToSquared(hit.point)));
         return distance(first) - distance(second);
       })[0];
     if (hotspot) this.onSelect(hotspot.label.id);

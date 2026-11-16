@@ -16,6 +16,9 @@ teacher portal. Admin and student accounts cannot open it.
   Models without clips show **Static model**.
 - Select a model part, label, or description to highlight it and read the original
   app description. **Play narration** uses the original recorded audio.
+- Teaching labels use stable attachment points in the complete model's coordinate
+  frame. They follow manual rotation/zoom and marker positioning while staying
+  steady during mesh animations such as moving rain, clouds or machine parts.
 - **Show labels**, **Full model**, narration mute, and graphics quality controls
   support teaching and presentation.
 - **Presentation mode** fills the window with the model/camera and hides the other
