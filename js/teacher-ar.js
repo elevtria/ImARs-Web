@@ -36,7 +36,6 @@ function buttons() {
   const panelVisible = Boolean(modelReady && (labelsVisible || selectedLabel));
   const rail = element("arCalloutRail");
   if (rail.hidden === panelVisible) { rail.hidden = !panelVisible; callout.refresh(); }
-  element("arStage").classList.toggle("has-details", panelVisible);
   element("arParts").hidden = !labelsVisible;
   callout.setEnabled(Boolean(modelReady && selectedLabel));
 }

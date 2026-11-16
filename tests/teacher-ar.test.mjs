@@ -217,7 +217,7 @@ async function engineMath() {
   return THREE;
 }
 
-test("teaching labels stay steady through mesh animation but follow model rotation and zoom", async () => {
+test("indicators follow actual mesh vertices through part animation, model rotation and zoom", async () => {
   const THREE = await engineMath();
   const context = vm.createContext({ THREE, MindARThree: class {}, document: { createElement: () => ({ style: {}, dataset: {}, setAttribute() {}, addEventListener() {} }) } });
   vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
@@ -233,9 +233,12 @@ test("teaching labels stay steady through mesh animation but follow model rotati
   const position = () => { scene.positionHotspots(); return { ...scene.hotspots[0].button.style }; };
   const first = position();
   part.position.set(-.5, -1, .2); part.scale.setScalar(.2); part.updateMatrixWorld(true);
-  assert.deepEqual(position(), first, "animated child transforms must not shake the teaching label");
+  const animated = position(); assert.notDeepEqual(animated, first, "an animated part must not leave its indicator floating at the old location");
+  const attached = scene.anchorWorld(scene.hotspots[0].parts[0]).project(camera);
+  assert.equal(animated.left, `${Math.round((attached.x + 1) * 500)}px`);
+  assert.equal(animated.top, `${Math.round((1 - attached.y) * 250)}px`);
   model.rotation.z = Math.PI / 4; model.updateMatrixWorld(true);
-  const rotated = position(); assert.notDeepEqual(rotated, first, "rotating the complete model moves its label with it");
+  const rotated = position(); assert.notDeepEqual(rotated, animated, "rotating the complete model moves its label with it");
   model.scale.setScalar(1.5); model.updateMatrixWorld(true);
   assert.notDeepEqual(position(), rotated, "zooming the complete model moves its label with it");
   assert.match(first.left, /^\d+px$/); assert.match(first.top, /^\d+px$/);
@@ -304,12 +307,16 @@ test("clicking a heart or volcano swaps whole and interior views, with correct l
       const event = { pointerId: 1, clientX: 400, clientY: 250, target: { closest: () => null } };
       scene.pointer({ ...event, type: "pointerdown" }); scene.pointer({ ...event, type: "pointerup" });
     };
-    tap(); assert.equal(scene.dissected, true); assert.equal(scene.wholeFrame.visible, false); assert.equal(scene.cutawayFrame.visible, true);
-    tap(); assert.equal(scene.dissected, false); assert.equal(scene.wholeFrame.visible, true);
+    tap(); assert.equal(scene.dissected, true); scene.advanceDissection(.14);
+    assert.equal(scene.wholeFrame.visible, true); assert.ok(scene.wholeFrame.rotation.y > 0, "opening begins with an animated turn");
+    scene.advanceDissection(.56); assert.equal(scene.wholeFrame.visible, false); assert.equal(scene.cutawayFrame.visible, true);
+    tap(); assert.equal(scene.dissected, false); scene.advanceDissection(.7); assert.equal(scene.wholeFrame.visible, true);
+    scene.positionHotspots();
     if (title === "Heart") {
       const valve = scene.hotspots.find(hotspot => hotspot.label.title === "Mitral valve");
       assert.equal(valve.button.hidden, true, "internal valve indicators stay hidden on the whole heart");
-      scene.selectLabel(valve.label.id); assert.equal(scene.dissected, true); assert.equal(valve.button.hidden, false, "choosing an internal part opens the heart");
+      scene.selectLabel(valve.label.id); assert.equal(scene.dissected, true); scene.advanceDissection(.7); scene.positionHotspots();
+      assert.equal(valve.button.hidden, false, "choosing an internal part opens the heart");
     } else { scene.selectLabel(item.labels[0].id); assert.equal(scene.dissected, true); }
     scene.selectLabel(null); assert.equal(scene.dissected, false, "Full model restores the whole view");
     scene.setDissected(true); scene.reset(); assert.equal(scene.dissected, false);

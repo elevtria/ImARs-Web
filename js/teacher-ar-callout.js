@@ -4,19 +4,23 @@ export function descriptionArrow(anchor, viewport, card, frame) {
   if (anchor.x < 0 || anchor.y < 0 || anchor.x > viewport.width || anchor.y > viewport.height) return null;
   if (card.top >= frame.top + frame.height || card.top + card.height <= frame.top) return null;
   const target = { x: viewport.left - frame.left + anchor.x, y: viewport.top - frame.top + anchor.y };
-  const below = card.top >= viewport.top + viewport.height - 2;
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  let start, bend;
-  if (below) {
-    start = { x: clamp(target.x, card.left - frame.left + 12, card.left - frame.left + card.width - 12), y: card.top - frame.top };
-    bend = { x: start.x, y: (start.y + target.y) / 2 };
-  } else {
-    const right = card.left >= viewport.left + viewport.width - 2;
-    start = { x: card.left - frame.left + (right ? 0 : card.width), y: clamp(card.top - frame.top + card.height / 2, 12, frame.height - 12) };
-    bend = { x: (start.x + target.x) / 2, y: start.y };
-  }
+  const centre = { x: card.left - frame.left + card.width / 2, y: card.top - frame.top + card.height / 2 };
+  const dx = target.x - centre.x, dy = target.y - centre.y;
+  if (Math.abs(dx) <= card.width / 2 && Math.abs(dy) <= card.height / 2) return null;
+  const amount = Math.min(card.width / 2 / Math.abs(dx), card.height / 2 / Math.abs(dy));
+  const start = { x: centre.x + dx * amount, y: centre.y + dy * amount };
+  const bend = Math.abs(dx) > Math.abs(dy) ? { x: (start.x + target.x) / 2, y: start.y } : { x: start.x, y: (start.y + target.y) / 2 };
   const point = value => `${Math.round(value.x)},${Math.round(value.y)}`;
   return `M${point(start)} L${point(bend)} L${point(target)}`;
+}
+
+export function descriptionPlacement(anchor, viewport, panel, previousSide) {
+  const side = !previousSide || anchor.x < viewport.width * .4 || anchor.x > viewport.width * .6
+    ? anchor.x < viewport.width / 2 ? "right" : "left" : previousSide;
+  const x = side === "right" ? Math.max(12, viewport.width - panel.width - 12) : 12;
+  const limit = Math.max(8, viewport.height - panel.height - 80), minimum = Math.min(58, limit);
+  const y = Math.max(minimum, Math.min(limit, anchor.y - panel.height * .45));
+  return { x: Math.round(x), y: Math.round(y), side };
 }
 
 export class TeacherARCallout {
@@ -24,7 +28,7 @@ export class TeacherARCallout {
     Object.assign(this, { frame, viewport, card, rail, svg, path });
     this.dirty = true;
     this.observer = new ResizeObserver(() => this.refresh());
-    for (const node of [frame, viewport, card]) this.observer.observe(node);
+    for (const node of [frame, viewport, card, rail]) this.observer.observe(node);
     rail.addEventListener("scroll", () => this.refresh(), { passive: true });
   }
   refresh() { this.dirty = true; }
@@ -41,11 +45,16 @@ export class TeacherARCallout {
   update(anchor) {
     if (!this.enabled || !anchor) { this.hide(true); return; }
     if (this.dirty) {
-      this.bounds = { frame: this.frame.getBoundingClientRect(), viewport: this.viewport.getBoundingClientRect(), card: this.card.getBoundingClientRect() };
+      this.bounds = { frame: this.frame.getBoundingClientRect(), viewport: this.viewport.getBoundingClientRect(), card: this.card.getBoundingClientRect(), rail: this.rail.getBoundingClientRect() };
       this.svg.setAttribute("viewBox", `0 0 ${this.bounds.frame.width} ${this.bounds.frame.height}`);
       this.dirty = false;
     }
-    const d = descriptionArrow(anchor, this.bounds.viewport, this.bounds.card, this.bounds.frame);
+    const { viewport, frame, card, rail } = this.bounds;
+    const position = descriptionPlacement(anchor, viewport, rail, this.side); this.side = position.side;
+    this.rail.style.left = `${position.x}px`; this.rail.style.top = `${position.y}px`; this.rail.style.right = "auto";
+    const offset = card.top - rail.top, top = Math.max(0, offset), bottom = Math.min(rail.height, offset + card.height);
+    const placed = { left: viewport.left + position.x + card.left - rail.left, top: viewport.top + position.y + top, width: card.width, height: Math.max(0, bottom - top) };
+    const d = descriptionArrow(anchor, viewport, placed, frame);
     this.hide(!d);
     if (d && this.path.getAttribute("d") !== d) this.path.setAttribute("d", d);
   }

@@ -16,7 +16,8 @@ teacher portal. Admin and student accounts cannot open it.
 - Click the heart or volcano to toggle its interior cutaway, or use **Show inside**.
   **Full model** and **Reset view** restore the whole model. Selecting an internal
   heart part opens the interior automatically; the cutaway and whole view share
-  the same marker position rather than appearing side by side.
+  the same marker position rather than appearing side by side. Opening and closing
+  use a reversible 0.7-second turn/reveal; the model's eruption clips keep playing.
 - **Stop camera** hides and releases the model and returns to the scan prompt.
 - **Pause animation** / **Resume animation** freezes the model's animation clips.
   Models without clips show **Static model**.
@@ -25,19 +26,20 @@ teacher portal. Admin and student accounts cannot open it.
   question/answer recording. Timed subtitles appear at the bottom of the model view.
   **Pause narration** / **Resume narration** controls playback without restarting it.
   Tapping a label again restarts its complete narration; another label replaces it.
-- Teaching labels use stable attachment points in the complete model's coordinate
-  frame. They follow manual rotation/zoom and marker positioning while staying
-  steady during mesh animations such as moving rain, clouds or machine parts.
+- Teaching indicators bind to actual mesh vertices near their authored part
+  coordinates. They follow rotation, zoom, marker pose, mesh motion, morphing and
+  skeletal animation. Empty corners of a model's bounding box cannot leave an
+  indicator floating beside the geometry. The same anchor drives its arrow tip.
 - Small, transparent ripple circles mark narration spots, including in presentation
   mode. **Hide indicators** / **Show indicators** toggles them independently of
   narration and the label list. Internal heart indicators appear only in the cutaway.
   The pulse respects the device's reduced-motion preference.
-- **Show labels** opens the part names in a separate side panel. Selecting a part
-  displays its title and original mobile description there, with an arrow to its
-  anchor on the model. The camera/model viewport resizes to reserve space for the
-  panel, so text never overlays it. Narrow screens put the panel below the view.
-  The same layout works in presentation mode. Arrows follow rotation, zoom and
-  tracking, and disappear when their part is offscreen or the marker is lost.
+- **Show labels** opens the part names inside the camera view. Selecting a part
+  displays its title and original mobile description in a compact translucent
+  card near the opposite edge, with an arrow to its mesh anchor. The camera view
+  keeps its full width; presentation mode uses the same in-camera card. Arrows
+  follow rotation, zoom and tracking, and disappear when their part is offscreen
+  or the marker is lost.
 - **Show labels**, **Full model**, narration mute, and graphics quality controls
   support teaching and presentation.
 - **Presentation mode** fills the window with the model/camera and hides the other
@@ -127,7 +129,10 @@ The teacher wrapper owns the camera stream and handles cancellation/cleanup.
 
 Automated checks cover asset integrity, embedded model resources, original marker
 coverage, teacher-only access, presentation controls, narration, camera consent,
-late permission grants, hidden tabs and sign-out. Browser camera/WebGL support,
+late permission grants, hidden tabs and sign-out. The shipped GLBs for all 27
+lessons are loaded with the actual engine to check geometry-bound anchors through
+animation, rotation and zoom; the volcano's real eruption clips are exercised too.
+Texture decoding is mocked for these geometry checks. Browser camera/WebGL support,
 marker stability, physical model alignment, scanning speed, and screenshot
 appearance still require a real-device test with the printed markers. Never treat
 mock camera tests as physical tracking validation.

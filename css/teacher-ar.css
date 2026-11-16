@@ -15,12 +15,20 @@
 .ar-status { min-height: 24px; margin: 12px 4px; color: var(--muted); font-size: 13px; line-height: 1.6; }
 .ar-classroom { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; }
 .ar-stage-card { min-width: 0; border: 1px solid #91bce0; border-radius: 24px; overflow: hidden; background: var(--surface, #fff); }
-.ar-stage { position: relative; isolation: isolate; display: flex; min-height: 440px; height: min(60vh, 640px); overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #fff, #e3f1ff 75%); }
-.ar-viewport { position: relative; flex: 1 1 0; min-width: 0; height: 100%; overflow: hidden; touch-action: none; }
-.ar-callout-rail { position: relative; z-index: 4; flex: 0 0 clamp(220px, 24vw, 280px); height: 100%; min-width: 0; padding: 18px 16px; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid #9dd1d8; background: var(--surface, #fff); color: var(--ink); }
+.ar-stage { position: relative; isolation: isolate; min-height: 440px; height: min(60vh, 640px); overflow: hidden; background: radial-gradient(ellipse at 50% 35%, #fff, #e3f1ff 75%); }
+.ar-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.ar-callout-rail { position: absolute; z-index: 4; top: 68px; right: 12px; width: clamp(168px, 30%, 260px); max-width: calc(100% - 24px); max-height: calc(100% - 150px); padding: 12px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; border: 1px solid #71d7dfaa; border-radius: 12px; background: #103842d9; color: #f1fdff; box-shadow: 0 4px 18px #0002; }
+.ar-callout-rail .ar-description-head h3, .ar-callout-rail .ar-description h3, .ar-callout-rail .ar-description p { color: #f1fdff; }
+.ar-callout-rail .ar-description-head { gap: 5px; margin-bottom: 6px; }
+.ar-callout-rail .ar-description-head h3 { font-size: 10px; font-weight: 600; }
+.ar-callout-rail .ghost-btn { padding: 4px 7px; font-size: 10px; background: #ffffff12; color: #f1fdff; border-color: #a6e8ec80; }
+.ar-callout-rail .ar-description { margin-top: 8px; padding: 8px 0 0; border: 0; border-top: 1px solid #a6e8ec55; border-radius: 0; background: transparent; }
+.ar-callout-rail .ar-description p { margin: 7px 0 10px; font-size: 12px; line-height: 1.55; }
+.ar-callout-rail .ar-description button { min-height: 30px; padding: 6px 10px; font-size: 11px; }
+.ar-callout-rail .ar-parts button { color: #f1fdff; background: #ffffff12; border-color: #a6e8ec80; }
 .ar-description-arrow { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; filter: drop-shadow(0 0 1px white); }
 .ar-panel-help { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
-.teacher-ar-canvas { position: absolute; inset: 0; z-index: 1; display: block; }
+.teacher-ar-canvas { position: absolute; inset: 0; z-index: 1; display: block; touch-action: none; }
 .teacher-ar-canvas[hidden] { display: none; }
 .teacher-ar-camera { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; object-fit: cover; }
 .ar-stage-top { position: absolute; z-index: 4; top: 18px; left: 18px; right: 18px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; }
@@ -78,11 +86,3 @@ body.ar-presenting { overflow: hidden; }
 @media (max-width: 520px) { .ar-stage { min-height: 340px; } .ar-picker { padding: 16px; } .ar-picker-actions { width: 100%; } .ar-picker-actions button { flex: 1; } .ar-stage-top { top: 12px; left: 12px; right: 12px; } .ar-toolbar { bottom: 12px; } .ar-toolbar button { padding: 8px 11px; font-size: 11px; } }
 @media print { .ar-classroom, .ar-picker, .ar-status { display: none; } }
 @media (max-width: 520px) { .ar-subtitles { bottom: 110px; max-width: calc(100% - 32px); padding: 10px 14px; font-size: 13px; } }
-@media (max-width: 650px) {
-  .ar-stage.has-details { flex-direction: column; height: auto; min-height: 0; }
-  .ar-stage.has-details .ar-viewport { flex: none; width: 100%; height: 55vh; min-height: 340px; }
-  .ar-callout-rail { flex: none; width: 100%; height: auto; max-height: 240px; border-left: 0; border-top: 1px solid #9dd1d8; }
-  .ar-stage-card.is-presenting .ar-stage { height: 100dvh; }
-  .ar-stage-card.is-presenting .ar-viewport { flex: 1 1 0; height: auto; min-height: 0; }
-  .ar-stage-card.is-presenting .ar-callout-rail { max-height: 35dvh; }
-}
