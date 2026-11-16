@@ -1,9 +1,13 @@
 .teacher-ar-page .content { max-width: 1540px; }
+.teacher-ar-page [hidden] { display: none !important; }
 .ar-picker { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; padding: 18px 22px; }
 .ar-picker label, .ar-preferences label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .ar-picker label { flex: 1 1 210px; }
 .ar-picker select, .ar-preferences select { width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 11px; padding: 9px 12px; font: inherit; color: var(--ink); background: var(--surface, white); }
 .ar-picker-actions { display: flex; gap: 8px; align-items: center; }
+.ar-scan-intro { flex: 1 1 260px; color: var(--ink); }
+.ar-scan-intro strong { display: block; font-size: 15px; }
+.ar-scan-intro p { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .ar-primary { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 9px 15px; border: 1px solid #1262e8; border-radius: 999px; background: #1262e8; color: white; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .ar-primary:hover:not(:disabled) { background: #084bc0; }
 .teacher-ar-page button:disabled { opacity: .55; cursor: not-allowed; }
@@ -32,6 +36,7 @@
 .ar-model-controls input { width: 100px; accent-color: #1262e8; }
 .ar-hint { padding: 7px 18px 18px; color: var(--muted); text-align: center; font-size: 12px; line-height: 1.5; }
 .ar-hotspots { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.ar-subtitles { position: absolute; z-index: 6; bottom: 76px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(85%, 760px); padding: 12px 18px; border-radius: 12px; background: #10233be6; color: #fff; box-shadow: 0 3px 14px #0002; font-size: clamp(13px, 1.1vw, 17px); font-weight: 600; line-height: 1.6; text-align: center; pointer-events: none; }
 .ar-hotspot, .teacher-ar-hotspot { position: absolute; max-width: 160px; padding: 6px 10px; transform: translate(-50%, -100%); border: 1px solid #95b6df; border-radius: 9px; background: #ffffffed; color: #153a68; font: inherit; font-size: 11px; font-weight: 700; box-shadow: 0 3px 12px #16395a18; pointer-events: auto; cursor: pointer; }
 .teacher-ar-hotspot[hidden] { display: none; }
 .ar-lesson-panel { padding: 22px; border-radius: 24px; }
@@ -62,3 +67,4 @@ body.ar-presenting { overflow: hidden; }
 @media (max-width: 1000px) { .ar-classroom { grid-template-columns: minmax(0, 1fr); } .ar-lesson-panel { width: 100%; } .ar-stage { height: 55vh; min-height: 360px; } }
 @media (max-width: 520px) { .ar-stage { min-height: 340px; } .ar-picker { padding: 16px; } .ar-picker-actions { width: 100%; } .ar-picker-actions button { flex: 1; } .ar-stage-top { top: 12px; left: 12px; right: 12px; } .ar-toolbar { bottom: 12px; } .ar-toolbar button { padding: 8px 11px; font-size: 11px; } }
 @media print { .ar-classroom, .ar-picker, .ar-status { display: none; } }
+@media (max-width: 520px) { .ar-subtitles { bottom: 110px; max-width: calc(100% - 32px); padding: 10px 14px; font-size: 13px; } }

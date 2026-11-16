@@ -1,6 +1,8 @@
 import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {extname,basename} from 'node:path';
+import {createRequire} from 'node:module';
+const {encode,decode}=createRequire(new URL('../tmp/ar-tools/package.json',import.meta.url))('@msgpack/msgpack');
 // Run read-unity-ar-assets.mjs and the documented MindAR compiler first.
 const {targets}=JSON.parse(readFileSync('tmp/ar-tools/scene-data.json','utf8'));
 const compiled=JSON.parse(readFileSync('tmp/ar-tools/compiled-targets.json','utf8'));
@@ -12,8 +14,17 @@ function copy(path){const input=readFileSync(path);if(input.length>25*1024*1024)
 const catalog=targets.map((target,index)=>{
   const models=target.models.map(path=>({url:replacements[basename(path)]?`/assets/showcase/${replacements[basename(path)]}.glb`:copy(path),name:basename(path,'.glb')}));
   const folder=target.models[0].split(/[\\/]/).find((part,i,parts)=>parts[i-1]==='3d MODELS');
-  return {id:`model-${index+1}`,title:names[index],topic:topicMap[folder],markerName:target.name,marker:copy(target.image),target:compiled[target.name],models,
-    labels:target.bindings.map((binding,i)=>({id:`label-${i+1}`,title:binding.title,description:binding.description||'',audio:binding.narration?copy(binding.narration):null,parts:binding.targets.map(t=>({path:t.path||'',point:t.normalizedPoint||{x:0,y:0,z:0}}))}))};
+  const tracking=compiled[target.name];
+  return {id:`model-${index+1}`,title:names[index],topic:topicMap[folder],markerName:target.name,marker:copy(target.image),target:typeof tracking==='string'?tracking:tracking.url,targetCount:tracking.count||1,markerSources:tracking.sources||[],models,
+    labels:target.bindings.map((binding,i)=>({id:`label-${i+1}`,title:binding.title,description:binding.description||'',audio:binding.narration?copy(binding.narration):null,interactiveAudio:binding.interactiveNarration?copy(binding.interactiveNarration):null,descriptionCues:binding.descriptionCues||[],question:binding.question||'',answer:binding.answer||'',answerStart:binding.answerStart||0,parts:binding.targets.map(t=>({path:t.path||'',point:t.normalizedPoint||{x:0,y:0,z:0}}))}))};
 });
-writeFileSync('js/teacher-ar-catalog.js',`// Generated from the app's SCENEAR image targets, models, and narration. Public teaching assets only.\nexport const teacherARCatalog = ${JSON.stringify(catalog,null,2)};\n`);
+const dataList=[],targetModels=[];
+for(const item of catalog) {
+  const data=decode(readFileSync('.'+item.target)).dataList;
+  dataList.push(...data); targetModels.push(...data.map(()=>item.id));
+}
+const bytes=encode({v:2,dataList}), path=`assets/teacher-ar/scanner-${createHash('sha256').update(bytes).digest('hex').slice(0,16)}.mind`;
+writeFileSync(path,bytes);
+const scanner={target:`/${path}`,targetModels};
+writeFileSync('js/teacher-ar-catalog.js',`// Generated from the app's SCENEAR image targets, models, and narration. Public teaching assets only.\nexport const teacherARCatalog = ${JSON.stringify(catalog,null,2)};\nexport const teacherARScanner = ${JSON.stringify(scanner,null,2)};\n`);
 console.log(`Prepared ${catalog.length} marker experiences, ${catalog.reduce((n,item)=>n+item.labels.length,0)} original description/narration cards.`);

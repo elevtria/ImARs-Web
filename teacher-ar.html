@@ -20,19 +20,19 @@
       <span class="page-title">AR Classroom</span>
     </div><div class="topbar-right"><span class="sy-chip" data-school-year>SY 2026–27</span></div></div></header>
     <main class="content" data-auth-shell inert>
-      <section class="hero" data-auth-shell><div><h1 data-auth-shell>AR Classroom</h1><p>Bring your science lessons to life. Scan a marker or explore a model with your class.</p></div><a class="ghost-btn" href="offline-sync.html">All marker packs</a></section>
-      <section class="card section ar-picker" aria-label="Choose AR teaching content">
-        <label>Topic<select id="arTopic" disabled></select></label>
-        <label>Model<select id="arModel" disabled></select></label>
-        <div class="ar-picker-actions"><button class="ar-primary" id="arScan" type="button" disabled>Scan marker</button><button class="ghost-btn" id="arPreview" type="button" disabled>Model preview</button></div>
+      <section class="hero" data-auth-shell><div><h1 data-auth-shell>AR Classroom</h1><p>Show a lesson marker. Its model appears automatically, ready to teach.</p></div><a class="ghost-btn" href="offline-sync.html">All marker packs</a></section>
+      <section class="card section ar-picker" aria-label="Marker scanner">
+        <div class="ar-scan-intro"><strong>One camera. Every lesson.</strong><p>Move from one marker to another to change the model automatically.</p></div>
+        <div class="ar-picker-actions"><button class="ar-primary" id="arScan" type="button" disabled>Scan markers</button></div>
       </section>
-      <p class="ar-status" id="arStatus" role="status" aria-live="polite">Choose a teaching model to get started.</p>
+      <p class="ar-status" id="arStatus" role="status" aria-live="polite">Choose Scan markers to get started.</p>
       <div class="ar-classroom">
         <section class="ar-stage-card" id="arStageCard" aria-label="Interactive teaching model">
           <div class="ar-stage" id="arStage" aria-label="Drag to rotate the model. Use the zoom and rotate buttons for keyboard controls.">
-            <div class="ar-stage-top" id="arStageTop"><span class="ar-mode" id="arMode">Model preview</span><span id="arTracking" hidden>Looking for marker</span></div>
+            <div class="ar-stage-top" id="arStageTop"><span class="ar-mode" id="arMode">Camera off</span><span id="arTracking" hidden>Looking for a lesson marker</span></div>
             <div class="ar-hotspots" id="arHotspots"></div>
-            <div class="ar-stage-placeholder" id="arPlaceholder"><span aria-hidden="true">✧</span><strong>Your classroom, in a new dimension</strong><p>Your selected science model will appear here.</p><button class="ar-primary" id="arRetry" type="button" hidden>Try again</button></div>
+            <div class="ar-subtitles" id="arSubtitles" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+            <div class="ar-stage-placeholder" id="arPlaceholder"><span aria-hidden="true">⌗</span><strong id="arPlaceholderTitle">Scan a lesson marker</strong><p id="arPlaceholderText">Start the camera, then show any of your printed ImARs markers.</p><button class="ar-primary" id="arRetry" type="button" hidden>Try again</button></div>
             <div class="ar-toolbar" aria-label="Presentation controls">
               <button type="button" id="arPresentation" aria-pressed="false" disabled>Presentation mode</button>
               <button type="button" id="arPause" aria-pressed="false" disabled>Pause animation</button>
@@ -46,14 +46,12 @@
             <button class="ghost-btn" id="arLabels" type="button" aria-pressed="false" disabled>Show labels</button>
             <button class="ghost-btn" id="arScreenshot" type="button" disabled>Screenshot</button>
             <button class="ghost-btn" id="arRefresh" type="button" disabled>Refresh tracking</button>
-            <button class="ghost-btn" id="arSwitchCamera" type="button" hidden>Switch camera</button>
-            <button class="ghost-btn" id="arTorch" type="button" aria-pressed="false" hidden>Flashlight</button>
           </div>
-          <p class="ar-hint" id="arHint">Drag to rotate. Scroll or pinch to zoom. Select a part or description to teach it.</p>
+          <p class="ar-hint" id="arHint">Keep the whole marker near the centre of the camera. When its model appears, drag to rotate or select a label to hear its narration.</p>
         </section>
         <aside class="ar-lesson-panel card" aria-label="Lesson descriptions and marker">
-          <div class="ar-panel-heading"><span class="ar-eyebrow">TEACHER VIEW</span><h2 id="arTitle">Science models</h2><p id="arTopicName"></p></div>
-          <details class="ar-marker-details"><summary>View this model’s marker</summary><img id="arMarkerImage" alt="Selected teaching model marker" /><a class="ghost-btn" id="arMarkerDownload" download>Download marker</a><p>Print the marker or show it on another screen, then point your camera at it.</p></details>
+          <div class="ar-panel-heading"><span class="ar-eyebrow">TEACHER VIEW</span><h2 id="arTitle">Scan a lesson marker</h2><p id="arTopicName">Its model, labels and narration will appear automatically.</p></div>
+          <details class="ar-marker-details" id="arMarkerDetails" hidden><summary>View this model’s marker</summary><img id="arMarkerImage" alt="Recognized teaching model marker" /><a class="ghost-btn" id="arMarkerDownload" download>Download marker</a><p>Print the marker or show it on another screen, then point your camera at it.</p></details>
           <div class="ar-description-head"><h3>Explore the model</h3><button class="ghost-btn" id="arFullModel" type="button" disabled>Full model</button></div>
           <div class="ar-parts" id="arParts" role="group" aria-label="Model parts and descriptions"></div>
           <article class="ar-description" id="arDescription" hidden aria-live="polite"><h3 id="arDescriptionTitle"></h3><p id="arDescriptionText"></p><button class="ar-primary" id="arNarration" type="button">Play narration</button><audio id="arAudio" preload="none"></audio></article>

@@ -6,16 +6,21 @@ teacher portal. Admin and student accounts cannot open it.
 
 ## Classroom controls
 
-- Select a topic and model. Only that model's files are loaded; the camera stays off.
-- **Scan marker** requests camera permission and recognizes the selected model's
-  original printed image. Expand **View this model’s marker** to check or download it.
-- **Model preview** and **Stop camera** return to the interactive 3D view.
-- Drag to rotate. Preview also supports scroll/pinch zoom; both modes have zoom,
-  keyboard rotation buttons and **Reset view**.
+- **Scan markers** requests camera permission and recognizes any supported lesson
+  marker. There are no topic/model selectors or standalone 3D previews. Opening
+  the page loads no model; a model stays hidden until its marker is recognized.
+- Show another marker to switch models automatically, one at a time, without
+  restarting the camera. Only the recognized model's files are loaded. Expand
+  **View this model’s marker** to check or download its image.
+- Drag to rotate, use the zoom slider or rotation buttons, and **Reset view**.
+- **Stop camera** hides and releases the model and returns to the scan prompt.
 - **Pause animation** / **Resume animation** freezes the model's animation clips.
   Models without clips show **Static model**.
-- Select a model part, label, or description to highlight it and read the original
-  app description. **Play narration** uses the original recorded audio.
+- Select a model part or label to highlight it and start its narration immediately.
+  The current mobile narration plays the description followed by the interactive
+  question/answer recording. Timed subtitles appear at the bottom of the model view.
+  **Pause narration** / **Resume narration** controls playback without restarting it.
+  Tapping a label again restarts its complete narration; another label replaces it.
 - Teaching labels use stable attachment points in the complete model's coordinate
   frame. They follow manual rotation/zoom and marker positioning while staying
   steady during mesh animations such as moving rain, clouds or machine parts.
@@ -24,10 +29,10 @@ teacher portal. Admin and student accounts cannot open it.
 - **Presentation mode** fills the window with the model/camera and hides the other
   controls. **Show controls** or Escape restores them; animation pause stays available.
 - **Screenshot** saves the model/camera image as PNG. **Refresh tracking** restarts
-  marker recognition. Camera switching and flashlight appear when supported.
+  marker recognition. Camera-switch and flashlight controls are omitted.
 
-Camera access is requested only after **Scan marker**. Camera tracks stop on
-Stop camera, model changes, hidden tabs, navigation and sign-out. Late permission
+Camera access is requested only after **Scan markers**. Camera tracks stop on
+Stop camera, hidden tabs, navigation and sign-out. Late permission
 grants after cancellation are closed as well. Narration stops when leaving or
 changing descriptions. Camera images are processed on the device, not uploaded.
 The feature does not create student scores, completion records or AR-time records.
@@ -38,12 +43,27 @@ All 27 image targets from the Unity app's `Assets/SCENEAR.unity` are represented
 including multi-model constellation/volcano content. The catalog includes 85
 original description/narration bindings. Runtime assets are self-hosted.
 
+Narration and timed caption data were refreshed from the local Unity workspace
+at changeset 440, verified against Alliona Barcelon's November 16, 2026 check-in.
+Both the description clips and the current interactive question/answer recordings
+are included, together with the app's exact caption cue times and answer boundaries.
+
 `js/teacher-ar-catalog.js` maps original marker names to their images, compiled
 MindAR targets, models and recorded narration. New copied files use content hashes
 under `assets/teacher-ar/`; ten previously optimized models reuse the web showcase.
 Full-size Unity originals are unchanged. Multi-model content is framed together
-for the web preview. Unity-specific particle/shader effects are not executed by
+on its marker. Unity-specific particle/shader effects are not executed by
 the browser; GLB animation clips are used.
+
+Each model recognizes its classroom image plus matching versions from the existing
+downloadable marker packs. Compilation composites images onto their print background
+before feature extraction, retains earlier app references, and deduplicates equivalent
+images. A combined target file maps every recognized image variant to its model,
+so the same running scanner can recognize markers across all lessons.
+The scanner requests an optional 1280×720 camera image and continuous focus /
+exposure where supported. Two successful tracked frames confirm recognition, while
+the model remains hidden until recognition. Unsupported camera settings are optional
+and do not block older laptop webcams.
 
 Only code/styles are in the shared versioned graph. The numerous content-hashed
 teaching files use their own stable URLs, avoiding the host's 100 header-rule limit.
@@ -81,6 +101,6 @@ The teacher wrapper owns the camera stream and handles cancellation/cleanup.
 Automated checks cover asset integrity, embedded model resources, original marker
 coverage, teacher-only access, presentation controls, narration, camera consent,
 late permission grants, hidden tabs and sign-out. Browser camera/WebGL support,
-marker stability, physical model alignment, phone flashlight support, and screenshot
+marker stability, physical model alignment, scanning speed, and screenshot
 appearance still require a real-device test with the printed markers. Never treat
 mock camera tests as physical tracking validation.

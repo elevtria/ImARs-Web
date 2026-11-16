@@ -1,18 +1,32 @@
 // Loaded only when a signed-in teacher opens the AR classroom.
-import { THREE, GLTFLoader, OrbitControls, MindARThree } from "./vendor/teacher-ar-engine.js";
+import { THREE, GLTFLoader, MindARThree } from "./vendor/teacher-ar-engine.js";
 
 export function stopCameraTracks(stream) {
   stream?.getTracks().forEach(track => track.stop());
+}
+
+export async function tuneTrackingCamera(stream) {
+  try {
+    const track = stream?.getVideoTracks?.()[0], capabilities = track?.getCapabilities?.();
+    const settings = {};
+    for (const name of ["focusMode", "exposureMode"]) {
+      if (capabilities?.[name]?.includes("continuous")) settings[name] = "continuous";
+    }
+    if (Object.keys(settings).length) await track.applyConstraints({ advanced: [settings] });
+  } catch { /* Optional camera tuning must never prevent scanning. */ }
 }
 
 // Own the stream even while permission or startup is pending, so leaving the page
 // cannot leave a late camera request running in the background.
 export class TeacherMarkerTracker extends MindARThree {
   async _startVideo() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: this.deviceId
-      ? { deviceId: { exact: this.deviceId } } : { facingMode: "environment" } });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+      ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : { facingMode: "environment" })
+    } });
     if (this.closed) { stopCameraTracks(stream); throw new DOMException("Camera closed", "AbortError"); }
     this.stream = stream;
+    void tuneTrackingCamera(stream);
     const video = document.createElement("video");
     this.video = video;
     video.muted = true; video.autoplay = true; video.playsInline = true;
@@ -55,22 +69,11 @@ export class TeacherMarkerTracker extends MindARThree {
 
 const safeName = name => THREE.PropertyBinding.sanitizeNodeName(name || "").toLowerCase();
 export class TeacherARScene {
-  constructor({ stage, overlay, onStatus, onTracking, onSelect }) {
-    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect });
+  constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected }) {
+    Object.assign(this, { stage, overlay, onStatus, onTracking, onSelect, onModelDetected });
     this.scene = new THREE.Scene();
-    this.camera = new THREE.PerspectiveCamera(38, 1, .01, 100);
-    this.camera.position.set(2.5, 1.7, 2.5);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.domElement.className = "teacher-ar-canvas";
-    stage.prepend(this.renderer.domElement);
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.minDistance = .5; this.controls.maxDistance = 8;
-    this.controls.target.set(0, .45, 0);
-    this.lights(this.scene);
     this.clock = new THREE.Clock();
+    this.quality = "medium";
     this.paused = false; this.zoom = 1; this.highlighted = []; this.hotspots = [];
     this.generation = 0; this.scanGeneration = 0;
     this.pointers = new Map();
@@ -80,8 +83,6 @@ export class TeacherARScene {
     for (const name of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
       stage.addEventListener(name, event => this.pointer(event), { signal: this.abort.signal });
     }
-    this.renderer.setAnimationLoop(() => this.draw());
-    this.resize();
   }
   lights(scene) {
     scene.add(new THREE.HemisphereLight(0xffffff, 0x7a8ea5, 2.5));
@@ -91,12 +92,10 @@ export class TeacherARScene {
   resize() {
     const width = this.stage.clientWidth, height = this.stage.clientHeight;
     if (!width || !height) return;
-    this.camera.aspect = width / height; this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
     this.tracker?.resize();
   }
   async load(item) {
-    this.stopScanning();
+    this.tracked = false; this.onTracking(false);
     this.modelAbort?.abort(); this.modelAbort = new AbortController();
     const signal = this.modelAbort.signal;
     const generation = ++this.generation;
@@ -136,7 +135,12 @@ export class TeacherARScene {
     this.scene.add(this.model);
     this.animated = results.some(result => result.animations.length);
     this.buildHotspots(item.labels);
-    this.reset(); this.draw();
+    this.reset(); this.model.visible = false;
+    if (this.tracker && this.activeAnchor?.modelId === item.id && this.activeAnchor.group.visible) {
+      this.activeAnchor.group.add(this.model);
+      this.tracked = true; this.model.visible = true; this.onTracking(true);
+    }
+    this.draw();
     return true;
   }
   findPart(part) {
@@ -170,10 +174,10 @@ export class TeacherARScene {
   setLabels(visible) { this.labelsVisible = visible; this.positionHotspots(); }
   positionHotspots() {
     if (!this.model) return;
-    const ar = Boolean(this.tracker), camera = this.tracker?.camera || this.camera;
+    const camera = this.tracker?.camera;
     for (const hotspot of this.hotspots) {
       const part = hotspot.parts[0];
-      const visible = this.labelsVisible && !this.presenting && (!ar || this.tracked) && Boolean(part);
+      const visible = this.labelsVisible && !this.presenting && this.tracker && this.tracked && Boolean(part);
       hotspot.button.hidden = !visible;
       if (!visible) continue;
       const point = this.model.localToWorld(part.modelPoint.clone());
@@ -210,51 +214,54 @@ export class TeacherARScene {
   }
   reset() {
     if (!this.model) return;
-    this.model.rotation.set(this.tracker ? Math.PI / 2 : 0, 0, 0);
+    this.model.rotation.set(Math.PI / 2, 0, 0);
     this.zoom = 1; this.model.scale.setScalar(1);
-    this.camera.position.set(2.5, 1.7, 2.5); this.controls.target.set(0, .45, 0); this.controls.update();
     this.restoreHighlight();
   }
   setZoom(value) { this.zoom = Math.max(.5, Math.min(2, Number(value) || 1)); this.model?.scale.setScalar(this.zoom); }
   rotate(direction) { if (this.model) this.model.rotateY(direction * Math.PI / 12); }
   setPaused(value) { this.paused = value; this.clock.getDelta(); }
   setQuality(value) {
+    this.quality = value;
     const ratio = Math.min(devicePixelRatio, value === "low" ? 1 : value === "high" ? 2 : 1.5);
-    this.renderer.setPixelRatio(ratio); this.tracker?.renderer.setPixelRatio(ratio); this.resize();
+    this.tracker?.renderer.setPixelRatio(ratio); this.resize();
   }
-  async startScanning(deviceId) {
-    if (!this.model || this.closed) return;
+  async startScanning(deviceId, scanner) {
+    if (this.closed || !scanner?.targetModels?.length) return false;
     this.stopScanning();
     const generation = ++this.scanGeneration;
-    const tracker = new TeacherMarkerTracker({ container: this.stage, imageTargetSrc: this.item.target,
-      maxTrack: 1, uiLoading: "no", uiScanning: "no", uiError: "no", warmupTolerance: 5, missTolerance: 8 });
+    const tracker = new TeacherMarkerTracker({ container: this.stage, imageTargetSrc: scanner.target,
+      maxTrack: 1, uiLoading: "no", uiScanning: "no", uiError: "no", warmupTolerance: 1, missTolerance: 8 });
     this.tracker = tracker; tracker.deviceId = deviceId;
     tracker.renderer.domElement.className = "teacher-ar-canvas";
     tracker.cssRenderer.domElement.hidden = true;
-    this.renderer.setAnimationLoop(null);
-    this.controls.enabled = false;
-    // The preview has already drawn a model. Clear its last frame as well as
-    // hiding its canvas before the camera starts; never carry it into scanning.
-    this.model.visible = false;
-    this.renderer.clear();
-    this.renderer.domElement.hidden = true;
-    this.renderer.domElement.style.display = "none";
+    if (this.model) this.model.visible = false;
     this.lights(tracker.scene);
-    const anchor = tracker.addAnchor(0);
-    anchor.onTargetFound = () => {
-      if (this.tracker !== tracker) return;
-      this.tracked = true; this.model.visible = true; this.onTracking(true);
-    };
-    anchor.onTargetLost = () => {
-      if (this.tracker !== tracker) return;
-      this.tracked = false; this.model.visible = false;
-      tracker.renderer.clear(); this.onTracking(false); this.positionHotspots();
-    };
-    anchor.group.add(this.model); this.reset();
+    this.activeAnchor = null;
+    scanner.targetModels.forEach((modelId, index) => {
+      const anchor = tracker.addAnchor(index);
+      anchor.modelId = modelId;
+      anchor.onTargetFound = () => {
+        if (this.tracker !== tracker) return;
+        this.activeAnchor = anchor;
+        const loaded = Boolean(this.model && this.item?.id === modelId);
+        this.tracked = loaded;
+        if (loaded) anchor.group.add(this.model);
+        if (this.model) this.model.visible = loaded;
+        this.onTracking(loaded);
+        this.onModelDetected?.(modelId);
+      };
+      anchor.onTargetLost = () => {
+        if (this.tracker !== tracker || this.activeAnchor !== anchor) return;
+        this.activeAnchor = null; this.tracked = false;
+        if (this.model) this.model.visible = false;
+        tracker.renderer.clear(); this.onTracking(false); this.positionHotspots();
+      };
+    });
     try {
       await tracker.start();
       if (this.closed || generation !== this.scanGeneration) { tracker.close(); return false; }
-      tracker.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      this.setQuality(this.quality);
       tracker.renderer.setAnimationLoop(() => this.draw());
       this.resize();
       return true;
@@ -269,18 +276,14 @@ export class TeacherARScene {
   stopScanning() {
     this.scanGeneration++;
     const tracker = this.tracker;
-    this.tracker = null; this.tracked = false;
-    if (this.model) { this.scene.add(this.model); this.model.rotation.x = 0; this.model.visible = true; }
+    this.tracker = null; this.tracked = false; this.activeAnchor = null;
+    if (this.model) { this.scene.add(this.model); this.model.visible = false; }
     tracker?.close();
-    this.controls.enabled = true;
-    this.renderer.domElement.hidden = false;
-    this.renderer.domElement.style.display = "";
-    if (!this.closed) this.renderer.setAnimationLoop(() => this.draw());
     this.onTracking(false);
     this.positionHotspots();
   }
   pointer(event) {
-    if (!this.model || event.target.closest("button, input, select, a")) return;
+    if (!this.model || !this.tracker || !this.tracked || event.target.closest("button, input, select, a")) return;
     if (event.type === "pointerdown") {
       this.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY });
       if (this.tracker) this.stage.setPointerCapture(event.pointerId);
@@ -302,7 +305,7 @@ export class TeacherARScene {
     if (this.tracker && !this.tracked) return;
     const box = this.stage.getBoundingClientRect();
     const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2((event.clientX - box.left) / box.width * 2 - 1, -(event.clientY - box.top) / box.height * 2 + 1), this.tracker?.camera || this.camera);
+    ray.setFromCamera(new THREE.Vector2((event.clientX - box.left) / box.width * 2 - 1, -(event.clientY - box.top) / box.height * 2 + 1), this.tracker.camera);
     const hit = ray.intersectObject(this.model, true)[0];
     if (!hit) return;
     const parents = new Set(); for (let node = hit.object; node; node = node.parent) parents.add(node);
@@ -315,16 +318,16 @@ export class TeacherARScene {
   }
   draw() {
     if (this.closed || document.visibilityState === "hidden") return;
-    if (this.model) this.model.visible = !this.tracker || Boolean(this.tracked);
+    if (this.model) this.model.visible = Boolean(this.tracker && this.tracked);
     const delta = Math.min(this.clock.getDelta(), .1);
-    if (!this.paused && (!this.tracker || this.tracked)) this.mixers?.forEach(mixer => mixer.update(delta));
+    if (!this.paused && this.tracker && this.tracked) this.mixers?.forEach(mixer => mixer.update(delta));
     if (this.tracker) this.tracker.renderer.render(this.tracker.scene, this.tracker.camera);
-    else { this.controls.update(); this.renderer.render(this.scene, this.camera); }
     this.positionHotspots();
   }
   screenshot() {
+    if (!this.tracker || !this.tracked || !this.model) throw new Error("Scan a marker before taking a screenshot.");
     this.draw();
-    const canvas = document.createElement("canvas"), source = this.tracker?.renderer.domElement || this.renderer.domElement;
+    const canvas = document.createElement("canvas"), source = this.tracker.renderer.domElement;
     canvas.width = source.width; canvas.height = source.height;
     const context = canvas.getContext("2d");
     context.fillStyle = "#e3f1ff"; context.fillRect(0, 0, canvas.width, canvas.height);
@@ -361,7 +364,6 @@ export class TeacherARScene {
     this.closed = true; this.generation++;
     this.modelAbort?.abort();
     this.stopScanning(); this.clearModel();
-    this.abort.abort(); this.resizeObserver.disconnect(); this.controls.dispose();
-    this.renderer.setAnimationLoop(null); this.renderer.dispose(); this.renderer.domElement.remove();
+    this.abort.abort(); this.resizeObserver.disconnect();
   }
 }
