@@ -229,11 +229,23 @@ export class TeacherARScene {
     tracker.cssRenderer.domElement.hidden = true;
     this.renderer.setAnimationLoop(null);
     this.controls.enabled = false;
+    // The preview has already drawn a model. Clear its last frame as well as
+    // hiding its canvas before the camera starts; never carry it into scanning.
+    this.model.visible = false;
+    this.renderer.clear();
     this.renderer.domElement.hidden = true;
+    this.renderer.domElement.style.display = "none";
     this.lights(tracker.scene);
     const anchor = tracker.addAnchor(0);
-    anchor.onTargetFound = () => { if (this.tracker === tracker) { this.tracked = true; this.onTracking(true); } };
-    anchor.onTargetLost = () => { if (this.tracker === tracker) { this.tracked = false; this.onTracking(false); } };
+    anchor.onTargetFound = () => {
+      if (this.tracker !== tracker) return;
+      this.tracked = true; this.model.visible = true; this.onTracking(true);
+    };
+    anchor.onTargetLost = () => {
+      if (this.tracker !== tracker) return;
+      this.tracked = false; this.model.visible = false;
+      tracker.renderer.clear(); this.onTracking(false); this.positionHotspots();
+    };
     anchor.group.add(this.model); this.reset();
     try {
       await tracker.start();
@@ -254,10 +266,11 @@ export class TeacherARScene {
     this.scanGeneration++;
     const tracker = this.tracker;
     this.tracker = null; this.tracked = false;
-    if (this.model) { this.scene.add(this.model); this.model.rotation.x = 0; }
+    if (this.model) { this.scene.add(this.model); this.model.rotation.x = 0; this.model.visible = true; }
     tracker?.close();
     this.controls.enabled = true;
     this.renderer.domElement.hidden = false;
+    this.renderer.domElement.style.display = "";
     if (!this.closed) this.renderer.setAnimationLoop(() => this.draw());
     this.onTracking(false);
     this.positionHotspots();
@@ -298,6 +311,7 @@ export class TeacherARScene {
   }
   draw() {
     if (this.closed || document.visibilityState === "hidden") return;
+    if (this.model) this.model.visible = !this.tracker || Boolean(this.tracked);
     const delta = Math.min(this.clock.getDelta(), .1);
     if (!this.paused && (!this.tracker || this.tracked)) this.mixers?.forEach(mixer => mixer.update(delta));
     if (this.tracker) this.tracker.renderer.render(this.tracker.scene, this.tracker.camera);

@@ -133,7 +133,7 @@ async function startCamera(deviceId = currentDevice) {
     say(error?.name === "NotAllowedError" ? "Camera permission was not granted. You can allow it in your browser and try again, or use Model preview."
       : error?.name === "NotFoundError" ? "No camera was found. Use Model preview or connect a camera and try again."
       : "Camera scanning could not start. Close other apps using the camera and try again. Model preview is still available.");
-  } finally { if (job === cameraJob && owner === account) { busy = false; buttons(); } }
+  } finally { if (job === cameraJob && owner === account) { busy = false; buttons(); tracking(Boolean(scene?.tracked)); } }
 }
 
 topicSelect.addEventListener("change", chooseTopic);

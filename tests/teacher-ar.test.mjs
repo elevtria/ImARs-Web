@@ -77,6 +77,66 @@ test("camera permission errors remain actionable", async () => {
   await assert.rejects(tracker._startVideo(), { name: "NotAllowedError" });
 });
 
+function markerScene() {
+  let scene;
+  const renderer = () => ({ domElement: { style: {}, hidden: false, remove() {} }, clears: 0,
+    clear() { this.clears++; }, setAnimationLoop(callback) { this.loop = callback; },
+    setPixelRatio() {}, dispose() {}, render() { this.lastModelVisible = scene.model.visible; } });
+  const context = vm.createContext({ THREE: {}, devicePixelRatio: 1, setTimeout: () => 1,
+    document: { visibilityState: "visible" }, window: { removeEventListener() {} },
+    MindARThree: class {
+      constructor() { this.renderer = renderer(); this.cssRenderer = { domElement: { remove() {} } }; this.scene = {}; this.camera = {}; }
+      async start() {}
+      addAnchor() {
+        this.anchor = { group: { visible: false, add(model) { model.parent = this; } } };
+        return this.anchor;
+      }
+    } });
+  vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
+  const Scene = vm.runInContext("TeacherARScene", context);
+  const tracking = [];
+  scene = Object.assign(Object.create(Scene.prototype), {
+    stage: {}, item: { target: "/assets/teacher-ar/example.mind" }, scanGeneration: 0,
+    model: { visible: true, rotation: { x: 0 } }, controls: { enabled: true, update() {} }, renderer: renderer(),
+    scene: { add(model) { model.parent = this; } }, camera: {}, clock: { getDelta: () => .016 }, mixers: [],
+    onTracking: found => tracking.push(found), lights() {}, reset() {}, resize() {}, positionHotspots() {}
+  });
+  return { scene, tracking };
+}
+
+test("scan mode clears the preview and shows no model until its marker is recognized", async () => {
+  const { scene } = markerScene();
+  await scene.startScanning();
+  const tracker = scene.tracker;
+  assert.equal(scene.model.visible, false);
+  assert.equal(scene.renderer.domElement.hidden, true);
+  assert.equal(scene.renderer.domElement.style.display, "none");
+  assert.ok(scene.renderer.clears > 0, "the frozen preview frame is erased before camera scanning");
+  scene.draw(); assert.equal(tracker.renderer.lastModelVisible, false);
+  tracker.anchor.group.visible = true; tracker.anchor.onTargetFound();
+  scene.draw(); assert.equal(tracker.renderer.lastModelVisible, true);
+  tracker.anchor.group.visible = false; tracker.anchor.onTargetLost();
+  assert.equal(scene.model.visible, false);
+  assert.ok(tracker.renderer.clears > 0, "the last tracked frame disappears immediately on loss");
+  scene.draw(); assert.equal(tracker.renderer.lastModelVisible, false);
+  tracker.anchor.group.visible = true; tracker.anchor.onTargetFound();
+  scene.draw(); assert.equal(tracker.renderer.lastModelVisible, true, "reacquisition restores the model");
+});
+
+test("refresh ignores old tracking callbacks and preview explicitly restores the model", async () => {
+  const { scene } = markerScene();
+  await scene.startScanning(); const previous = scene.tracker;
+  previous.anchor.onTargetFound(); assert.equal(scene.model.visible, true);
+  await scene.startScanning();
+  assert.equal(scene.model.visible, false);
+  previous.anchor.onTargetFound(); assert.equal(scene.model.visible, false, "stale recognition cannot reveal the new scan");
+  scene.stopScanning();
+  assert.equal(scene.model.visible, true);
+  assert.equal(scene.renderer.domElement.hidden, false);
+  assert.equal(scene.renderer.domElement.style.display, "");
+  scene.draw(); assert.equal(scene.renderer.lastModelVisible, true);
+});
+
 function classroom() {
   class Element {
     events = {}; children = []; attributes = new Map(); dataset = {}; value = ""; hidden = false; disabled = true; paused = true;
