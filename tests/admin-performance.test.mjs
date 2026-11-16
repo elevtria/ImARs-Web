@@ -11,8 +11,8 @@ const source = file => stripImports(readFileSync(new URL(`../js/${file}`, import
 test("teacher snapshot labels distinguish the tests and tooltips explain counts and missing scores on keyboard focus", () => {
   const elements = new Map(), documentEvents = {};
   const element = id => {
-    if (!elements.has(id)) elements.set(id, { style: {}, events: {}, hidden: true, children: [],
-      setAttribute() {},
+    if (!elements.has(id)) elements.set(id, { style: {}, events: {}, attributes: {}, hidden: true, children: [],
+      setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener(name, callback) { this.events[name] = callback; },
       getBoundingClientRect: () => ({ width: 280, height: 80 }),
       appendChild(child) { this.children.push(...(child.fragment ? child.children : [child])); } });
@@ -41,9 +41,15 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   assert.ok(html.includes('role="tooltip"'));
   assert.ok(html.includes("Before learning"));
   assert.ok(html.includes("After learning"));
+  assert.ok(html.includes("Teacher Performance Comparison"));
   context.report = { teachers: [{ id: "T1", name: "Teacher", meta: "Science", students: 132, pre: 46, preCount: 120, post: 75, postCount: 110, gain: 29, hours: "9 min" }],
     totalStudents: 132, pre: 46, post: 75, gain: 29, hours: "9 min" };
   vm.runInContext("renderDashboard(report)", context);
+  assert.equal(element("schoolPreBar").attributes.height, "78.2");
+  assert.equal(element("schoolPostBar").attributes.height, "127.5");
+  assert.equal(element("schoolPreValue").textContent, "46%");
+  assert.equal(element("schoolPostValue").textContent, "75%");
+  assert.match(element("schoolScoreChart").attributes["aria-label"], /pre-test 46%, post-test 75%/);
   assert.match(element("teacherScoreChart").innerHTML, /width:46%/);
   assert.match(element("teacherScoreChart").innerHTML, /width:75%/);
   assert.match(element("teacherStudentChart").innerHTML, /132 students/);
@@ -64,6 +70,12 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   assert.equal(attributes["aria-expanded"], "true");
   element("teacherSnapshot").events.click({ target: { closest: () => button } });
   assert.equal(detail.hidden, true);
+  context.report = { teachers: [], totalStudents: 0, pre: null, post: null, gain: null, hours: "0 min" };
+  vm.runInContext("renderDashboard(report)", context);
+  assert.equal(element("schoolPreBar").attributes.height, "0");
+  assert.equal(element("schoolPostBar").attributes.height, "0");
+  assert.equal(element("schoolPreValue").textContent, "—");
+  assert.equal(element("schoolPostValue").textContent, "—");
 });
 
 test("admin and teacher summary cards share pointer movement, reset, and reduced-motion behavior", () => {

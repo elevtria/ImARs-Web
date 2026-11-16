@@ -33,28 +33,24 @@ select.admin-year:disabled { opacity: .7; cursor: wait; }
 
 .panel { margin-top: 14px; padding: 20px 22px 21px; border: 1px solid var(--admin-line); border-radius: 17px; background: var(--admin-card); }
 .panel h2 { margin: 0; padding-left: 10px; border-left: 4px solid var(--steel); font-size: 17px; line-height: 1.4; font-weight: 700; }
-.learning-content { display: flex; min-height: 310px; align-items: center; justify-content: center; gap: clamp(38px, 12vw, 130px); padding: 20px 10px 5px; }
-.learning-ring {
-  display: grid;
-  width: 148px;
-  height: 148px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--chart-track, #e2e8f0);
-  transform: rotate(0deg);
-}
-.ring-center { display: flex; width: 110px; height: 110px; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #fff; }
-.ring-center strong { font-size: 24px; font-weight: 700; line-height: 1.15; }
-.ring-center span { color: var(--admin-muted); font-size: 11px; }
-.learning-metrics { width: min(360px, 48%); display: grid; gap: 19px; }
-.learning-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 12px; font-weight: 600; }
-.learning-meta strong { font-size: 12px; }
-.meter { height: 9px; overflow: hidden; border-radius: 999px; background: #edf1f7; }
-.meter i { display: block; height: 100%; border-radius: inherit; }
-.pre-meter { background: var(--admin-cyan); }
-.post-meter { background: var(--admin-green); }
-.gain-meter { background: var(--admin-purple); }
+.learning-content { display: flex; min-height: 310px; align-items: center; justify-content: center; gap: clamp(25px, 6vw, 75px); padding: 18px 10px 5px; }
+.school-score-chart { width: min(400px, 55%); min-width: 0; }
+.school-score-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.school-score-chart > p { margin: -4px 0 0; color: var(--admin-muted); font-size: 11px; text-align: center; }
+.school-chart-grid path { fill: none; stroke: var(--admin-line); stroke-width: 1; }
+.school-chart-grid text { fill: var(--admin-muted); font-size: 11px; text-anchor: end; }
+.school-chart-pre { fill: var(--admin-cyan); }
+.school-chart-post { fill: var(--admin-green); }
+.school-chart-value { fill: var(--admin-ink); font-size: 14px; font-weight: 700; text-anchor: middle; }
+.school-chart-label { fill: var(--admin-ink); font-size: 12px; font-weight: 700; text-anchor: middle; }
+.learning-metrics { width: min(360px, 45%); display: grid; gap: 12px; }
+.learning-row { padding: 13px 15px; border: 1px solid var(--admin-line); border-left: 4px solid var(--admin-purple); border-radius: 11px; background: #f5f9fd; }
+.learning-row:first-child { border-left-color: var(--admin-cyan); }
+.learning-row:nth-child(2) { border-left-color: var(--admin-green); }
+.learning-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12px; font-weight: 600; }
+.learning-meta strong { color: var(--admin-ink); font-size: 15px; }
+.learning-row small { display: block; margin-top: 4px; color: var(--admin-muted); font-size: 10px; line-height: 1.4; }
+[data-theme="dark"] .learning-row { background: #202f41; }
 
 .comparison-panel { padding-bottom: 23px; }
 .comparison-panel .panel-heading { align-items: flex-start; }
@@ -134,8 +130,7 @@ td { padding: 14px 10px; border-top: 1px solid #f0f3f8; color: #566c8b; font-siz
   .dashboard-content { padding: 27px 14px 54px; }
   .panel { padding: 17px 14px; }
   .learning-content { min-height: 0; flex-direction: column; gap: 25px; padding: 24px 3px 10px; }
-  .learning-ring { width: 132px; height: 132px; }
-  .ring-center { width: 98px; height: 98px; }
+  .school-score-chart { width: min(400px, 100%); }
   .learning-metrics { width: 100%; }
   .teacher-panel { padding-right: 0; padding-left: 13px; }
   .teacher-panel .panel-heading { padding-right: 13px; }

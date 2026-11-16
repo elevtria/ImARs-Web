@@ -128,29 +128,29 @@ function renderDashboard(report) {
     if (schoolAvgPreNoteEl) schoolAvgPreNoteEl.textContent = avgPrePct === null ? "Completed tests" : `Pre-test average: ${formatAdminPercent(avgPrePct)}`;
     if (totalArHoursEl) totalArHoursEl.textContent = totalArHours;
 
-    const ringPostEl = document.getElementById("ringPostScore");
     const meterPreVal = document.getElementById("meterPreVal");
     const meterPostVal = document.getElementById("meterPostVal");
     const meterGainVal = document.getElementById("meterGainVal");
 
-    const meterPreBar = document.getElementById("meterPreBar");
-    const meterPostBar = document.getElementById("meterPostBar");
-    const meterGainBar = document.getElementById("meterGainBar");
-
-    if (ringPostEl) ringPostEl.textContent = formatAdminPercent(avgPostPct);
     if (meterPreVal) meterPreVal.textContent = formatAdminPercent(avgPrePct);
     if (meterPostVal) meterPostVal.textContent = formatAdminPercent(avgPostPct);
     if (meterGainVal) meterGainVal.textContent = formatAdminGain(gainPct);
 
-    if (meterPreBar) meterPreBar.style.width = `${avgPrePct ?? 0}%`;
-    if (meterPostBar) meterPostBar.style.width = `${avgPostPct ?? 0}%`;
-    if (meterGainBar) meterGainBar.style.width = `${Math.abs(gainPct ?? 0)}%`;
-
-    const ringEl = document.getElementById("learningRing");
-    if (ringEl) {
-      ringEl.setAttribute("aria-label", avgPostPct === null ? "No completed post-tests" : `School average post-test score: ${avgPostPct}%`);
-      ringEl.style.background = `conic-gradient(var(--steel) ${avgPostPct ?? 0}%, var(--chart-track, #e2e8f0) 0%)`;
+    for (const [kind, score] of [["Pre", avgPrePct], ["Post", avgPostPct]]) {
+      const bar = document.getElementById(`school${kind}Bar`);
+      const value = document.getElementById(`school${kind}Value`);
+      const height = Number.isFinite(score) ? Math.max(0, Math.min(100, score)) * 1.7 : 0;
+      if (bar) {
+        bar.setAttribute("y", String(210 - height));
+        bar.setAttribute("height", String(height));
+      }
+      if (value) {
+        value.textContent = formatAdminPercent(score);
+        value.setAttribute("y", String(Math.max(28, 202 - height)));
+      }
     }
+    document.getElementById("schoolScoreChart")?.setAttribute("aria-label",
+      `School averages: pre-test ${formatAdminPercent(avgPrePct)}, post-test ${formatAdminPercent(avgPostPct)}, change ${formatAdminGain(gainPct)}`);
 
     renderComparisonCharts(report.teachers);
 

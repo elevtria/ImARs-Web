@@ -75,21 +75,33 @@
     <section class="panel learning-panel" aria-labelledby="learningTitle" data-auth-shell data-await-content="admin-report">
       <h2 id="learningTitle" data-public-label>School-Wide Learning Gain</h2>
       <div class="learning-content">
-        <div class="learning-ring" id="learningRing" role="img" aria-label="School average post-test score">
-          <div class="ring-center"><strong id="ringPostScore">—</strong><span>school avg</span></div>
+        <div class="school-score-chart">
+          <svg id="schoolScoreChart" viewBox="0 0 400 270" role="img" aria-label="School pre-test and post-test averages: no completed scores yet">
+            <g class="school-chart-grid" aria-hidden="true">
+              <path d="M46 40H380M46 82.5H380M46 125H380M46 167.5H380M46 210H380" />
+              <text x="38" y="44">100%</text><text x="38" y="86.5">75%</text><text x="38" y="129">50%</text><text x="38" y="171.5">25%</text><text x="38" y="214">0%</text>
+            </g>
+            <rect class="school-chart-pre" id="schoolPreBar" x="124" y="210" width="62" height="0" rx="5" />
+            <rect class="school-chart-post" id="schoolPostBar" x="238" y="210" width="62" height="0" rx="5" />
+            <text class="school-chart-value" id="schoolPreValue" x="155" y="200">—</text>
+            <text class="school-chart-value" id="schoolPostValue" x="269" y="200">—</text>
+            <text class="school-chart-label" x="155" y="237">Pre-test</text>
+            <text class="school-chart-label" x="269" y="237">Post-test</text>
+          </svg>
+          <p>School averages from completed lesson tests</p>
         </div>
         <div class="learning-metrics">
           <div class="learning-row">
             <div class="learning-meta"><span>School Pre-Test Average</span><strong class="cyan" id="meterPreVal">—</strong></div>
-            <div class="meter"><i class="pre-meter" id="meterPreBar" style="width:0%"></i></div>
+            <small>Before learning each topic</small>
           </div>
           <div class="learning-row">
             <div class="learning-meta"><span>School Post-Test Average</span><strong class="green" id="meterPostVal">—</strong></div>
-            <div class="meter"><i class="post-meter" id="meterPostBar" style="width:0%"></i></div>
+            <small>After learning each topic</small>
           </div>
           <div class="learning-row">
             <div class="learning-meta"><span>Change in Average</span><strong class="purple" id="meterGainVal">—</strong></div>
-            <div class="meter"><i class="gain-meter" id="meterGainBar" style="width:0%"></i></div>
+            <small>Post-test minus pre-test, in percentage points</small>
           </div>
         </div>
       </div>
@@ -98,7 +110,7 @@
     <section class="panel comparison-panel" aria-labelledby="comparisonTitle" data-auth-shell data-await-content="admin-report">
       <div class="panel-heading">
         <div>
-          <h2 id="comparisonTitle" data-public-label>Teacher Data at a Glance</h2>
+          <h2 id="comparisonTitle" data-public-label>Teacher Performance Comparison</h2>
           <p class="comparison-intro">Compare the scores and student counts behind the school totals.</p>
         </div>
         <a class="comparison-link" href="school-analytics.html">View School Analytics</a>
