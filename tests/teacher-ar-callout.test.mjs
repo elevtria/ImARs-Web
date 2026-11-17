@@ -14,14 +14,30 @@ test("camera descriptions connect to the projected surface point and follow its 
   assert.equal(descriptionArrow({ x: 300, y: 220 }, scroll(viewport), scroll(card), scroll(frame)), "M736,189 L518,189 L300,220");
 });
 
-test("narrow layouts keep descriptions inside the camera near the opposite edge", () => {
+test("narrow layouts keep descriptions beside the selected point and inside the camera", () => {
   const mobile = { left: 0, top: 20, width: 390, height: 540 };
   const detail = { left: 210, top: 78, width: 168, height: 190 };
   assert.equal(descriptionArrow({ x: 110, y: 230 }, mobile, detail, mobile), "M210,188 L160,188 L110,230");
   assert.equal(descriptionArrow({ x: 260, y: 100 }, mobile, detail, mobile), null, "never draw an arrow pointing under the card");
-  assert.deepEqual(descriptionPlacement({ x: 110, y: 230 }, mobile, detail), { x: 210, y: 145, side: "right" });
-  assert.deepEqual(descriptionPlacement({ x: 300, y: 200 }, mobile, detail), { x: 12, y: 115, side: "left" });
-  assert.equal(descriptionPlacement({ x: 210, y: 200 }, mobile, detail, "right").side, "right", "small tracking movements must not flip the card repeatedly");
+  assert.deepEqual(descriptionPlacement({ x: 110, y: 230 }, mobile, detail), { x: 134, y: 145, side: "right" });
+  assert.deepEqual(descriptionPlacement({ x: 300, y: 200 }, mobile, detail), { x: 108, y: 115, side: "left" });
+  const switched = descriptionPlacement({ x: 210, y: 200 }, mobile, detail, "right");
+  assert.equal(switched.side, "left", "switch sides when the previous side would overlap the selected point");
+  assert.equal(descriptionPlacement({ x: 209, y: 200 }, mobile, detail, switched.side).side, "left", "small tracking movements must not flip the card repeatedly");
+});
+
+test("descriptions use short connectors instead of stretching across the camera", () => {
+  for (const [width, panelWidth, x] of [[1000, 248, 180], [1000, 248, 800], [390, 168, 110], [390, 168, 300]]) {
+    const view = { left: 0, top: 0, width, height: 500 }, anchor = { x, y: 240 };
+    const size = { width: panelWidth, height: 190 };
+    const position = descriptionPlacement(anchor, view, size);
+    const placed = { left: position.x, top: position.y, ...size };
+    assert.ok(placed.left >= 12 && placed.left + placed.width <= width - 12);
+    const arrow = descriptionArrow(anchor, view, placed, view);
+    assert.ok(arrow);
+    const [startX, startY] = arrow.match(/^M(\d+),(\d+)/).slice(1).map(Number);
+    assert.ok(Math.hypot(startX - x, startY - anchor.y) <= 36, "connector stays close to the selected surface point");
+  }
 });
 
 test("missing, offscreen, or unmeasurable parts never leave a misleading arrow", () => {

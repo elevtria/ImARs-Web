@@ -15,9 +15,15 @@ export function descriptionArrow(anchor, viewport, card, frame) {
 }
 
 export function descriptionPlacement(anchor, viewport, panel, previousSide) {
-  const side = !previousSide || anchor.x < viewport.width * .4 || anchor.x > viewport.width * .6
+  let side = !previousSide || anchor.x < viewport.width * .4 || anchor.x > viewport.width * .6
     ? anchor.x < viewport.width / 2 ? "right" : "left" : previousSide;
-  const x = side === "right" ? Math.max(12, viewport.width - panel.width - 12) : 12;
+  const gap = 24, margin = 12;
+  const fitsRight = anchor.x + gap + panel.width <= viewport.width - margin;
+  const fitsLeft = anchor.x - gap - panel.width >= margin;
+  if (side === "right" && !fitsRight && fitsLeft) side = "left";
+  else if (side === "left" && !fitsLeft && fitsRight) side = "right";
+  const desired = side === "right" ? anchor.x + gap : anchor.x - gap - panel.width;
+  const x = Math.max(margin, Math.min(Math.max(margin, viewport.width - panel.width - margin), desired));
   const limit = Math.max(8, viewport.height - panel.height - 80), minimum = Math.min(58, limit);
   const y = Math.max(minimum, Math.min(limit, anchor.y - panel.height * .45));
   return { x: Math.round(x), y: Math.round(y), side };

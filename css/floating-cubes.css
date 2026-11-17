@@ -31,4 +31,68 @@ body { isolation:isolate; }
 @media(max-width:700px) { .floating-cube { opacity:.45; } .floating-cube:nth-child(1) { left:-55px; top:20%; width:110px; height:124px; } .floating-cube:nth-child(4) { right:-50px; bottom:8%; width:110px; height:124px; opacity:.45; } }
 @media(prefers-reduced-motion:reduce) { .floating-cube { animation:none; } }
 
+/* Slow liquid ribbons in the existing sky-blue palette, with pearly highlights.
+   Animate only transforms so the gradient does not repaint on every frame. */
+@media screen {
+  .login-cubes {
+    --liquid-base: #b3e0ff;
+    --liquid-blue: #8fc9f5;
+    --liquid-sky: #c6eaff;
+    --liquid-white: #ffffffc4;
+    --liquid-glow: #ffffff75;
+    background:
+      radial-gradient(ellipse at 10% 12%, var(--liquid-glow), transparent 52%),
+      linear-gradient(135deg, var(--liquid-sky), var(--liquid-base) 50%, var(--liquid-blue));
+  }
+  .login-cubes::before, .login-cubes::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    transform-origin: center;
+  }
+  .login-cubes::before {
+    inset: -35% -24%;
+    border-radius: 42% 58% 62% 38% / 48% 38% 62% 52%;
+    background:
+      radial-gradient(ellipse at 34% 42%, var(--liquid-white), transparent 53%),
+      radial-gradient(ellipse at 74% 78%, var(--liquid-sky), transparent 58%),
+      linear-gradient(145deg, transparent 26%, var(--liquid-glow) 47%, var(--liquid-blue) 72%);
+    box-shadow: inset 0 2px 36px var(--liquid-glow);
+    transform: translate(-4%, -3%) rotate(-12deg);
+    animation: liquid-flow 32s ease-in-out infinite alternate;
+  }
+  .login-cubes::after {
+    width: 145%;
+    height: 88%;
+    left: -32%;
+    top: 52%;
+    border-radius: 48% 52% 38% 62% / 36% 42% 58% 64%;
+    background: linear-gradient(165deg, var(--liquid-white), var(--liquid-glow) 12%, var(--liquid-sky) 43%, transparent 76%);
+    box-shadow: 0 -2px 30px var(--liquid-glow), inset 0 2px 4px var(--liquid-white);
+    transform: translate(0, 0) rotate(-18deg);
+    animation: liquid-ribbon 38s ease-in-out infinite alternate;
+  }
+  /* Keep cubes above the soft ribbons. */
+  .login-cubes .floating-cube { z-index: 1; }
+  :root[data-theme="dark"] .login-cubes {
+    --liquid-base: #123a69;
+    --liquid-blue: #0b264d;
+    --liquid-sky: #1b599a;
+    --liquid-white: #aedaff24;
+    --liquid-glow: #dcefff0d;
+  }
+  @keyframes liquid-flow {
+    to { transform: translate(5%, 4%) rotate(8deg) scale(1.06); }
+  }
+  @keyframes liquid-ribbon {
+    to { transform: translate(9%, -8%) rotate(-8deg); }
+  }
+}
+@media screen and (max-width: 700px) {
+  .login-cubes::before { inset: -20% -55%; }
+  .login-cubes::after { width: 190%; left: -60%; top: 55%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-cubes::before, .login-cubes::after { animation: none; }
+}
 @media print { .login-cubes { display:none; } }

@@ -74,7 +74,7 @@ export class TeacherARScene {
     this.scene = new THREE.Scene();
     this.clock = new THREE.Clock();
     this.quality = "medium";
-    this.paused = false; this.zoom = 1; this.highlighted = []; this.hotspots = []; this.indicatorsVisible = true;
+    this.paused = false; this.zoom = 1; this.hotspots = []; this.indicatorsVisible = true;
     this.generation = 0; this.scanGeneration = 0;
     this.pointers = new Map();
     this.abort = new AbortController();
@@ -263,34 +263,12 @@ export class TeacherARScene {
     this.onLabelAnchor?.(anchor);
   }
   selectLabel(id) {
-    this.restoreHighlight();
     this.selectedLabelId = id;
     const hotspot = this.hotspots.find(item => item.label.id === id);
     if (id === null) this.setDissected(false);
     else if (this.item?.dissection && hotspot && (this.item.dissection.kind === "volcano" || hotspot.parts.every(part => !this.partVisible(part.node)))) this.setDissected(true);
     this.hotspots.forEach(item => item.button.setAttribute("aria-pressed", String(item === hotspot)));
-    for (const part of hotspot?.parts || []) {
-      if (part.node === this.content) continue;
-      part.node.traverse(node => {
-        if (!node.isMesh || !node.material || this.highlighted.some(entry => entry.node === node)) return;
-        const original = node.material;
-        const highlight = material => {
-          const clone = material.clone();
-          if (clone.emissive) { clone.emissive.set(0x1258ac); clone.emissiveIntensity = .5; }
-          return clone;
-        };
-        node.material = Array.isArray(original) ? original.map(highlight) : highlight(original);
-        this.highlighted.push({ node, original });
-      });
-    }
     this.positionHotspots();
-  }
-  restoreHighlight() {
-    for (const { node, original } of this.highlighted) {
-      for (const material of Array.isArray(node.material) ? node.material : [node.material]) material.dispose();
-      node.material = original;
-    }
-    this.highlighted = [];
   }
   setDissected(value, immediate = false) {
     if (!this.cutawayFrame || !this.wholeFrame) return;
@@ -312,7 +290,6 @@ export class TeacherARScene {
     if (!this.model) return;
     this.model.rotation.set(Math.PI / 2, 0, 0);
     this.zoom = 1; this.model.scale.setScalar(1);
-    this.restoreHighlight();
     this.setDissected(false, true);
   }
   setZoom(value) { this.zoom = Math.max(.5, Math.min(2, Number(value) || 1)); this.model?.scale.setScalar(this.zoom); }
@@ -453,7 +430,6 @@ export class TeacherARScene {
     geometries.forEach(item => item.dispose()); materials.forEach(item => item.dispose()); textures.forEach(item => item.dispose());
   }
   clearModel() {
-    this.restoreHighlight();
     this.mixers?.forEach(mixer => { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); });
     this.mixers = [];
     if (this.model) { this.model.removeFromParent(); this.disposeObject(this.model); }

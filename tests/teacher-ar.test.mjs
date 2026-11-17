@@ -254,6 +254,34 @@ test("indicators follow actual mesh vertices through part animation, model rotat
   part.geometry.dispose(); part.material.dispose();
 });
 
+test("selecting narration indicators preserves original mesh colours and materials", async () => {
+  const THREE = await engineMath();
+  const context = vm.createContext({ THREE, MindARThree: class {} });
+  vm.runInContext(readFileSync(new URL("../js/teacher-ar-scene.js", import.meta.url), "utf8").replace(/^import .*;\r?\n/gm, "").replace(/^export /gm, ""), context);
+  const Scene = vm.runInContext("TeacherARScene", context);
+  const root = new THREE.Group(), model = new THREE.Group(); model.add(root);
+  const first = new THREE.MeshStandardMaterial({ color: 0xaa3322, emissive: 0x110000, emissiveIntensity: .2 });
+  const second = new THREE.MeshStandardMaterial({ color: 0x224488 });
+  const single = new THREE.Mesh(new THREE.BoxGeometry(), first), multi = new THREE.Mesh(new THREE.BoxGeometry(), [first, second]);
+  root.add(single, multi);
+  const originals = [single.material, multi.material];
+  let disposed = 0;
+  first.addEventListener("dispose", () => disposed++); second.addEventListener("dispose", () => disposed++);
+  const button = { setAttribute(name, value) { this[name] = value; } };
+  const scene = Object.assign(Object.create(Scene.prototype), { model, content: root, positionHotspots() {},
+    hotspots: [{ label: { id: "part" }, parts: [{ node: root }], button }] });
+  for (const id of ["part", "part", null, "part"]) {
+    scene.selectLabel(id);
+    assert.equal(button["aria-pressed"], String(id === "part"));
+    assert.equal(single.material, originals[0]); assert.equal(multi.material, originals[1]);
+    assert.equal(first.color.getHex(), 0xaa3322); assert.equal(first.emissive.getHex(), 0x110000);
+    assert.equal(first.emissiveIntensity, .2); assert.equal(second.color.getHex(), 0x224488);
+  }
+  scene.reset();
+  assert.equal(disposed, 0, "selection does not replace or dispose shared model materials");
+  single.geometry.dispose(); multi.geometry.dispose(); first.dispose(); second.dispose();
+});
+
 test("clicking a heart or volcano swaps whole and interior views, with correct label visibility and reset", async () => {
   const math = await engineMath();
   const node = () => ({ style: {}, dataset: {}, attributes: {}, setAttribute(name, value) { this.attributes[name] = value; }, addEventListener() {}, remove() {} });
