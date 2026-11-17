@@ -1,9 +1,7 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
 @media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link { position: relative; overflow: hidden; transform: perspective(900px) rotateX(0deg) rotateY(0deg); transition: transform 220ms cubic-bezier(.2,.65,.3,1), border-color 220ms ease, box-shadow 220ms ease; }
+  :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link { position: relative; overflow: hidden; transform: perspective(900px) rotateX(0deg) rotateY(0deg); transition: transform 160ms ease-out, border-color 160ms ease; }
   :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link[data-tilt-active] { transform: perspective(900px) rotateX(var(--summary-rotate-x, 0deg)) rotateY(var(--summary-rotate-y, 0deg)) translateY(-4px); }
-  :is(.admin-overview, .teacher-dashboard) .stats .stat-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(circle at var(--summary-glow-x, 50%) var(--summary-glow-y, 50%), #ffffff80, transparent 65%); opacity: 0; pointer-events: none; transition: opacity 220ms ease; }
-  :is(.admin-overview, .teacher-dashboard) .stats .stat-link[data-tilt-active]::after { opacity: .65; }
   :is(.admin-overview, .teacher-dashboard) .stats .stat-link :is(.label, .value, .hint) { position: relative; z-index: 1; }
   :is(.admin-overview, .teacher-dashboard) .stats .stat-link .summary-icon { z-index: 1; }
 }
@@ -130,39 +128,52 @@ body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outli
 @media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
 }
 
-/* Dashboard-demo motion: reveal the live cards after authentication and their
-   data are ready. Private content is never captured in a view-transition image. */
+/* Shared lightweight motion for BOTH admin and teacher screens. Animate live
+   elements after authentication/data readiness, without snapshotting private data. */
 @media screen and (prefers-reduced-motion: no-preference) {
-  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) .app > main >
+  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) main >
   :is(.hero, .intro, .card, .panel, .page-intro, .manage-heading, .analytics-heading):not([hidden]):not([data-await-content]:not([data-content-ready])),
-  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) .app > main >
-  .stats:not([hidden]):not([data-await-content]:not([data-content-ready])) > .stat-link {
-    animation: portal-card-enter 440ms cubic-bezier(.2, .7, .2, 1) backwards;
+  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) main
+  :is(.stats, .teacher-metrics):not([hidden]):not([data-await-content]:not([data-content-ready])) > :is(.stat-link, .teacher-metric) {
+    animation: portal-card-enter 300ms ease-out backwards;
     animation-delay: var(--portal-enter-delay, 0ms);
   }
-  .app > main > .stats > .stat-link:first-child { --portal-enter-delay: 0ms; }
-  .app > main > :nth-child(2), .app > main > .stats > .stat-link:nth-child(2) { --portal-enter-delay: 50ms; }
-  .app > main > :nth-child(3), .app > main > .stats > .stat-link:nth-child(3) { --portal-enter-delay: 100ms; }
-  .app > main > :nth-child(4), .app > main > .stats > .stat-link:nth-child(4) { --portal-enter-delay: 150ms; }
-  .app > main > :nth-child(n + 5), .app > main > .stats > .stat-link:nth-child(n + 5) { --portal-enter-delay: 180ms; }
+  main > :nth-child(2), main :is(.stats, .teacher-metrics) > :nth-child(2) { --portal-enter-delay: 35ms; }
+  main > :nth-child(3), main :is(.stats, .teacher-metrics) > :nth-child(3) { --portal-enter-delay: 70ms; }
+  main > :nth-child(4), main :is(.stats, .teacher-metrics) > :nth-child(4) { --portal-enter-delay: 105ms; }
+  main > :nth-child(n + 5) { --portal-enter-delay: 140ms; }
+  main :is(.stats, .teacher-metrics) > :first-child { --portal-enter-delay: 0ms; }
 
-  @keyframes portal-card-enter {
-    from { opacity: 0; translate: 0 16px; filter: blur(3px); }
-    to { opacity: 1; translate: 0 0; filter: none; }
+  :where(body:not([data-auth-pending]):not([data-history-hidden])) main
+  :is(.record, .teacher-record, .quiz-library-card, .term-card, .teacher-analytics-card, .comparison-item):nth-child(-n + 8):not([hidden]) {
+    animation: portal-item-enter 220ms ease-out backwards;
   }
+  :where(body:not([data-auth-pending])) :is(dialog[open], .modal.open .modal-card, .modal.open .modal-box) {
+    animation: portal-dialog-enter 180ms ease-out;
+  }
+  :where(body:not([data-auth-pending])) dialog[open]::backdrop { animation: portal-fade-in 160ms ease-out; }
+  :where(body:not([data-auth-pending])) :is([role="tabpanel"], .quiz-step-pane):not([hidden]) {
+    animation: portal-item-enter 200ms ease-out;
+  }
+  :where(body:not([data-auth-pending])) .comparison-fill { transform-origin: left center; animation: portal-bar-enter 360ms ease-out; }
+  :where(body:not([data-auth-pending])) :is(.bar > i, .comparison-fill) { transition: width 260ms ease-out; }
+  :where(body:not([data-auth-pending])) :is(.school-chart-pre, .school-chart-post) { transition: height 360ms ease-out, y 360ms ease-out; }
+  :where(body:not([data-auth-pending])) .stats[data-content-ready] .value { animation: portal-item-enter 200ms ease-out; }
 
-  #drawer .nav-item { position: relative; isolation: isolate; transition: background-color 220ms ease, color 220ms ease, box-shadow 220ms ease; }
-  #drawer .nav-item::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(ellipse at 24px 50%, #ffffff60, transparent 65%);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 220ms ease;
-  }
-  #drawer .nav-item:is(:hover, :focus-visible)::after { opacity: 1; }
-  #drawer .nav-item svg { transition: transform 220ms cubic-bezier(.2, .7, .2, 1); }
-  #drawer .nav-item:is(:hover, :focus-visible) svg { transform: translateY(-1px) scale(1.08); }
+  #drawer .nav-item { transition: background-color 140ms ease, color 140ms ease; }
+  #drawer .nav-item svg { transition: transform 140ms ease-out; }
+  #drawer .nav-item:is(:hover, :focus-visible) svg { transform: translateY(-1px) scale(1.05); }
+  @media (min-width: 1000px) { #drawer, #drawer .drawer-panel { transition: width 160ms ease-out; } }
+
+  @keyframes portal-card-enter { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
+  @keyframes portal-item-enter { from { opacity: 0; translate: 0 5px; } to { opacity: 1; translate: 0 0; } }
+  @keyframes portal-dialog-enter { from { opacity: 0; scale: .98; } to { opacity: 1; scale: 1; } }
+  @keyframes portal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes portal-bar-enter { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 }
+
+/* Flat hover/selection treatments: no glossy sheen or hover glow. Keep focus
+   outlines so keyboard navigation stays visible. */
+#drawer .nav-item::after, :is(.teacher-dashboard, .admin-overview) .stats .stat-link::after { content: none; }
+#drawer .nav-item, #drawer .nav-item:is(:hover, :focus-visible), #drawer .nav-item.active { box-shadow: none; }
+:root body main :is(.stat-link, .action, .record, .teacher-record, .quiz-library-card):is(:hover, :focus-within) { box-shadow: none; }

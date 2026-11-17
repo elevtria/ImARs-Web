@@ -28,6 +28,15 @@ if (navigationDrawer) {
     let pointerInside = false;
     let keyboardNavigation = false;
     let collapseTimer;
+    let navigatingFromSidebar = false;
+    let preserveFirstPageShow = false;
+    let arrival;
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        arrival = JSON.parse(sessionStorage.getItem("imars-sidebar-arrival") || "null");
+        sessionStorage.removeItem("imars-sidebar-arrival");
+      }
+    } catch { arrival = null; }
     const updateCompact = () => {
       const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
       const compact = desktop.matches && hoverPointer.matches && !pointerInside && !focused;
@@ -86,12 +95,17 @@ if (navigationDrawer) {
       syncDrawer();
     };
     const resetNavigation = () => {
+      navigatingFromSidebar = false;
+      preserveFirstPageShow = false;
       resetHover();
       closeNavigation();
     };
     desktop.addEventListener("change", resetNavigation);
-    window.addEventListener("pagehide", resetNavigation);
-    window.addEventListener("pageshow", resetNavigation);
+    window.addEventListener("pagehide", () => { if (!navigatingFromSidebar) resetNavigation(); });
+    window.addEventListener("pageshow", event => {
+      if (preserveFirstPageShow && !event.persisted) preserveFirstPageShow = false;
+      else resetNavigation();
+    });
     menuButton?.addEventListener("click", () => {
       navigationDrawer.classList.add("open");
       syncDrawer();
@@ -99,6 +113,15 @@ if (navigationDrawer) {
     });
     resetHover();
     syncDrawer();
+    // Preserve a deliberate sidebar navigation for the first paint only. This
+    // prevents expanded -> compact -> expanded flicker between documents.
+    if (desktop.matches && arrival && Date.now() - arrival.at >= 0 && Date.now() - arrival.at < 5000 &&
+        arrival.path === new URL(window.location.href).pathname && [arrival.x, arrival.y].every(Number.isFinite) &&
+        panel.contains(document.elementFromPoint?.(arrival.x, arrival.y))) {
+      pointerInside = true;
+      preserveFirstPageShow = true;
+      updateCompact();
+    }
 
     const close = document.createElement("button");
     close.type = "button";
@@ -108,6 +131,17 @@ if (navigationDrawer) {
     panel.append(close);
     close.addEventListener("click", () => closeNavigation(true));
     navigationDrawer.addEventListener("click", event => {
+      const link = event.target.closest?.(".nav-item[href], .brand[href]");
+      if (desktop.matches && pointerInside && link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey &&
+          (!event.button || event.button === 0) && (!link.target || link.target === "_self")) {
+        try {
+          const target = new URL(link.href, window.location.href);
+          if (target.origin === window.location.origin) {
+            sessionStorage.setItem("imars-sidebar-arrival", JSON.stringify({ path: target.pathname, at: Date.now(), x: event.clientX, y: event.clientY }));
+            navigatingFromSidebar = true;
+          }
+        } catch { /* Navigation still works when browser storage is unavailable. */ }
+      }
       if (event.target === navigationDrawer) closeNavigation(true);
       else if (!desktop.matches && event.target.closest(".nav-item[href], .brand[href]")) closeNavigation();
     });

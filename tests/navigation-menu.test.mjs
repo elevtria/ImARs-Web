@@ -20,7 +20,7 @@ function setup(connection) {
   return { context, events, windowEvents, links, link, event, flush };
 }
 
-function menu({ desktop = true, inheritedHover = false } = {}) {
+function menu({ desktop = true, inheritedHover = false, arrival = null, path = "/", now = Date.now() } = {}) {
   const timers = new Map(); let timer = 0;
   const target = () => {
     const events = new Map(), classes = new Set(), attributes = new Map();
@@ -36,6 +36,7 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
   const outside = { matches: () => false }, focusedLink = { inside: true, matches: () => true, blur: () => { document.activeElement = outside; } };
   document.activeElement = outside;
   document.body = target();
+  document.elementFromPoint = () => panel;
   panel.contains = element => element === panel || element?.inside === true;
   panel.matches = () => inheritedHover;
   panel.querySelector = () => ({ focus() {} }); panel.querySelectorAll = () => [];
@@ -44,10 +45,12 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
   document.querySelectorAll = () => []; document.createElement = () => target(); document.head = { append() {} };
   const screen = Object.assign(target(), { matches: desktop }), pointer = Object.assign(target(), { matches: true });
   window.matchMedia = query => query.includes("min-width") ? screen : pointer;
-  window.location = { href: "https://imars.test/", origin: "https://imars.test" };
-  vm.runInNewContext(script, { window, document, navigator: {}, URL, queueMicrotask: callback => callback(),
+  window.location = { href: "https://imars.test" + path, origin: "https://imars.test" };
+  const storage = new Map(arrival ? [["imars-sidebar-arrival", JSON.stringify(arrival)]] : []);
+  const sessionStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
+  vm.runInNewContext(script, { window, document, sessionStorage, Date: { now: () => now }, navigator: {}, URL, queueMicrotask: callback => callback(),
     MutationObserver: class { observe() {} }, setTimeout: callback => { timers.set(++timer, callback); return timer; }, clearTimeout: id => timers.delete(id) });
-  return { panel, drawer, document, window, screen, button, accountButton, accountMenu, focusedLink, outside, compact: () => drawer.classes.has("is-compact"),
+  return { panel, drawer, document, window, screen, button, accountButton, accountMenu, focusedLink, outside, storage, compact: () => drawer.classes.has("is-compact"),
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
@@ -56,6 +59,26 @@ test("sidebar does not inherit a stale expanded hover state after navigation", (
   assert.equal(f.compact(), true);
   f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
   f.panel.emit("pointerleave"); f.flush(); assert.equal(f.compact(), true);
+});
+
+test("clicking a sidebar destination preserves its width for first paint without leaving stale hover on back navigation", () => {
+  const first = menu({ now: 1000 });
+  first.panel.emit("pointerenter", { pointerType: "mouse" });
+  const link = { href: "https://imars.test/analytics.html" };
+  first.drawer.emit("click", { target: { closest: () => link }, clientX: 32, clientY: 200 });
+  const arrival = JSON.parse(first.storage.get("imars-sidebar-arrival"));
+  first.window.emit("pagehide");
+  assert.equal(first.compact(), false, "the outgoing menu does not collapse during navigation");
+  const next = menu({ arrival, path: "/analytics.html", now: 1100 });
+  assert.equal(next.compact(), false, "the incoming menu starts at the same width");
+  assert.equal(next.storage.size, 0, "the handoff is consumed once");
+  next.window.emit("pageshow", { persisted: false }); assert.equal(next.compact(), false);
+  next.window.emit("pageshow", { persisted: true }); assert.equal(next.compact(), true);
+  for (const hint of [{ ...arrival, at: 0 }, { ...arrival, path: "/other" }])
+    assert.equal(menu({ arrival: hint, path: "/analytics.html", now: 6000 }).compact(), true);
+  const pointerLeaves = menu({ arrival, path: "/analytics.html", now: 1100 });
+  pointerLeaves.document.emit("pointermove", { target: pointerLeaves.outside, pointerType: "mouse" }); pointerLeaves.flush();
+  assert.equal(pointerLeaves.compact(), true, "moving outside still collapses the menu");
 });
 
 test("moving outside collapses the sidebar even when its pointerleave event is missed", () => {

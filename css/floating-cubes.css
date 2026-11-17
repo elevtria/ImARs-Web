@@ -47,7 +47,7 @@ body { isolation:isolate; }
   .login-cubes::before, .login-cubes::after {
     content: "";
     position: absolute;
-    inset: -24%;
+    inset: -16%;
     pointer-events: none;
     transform-origin: center;
   }
@@ -89,7 +89,19 @@ body { isolation:isolate; }
   }
 }
 @media screen and (max-width: 700px) {
-  .login-cubes::before, .login-cubes::after { inset: -18% -42%; }
+  .login-cubes::before, .login-cubes::after { inset: -14% -24%; }
+  .login-cubes::after { animation: none; }
+  .login-cubes .floating-cube { animation: none; }
+}
+@media screen {
+  .login-cubes .floating-cube { filter: none; }
+  body:is([data-auth-pending], [data-history-hidden]) .login-cubes::before,
+  body:is([data-auth-pending], [data-history-hidden]) .login-cubes::after { animation-play-state: paused; }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  .login-scene :is(.experience-header, .login-card, .signin-model-scene) { animation: signin-content-enter 280ms ease-out backwards; }
+  .login-scene .signin-model-scene { animation-delay: 60ms; }
+  @keyframes signin-content-enter { from { opacity: 0; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
   .login-cubes::before, .login-cubes::after { animation: none; }
