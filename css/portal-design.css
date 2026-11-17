@@ -177,3 +177,13 @@ body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outli
 #drawer .nav-item::after, :is(.teacher-dashboard, .admin-overview) .stats .stat-link::after { content: none; }
 #drawer .nav-item, #drawer .nav-item:is(:hover, :focus-visible), #drawer .nav-item.active { box-shadow: none; }
 :root body main :is(.stat-link, .action, .record, .teacher-record, .quiz-library-card):is(:hover, :focus-within) { box-shadow: none; }
+
+/* Reserve the same expanded desktop column before JS runs on every document. */
+@media screen and (min-width: 1000px) {
+  :root body:has(#drawer) { --navigation-width: 260px; }
+  :root body:has(#drawer) .app { margin-left: 260px; transition: none; }
+  :root #drawer, :root #drawer .drawer-panel { width: 260px; transition: none; }
+  :root #drawer :is(.brand > div, .nav-label, .user-meta) { display: block; opacity: 1; pointer-events: auto; transition: none; }
+}
+#drawer .nav-item, #drawer .nav-item:is(:hover, :active, :focus-visible) { background-image: none; filter: none; }
+#drawer .nav-item svg, #drawer .nav-item:is(:hover, :active, :focus-visible) svg { transform: none; transition: none; }

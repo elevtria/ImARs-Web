@@ -24,63 +24,10 @@ if (navigationDrawer) {
     };
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
-    const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
-    let pointerInside = false;
-    let keyboardNavigation = false;
-    let collapseTimer;
-    let navigatingFromSidebar = false;
-    let preserveFirstPageShow = false;
-    let arrival;
-    try {
-      if (typeof sessionStorage !== "undefined") {
-        arrival = JSON.parse(sessionStorage.getItem("imars-sidebar-arrival") || "null");
-        sessionStorage.removeItem("imars-sidebar-arrival");
-      }
-    } catch { arrival = null; }
-    const updateCompact = () => {
-      const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
-      const compact = desktop.matches && hoverPointer.matches && !pointerInside && !focused;
-      navigationDrawer.classList.toggle("is-compact", compact);
-      if (compact) setAccountOpen(false);
-    };
-    const setPointerInside = inside => {
-      if (inside === pointerInside) return;
-      pointerInside = inside;
-      clearTimeout(collapseTimer);
-      if (inside) updateCompact();
-      else collapseTimer = setTimeout(updateCompact, 220);
-    };
-    const resetHover = () => {
-      pointerInside = false;
-      keyboardNavigation = false;
-      clearTimeout(collapseTimer);
-      updateCompact();
-    };
-    panel.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") setPointerInside(true); });
-    panel.addEventListener("pointerleave", () => setPointerInside(false));
-    // Pointerleave can be missed when the page, window or hit-tested element
-    // changes. An outside pointer move must not leave the menu expanded.
-    document.addEventListener("pointermove", event => {
-      if (!desktop.matches || !hoverPointer.matches || event.pointerType === "touch") return;
-      const wasKeyboardNavigation = keyboardNavigation;
-      keyboardNavigation = false;
-      setPointerInside(panel.contains(event.target));
-      if (!pointerInside && wasKeyboardNavigation) updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerdown", event => {
-      keyboardNavigation = false;
-      if (desktop.matches && hoverPointer.matches) setPointerInside(panel.contains(event.target));
-      updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerleave", () => setPointerInside(false));
-    document.addEventListener("keydown", event => {
-      if (event.key === "Tab") keyboardNavigation = true;
-    });
-    window.addEventListener("blur", resetHover);
-    panel.addEventListener("focusin", updateCompact);
-    panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
-    hoverPointer.addEventListener("change", resetHover);
+    // Desktop navigation stays expanded on every page. No pointer-driven width
+    // changes or navigation handoff are needed, so document changes cannot shrink it.
     const syncDrawer = () => {
+      navigationDrawer.classList.remove("is-compact");
       const open = !desktop.matches && navigationDrawer.classList.contains("open");
       const hidden = !desktop.matches && !open;
       navigationDrawer.setAttribute("aria-hidden", String(hidden));
@@ -94,34 +41,16 @@ if (navigationDrawer) {
       if (wasOpen && restoreFocus) menuButton?.focus();
       syncDrawer();
     };
-    const resetNavigation = () => {
-      navigatingFromSidebar = false;
-      preserveFirstPageShow = false;
-      resetHover();
-      closeNavigation();
-    };
-    desktop.addEventListener("change", resetNavigation);
-    window.addEventListener("pagehide", () => { if (!navigatingFromSidebar) resetNavigation(); });
-    window.addEventListener("pageshow", event => {
-      if (preserveFirstPageShow && !event.persisted) preserveFirstPageShow = false;
-      else resetNavigation();
-    });
+    desktop.addEventListener("change", () => closeNavigation());
+    window.addEventListener("pagehide", () => closeNavigation());
+    window.addEventListener("pageshow", () => closeNavigation());
     menuButton?.addEventListener("click", () => {
+      if (desktop.matches) return;
       navigationDrawer.classList.add("open");
       syncDrawer();
       brand.focus();
     });
-    resetHover();
     syncDrawer();
-    // Preserve a deliberate sidebar navigation for the first paint only. This
-    // prevents expanded -> compact -> expanded flicker between documents.
-    if (desktop.matches && arrival && Date.now() - arrival.at >= 0 && Date.now() - arrival.at < 5000 &&
-        arrival.path === new URL(window.location.href).pathname && [arrival.x, arrival.y].every(Number.isFinite) &&
-        panel.contains(document.elementFromPoint?.(arrival.x, arrival.y))) {
-      pointerInside = true;
-      preserveFirstPageShow = true;
-      updateCompact();
-    }
 
     const close = document.createElement("button");
     close.type = "button";
@@ -131,17 +60,6 @@ if (navigationDrawer) {
     panel.append(close);
     close.addEventListener("click", () => closeNavigation(true));
     navigationDrawer.addEventListener("click", event => {
-      const link = event.target.closest?.(".nav-item[href], .brand[href]");
-      if (desktop.matches && pointerInside && link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey &&
-          (!event.button || event.button === 0) && (!link.target || link.target === "_self")) {
-        try {
-          const target = new URL(link.href, window.location.href);
-          if (target.origin === window.location.origin) {
-            sessionStorage.setItem("imars-sidebar-arrival", JSON.stringify({ path: target.pathname, at: Date.now(), x: event.clientX, y: event.clientY }));
-            navigatingFromSidebar = true;
-          }
-        } catch { /* Navigation still works when browser storage is unavailable. */ }
-      }
       if (event.target === navigationDrawer) closeNavigation(true);
       else if (!desktop.matches && event.target.closest(".nav-item[href], .brand[href]")) closeNavigation();
     });
@@ -156,10 +74,7 @@ if (navigationDrawer) {
         accountButton?.focus();
         return;
       }
-      if (desktop.matches) {
-        resetHover();
-        if (panel.contains(document.activeElement)) document.activeElement.blur();
-      } else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
+      if (!desktop.matches && navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();
@@ -168,7 +83,8 @@ if (navigationDrawer) {
       span.textContent = label;
       Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).forEach(node => node.remove());
       link.append(span);
-      link.title = label;
+      // Native title tooltips duplicate the visible label and flicker on hover.
+      link.removeAttribute("title");
       link.setAttribute("aria-label", label);
       if (link.classList.contains("active")) link.setAttribute("aria-current", "page");
     });

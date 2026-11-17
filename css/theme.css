@@ -247,7 +247,7 @@
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :is(th, td) { background: #c8e2ff; }
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr:not(.empty-row):is(:hover, :focus-within) > :first-child { box-shadow: inset 4px 0 #247bce; }
   :root[data-theme="light"] .analytics-term-switch button[aria-pressed="false"]:is(:hover, :focus-visible) { background: #c8e2ff; color: #174b7a; }
-  :root[data-theme="light"] #drawer .nav-item:not(.active):is(:hover, :focus-visible) { background: #cce3ff; color: #174b7a; box-shadow: inset 3px 0 #247bce; }
+  :root[data-theme="light"] #drawer .nav-item:not(.active):is(:hover, :focus-visible) { background: #cce3ff; color: #174b7a; box-shadow: none; }
   :root[data-theme="light"] .teacher-dashboard .action { border-color: #91b6df; background: #fff; box-shadow: 0 3px 10px #247bce12; transition: background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
   :root[data-theme="light"] .teacher-dashboard .action:is(:hover, :focus-visible) { background: #cce3ff; border-color: #247bce; box-shadow: 0 6px 16px #247bce30; transform: translateY(-2px); }
   :root[data-theme="light"] .quiz-primary { border: 1px solid #1455af; background: #1765cf; color: #fff; box-shadow: 0 5px 12px #1765cf30; }
