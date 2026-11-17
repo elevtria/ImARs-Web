@@ -78,11 +78,10 @@ test("teacher snapshot labels distinguish the tests and tooltips explain counts 
   assert.equal(element("schoolPostValue").textContent, "—");
 });
 
-test("admin and teacher summary hover batches pointer work once per frame without glow or repeated layout reads", () => {
-  const properties = new Map(), events = {}, frames = new Map(); let nextFrame = 0, reads = 0;
-  const flush = () => { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback()); };
+test("admin and teacher summary cards share pointer movement, reset, and reduced-motion behavior", () => {
+  const properties = new Map(), events = {};
   const card = { dataset: {}, style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name) },
-    addEventListener: (name, callback) => { events[name] = callback; }, getBoundingClientRect: () => { reads++; return { left: 0, top: 0, width: 200, height: 100 }; } };
+    addEventListener: (name, callback) => { events[name] = callback; }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 200, height: 100 }) };
   const reduced = { matches: false, addEventListener() {} };
   const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
     document: { querySelectorAll: selector => {
@@ -90,21 +89,14 @@ test("admin and teacher summary hover batches pointer work once per frame withou
       assert.ok(selector.includes(".teacher-dashboard .stats .stat-link"));
       return [card];
     }, getElementById: () => null, addEventListener() {} },
-    window: { matchMedia: query => query.includes("reduced-motion") ? reduced : { matches: true }, addEventListener() {} },
-    requestAnimationFrame: callback => { frames.set(++nextFrame, callback); return nextFrame; }, cancelAnimationFrame: id => frames.delete(id) });
+    window: { matchMedia: query => query.includes("reduced-motion") ? reduced : { matches: true }, addEventListener() {} } });
   vm.runInContext(source("dashboard-card-hover.js"), context);
-  for (let index = 0; index < 100; index++) events.pointermove({ pointerType: "mouse", clientX: index, clientY: 50 });
   events.pointermove({ pointerType: "mouse", clientX: 200, clientY: 0 });
-  assert.equal(frames.size, 1); assert.equal(reads, 1); assert.equal(properties.size, 0);
-  flush();
   assert.equal(card.dataset.tiltActive, "true");
   assert.equal(properties.get("--summary-rotate-x"), "4deg");
   assert.equal(properties.get("--summary-rotate-y"), "4deg");
-  assert.equal(properties.has("--summary-glow-x"), false);
-  events.pointermove({ pointerType: "mouse", clientX: 100, clientY: 50 });
-  assert.equal(reads, 1);
+  assert.equal(properties.get("--summary-glow-x"), "100%");
   events.pointerleave();
-  assert.equal(frames.size, 0, "leaving cancels queued work so the card cannot spring back");
   assert.equal(card.dataset.tiltActive, undefined);
   assert.equal(properties.size, 0);
   reduced.matches = true;

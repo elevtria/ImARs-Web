@@ -20,14 +20,14 @@ function setup(connection) {
   return { context, events, windowEvents, links, link, event, flush };
 }
 
-function menu({ desktop = true, inheritedHover = false, arrival = null, path = "/", now = Date.now(), navLinks = [] } = {}) {
+function menu({ desktop = true, inheritedHover = false } = {}) {
   const timers = new Map(); let timer = 0;
   const target = () => {
     const events = new Map(), classes = new Set(), attributes = new Map();
     return { events, classes, attributes, children: [],
       addEventListener(name, callback) { if (!events.has(name)) events.set(name, []); events.get(name).push(callback); },
       emit(name, event = {}) { for (const callback of events.get(name) || []) callback(event); },
-      removeAttribute: name => attributes.delete(name), setAttribute: (name, value) => attributes.set(name, value), append(child) { this.children.push(child); },
+      setAttribute: (name, value) => attributes.set(name, value), append(child) { this.children.push(child); },
       classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value),
         toggle(value, enabled) { if (enabled) classes.add(value); else classes.delete(value); } } };
   };
@@ -36,62 +36,54 @@ function menu({ desktop = true, inheritedHover = false, arrival = null, path = "
   const outside = { matches: () => false }, focusedLink = { inside: true, matches: () => true, blur: () => { document.activeElement = outside; } };
   document.activeElement = outside;
   document.body = target();
-  document.elementFromPoint = () => panel;
   panel.contains = element => element === panel || element?.inside === true;
   panel.matches = () => inheritedHover;
-  panel.querySelector = () => ({ focus() {} }); panel.querySelectorAll = () => navLinks;
+  panel.querySelector = () => ({ focus() {} }); panel.querySelectorAll = () => [];
   drawer.querySelector = selector => selector === ".drawer-panel" ? panel : null;
   document.getElementById = id => ({ drawer, menuBtn: button, accountBtn: accountButton, accountMenu })[id];
   document.querySelectorAll = () => []; document.createElement = () => target(); document.head = { append() {} };
   const screen = Object.assign(target(), { matches: desktop }), pointer = Object.assign(target(), { matches: true });
   window.matchMedia = query => query.includes("min-width") ? screen : pointer;
-  window.location = { href: "https://imars.test" + path, origin: "https://imars.test" };
-  const storage = new Map(arrival ? [["imars-sidebar-arrival", JSON.stringify(arrival)]] : []);
-  const sessionStorage = { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
-  vm.runInNewContext(script, { Node: { TEXT_NODE: 3 }, window, document, sessionStorage, Date: { now: () => now }, navigator: {}, URL, queueMicrotask: callback => callback(),
+  window.location = { href: "https://imars.test/", origin: "https://imars.test" };
+  vm.runInNewContext(script, { window, document, navigator: {}, URL, queueMicrotask: callback => callback(),
     MutationObserver: class { observe() {} }, setTimeout: callback => { timers.set(++timer, callback); return timer; }, clearTimeout: id => timers.delete(id) });
-  return { panel, drawer, document, window, screen, button, accountButton, accountMenu, focusedLink, outside, storage, compact: () => drawer.classes.has("is-compact"),
+  return { panel, drawer, document, window, screen, button, accountButton, accountMenu, focusedLink, outside, compact: () => drawer.classes.has("is-compact"),
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
-test("desktop sidebar starts expanded and stays expanded during pointer, window and navigation changes", () => {
+test("sidebar does not inherit a stale expanded hover state after navigation", () => {
   const f = menu({ inheritedHover: true });
-  assert.equal(f.compact(), false);
-  assert.equal(f.drawer.inert, false);
-  for (const event of ["pointerenter", "pointerleave", "pointercancel"]) {
-    f.panel.emit(event, { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
-  }
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.document.emit("pointerdown", { target: f.outside }); f.flush(); assert.equal(f.compact(), false);
-  for (const event of ["blur", "pagehide", "pageshow"]) {
-    f.window.emit(event, { persisted: true }); assert.equal(f.compact(), false);
-  }
-  const link = { href: "https://imars.test/analytics.html" };
-  f.drawer.emit("click", { target: { closest: () => link } });
-  f.window.emit("pagehide"); assert.equal(f.compact(), false);
-  const destination = menu({ path: "/analytics.html" });
-  assert.equal(destination.compact(), false, "new pages need no saved mouse position to stay expanded");
-  assert.equal(f.storage.size, 0, "navigation no longer depends on a temporary storage handoff");
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
+  f.panel.emit("pointerleave"); f.flush(); assert.equal(f.compact(), true);
 });
 
-test("keyboard navigation and Escape do not collapse the desktop sidebar or lose its focused link", () => {
+test("moving outside collapses the sidebar even when its pointerleave event is missed", () => {
+  const f = menu();
+  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
+  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
+  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
+  f.flush(); assert.equal(f.compact(), true);
+  f.document.emit("pointermove", { target: f.panel, pointerType: "mouse" }); assert.equal(f.compact(), false);
+  f.document.emit("pointerdown", { target: f.outside }); assert.equal(f.compact(), true);
+});
+
+test("reentering cancels collapse and window blur or history restoration clears the hover state", () => {
+  const f = menu();
+  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.panel.emit("pointerleave");
+  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
+  for (const event of ["blur", "pagehide", "pageshow"]) {
+    f.panel.emit("pointerenter", { pointerType: "mouse" }); f.window.emit(event); assert.equal(f.compact(), true);
+  }
+});
+
+test("keyboard focus keeps navigation accessible but pointer movement and Escape cannot leave it stuck", () => {
   const f = menu();
   f.document.activeElement = f.focusedLink;
-  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
-  f.document.emit("keydown", { key: "Escape" });
-  assert.equal(f.compact(), false); assert.equal(f.document.activeElement, f.focusedLink);
-});
-
-test("sidebar labels retain accessible names without native title tooltip popups", () => {
-  const attributes = new Map([["title", "Teacher Manual"]]);
-  const text = { nodeType: 3, textContent: "Teacher Manual", remove() {} };
-  const link = { childNodes: [text], children: [], classList: { contains: () => false },
-    append(node) { this.children.push(node); }, removeAttribute: name => attributes.delete(name),
-    setAttribute: (name, value) => attributes.set(name, value) };
-  menu({ navLinks: [link] });
-  assert.equal(attributes.has("title"), false);
-  assert.equal(attributes.get("aria-label"), "Teacher Manual");
-  assert.equal(link.children[0].textContent, "Teacher Manual");
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
+  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), true);
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
+  f.document.emit("keydown", { key: "Escape" }); assert.equal(f.compact(), true); assert.equal(f.document.activeElement, f.outside);
 });
 
 test("mobile close controls and breakpoint changes retain the drawer behavior", () => {
@@ -107,7 +99,7 @@ test("mobile close controls and breakpoint changes retain the drawer behavior", 
   assert.equal(f.drawer.classes.has("open"), false);
   assert.equal(f.accountMenu.hidden, true);
   assert.equal(f.drawer.inert, true);
-  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), false); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
+  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), true); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
 });
 
 test("mobile link navigation and history restoration clear the drawer and its backdrop", () => {
