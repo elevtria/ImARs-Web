@@ -129,3 +129,40 @@ body:not(.login-page) :is(input,select,textarea):focus-visible { outline:2px sol
 body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outline:3px solid var(--portal-blue); outline-offset:3px; }
 @media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
 }
+
+/* Dashboard-demo motion: reveal the live cards after authentication and their
+   data are ready. Private content is never captured in a view-transition image. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) .app > main >
+  :is(.hero, .intro, .card, .panel, .page-intro, .manage-heading, .analytics-heading):not([hidden]):not([data-await-content]:not([data-content-ready])),
+  :where(body:has(#drawer):not([data-auth-pending]):not([data-history-hidden])) .app > main >
+  .stats:not([hidden]):not([data-await-content]:not([data-content-ready])) > .stat-link {
+    animation: portal-card-enter 440ms cubic-bezier(.2, .7, .2, 1) backwards;
+    animation-delay: var(--portal-enter-delay, 0ms);
+  }
+  .app > main > .stats > .stat-link:first-child { --portal-enter-delay: 0ms; }
+  .app > main > :nth-child(2), .app > main > .stats > .stat-link:nth-child(2) { --portal-enter-delay: 50ms; }
+  .app > main > :nth-child(3), .app > main > .stats > .stat-link:nth-child(3) { --portal-enter-delay: 100ms; }
+  .app > main > :nth-child(4), .app > main > .stats > .stat-link:nth-child(4) { --portal-enter-delay: 150ms; }
+  .app > main > :nth-child(n + 5), .app > main > .stats > .stat-link:nth-child(n + 5) { --portal-enter-delay: 180ms; }
+
+  @keyframes portal-card-enter {
+    from { opacity: 0; translate: 0 16px; filter: blur(3px); }
+    to { opacity: 1; translate: 0 0; filter: none; }
+  }
+
+  #drawer .nav-item { position: relative; isolation: isolate; transition: background-color 220ms ease, color 220ms ease, box-shadow 220ms ease; }
+  #drawer .nav-item::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at 24px 50%, #ffffff60, transparent 65%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 220ms ease;
+  }
+  #drawer .nav-item:is(:hover, :focus-visible)::after { opacity: 1; }
+  #drawer .nav-item svg { transition: transform 220ms cubic-bezier(.2, .7, .2, 1); }
+  #drawer .nav-item:is(:hover, :focus-visible) svg { transform: translateY(-1px) scale(1.08); }
+}
