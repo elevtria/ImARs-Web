@@ -43,9 +43,13 @@ test("bell shows unread completions, safe student text and persistent mark-all-r
   assert.equal(panel.hidden, true); bell.events.click(); await f.settle(); assert.equal(panel.hidden, false);
   const link = f.find("notification-list").children[0].children[0];
   assert.equal(link.children[0].textContent, item.name); assert.equal(link.children[0].innerHTML, undefined);
+  assert.equal(link.children[0].children[0].textContent, "New");
   assert.match(link.children[1].textContent, /pre-test.*Term 1, Lesson 2/);
   f.find("notification-mark").events.click();
   assert.equal(f.find("notification-badge").hidden, true);
+  const readLink = f.find("notification-list").children[0].children[0];
+  assert.equal(readLink.className, "notification-item");
+  assert.equal(readLink.children[0].children.length, 0);
   await f.signIn(); assert.equal(f.find("notification-badge").hidden, true);
   await f.signIn({ uid: "teacher-b", role: "teacher" }); assert.equal(f.find("notification-badge").hidden, false);
   assert.equal(f.storage.size, 1);

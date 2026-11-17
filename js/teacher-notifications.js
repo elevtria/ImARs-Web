@@ -45,9 +45,11 @@ export function initTeacherNotifications(app, auth) {
     list.replaceChildren();
     for (const item of items) {
       const row = element("li");
-      const link = element("a", undefined, read.has(item.id) ? "notification-item" : "notification-item unread");
+      const isUnread = !read.has(item.id);
+      const link = element("a", undefined, isUnread ? "notification-item unread" : "notification-item");
       link.href = "student-records.html";
       const name = element("strong", item.name);
+      if (isUnread) name.append(element("span", "New", "notification-new"));
       const test = item.kind === "pre" ? "pre-test" : "post-test";
       const detail = element("span", `Completed the ${test} · Term ${Number(item.termId.slice(-2))}, Lesson ${Number(item.lessonId.slice(-2))}`);
       const section = element("small", item.section);
