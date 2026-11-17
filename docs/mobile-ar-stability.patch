@@ -1,0 +1,931 @@
+diff --git a/Assets/SCRIPTS/ARScanPresentation.cs b/Assets/SCRIPTS/ARScanPresentation.cs
+--- a/Assets/SCRIPTS/ARScanPresentation.cs
++++ b/Assets/SCRIPTS/ARScanPresentation.cs
+@@ -1,314 +1,360 @@
+-using System.Collections;
+-using System.Collections.Generic;
+-using UnityEngine;
+-using Vuforia;
+-
+-// Fits model geometry after tracking, rather than relying on the imported pivot.
+-// The camera and marker remain under Vuforia's control.
+-public sealed class ARScanPresentation : MonoBehaviour
+-{
+-    private Transform content;
+-    private ObserverBehaviour observer;
+-    private ARLabelController owner;
+-    private bool tracked;
+-    private Coroutine pending;
+-    private Renderer[] modelRenderers;
+-    private bool wasVisible;
+-    private bool hasFramed;
+-    private Transform[] scaleSources, scaleFrames, rotationFrames;
+-    private Vector3 markerOffset;
+-    private Quaternion markerRotation;
+-
+-    public bool HasVisibleModel => tracked && hasFramed && content && content.gameObject.activeInHierarchy;
+-
+-    public void ResetView()
+-    {
+-        if (!tracked) return;
+-        hasFramed = false;
+-        QueueFrame();
+-    }
+-
+-    public static void Install(ARLabelController labels)
+-    {
+-        var roots = new HashSet<Transform>();
+-        foreach (var binding in labels.bindings)
+-            foreach (var target in binding.targets)
+-                if (target.root) roots.Add(target.root);
+-        foreach (var root in labels.additionalScanModels) if (root) roots.Add(root);
+-        foreach (var root in roots)
+-        {
+-            var observer = root.GetComponentInParent<ObserverBehaviour>(true);
+-            if (!observer || root.GetComponentInParent<ARScanPresentation>()) continue;
+-            var pivot = new GameObject(root.name + " scan framing").transform;
+-            Transform parent = root.parent;
+-            // Invert the complete ancestor linear transform, in reverse order.
+-            // A single inverse lossyScale cannot remove shear from a rotated
+-            // target inside a nonuniformly scaled lesson group.
+-            var sources = new List<Transform>();
+-            var scales = new List<Transform>();
+-            var rotations = new List<Transform>();
+-            for (var ancestor = parent; ancestor; ancestor = ancestor.parent)
+-            {
+-                var unscale = new GameObject(root.name + " scale compensation").transform;
+-                unscale.SetParent(parent, false);
+-                var scale = ancestor.localScale;
+-                unscale.localScale = new Vector3(InverseScale(scale.x), InverseScale(scale.y), InverseScale(scale.z));
+-                var unrotate = new GameObject(root.name + " axis compensation").transform;
+-                unrotate.SetParent(unscale, false);
+-                unrotate.localRotation = Quaternion.Inverse(ancestor.localRotation);
+-                sources.Add(ancestor); scales.Add(unscale); rotations.Add(unrotate);
+-                parent = unrotate;
+-            }
+-            pivot.SetParent(parent, false);
+-            root.SetParent(pivot, true);
+-            var presentation = pivot.gameObject.AddComponent<ARScanPresentation>();
+-            presentation.content = root;
+-            presentation.observer = observer;
+-            presentation.owner = labels;
+-            presentation.scaleSources = sources.ToArray();
+-            presentation.scaleFrames = scales.ToArray();
+-            presentation.rotationFrames = rotations.ToArray();
+-            presentation.modelRenderers = root.GetComponentsInChildren<Renderer>(true);
+-            observer.OnTargetStatusChanged += presentation.StatusChanged;
+-            presentation.StatusChanged(observer, observer.TargetStatus);
+-        }
+-    }
+-
+-    private static float InverseScale(float value)
+-        => Mathf.Abs(value) > .00001f ? 1f / value : 1f;
+-
+-    private void StatusChanged(ObserverBehaviour source, TargetStatus status)
+-    {
+-        bool visible = status.Status == Status.TRACKED || status.Status == Status.EXTENDED_TRACKED;
+-        if (visible && !tracked && !hasFramed) QueueFrame();
+-        tracked = visible;
+-        if (!visible && pending != null) { StopCoroutine(pending); pending = null; }
+-    }
+-
+-    private void QueueFrame()
+-    {
+-        if (!isActiveAndEnabled) return;
+-        if (pending != null) StopCoroutine(pending);
+-        pending = StartCoroutine(FrameWhenReady());
+-    }
+-
+-    private void Update()
+-    {
+-        bool visible = false;
+-        if (tracked && modelRenderers != null)
+-            foreach (var renderer in modelRenderers)
+-                if (renderer && renderer.enabled && !renderer.forceRenderingOff && renderer.gameObject.activeInHierarchy)
+-                { visible = true; break; }
+-        // Also handle switching to a model that was inactive when its marker was found.
+-        if (visible && !wasVisible && !hasFramed) QueueFrame();
+-        wasVisible = visible;
+-    }
+-
+-    private IEnumerator FrameWhenReady()
+-    {
+-        // Vuforia enables renderers after its status callback; allow animation to sample.
+-        yield return null;
+-        yield return null;
+-        // The first observed pose can still be correcting itself. Capturing it
+-        // immediately bakes that correction into the model's initial tilt/offset.
+-        yield return WaitForStablePose();
+-        for (int frame = 0; frame < 90; frame++)
+-        {
+-            if (!tracked) break;
+-            if (Camera.main && TryBounds(content, out _))
+-            {
+-                StartAnimations();
+-                yield return null;
+-                Frame(Camera.main);
+-                break;
+-            }
+-            yield return null;
+-        }
+-        pending = null;
+-    }
+-
+-    private IEnumerator WaitForStablePose()
+-    {
+-        float elapsed = 0, stable = 0;
+-        Vector3 previousPosition = Vector3.zero;
+-        Quaternion previousRotation = Quaternion.identity;
+-        bool sampled = false;
+-        while (tracked && elapsed < 2f)
+-        {
+-            var camera = Camera.main;
+-            if (camera)
+-            {
+-                Vector3 position = camera.transform.InverseTransformPoint(observer.transform.position);
+-                Quaternion rotation = Quaternion.Inverse(camera.transform.rotation) * observer.transform.rotation;
+-                bool settled = sampled && Vector3.Distance(previousPosition, position) < .01f
+-                    && Quaternion.Angle(previousRotation, rotation) < 1.5f;
+-                stable = settled ? stable + Time.unscaledDeltaTime : 0;
+-                if (!settled)
+-                {
+-                    previousPosition = position;
+-                    previousRotation = rotation;
+-                }
+-                sampled = true;
+-                if (stable >= .35f) yield break;
+-            }
+-            elapsed += Time.unscaledDeltaTime;
+-            yield return null;
+-        }
+-    }
+-
+-    private void StartAnimations()
+-    {
+-        foreach (var animator in content.GetComponentsInChildren<Animator>(true))
+-        {
+-            if (!animator.runtimeAnimatorController) continue;
+-            animator.enabled = true;
+-            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+-            animator.speed = 1;
+-            foreach (var parameter in animator.parameters)
+-                if (parameter.type == AnimatorControllerParameterType.Trigger && parameter.name == "StartChange")
+-                    animator.SetTrigger(parameter.name);
+-        }
+-        foreach (var animation in content.GetComponentsInChildren<Animation>(true))
+-            if (animation.clip) { animation.wrapMode = WrapMode.Loop; animation.Play(); }
+-    }
+-
+-    public void Frame(Camera camera)
+-    {
+-        if (!content || !camera || !observer) return;
+-        if (hasFramed) return;
+-        if (owner && owner.PartFocus != null) owner.PartFocus.ClearSelection();
+-        UpdateCompensation();
+-        content.localScale = Vector3.one;
+-        // Set the initial view for EVERY presentation, not just a name-based
+-        // subset. The imported geometry is Y-up except the flat sky/crystal
+-        // assets below. This removes the marker-plane tilt from heart, volcano,
+-        // food web, waves, physical changes, and the other lessons as well.
+-        string model = content.name.ToLowerInvariant();
+-        bool flat = model.Contains("dipper") || model.Contains("orion")
+-            || model.Contains("sparkling") || model.Contains("freezing");
+-        content.localRotation = flat ? Quaternion.Euler(90, 0, 0) : Quaternion.identity;
+-        // Present the authored +Z front, including the blood-flow cutaway.
+-        transform.rotation = Quaternion.LookRotation(-camera.transform.forward,
+-            camera.transform.up);
+-        if (!CameraBounds(modelRenderers, camera, out var bounds)) return;
+-        float depth = Mathf.Max(.35f, camera.transform.InverseTransformPoint(observer.transform.position).z);
+-        // Project mesh bounds directly, avoiding the padding from rotating a world AABB twice.
+-        Vector3 size = bounds.size;
+-        float height = camera.orthographic ? camera.orthographicSize * 2
+-            : 2 * depth * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f);
+-        // Give every scanned model enough screen space to inspect its details.
+-        // Retain margins for the scan controls and fit both dimensions so wide or
+-        // tall models stay fully visible in portrait and landscape orientations.
+-        const float widthFraction = .96f;
+-        const float heightFraction = .90f;
+-        float scale = Mathf.Min(height * camera.aspect * widthFraction / Mathf.Max(size.x, .00001f),
+-            height * heightFraction / Mathf.Max(size.y, .00001f));
+-        if (!camera.orthographic)
+-        {
+-            scale = PerspectiveFit(camera, bounds.center, depth, widthFraction, heightFraction);
+-        }
+-        // Keep deep models in front of the near plane too.
+-        scale = Mathf.Min(scale, (depth - camera.nearClipPlane) * 1.5f / Mathf.Max(size.z, .00001f));
+-        transform.localScale *= Mathf.Clamp(scale, .001f, 1000);
+-        if (!CameraBounds(modelRenderers, camera, out bounds)) return;
+-        transform.position += camera.ViewportToWorldPoint(new Vector3(.5f, .52f, depth)) - camera.transform.TransformPoint(bounds.center);
+-        // Keep this pose relative to the tracked marker. Moving the phone can
+-        // now reveal the sides and back without the model chasing the camera.
+-        markerOffset = Quaternion.Inverse(observer.transform.rotation) * (transform.position - observer.transform.position);
+-        markerRotation = Quaternion.Inverse(observer.transform.rotation) * transform.rotation;
+-        hasFramed = true;
+-    }
+-
+-    private void UpdateCompensation()
+-    {
+-        if (scaleSources == null) return;
+-        for (int i = 0; i < scaleSources.Length; i++)
+-        {
+-            var scale = scaleSources[i].localScale;
+-            scaleFrames[i].localScale = new Vector3(InverseScale(scale.x), InverseScale(scale.y), InverseScale(scale.z));
+-            rotationFrames[i].localRotation = Quaternion.Inverse(scaleSources[i].localRotation);
+-        }
+-    }
+-
+-    private void LateUpdate()
+-    {
+-        if (!hasFramed || !tracked || !observer) return;
+-        // Follow the marker's rigid pose, never the viewing camera. Keeping the
+-        // saved offset/rotation lets phone movement reveal the sides and back.
+-        Vector3 position = observer.transform.position + observer.transform.rotation * markerOffset;
+-        Quaternion rotation = observer.transform.rotation * markerRotation;
+-        UpdateCompensation();
+-        transform.SetPositionAndRotation(position, rotation);
+-    }
+-
+-    private float PerspectiveFit(Camera camera, Vector3 center, float depth, float width, float height)
+-    {
+-        float tangent = Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f);
+-        float horizontal = width * tangent * camera.aspect;
+-        float vertical = height * tangent;
+-        float scale = float.PositiveInfinity;
+-        // Fit the individual mesh corners, rather than the empty corners of a
+-        // combined box. Long/deep models can otherwise appear unnecessarily small.
+-        foreach (var renderer in modelRenderers)
+-        {
+-            if (!renderer || !(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
+-                || !renderer.enabled || renderer.forceRenderingOff || !renderer.gameObject.activeInHierarchy) continue;
+-            var local = renderer.localBounds;
+-            for (int i = 0; i < 8; i++)
+-            {
+-                var corner = local.center + Vector3.Scale(local.extents,
+-                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+-                var offset = camera.transform.InverseTransformPoint(renderer.transform.TransformPoint(corner)) - center;
+-                float xLimit = Mathf.Abs(offset.x) - horizontal * offset.z;
+-                // Account for the presentation center at viewport y = .52.
+-                float yLimit = Mathf.Max(offset.y - (vertical + .04f * tangent) * offset.z,
+-                    -offset.y + (.04f * tangent - vertical) * offset.z);
+-                if (xLimit > .00001f) scale = Mathf.Min(scale, horizontal * depth / xLimit);
+-                if (yLimit > .00001f) scale = Mathf.Min(scale, vertical * depth / yLimit);
+-            }
+-        }
+-        return scale;
+-    }
+-
+-    public static bool CameraBounds(Transform root, Camera camera, out Bounds bounds)
+-        => CameraBounds(root.GetComponentsInChildren<Renderer>(false), camera, out bounds);
+-
+-    private static bool CameraBounds(Renderer[] renderers, Camera camera, out Bounds bounds)
+-    {
+-        bounds = default;
+-        bool found = false;
+-        foreach (var renderer in renderers)
+-        {
+-            if (!renderer || !(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
+-                || !renderer.enabled || renderer.forceRenderingOff || !renderer.gameObject.activeInHierarchy) continue;
+-            var local = renderer.localBounds;
+-            for (int i = 0; i < 8; i++)
+-            {
+-                var corner = local.center + Vector3.Scale(local.extents,
+-                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+-                var point = camera.transform.InverseTransformPoint(renderer.transform.TransformPoint(corner));
+-                if (found) bounds.Encapsulate(point); else bounds = new Bounds(point, Vector3.zero);
+-                found = true;
+-            }
+-        }
+-        return found;
+-    }
+-
+-    public static bool TryBounds(Transform root, out Bounds bounds)
+-    {
+-        bounds = default;
+-        bool found = false;
+-        foreach (var renderer in root.GetComponentsInChildren<Renderer>(false))
+-        {
+-            if (!(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
+-                || !renderer.enabled || renderer.forceRenderingOff) continue;
+-            if (found) bounds.Encapsulate(renderer.bounds); else bounds = renderer.bounds;
+-            found = true;
+-        }
+-        return found && bounds.size.sqrMagnitude > .000000001f;
+-    }
+-
+-    private void OnEnable() { if (observer && tracked && !hasFramed) QueueFrame(); }
+-    private void OnDisable() { if (pending != null) StopCoroutine(pending); pending = null; }
+-    private void OnDestroy() { if (observer) observer.OnTargetStatusChanged -= StatusChanged; }
+-}
++using System.Collections;
++using System.Collections.Generic;
++using UnityEngine;
++using Vuforia;
++
++// Fits model geometry after tracking, rather than relying on the imported pivot.
++// The camera and marker remain under Vuforia's control.
++[DefaultExecutionOrder(100)]
++public sealed class ARScanPresentation : MonoBehaviour
++{
++    private Transform content;
++    private ObserverBehaviour observer;
++    private ARLabelController owner;
++    private bool tracked;
++    private Coroutine pending;
++    private Renderer[] modelRenderers;
++    private bool wasVisible;
++    private bool hasFramed;
++    private Transform[] scaleSources, scaleFrames, rotationFrames;
++    private Vector3 markerOffset;
++    private Quaternion markerRotation;
++    // Store a pose separately from the hierarchy: Vuforia can move both the
++    // marker and camera before LateUpdate, including in first-target world mode.
++    private Vector3 filteredPosition;
++    private Quaternion filteredRotation;
++    private Transform filterCamera;
++    private bool hasFilteredPose;
++
++    public bool HasVisibleModel => tracked && hasFramed && content && content.gameObject.activeInHierarchy;
++
++    public void ResetView()
++    {
++        if (!tracked) return;
++        hasFramed = false;
++        hasFilteredPose = false;
++        QueueFrame();
++    }
++
++    public static void Install(ARLabelController labels)
++    {
++        var roots = new HashSet<Transform>();
++        foreach (var binding in labels.bindings)
++            foreach (var target in binding.targets)
++                if (target.root) roots.Add(target.root);
++        foreach (var root in labels.additionalScanModels) if (root) roots.Add(root);
++        foreach (var root in roots)
++        {
++            var observer = root.GetComponentInParent<ObserverBehaviour>(true);
++            if (!observer || root.GetComponentInParent<ARScanPresentation>()) continue;
++            var pivot = new GameObject(root.name + " scan framing").transform;
++            Transform parent = root.parent;
++            // Invert the complete ancestor linear transform, in reverse order.
++            // A single inverse lossyScale cannot remove shear from a rotated
++            // target inside a nonuniformly scaled lesson group.
++            var sources = new List<Transform>();
++            var scales = new List<Transform>();
++            var rotations = new List<Transform>();
++            for (var ancestor = parent; ancestor; ancestor = ancestor.parent)
++            {
++                var unscale = new GameObject(root.name + " scale compensation").transform;
++                unscale.SetParent(parent, false);
++                var scale = ancestor.localScale;
++                unscale.localScale = new Vector3(InverseScale(scale.x), InverseScale(scale.y), InverseScale(scale.z));
++                var unrotate = new GameObject(root.name + " axis compensation").transform;
++                unrotate.SetParent(unscale, false);
++                unrotate.localRotation = Quaternion.Inverse(ancestor.localRotation);
++                sources.Add(ancestor); scales.Add(unscale); rotations.Add(unrotate);
++                parent = unrotate;
++            }
++            pivot.SetParent(parent, false);
++            root.SetParent(pivot, true);
++            var presentation = pivot.gameObject.AddComponent<ARScanPresentation>();
++            presentation.content = root;
++            presentation.observer = observer;
++            presentation.owner = labels;
++            presentation.scaleSources = sources.ToArray();
++            presentation.scaleFrames = scales.ToArray();
++            presentation.rotationFrames = rotations.ToArray();
++            presentation.modelRenderers = root.GetComponentsInChildren<Renderer>(true);
++            observer.OnTargetStatusChanged += presentation.StatusChanged;
++            presentation.StatusChanged(observer, observer.TargetStatus);
++        }
++    }
++
++    private static float InverseScale(float value)
++        => Mathf.Abs(value) > .00001f ? 1f / value : 1f;
++
++    private void StatusChanged(ObserverBehaviour source, TargetStatus status)
++    {
++        bool visible = status.Status == Status.TRACKED || status.Status == Status.EXTENDED_TRACKED;
++        if (visible && !tracked && !hasFramed) QueueFrame();
++        if (visible != tracked) hasFilteredPose = false;
++        tracked = visible;
++        if (!visible && pending != null) { StopCoroutine(pending); pending = null; }
++    }
++
++    private void QueueFrame()
++    {
++        if (!isActiveAndEnabled) return;
++        if (pending != null) StopCoroutine(pending);
++        pending = StartCoroutine(FrameWhenReady());
++    }
++
++    private void Update()
++    {
++        bool visible = false;
++        if (tracked && modelRenderers != null)
++            foreach (var renderer in modelRenderers)
++                if (renderer && renderer.enabled && !renderer.forceRenderingOff && renderer.gameObject.activeInHierarchy)
++                { visible = true; break; }
++        // Also handle switching to a model that was inactive when its marker was found.
++        if (visible && !wasVisible && !hasFramed) QueueFrame();
++        wasVisible = visible;
++    }
++
++    private IEnumerator FrameWhenReady()
++    {
++        // Vuforia enables renderers after its status callback; allow animation to sample.
++        yield return null;
++        yield return null;
++        // The first observed pose can still be correcting itself. Capturing it
++        // immediately bakes that correction into the model's initial tilt/offset.
++        yield return WaitForStablePose();
++        for (int frame = 0; frame < 90; frame++)
++        {
++            if (!tracked) break;
++            if (Camera.main && TryBounds(content, out _))
++            {
++                StartAnimations();
++                yield return null;
++                Frame(Camera.main);
++                break;
++            }
++            yield return null;
++        }
++        pending = null;
++    }
++
++    private IEnumerator WaitForStablePose()
++    {
++        float elapsed = 0, stable = 0;
++        Vector3 previousPosition = Vector3.zero;
++        Quaternion previousRotation = Quaternion.identity;
++        bool sampled = false;
++        while (tracked && elapsed < 2f)
++        {
++            var camera = Camera.main;
++            if (camera)
++            {
++                Vector3 position = camera.transform.InverseTransformPoint(observer.transform.position);
++                Quaternion rotation = Quaternion.Inverse(camera.transform.rotation) * observer.transform.rotation;
++                bool settled = sampled && Vector3.Distance(previousPosition, position) < .01f
++                    && Quaternion.Angle(previousRotation, rotation) < 1.5f;
++                stable = settled ? stable + Time.unscaledDeltaTime : 0;
++                if (!settled)
++                {
++                    previousPosition = position;
++                    previousRotation = rotation;
++                }
++                sampled = true;
++                if (stable >= .35f) yield break;
++            }
++            elapsed += Time.unscaledDeltaTime;
++            yield return null;
++        }
++    }
++
++    private void StartAnimations()
++    {
++        foreach (var animator in content.GetComponentsInChildren<Animator>(true))
++        {
++            if (!animator.runtimeAnimatorController) continue;
++            animator.enabled = true;
++            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
++            animator.speed = 1;
++            foreach (var parameter in animator.parameters)
++                if (parameter.type == AnimatorControllerParameterType.Trigger && parameter.name == "StartChange")
++                    animator.SetTrigger(parameter.name);
++        }
++        foreach (var animation in content.GetComponentsInChildren<Animation>(true))
++            if (animation.clip) { animation.wrapMode = WrapMode.Loop; animation.Play(); }
++    }
++
++    public void Frame(Camera camera)
++    {
++        if (!content || !camera || !observer) return;
++        if (hasFramed) return;
++        if (owner && owner.PartFocus != null) owner.PartFocus.ClearSelection();
++        UpdateCompensation();
++        content.localScale = Vector3.one;
++        // Set the initial view for EVERY presentation, not just a name-based
++        // subset. The imported geometry is Y-up except the flat sky/crystal
++        // assets below. This removes the marker-plane tilt from heart, volcano,
++        // food web, waves, physical changes, and the other lessons as well.
++        string model = content.name.ToLowerInvariant();
++        bool flat = model.Contains("dipper") || model.Contains("orion")
++            || model.Contains("sparkling") || model.Contains("freezing");
++        content.localRotation = flat ? Quaternion.Euler(90, 0, 0) : Quaternion.identity;
++        // Present the authored +Z front, including the blood-flow cutaway.
++        transform.rotation = Quaternion.LookRotation(-camera.transform.forward,
++            camera.transform.up);
++        if (!CameraBounds(modelRenderers, camera, out var bounds)) return;
++        float depth = Mathf.Max(.35f, camera.transform.InverseTransformPoint(observer.transform.position).z);
++        // Project mesh bounds directly, avoiding the padding from rotating a world AABB twice.
++        Vector3 size = bounds.size;
++        float height = camera.orthographic ? camera.orthographicSize * 2
++            : 2 * depth * Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f);
++        // Give every scanned model enough screen space to inspect its details.
++        // Retain margins for the scan controls and fit both dimensions so wide or
++        // tall models stay fully visible in portrait and landscape orientations.
++        const float widthFraction = .96f;
++        const float heightFraction = .90f;
++        float scale = Mathf.Min(height * camera.aspect * widthFraction / Mathf.Max(size.x, .00001f),
++            height * heightFraction / Mathf.Max(size.y, .00001f));
++        if (!camera.orthographic)
++        {
++            scale = PerspectiveFit(camera, bounds.center, depth, widthFraction, heightFraction);
++        }
++        // Keep deep models in front of the near plane too.
++        scale = Mathf.Min(scale, (depth - camera.nearClipPlane) * 1.5f / Mathf.Max(size.z, .00001f));
++        transform.localScale *= Mathf.Clamp(scale, .001f, 1000);
++        if (!CameraBounds(modelRenderers, camera, out bounds)) return;
++        transform.position += camera.ViewportToWorldPoint(new Vector3(.5f, .52f, depth)) - camera.transform.TransformPoint(bounds.center);
++        // Keep this pose relative to the tracked marker. Moving the phone can
++        // now reveal the sides and back without the model chasing the camera.
++        markerOffset = Quaternion.Inverse(observer.transform.rotation) * (transform.position - observer.transform.position);
++        markerRotation = Quaternion.Inverse(observer.transform.rotation) * transform.rotation;
++        hasFramed = true;
++        hasFilteredPose = false;
++    }
++
++    private void UpdateCompensation()
++    {
++        if (scaleSources == null) return;
++        for (int i = 0; i < scaleSources.Length; i++)
++        {
++            var scale = scaleSources[i].localScale;
++            scaleFrames[i].localScale = new Vector3(InverseScale(scale.x), InverseScale(scale.y), InverseScale(scale.z));
++            rotationFrames[i].localRotation = Quaternion.Inverse(scaleSources[i].localRotation);
++        }
++    }
++
++    private void LateUpdate()
++    {
++        if (!hasFramed || !tracked || !observer) return;
++        // Follow the marker's rigid pose, never the viewing camera. Keeping the
++        // saved offset/rotation lets phone movement reveal the sides and back.
++        Vector3 position = observer.transform.position + observer.transform.rotation * markerOffset;
++        Quaternion rotation = observer.transform.rotation * markerRotation;
++        UpdateCompensation();
++        ApplyTrackingPose(Camera.main, position, rotation, Time.unscaledDeltaTime);
++    }
++
++    internal void ApplyTrackingPose(Camera camera, Vector3 position, Quaternion rotation, float deltaTime)
++    {
++        if (!camera)
++        {
++            hasFilteredPose = false;
++            transform.SetPositionAndRotation(position, rotation);
++            return;
++        }
++        Transform view = camera.transform;
++        Vector3 targetPosition = view.InverseTransformPoint(position);
++        Quaternion targetRotation = Quaternion.Inverse(view.rotation) * rotation;
++        // Reacquisition starts at the new pose instead of sliding from stale data.
++        if (!hasFilteredPose || filterCamera != view)
++        {
++            filteredPosition = targetPosition;
++            filteredRotation = targetRotation;
++            filterCamera = view;
++            hasFilteredPose = true;
++        }
++        else
++        {
++            float distance = Vector3.Distance(filteredPosition, targetPosition);
++            float angle = Quaternion.Angle(filteredRotation, targetRotation);
++            float dt = Mathf.Max(0, deltaTime);
++            // Sub-millimetre/sub-degree noise should not move a resting model.
++            // Larger deliberate movement raises response to keep interaction fluid.
++            float positionResponse = Mathf.Lerp(10f, 32f, Mathf.Clamp01(distance / .05f));
++            float rotationResponse = Mathf.Lerp(10f, 32f, Mathf.Clamp01(angle / 8f));
++            if (distance > .00075f)
++                filteredPosition = Vector3.Lerp(filteredPosition, targetPosition, 1 - Mathf.Exp(-positionResponse * dt));
++            if (angle > .1f)
++                filteredRotation = Quaternion.Slerp(filteredRotation, targetRotation, 1 - Mathf.Exp(-rotationResponse * dt));
++        }
++        transform.SetPositionAndRotation(view.TransformPoint(filteredPosition), view.rotation * filteredRotation);
++    }
++
++    private float PerspectiveFit(Camera camera, Vector3 center, float depth, float width, float height)
++    {
++        float tangent = Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * .5f);
++        float horizontal = width * tangent * camera.aspect;
++        float vertical = height * tangent;
++        float scale = float.PositiveInfinity;
++        // Fit the individual mesh corners, rather than the empty corners of a
++        // combined box. Long/deep models can otherwise appear unnecessarily small.
++        foreach (var renderer in modelRenderers)
++        {
++            if (!renderer || !(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
++                || !renderer.enabled || renderer.forceRenderingOff || !renderer.gameObject.activeInHierarchy) continue;
++            var local = renderer.localBounds;
++            for (int i = 0; i < 8; i++)
++            {
++                var corner = local.center + Vector3.Scale(local.extents,
++                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
++                var offset = camera.transform.InverseTransformPoint(renderer.transform.TransformPoint(corner)) - center;
++                float xLimit = Mathf.Abs(offset.x) - horizontal * offset.z;
++                // Account for the presentation center at viewport y = .52.
++                float yLimit = Mathf.Max(offset.y - (vertical + .04f * tangent) * offset.z,
++                    -offset.y + (.04f * tangent - vertical) * offset.z);
++                if (xLimit > .00001f) scale = Mathf.Min(scale, horizontal * depth / xLimit);
++                if (yLimit > .00001f) scale = Mathf.Min(scale, vertical * depth / yLimit);
++            }
++        }
++        return scale;
++    }
++
++    public static bool CameraBounds(Transform root, Camera camera, out Bounds bounds)
++        => CameraBounds(root.GetComponentsInChildren<Renderer>(false), camera, out bounds);
++
++    private static bool CameraBounds(Renderer[] renderers, Camera camera, out Bounds bounds)
++    {
++        bounds = default;
++        bool found = false;
++        foreach (var renderer in renderers)
++        {
++            if (!renderer || !(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
++                || !renderer.enabled || renderer.forceRenderingOff || !renderer.gameObject.activeInHierarchy) continue;
++            var local = renderer.localBounds;
++            for (int i = 0; i < 8; i++)
++            {
++                var corner = local.center + Vector3.Scale(local.extents,
++                    new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
++                var point = camera.transform.InverseTransformPoint(renderer.transform.TransformPoint(corner));
++                if (found) bounds.Encapsulate(point); else bounds = new Bounds(point, Vector3.zero);
++                found = true;
++            }
++        }
++        return found;
++    }
++
++    public static bool TryBounds(Transform root, out Bounds bounds)
++    {
++        bounds = default;
++        bool found = false;
++        foreach (var renderer in root.GetComponentsInChildren<Renderer>(false))
++        {
++            if (!(renderer is MeshRenderer || renderer is SkinnedMeshRenderer)
++                || !renderer.enabled || renderer.forceRenderingOff) continue;
++            if (found) bounds.Encapsulate(renderer.bounds); else bounds = renderer.bounds;
++            found = true;
++        }
++        return found && bounds.size.sqrMagnitude > .000000001f;
++    }
++
++    private void OnEnable() { if (observer && tracked && !hasFramed) QueueFrame(); }
++    private void OnDisable() { hasFilteredPose = false; if (pending != null) StopCoroutine(pending); pending = null; }
++    private void OnDestroy() { if (observer) observer.OnTargetStatusChanged -= StatusChanged; }
++}
+diff --git a/Assets/SCRIPTS/VolcanoCutaway.cs b/Assets/SCRIPTS/VolcanoCutaway.cs
+--- a/Assets/SCRIPTS/VolcanoCutaway.cs
++++ b/Assets/SCRIPTS/VolcanoCutaway.cs
+@@ -1,109 +1,140 @@
+-using UnityEngine;
+-
+-// The shared parent stays selectable while its two imported models are exchanged.
+-public sealed class VolcanoCutaway : MonoBehaviour
+-{
+-    public Transform wholeModel;
+-    public Transform cutawayModel;
+-    [Min(.1f)] public float duration = .7f;
+-
+-    private Vector3 wholeScale, cutawayScale;
+-    private Quaternion wholeRotation, cutawayRotation;
+-    private float elapsed;
+-    private bool initialized, revealing;
+-    public bool IsRevealed { get; private set; }
+-    public bool WasClicked => revealing || IsRevealed;
+-    internal bool AnimationPaused { get; set; }
+-
+-    private void Awake() => Initialize();
+-
+-    private void Initialize()
+-    {
+-        if (initialized || !wholeModel || !cutawayModel) return;
+-        initialized = true;
+-        wholeScale = wholeModel.localScale;
+-        cutawayScale = cutawayModel.localScale;
+-        wholeRotation = wholeModel.localRotation;
+-        cutawayRotation = cutawayModel.localRotation;
+-        // Match the bases, preserving the cutaway's authored orientation and size.
+-        if (TryBounds(wholeModel, out var whole) && TryBounds(cutawayModel, out var cut))
+-            cutawayModel.position += new Vector3(whole.center.x - cut.center.x,
+-                whole.min.y - cut.min.y, whole.center.z - cut.center.z);
+-        ResetToWhole();
+-    }
+-
+-    private static bool TryBounds(Transform root, out Bounds bounds)
+-    {
+-        bounds = default;
+-        bool found = false;
+-        foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+-        {
+-            if (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer)) continue;
+-            // Inactive renderers may not have updated world bounds yet.
+-            var local = renderer.localBounds;
+-            for (int corner = 0; corner < 8; corner++)
+-            {
+-                var point = renderer.transform.TransformPoint(local.center + Vector3.Scale(local.extents,
+-                    new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1,
+-                        (corner & 4) == 0 ? -1 : 1)));
+-                if (found) bounds.Encapsulate(point); else bounds = new Bounds(point, Vector3.zero);
+-                found = true;
+-            }
+-        }
+-        return found;
+-    }
+-
+-    public void Reveal()
+-    {
+-        Initialize();
+-        if (!initialized || IsRevealed || revealing) return;
+-        revealing = true;
+-        elapsed = 0;
+-    }
+-
+-    private void Update()
+-    {
+-        if (!AnimationPaused) AdvanceAnimation(Time.unscaledDeltaTime);
+-    }
+-
+-    public void AdvanceAnimation(float deltaTime)
+-    {
+-        if (!revealing) return;
+-        elapsed += Mathf.Max(0, deltaTime);
+-        float t = Mathf.Clamp01(elapsed / Mathf.Max(.1f, duration));
+-        if (t < .4f)
+-        {
+-            float blend = Mathf.SmoothStep(0, 1, t / .4f);
+-            wholeModel.localScale = wholeScale;
+-            wholeModel.localRotation = wholeRotation * Quaternion.Euler(0, 20 * blend, 0);
+-        }
+-        else
+-        {
+-            wholeModel.gameObject.SetActive(false);
+-            cutawayModel.gameObject.SetActive(true);
+-            float blend = Mathf.SmoothStep(0, 1, (t - .4f) / .6f);
+-            cutawayModel.localScale = cutawayScale;
+-            cutawayModel.localRotation = cutawayRotation * Quaternion.Euler(0, -20 * (1 - blend), 0);
+-        }
+-        if (t >= 1)
+-        {
+-            revealing = false;
+-            IsRevealed = true;
+-        }
+-    }
+-
+-    public void ResetToWhole()
+-    {
+-        if (!initialized) return;
+-        revealing = false;
+-        IsRevealed = false;
+-        wholeModel.localScale = wholeScale;
+-        wholeModel.localRotation = wholeRotation;
+-        cutawayModel.localScale = cutawayScale;
+-        cutawayModel.localRotation = cutawayRotation;
+-        wholeModel.gameObject.SetActive(true);
+-        cutawayModel.gameObject.SetActive(false);
+-    }
+-
+-    private void OnDisable() => ResetToWhole();
+-}
++using UnityEngine;
++
++// The shared parent stays selectable while its two imported models are exchanged.
++public sealed class VolcanoCutaway : MonoBehaviour
++{
++    public Transform wholeModel;
++    public Transform cutawayModel;
++    [Min(.1f)] public float duration = .7f;
++
++    private Vector3 wholeScale, cutawayScale;
++    private Quaternion wholeRotation, cutawayRotation;
++    private float elapsed;
++    private bool initialized, revealing;
++    private bool playingAuthoredReveal;
++    private float authoredRevealLength;
++    public bool IsRevealed { get; private set; }
++    public bool WasClicked => revealing || IsRevealed;
++    internal bool AnimationPaused { get; set; }
++
++    private void Awake() => Initialize();
++
++    private void Initialize()
++    {
++        if (initialized || !wholeModel || !cutawayModel) return;
++        initialized = true;
++        wholeScale = wholeModel.localScale;
++        cutawayScale = cutawayModel.localScale;
++        wholeRotation = wholeModel.localRotation;
++        cutawayRotation = cutawayModel.localRotation;
++        // Match the bases, preserving the cutaway's authored orientation and size.
++        if (TryBounds(wholeModel, out var whole) && TryBounds(cutawayModel, out var cut))
++            cutawayModel.position += new Vector3(whole.center.x - cut.center.x,
++                whole.min.y - cut.min.y, whole.center.z - cut.center.z);
++        ResetToWhole();
++    }
++
++    private static bool TryBounds(Transform root, out Bounds bounds)
++    {
++        bounds = default;
++        bool found = false;
++        foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
++        {
++            if (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer)) continue;
++            // Inactive renderers may not have updated world bounds yet.
++            var local = renderer.localBounds;
++            for (int corner = 0; corner < 8; corner++)
++            {
++                var point = renderer.transform.TransformPoint(local.center + Vector3.Scale(local.extents,
++                    new Vector3((corner & 1) == 0 ? -1 : 1, (corner & 2) == 0 ? -1 : 1,
++                        (corner & 4) == 0 ? -1 : 1)));
++                if (found) bounds.Encapsulate(point); else bounds = new Bounds(point, Vector3.zero);
++                found = true;
++            }
++        }
++        return found;
++    }
++
++    public void Reveal()
++    {
++        Initialize();
++        if (!initialized || IsRevealed || revealing) return;
++        revealing = true;
++        elapsed = 0;
++        // The imported cutaway already animates both halves separating. Replay
++        // that clip explicitly; a quick root turn/model swap hides this action.
++        var animator = cutawayModel.GetComponent<Animator>();
++        playingAuthoredReveal = animator && animator.runtimeAnimatorController;
++        if (playingAuthoredReveal)
++        {
++            wholeModel.gameObject.SetActive(false);
++            cutawayModel.gameObject.SetActive(true);
++            animator.enabled = true;
++            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
++            animator.Rebind();
++            animator.Update(0);
++            var state = animator.GetCurrentAnimatorStateInfo(0);
++            animator.Play(state.fullPathHash, 0, 0);
++            animator.Update(0);
++            authoredRevealLength = Mathf.Max(duration, animator.GetCurrentAnimatorStateInfo(0).length);
++        }
++    }
++
++    private void Update()
++    {
++        if (!AnimationPaused) AdvanceAnimation(Time.unscaledDeltaTime);
++    }
++
++    public void AdvanceAnimation(float deltaTime)
++    {
++        if (!revealing) return;
++        elapsed += Mathf.Max(0, deltaTime);
++        if (playingAuthoredReveal)
++        {
++            if (elapsed >= authoredRevealLength)
++            {
++                revealing = false;
++                IsRevealed = true;
++            }
++            return;
++        }
++        // Retain the existing transition for a model without an Animator.
++        float t = Mathf.Clamp01(elapsed / Mathf.Max(.1f, duration));
++        if (t < .4f)
++        {
++            float blend = Mathf.SmoothStep(0, 1, t / .4f);
++            wholeModel.localScale = wholeScale;
++            wholeModel.localRotation = wholeRotation * Quaternion.Euler(0, 20 * blend, 0);
++        }
++        else
++        {
++            wholeModel.gameObject.SetActive(false);
++            cutawayModel.gameObject.SetActive(true);
++            float blend = Mathf.SmoothStep(0, 1, (t - .4f) / .6f);
++            cutawayModel.localScale = cutawayScale;
++            cutawayModel.localRotation = cutawayRotation * Quaternion.Euler(0, -20 * (1 - blend), 0);
++        }
++        if (t >= 1)
++        {
++            revealing = false;
++            IsRevealed = true;
++        }
++    }
++
++    public void ResetToWhole()
++    {
++        if (!initialized) return;
++        revealing = false;
++        playingAuthoredReveal = false;
++        elapsed = 0;
++        IsRevealed = false;
++        wholeModel.localScale = wholeScale;
++        wholeModel.localRotation = wholeRotation;
++        cutawayModel.localScale = cutawayScale;
++        cutawayModel.localRotation = cutawayRotation;
++        wholeModel.gameObject.SetActive(true);
++        cutawayModel.gameObject.SetActive(false);
++    }
++
++    private void OnDisable() => ResetToWhole();
++}
