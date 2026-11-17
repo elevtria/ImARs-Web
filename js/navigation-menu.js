@@ -8,8 +8,8 @@ if (navigationDrawer) {
     link.href = "teacher-ar.html";
     if (/^\/teacher-ar(?:\.html)?\/?$/.test(window.location.pathname)) { link.classList.add("active"); link.setAttribute("aria-current", "page"); }
     link.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><path d="m12 7 5 3v5l-5 3-5-3v-5zM7 10l5 3 5-3m-5 3v5"/></svg>AR Classroom';
-    const markers = teacherNavigation.querySelector('a[href="offline-sync.html"]');
-    if (markers) markers.after(link); else teacherNavigation.append(link);
+    const scan = teacherNavigation.querySelector('a[href="sync-offline-results.html"]');
+    if (scan) scan.before(link); else teacherNavigation.append(link);
   }
   const panel = navigationDrawer.querySelector(".drawer-panel");
   const brand = panel?.querySelector(".brand");
