@@ -17,15 +17,15 @@ export function initTeacherNotifications(app, auth) {
   const host = element("div", undefined, "teacher-notifications");
   const bell = element("button", undefined, "theme-toggle notification-toggle");
   bell.type = "button";
-  bell.setAttribute("aria-label", "Test notifications");
+  bell.setAttribute("aria-label", "Notifications");
   bell.setAttribute("aria-expanded", "false");
   bell.setAttribute("aria-controls", "teacherNotifications");
-  bell.title = "Test notifications";
+  bell.title = "Notifications";
   bell.innerHTML = '<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>';
   const badge = element("span", "", "notification-badge"); badge.setAttribute("aria-hidden", "true"); badge.hidden = true; bell.append(badge);
   const panel = element("section", undefined, "notification-panel");
   panel.id = "teacherNotifications"; panel.hidden = true; panel.setAttribute("aria-labelledby", "notificationTitle");
-  const heading = element("h2", "Test notifications"); heading.id = "notificationTitle";
+  const heading = element("h2", "Notifications"); heading.id = "notificationTitle";
   const mark = element("button", "Mark all read", "notification-mark"); mark.type = "button";
   const header = element("div", undefined, "notification-header"); header.append(heading, mark);
   const status = element("p", "Loading test completions…", "notification-status"); status.setAttribute("role", "status");
@@ -40,7 +40,7 @@ export function initTeacherNotifications(app, auth) {
   function paint() {
     const unread = items.filter(item => !read.has(item.id)).length;
     badge.hidden = !unread; badge.textContent = String(unread);
-    bell.setAttribute("aria-label", `Test notifications, ${unread} unread`);
+    bell.setAttribute("aria-label", `Notifications, ${unread} unread`);
     mark.disabled = !unread;
     list.replaceChildren();
     for (const item of items) {
@@ -60,7 +60,7 @@ export function initTeacherNotifications(app, auth) {
   }
   function receive(next, complete = true) {
     items = next; paint();
-    status.textContent = complete ? items.length ? "Latest completed tests" : "No completed tests yet." : "Checking student test completions…";
+    status.textContent = complete ? items.length ? "Recent activity" : "No completed tests yet." : "Checking student test completions…";
   }
   function close() {
     panel.hidden = true; bell.setAttribute("aria-expanded", "false");

@@ -39,6 +39,9 @@ function setup({ enabled = true, ready = true, blocked = false } = {}) {
 test("bell shows unread completions, safe student text and persistent mark-all-read", async () => {
   const f = setup(); await f.signIn();
   const bell = f.find("theme-toggle notification-toggle"), panel = f.find("notification-panel");
+  assert.equal(f.find("notification-header").children[0].textContent, "Notifications");
+  assert.equal(f.find("notification-status").textContent, "Recent activity");
+  assert.equal(bell.attributes["aria-label"], "Notifications, 1 unread");
   assert.equal(f.find("notification-badge").textContent, "1");
   assert.equal(panel.hidden, true); bell.events.click(); await f.settle(); assert.equal(panel.hidden, false);
   const link = f.find("notification-list").children[0].children[0];
