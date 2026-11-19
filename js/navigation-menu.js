@@ -37,10 +37,12 @@ if (navigationDrawer) {
     };
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
-    // Desktop navigation stays expanded on every page. No pointer-driven width
-    // changes or navigation handoff are needed, so document changes cannot shrink it.
+    let hovering = desktop.matches && panel.matches(":hover");
+    let keyboardFocus = false;
     const syncDrawer = () => {
-      navigationDrawer.classList.remove("is-compact");
+      const expanded = desktop.matches && (hovering || (keyboardFocus && panel.contains(document.activeElement)));
+      navigationDrawer.classList.toggle("is-compact", desktop.matches && !expanded);
+      navigationDrawer.setAttribute("data-desktop-open", String(expanded));
       const open = !desktop.matches && navigationDrawer.classList.contains("open");
       const hidden = !desktop.matches && !open;
       navigationDrawer.setAttribute("aria-hidden", String(hidden));
@@ -49,14 +51,49 @@ if (navigationDrawer) {
     };
     const closeNavigation = (restoreFocus = false) => {
       const wasOpen = navigationDrawer.classList.contains("open");
+      hovering = keyboardFocus = false;
       navigationDrawer.classList.remove("open");
       setAccountOpen(false);
       if (wasOpen && restoreFocus) menuButton?.focus();
       syncDrawer();
     };
+    panel.addEventListener("pointerenter", event => {
+      if (!desktop.matches || event.pointerType === "touch") return;
+      hovering = true;
+      syncDrawer();
+    });
+    const leavePanel = () => {
+      if (!desktop.matches) return;
+      hovering = false;
+      setAccountOpen(false);
+      syncDrawer();
+    };
+    panel.addEventListener("pointerleave", leavePanel);
+    panel.addEventListener("pointercancel", leavePanel);
+    panel.addEventListener("focusin", syncDrawer);
+    panel.addEventListener("focusout", () => queueMicrotask(syncDrawer));
+    document.addEventListener("pointerdown", event => {
+      if (!desktop.matches) return;
+      keyboardFocus = false;
+      hovering = panel.contains(event.target);
+      syncDrawer();
+    });
+    document.addEventListener("pointermove", event => {
+      if (!desktop.matches || event.pointerType === "touch") return;
+      const inside = panel.contains(event.target);
+      if (inside === hovering) return;
+      hovering = inside;
+      if (!inside) setAccountOpen(false);
+      syncDrawer();
+    });
     desktop.addEventListener("change", () => closeNavigation());
-    window.addEventListener("pagehide", () => closeNavigation());
-    window.addEventListener("pageshow", () => closeNavigation());
+    window.addEventListener("blur", () => closeNavigation());
+    window.addEventListener("pagehide", () => { if (!desktop.matches) closeNavigation(); });
+    window.addEventListener("pageshow", () => {
+      if (!desktop.matches) { closeNavigation(); return; }
+      hovering = panel.matches(":hover");
+      syncDrawer();
+    });
     menuButton?.addEventListener("click", () => {
       if (desktop.matches) return;
       navigationDrawer.classList.add("open");
@@ -81,13 +118,15 @@ if (navigationDrawer) {
       if (!event.target.closest(".account")) setAccountOpen(false);
     });
     document.addEventListener("keydown", event => {
+      if (event.key === "Tab") { keyboardFocus = true; syncDrawer(); return; }
       if (event.key !== "Escape") return;
       if (accountMenu && !accountMenu.hidden) {
         setAccountOpen(false);
         accountButton?.focus();
         return;
       }
-      if (!desktop.matches && navigationDrawer.classList.contains("open")) closeNavigation(true);
+      if (desktop.matches) closeNavigation();
+      else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();

@@ -130,11 +130,18 @@ body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outli
 @media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
 }
 
-/* Keep desktop navigation at its expanded width from the first paint through
-   navigation. Mobile continues to use the existing menu drawer. */
+/* Keep a stable icon rail; expanded labels overlay it without moving content.
+   CSS handles the initial pointer position before the shared script loads. */
 @media screen and (min-width: 1000px) {
-  :root body:has(#drawer) { --navigation-width: 260px; }
-  :root body:has(#drawer) .app { margin-left: 260px; transition: none; }
-  :root #drawer, :root #drawer .drawer-panel { width: 260px; transition: none; }
-  :root #drawer :is(.brand > div, .nav-label, .user-meta) { display: block; opacity: 1; pointer-events: auto; transition: none; }
+  :root body:has(#drawer) { --navigation-width: 82px; }
+  :root body:has(#drawer) .app { margin-left: 82px; transition: none; }
+  :root #drawer, :root #drawer .drawer-panel { width: 82px; transition: none; }
+  :root #drawer :is(.brand > div, .nav-label, .user-meta) { display: block; opacity: 0; pointer-events: none; transition: none; }
+  :root #drawer .account { visibility: hidden; }
+  :root #drawer:not([data-desktop-open]) .nav-item { font-size: 0; }
+  :root #drawer:is([data-desktop-open="true"], :not([data-desktop-open]):hover),
+  :root #drawer:is([data-desktop-open="true"], :not([data-desktop-open]):hover) .drawer-panel { width: 260px; }
+  :root #drawer:is([data-desktop-open="true"], :not([data-desktop-open]):hover) :is(.brand > div, .nav-label, .user-meta) { opacity: 1; pointer-events: auto; }
+  :root #drawer:is([data-desktop-open="true"], :not([data-desktop-open]):hover) .account { visibility: visible; }
+  :root #drawer:not([data-desktop-open]):hover .nav-item { font-size: 13px; }
 }

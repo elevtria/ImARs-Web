@@ -51,31 +51,51 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
-test("desktop sidebar starts expanded and stays expanded during pointer, window and navigation changes", () => {
+test("desktop sidebar expands on hover and returns to icons even when a clicked link retains focus", () => {
+  const f = menu();
+  assert.equal(f.compact(), true);
+  assert.equal(f.drawer.inert, false);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  assert.equal(f.compact(), false);
+  f.document.activeElement = f.focusedLink;
+  f.panel.emit("focusin");
+  f.panel.emit("pointerleave", { pointerType: "mouse" });
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  f.panel.emit("pointercancel");
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  f.window.emit("blur");
+  assert.equal(f.compact(), true);
+});
+
+test("desktop link navigation preserves the hover width and destination pages use the actual pointer position", () => {
   const f = menu({ inheritedHover: true });
   assert.equal(f.compact(), false);
-  assert.equal(f.drawer.inert, false);
-  for (const event of ["pointerenter", "pointerleave", "pointercancel"]) {
-    f.panel.emit(event, { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
-  }
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.document.emit("pointerdown", { target: f.outside }); f.flush(); assert.equal(f.compact(), false);
-  for (const event of ["blur", "pagehide", "pageshow"]) {
-    f.window.emit(event, { persisted: true }); assert.equal(f.compact(), false);
-  }
   const link = { href: "https://imars.test/analytics.html" };
   f.drawer.emit("click", { target: { closest: () => link } });
   f.window.emit("pagehide"); assert.equal(f.compact(), false);
-  const destination = menu();
-  assert.equal(destination.compact(), false, "new pages need no saved mouse position to stay expanded");
+  assert.equal(menu({ inheritedHover: true }).compact(), false);
+  assert.equal(menu().compact(), true);
+  assert.match(style, /:not\(\[data-desktop-open\]\):hover/);
+  assert.match(style, /\.app\s*\{\s*margin-left:\s*82px;\s*transition:\s*none/);
 });
 
-test("keyboard navigation and Escape do not collapse the desktop sidebar or lose its focused link", () => {
+test("keyboard navigation keeps labels open after pointer exit and Escape returns to icons without losing focus", () => {
   const f = menu();
   f.document.activeElement = f.focusedLink;
   f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
+  f.panel.emit("pointerleave", { pointerType: "mouse" });
+  assert.equal(f.compact(), false);
   f.document.emit("keydown", { key: "Escape" });
-  assert.equal(f.compact(), false); assert.equal(f.document.activeElement, f.focusedLink);
+  assert.equal(f.compact(), true); assert.equal(f.document.activeElement, f.focusedLink);
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
+  f.document.activeElement = f.outside;
+  f.panel.emit("focusout");
+  assert.equal(f.compact(), true);
 });
 
 test("mobile close controls and breakpoint changes retain the drawer behavior", () => {
@@ -91,7 +111,7 @@ test("mobile close controls and breakpoint changes retain the drawer behavior", 
   assert.equal(f.drawer.classes.has("open"), false);
   assert.equal(f.accountMenu.hidden, true);
   assert.equal(f.drawer.inert, true);
-  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), false); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
+  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), true); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
 });
 
 test("mobile link navigation and history restoration clear the drawer and its backdrop", () => {
