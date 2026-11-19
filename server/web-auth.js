@@ -137,6 +137,9 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
 
+  // Local removal is authoritative even if the Firestore mirror is unavailable.
+  const localProfile = await store.get("users/" + id);
+  if (String(localProfile?.data?.status || "").toLowerCase() === "deleted") return null;
   let profile = null;
 
   // Always check live Firebase Firestore first so newly registered mobile teachers work immediately
@@ -148,7 +151,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
         profile = fbProfile;
         // Best-effort background sync to Supabase
         try {
-          const sbProfile = await store.get("users/" + id);
+          const sbProfile = localProfile;
           if (!sbProfile?.data?.uid || sbProfile.data.uid !== fbProfile.data.uid) {
             const merged = { ...(sbProfile?.data || {}), ...fbProfile.data, active: true, status: "active", isRegistered: true };
             await store.begin();
@@ -170,7 +173,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   }
 
   if (!profile) {
-    profile = await store.get("users/" + id);
+    profile = localProfile;
   }
 
   if (!profile?.data?.uid || String(profile.data.role || "").toLowerCase() !== "teacher") return initial;

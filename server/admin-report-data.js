@@ -18,7 +18,7 @@ function duration(minutes) {
 
 export function summarizeAdminReports(teacherDocs, students, classes = []) {
   const sectionsById = new Map(classes.map(row => [row.id, row.data]));
-  const teachers = new Map(teacherDocs.map(({ id, data }) => {
+  const teachers = new Map(teacherDocs.filter(({ data }) => String(data.status || "").toLowerCase() !== "deleted").map(({ id, data }) => {
     let joined = data.joined || "Recently";
     if (data.createdAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.createdAt.value))) {
       joined = new Date(data.createdAt.value).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });

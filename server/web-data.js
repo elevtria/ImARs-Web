@@ -66,9 +66,9 @@ export async function transferredRosterWrites(store, transfers) {
   return writes;
 }
 
-async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
+export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, { firestore } = {}) {
   try {
-    const firestore = new FirestoreAdmin(env, fetcher);
+    firestore ??= new FirestoreAdmin(env, fetcher);
     const [fsClasses, fsTeachersOnly, fsAdminsOnly, sbClasses, sbTeachersOnly, sbAdminsOnly] = await Promise.all([
       firestore.query("classes", { limit: 100 }),
       firestore.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 }),
@@ -109,8 +109,11 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
     // 2. Sync teacher & admin profiles (including ADMIN2) from Firebase Firestore -> Supabase
     for (const fsUser of fsStaff) {
       if (!fsUser?.id || !fsUser?.data) continue;
-      const sbUser = sbStaffMap.get(fsUser.id);
+      const sbUser = sbStaffMap.get(fsUser.id) || await store.get("users/" + fsUser.id);
+      if (sbUser) sbStaffMap.set(fsUser.id, sbUser);
       const isTeacher = fsUser.data.role === "teacher";
+      // A failed mirror must never let an older source restore a removed teacher.
+      if (isTeacher && String(sbUser?.data?.status || "").toLowerCase() === "deleted") continue;
 
       if (isTeacher) {
         if (fsUser.data.uid) affectedTeacherUids.add(fsUser.data.uid);
@@ -152,6 +155,8 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
 
     for (const fsUser of fsTeachersOnly) {
       if (!fsUser?.id || !Array.isArray(fsUser.data?.sections) || !fsUser.data.sections.length) continue;
+      if (String(sbStaffMap.get(fsUser.id)?.data?.status || "").toLowerCase() === "deleted" ||
+          String(fsUser.data.status || "").toLowerCase() === "deleted") continue;
       const teacherClasses = [...fsClasses, ...sbClasses].filter(c => c.data?.teacherId === fsUser.id);
       const existingNames = new Set(teacherClasses.map(c => normalizeSectionName(c.data?.SectionName || c.data?.sectionName || c.id).toLowerCase()));
 
@@ -313,6 +318,11 @@ class Scope {
       else if (p[0] === "users" && p.length === 2 && actor.role === "teacher" && previous?.role === "student" && previous.active === false) await this.student(p[1]);
       else if (!(p[0] === "users" && p.length === 2 && actor.role === "admin" && previous?.role === "teacher")) throw fail();
       if (!row) throw fail("This record no longer exists.", 409);
+      if (p[0] === "users" && previous.role === "teacher") {
+        // Retain a deletion marker so periodic imports cannot recreate the account.
+        return { operation: "update", path: ref.path, updateTime: row.updateTime,
+          data: { active: false, status: "deleted", deletedAt: { $type: "serverTimestamp" } } };
+      }
       return { ...input, updateTime: row.updateTime };
     }
     if (row && input.operation === "set" && input.merge !== true && p[0] !== "generatedQuizzes") throw fail("Save edits without replacing the existing record.", 400);
@@ -326,7 +336,7 @@ class Scope {
           ["school", "department", "phone", "roleLabel"].every(key => data[key] === undefined || text(data[key], 200, true))) {
         return { ...input, updateTime: row.updateTime };
       }
-      if (actor.role === "admin" && previous?.role === "teacher" && input.operation === "update" &&
+      if (actor.role === "admin" && previous?.role === "teacher" && previous.status !== "deleted" && input.operation === "update" &&
           names(["active", "status"]) && typeof data.active === "boolean" && data.status === (data.active ? "active" : "inactive")) {
         return { ...input, updateTime: row.updateTime };
       }
@@ -923,7 +933,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       }
       for (const write of writes) if (/^users\/TEACH\d+$/.test(write.path) && actor.role === "admin") {
         const id = write.path.split("/")[1];
-        if (write.operation === "delete") {
+        if (write.operation === "delete" || write.data?.status === "deleted") {
           const disabled = await stateCall(env, "staff-roster", "roster-disable", { id });
           if (!disabled.ok) throw new Error("Invitation update failed");
         }
