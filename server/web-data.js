@@ -501,6 +501,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
     throw fail("Invalid student performance page.", 400);
   }
   if (body.includeTeacher !== undefined && typeof body.includeTeacher !== "boolean") throw fail("Invalid teacher details request.", 400);
+  if (body.includePoints !== undefined && typeof body.includePoints !== "boolean") throw fail("Invalid points request.", 400);
   const classes = await scope.assignedClasses(body.rawActivityScores === true ? ["teacherId", ...classDisplayFields] : undefined);
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -545,7 +546,14 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
       after = row.id; consumed++; scanned++;
       const archived = row.data.active === false;
       const matches = matchesSearch(search, personSearchText(row.id, row.data));
-      if (archived === (status === "archived") && matches) students.push({ classId, document: output("users/" + row.id, row) });
+      if (archived === (status === "archived") && matches) {
+        const document = output("users/" + row.id, row);
+        if (body.includePoints === true) {
+          const points = row.data.gamification?.totalPoints;
+          document.data.totalPoints = Number.isSafeInteger(points) && points >= 0 ? points : 0;
+        }
+        students.push({ classId, document });
+      }
     }
     if (consumed === rows.length && rows.length < queuedClass.size) { index++; after = null; }
     else if (students.length === maximum || scanned >= 100) break;

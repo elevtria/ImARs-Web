@@ -1,3 +1,4 @@
+.leaderboard-nav-icon { display: grid; place-items: center; width: 19px; flex: 0 0 19px; font-size: 23px; line-height: 1; }
 body[data-auth-pending] :is(main, main *, .side-user, .side-user *, .modal, .modal *, dialog, dialog *) { visibility: hidden !important; }
 body[data-auth-pending] :is(main[data-auth-shell], main [data-auth-shell]) { visibility: visible !important; }
 /* This marker is reserved for fixed public labels, never account data. */

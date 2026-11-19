@@ -2,6 +2,19 @@
 const navigationDrawer = document.getElementById("drawer");
 if (navigationDrawer) {
   const teacherNavigation = !document.body.classList.contains("admin-portal") && navigationDrawer.querySelector(".side-nav");
+  if (teacherNavigation && !teacherNavigation.querySelector('a[href="leaderboard.html"]')) {
+    const link = document.createElement("a");
+    link.className = "nav-item";
+    link.href = "leaderboard.html";
+    if (/^\/leaderboard(?:\.html)?\/?$/.test(window.location.pathname)) {
+      link.classList.add("active");
+      link.setAttribute("aria-current", "page");
+    }
+    link.innerHTML = '<span class="leaderboard-nav-icon" aria-hidden="true">♛</span>Leaderboard';
+    const records = teacherNavigation.querySelector('a[href="student-records.html"]');
+    if (records) records.after(link);
+    else teacherNavigation.append(link);
+  }
   if (teacherNavigation && !teacherNavigation.querySelector('a[href="teacher-ar.html"]')) {
     const link = document.createElement("a");
     link.className = "nav-item";
