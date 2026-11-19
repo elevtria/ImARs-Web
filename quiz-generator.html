@@ -37,7 +37,7 @@
     </header>
 
     <main class="content quiz-content" inert data-auth-shell>
-      <section class="hero quiz-hero" data-auth-shell>
+      <section class="hero quiz-hero" id="quizIntro" data-auth-shell>
         <div>
           <p class="quiz-eyebrow">TEACHER TOOLS</p>
           <h1 data-auth-shell>Quiz Generator</h1>
@@ -46,7 +46,7 @@
         <button class="ghost-btn" id="openLibrary" type="button">My quizzes <span class="quiz-library-count" id="libraryCount">0</span></button>
       </section>
 
-      <div class="quiz-view-tabs" role="tablist" aria-label="Quiz generator views">
+      <div class="quiz-view-tabs" id="quizViewTabs" role="tablist" aria-label="Quiz generator views">
         <button class="quiz-view-tab active" id="createTab" type="button" role="tab" aria-selected="true">Create a quiz</button>
         <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
         <button class="quiz-view-tab" id="gradingTab" type="button" role="tab" aria-selected="false">Submissions &amp; grading</button>
@@ -182,6 +182,7 @@
         <p class="quiz-status" id="gradingStatus" role="status" aria-live="polite"></p>
         <div id="gradingQuizList" class="quiz-library-list"></div>
       </section>
+      <section id="quizGradingWorkspace" class="quiz-view" hidden data-auth-shell aria-label="Quiz submissions and grading"></section>
     </main>
   </div>
 

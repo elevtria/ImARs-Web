@@ -31,6 +31,9 @@ const firestore = getFirestore(firebaseApp);
   const createView = document.getElementById("createView");
   const libraryView = document.getElementById("libraryView");
   const gradingView = document.getElementById("gradingView");
+  const gradingWorkspace = document.getElementById("quizGradingWorkspace");
+  const quizViewTabs = document.getElementById("quizViewTabs");
+  const quizIntro = document.getElementById("quizIntro");
   const gradingTermFilter = document.getElementById("gradingTermFilter");
   const gradingSectionFilter = document.getElementById("gradingSectionFilter");
   const setupStep = document.getElementById("setupStep");
@@ -332,6 +335,10 @@ const firestore = getFirestore(firebaseApp);
   function saveQuizzes(quizzes) { quizCache = quizSummaries(quizzes); }
 
   function setView(view) {
+    if (!gradingWorkspace.hidden) closeQuizReview();
+    gradingWorkspace.hidden = true;
+    quizViewTabs.hidden = false;
+    quizIntro.hidden = false;
     for (const [name, panel] of [["create", createView], ["library", libraryView], ["grading", gradingView]]) {
       panel.hidden = view !== name;
       const tab = document.getElementById(name + "Tab");
@@ -343,6 +350,37 @@ const firestore = getFirestore(firebaseApp);
     persistWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  const gradingRouteMatch = () => window.location?.hash?.match(/^#submissions\/([A-Za-z0-9_-]{1,128})(?:\/([A-Za-z0-9_-]{1,128}))?$/);
+  const gradingRoute = () => gradingRouteMatch()?.[1];
+  function openGradingWorkspace(quiz, navigate = true) {
+    if (!auth.currentUser) return;
+    const routeSection = !navigate && gradingRouteMatch()?.[2];
+    if (routeSection && teacherSections.some(section => section.id === routeSection)) gradingSectionFilter.value = routeSection;
+    setView("grading");
+    gradingView.hidden = true;
+    gradingWorkspace.hidden = false;
+    quizViewTabs.hidden = true;
+    quizIntro.hidden = true;
+    if (navigate && window.history?.pushState) window.history.pushState({ ...window.history.state, imarsQuizGrading: true }, "", "#submissions/" + quiz.id + (gradingSectionFilter.value ? "/" + gradingSectionFilter.value : ""));
+    void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value, {
+      container: gradingWorkspace,
+      onReviewed: () => { gradingSummaries.clear(); void loadGradingSummaries(true); },
+      onClose: () => {
+        if (window.history?.state?.imarsQuizGrading && gradingRoute()) window.history.back();
+        else {
+          if (gradingRoute()) window.history?.replaceState(null, "", window.location.pathname + window.location.search);
+          setView("grading");
+        }
+      }
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  window.addEventListener("popstate", () => {
+    const quiz = loadQuizzes().find(item => item.id === gradingRoute());
+    if (quiz) openGradingWorkspace(quiz, false);
+    else if (!gradingWorkspace.hidden) setView("grading");
+  });
 
   function setStep(step) {
     setupStep.hidden = step !== "setup";
@@ -923,6 +961,7 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    closeQuizReview(); gradingWorkspace.hidden = true; quizViewTabs.hidden = false; quizIntro.hidden = false;
     gradingRequest?.abort();
     gradingSummaries.clear();
     gradingTermFilter.value = gradingSectionFilter.value = "";
@@ -954,6 +993,8 @@ const firestore = getFirestore(firebaseApp);
     }
     if (user && auth.currentUser?.uid === user.uid && teacherProfileId) {
       restoreWorkspace(user);
+      const selectedQuiz = loadQuizzes().find(quiz => quiz.id === gradingRoute());
+      if (selectedQuiz) openGradingWorkspace(selectedQuiz, false);
       restoringWorkspace = false;
       void refreshJob(user);
     } else { clearQuizWorkspace(); restoringWorkspace = false; }
@@ -1096,8 +1137,7 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("gradingQuizList").addEventListener("click", event => {
     const button = event.target.closest("[data-grade-quiz]");
     const quiz = button && loadQuizzes().find(item => item.id === button.dataset.gradeQuiz);
-    if (quiz && auth.currentUser) void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value,
-      { onReviewed: () => void loadGradingSummaries(true) });
+    if (quiz && auth.currentUser) openGradingWorkspace(quiz);
   });
   document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
   async function startNewQuiz() {

@@ -149,9 +149,30 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("gradingSectionFilter").value = "A";
   element("gradingSectionFilter").listeners.change();
   assert.match(element("gradingQuizList").innerHTML, /View submissions \/ grade/);
+  context.window.location = { hash: "", pathname: "/quiz-generator", search: "" };
+  context.window.history = { state: null,
+    pushState(state, _title, hash) { this.state = state; context.window.location.hash = hash; },
+    back() { this.state = null; context.window.location.hash = ""; windowEvents.popstate(); }
+  };
   element("gradingQuizList").listeners.click({ target: { closest: () => ({ dataset: { gradeQuiz: saves[0].id } }) } });
   assert.equal(results[1].id, saves[0].id);
   assert.equal(results[3], "A", "grading uses its own section filter");
+  assert.equal(results[4].container, element("quizGradingWorkspace"));
+  assert.equal(element("quizGradingWorkspace").hidden, false);
+  assert.equal(element("gradingView").hidden, true);
+  assert.equal(element("quizViewTabs").hidden, true);
+  assert.equal(element("quizIntro").hidden, true);
+  assert.equal(context.window.location.hash, "#submissions/" + saves[0].id + "/A");
+  context.window.location.hash = "#submissions/" + saves[0].id + "/C";
+  windowEvents.popstate();
+  assert.equal(results[3], "C", "a restored grading route keeps the requested owned section");
+  context.window.location.hash = "#submissions/" + saves[0].id + "/A";
+  windowEvents.popstate();
+  results[4].onClose();
+  assert.equal(element("gradingView").hidden, false);
+  assert.equal(element("quizGradingWorkspace").hidden, true);
+  assert.equal(element("quizIntro").hidden, false);
+  assert.equal(element("gradingSectionFilter").value, "A");
   await new Promise(setImmediate);
   assert.match(element("gradingQuizList").innerHTML, /30\/36 submitted · 6 awaiting grade · 24 graded · 6 not submitted/);
   element("libraryTab").listeners.click();
