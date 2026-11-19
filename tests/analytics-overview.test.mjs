@@ -18,6 +18,7 @@ test("overview uses normalized paired scores, real zeroes and recorded learning 
   ]), "A", "term_01");
   assert.equal(result.students, 3); assert.equal(result.pre, 0); assert.equal(result.post, 70);
   assert.equal(result.change, 40, "unpaired post-tests do not inflate the change");
+  assert.equal(result.pairs, 1);
   assert.equal(result.assessments, 3); assert.equal(result.possibleAssessments, 6);
   assert.equal(result.lessons[0].ar, 0); assert.equal(result.lessons[0].arCount, 1);
   assert.equal(result.lessons[0].module, 3);

@@ -635,7 +635,8 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const scoreFields = [...heatmapFields, "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isLessonCompleted", "isARCompleted", "completed",
-    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum", "teacherScoreOverrides"];
+    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum", "teacherScoreOverrides",
+    "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const gradeRequest = !heatmap && page.students.length
     ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))

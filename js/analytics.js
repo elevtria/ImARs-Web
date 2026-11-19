@@ -203,24 +203,26 @@ function renderTopics(records, emptyMessage = "No lessons found for this term.")
 
 
 const percent = value => value === null ? '—' : Math.round(value) + '%';
+const recordedPeople = count => count + (count === 1 ? ' student' : ' students') + ' with recorded time';
 const minutes = value => value === null ? 'Not recorded' : Math.round(value * 10) / 10 + ' min';
 function renderOverview() {
   if (!lastReport) return;
   const overview = buildAnalyticsOverview(lastReport, activitySection, currentTermFilter);
   const quizzes = quizSummary;
-  const metrics = [['Students', String(lastReport.total ?? overview.students)], ['Completed assessments', overview.assessments + '/' + overview.possibleAssessments],
+  const metrics = [['Students', String(lastReport.total ?? overview.students)], ['Recorded pre/post tests', overview.assessments + '/' + overview.possibleAssessments],
     ['Average pre-test', percent(overview.pre)], ['Average post-test', percent(overview.post)],
     ['Change in paired scores', overview.change === null ? '—' : (overview.change > 0 ? '+' : '') + Math.round(overview.change) + ' pp'],
     ['Awaiting grading', quizzes ? String(quizzes.items.reduce((sum, row) => sum + row.awaitingGrade, 0)) : '—']];
-  document.getElementById('analyticsMetrics').innerHTML = metrics.map(([label, value]) => '<article class="card analytics-metric"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong></article>').join('');
+  document.getElementById('analyticsMetrics').innerHTML = metrics.map(([label, value]) => '<article class="card analytics-metric"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong>' + (label === 'Recorded pre/post tests' ? '<small>Saved pre-tests + post-tests / expected lesson tests</small>' : label === 'Change in paired scores' ? '<small>From ' + overview.pairs + ' matched student–lesson pairs</small>' : '') + '</article>').join('');
   document.getElementById('analyticsCoverage').textContent = (lastReport.complete ? 'Results for ' : 'Updating results: ') + overview.students + ' students loaded. ' +
     (quizzes ? quizzes.items.reduce((sum, row) => sum + row.submitted, 0) + '/' + (quizzes.learners * quizzes.quizCount) + ' generated-quiz submissions. ' : '') +
-    'Missing assessments are excluded from averages. pp = percentage points.';
+    'Only uploaded results are shown; a device may still have offline work. Missing tests are excluded from averages. pp = percentage points.' + (lastReport.activitySyncPending ? ' Older-app activity records could not be checked.' : '') + (Number.isFinite(lastReport.checkedAt) ? ' Last checked: ' + new Intl.DateTimeFormat('en-PH', { dateStyle:'medium', timeStyle:'short', timeZone:'Asia/Manila' }).format(new Date(lastReport.checkedAt)) + '.' : '');
   document.getElementById('lessonComparison').innerHTML = overview.lessons.map(row => '<article class="analytics-lesson"><h3>' + escapeHtml(row.title) + '</h3>' +
     [['Pre-test', row.pre, row.preCount], ['Post-test', row.post, row.postCount]].map(([label, value, count]) => '<div class="analytics-bar-row"><span>' + label + '</span><div class="analytics-bar"><i style="width:' + (value ?? 0) + '%"></i></div><strong>' + percent(value) + '</strong><small>' + count + ' recorded</small></div>').join('') +
-    '<p class="scheduler-progress-copy">Paired change: ' + (row.change === null ? '—' : (row.change > 0 ? '+' : '') + Math.round(row.change) + ' pp') + ' · ' + row.pairs + ' paired results</p></article>').join('') || '<p>No lesson records are available for this term.</p>';
-  document.getElementById('learningTimeOverview').innerHTML = overview.lessons.map(row => '<article class="analytics-time-row"><strong>' + escapeHtml(row.title) + '</strong><span>AR average: ' + minutes(row.ar) + ' (' + row.arCount + ' recorded)</span><span>Module average: ' + minutes(row.module) + ' (' + row.moduleCount + ' recorded)</span></article>').join('') || '<p>No recorded learning time is available.</p>';
-  document.getElementById('supportStudents').innerHTML = overview.support.slice(0, supportLimit).map(row => '<article class="analytics-time-row"><a href="student-records.html?student=' + encodeURIComponent(row.id) + '">' + escapeHtml(row.name) + '</a><span>' + row.lessons.map(lesson => escapeHtml(lesson.title) + ': ' + lesson.score + '/' + lesson.maximum).join(' · ') + '</span></article>').join('') || '<p>' + (lastReport.complete ? 'No completed post-test results fall below the 60% review threshold.' : 'No students flagged in the results loaded so far.') + '</p>';
+    '<p class="scheduler-progress-copy">Paired change: ' + (row.change === null ? '—' : (row.change > 0 ? '+' : '') + Math.round(row.change) + ' pp') + ' · ' + row.pairs + ' students with both tests</p></article>').join('') || '<p>No lesson records are available for this term.</p>';
+  document.getElementById('learningTimeOverview').innerHTML = overview.lessons.length ? '<div class="analytics-data-wrap"><table class="analytics-data-table analytics-time-table"><caption class="sr-only">Recorded learning time by lesson</caption><thead><tr><th scope="col">Lesson</th><th scope="col">AR average</th><th scope="col">Module average</th></tr></thead><tbody>' + overview.lessons.map(row => '<tr><th scope="row">' + escapeHtml(row.title) + '</th><td>' + minutes(row.ar) + '<small>' + recordedPeople(row.arCount) + '</small></td><td>' + minutes(row.module) + '<small>' + recordedPeople(row.moduleCount) + '</small></td></tr>').join('') + '</tbody></table></div>' : '<p>No recorded learning time is available.</p>';
+  const support = overview.support.slice(0, supportLimit);
+  document.getElementById('supportStudents').innerHTML = support.length ? '<div class="analytics-data-wrap"><table class="analytics-data-table analytics-support-table"><caption class="sr-only">Post-tests below the 60% review threshold</caption><thead><tr><th scope="col">Student</th><th scope="col">Lesson to review</th><th scope="col">Post-test score</th></tr></thead><tbody>' + support.map(row => row.lessons.map((lesson, index) => '<tr>' + (index === 0 ? '<th scope="rowgroup" rowspan="' + row.lessons.length + '"><a href="student-records.html?student=' + encodeURIComponent(row.id) + '">' + escapeHtml(row.name) + '</a></th>' : '') + '<td>' + escapeHtml(lesson.title) + '</td><td>' + lesson.score + '/' + lesson.maximum + '</td></tr>').join('')).join('') + '</tbody></table></div>' : '<p>' + (lastReport.complete ? 'No completed post-test results fall below the 60% review threshold.' : 'No students flagged in the results loaded so far.') + '</p>';
   document.getElementById('supportMore').hidden = overview.support.length <= supportLimit;
 }
 async function loadQuizSummary() {
@@ -288,7 +290,8 @@ const termButtons = document.querySelectorAll('#termSwitch .term-tab-btn');
 termButtons.forEach(button => button.addEventListener('click', () => {
   if (currentTermFilter === button.dataset.term) return;
   currentTermFilter = button.dataset.term;
-  termButtons.forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)));
+  document.getElementById('analyticsTermPanel').setAttribute('aria-label', termLabels[currentTermFilter] + ' analytics');
+  termButtons.forEach(tab => { tab.setAttribute('aria-pressed', String(tab === button)); tab.setAttribute('aria-selected', String(tab === button)); tab.setAttribute('tabindex', tab === button ? '0' : '-1'); });
   return openReport();
 }));
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
@@ -304,3 +307,11 @@ onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   void openReport({ restoredPage:restored });
 });
 window.addEventListener('pagehide', () => quizRequest?.abort());
+
+termButtons.forEach((button, index) => button.addEventListener('keydown', event => {
+  const keys = ['ArrowLeft','ArrowRight','Home','End'];
+  if (!keys.includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? termButtons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + termButtons.length) % termButtons.length;
+  termButtons[next].focus(); termButtons[next].click();
+}));

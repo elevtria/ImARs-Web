@@ -95,7 +95,8 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     } finally { if (current(token)) running = false; }
   };
   return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false, refresh = false }) {
-    const key = (rawActivityScores ? "teacher-raw-report:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
+    // v2 includes learning durations; older score-only cache entries omit them.
+    const key = (rawActivityScores ? "teacher-raw-report-v2:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
     const nextCache = prepareTeacherCache(app, account);
     const nextVersion = nextCache.version();
     const keep = restoredPage && user?.uid === account.uid && options?.key === key && options.termId === termId &&

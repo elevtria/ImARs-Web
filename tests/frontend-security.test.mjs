@@ -315,7 +315,9 @@ test("Analytics overview connects lesson averages, support links and grading cou
   await app.render();
   assert.match(app.element("analyticsMetrics").html(), /Average post-test.*40%/);
   assert.match(app.element("lessonComparison").html(), /Shared topic/);
-  assert.match(app.element("learningTimeOverview").html(), /AR average: 0 min.*Module average: 3 min/);
+  assert.match(app.element("learningTimeOverview").html(), /<th scope="col">AR average<\/th><th scope="col">Module average<\/th>/);
+  assert.match(app.element("learningTimeOverview").html(), /<td>0 min<small>.*<td>3 min<small>/);
+  assert.match(app.element("supportStudents").html(), /<th scope="col">Student<\/th>.*<th scope="col">Lesson to review<\/th>.*Post-test score/);
   assertTextOnly(app.element("supportStudents").html());
   assert.match(app.element("supportStudents").html(), /student-records.html\?student=S1/);
   assert.equal(app.quizRequests.at(-1).action, "grading-summary");

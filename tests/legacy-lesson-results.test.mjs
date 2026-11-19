@@ -95,3 +95,20 @@ test("a mobile-record read failure is reported as unavailable instead of a succe
   assert.equal(result.status, 503);
   assert.equal((await result.json()).code, "unavailable");
 });
+
+test("the Analytics score projection includes saved Supabase and legacy learning durations", async () => {
+  const { app, legacy, profile } = setup(), cookie = await app.login();
+  const path = `${profile}/test_results/term_02/lessons/lesson_01`;
+  app.data.set(path, { lessonTimeMinutes: 4, arTimeMinutes: 2, isPreTestCompleted: true, preTestScore: 3, preTestTotalQuestions: 5 });
+  legacy.set(path, { lessonTimeMinutes: 7, arTimeMinutes: 3, arNavigationTimeMinutes: 1,
+    learningTimeByDevice: { phone: { lessonSeconds: 420, arSeconds: 180 } } });
+  const response = await app.call({ action: "teacher-report-page", termId: "term_02", sectionId: "A", batchSize: 25,
+    includeCounts: false, includeCurriculum: false, rawActivityScores: true }, cookie);
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  const lesson = page.students[0].lessons.find(row => row.id === "lesson_01").data;
+  assert.equal(lesson.lessonTimeMinutes, 7); assert.equal(lesson.arTimeMinutes, 3);
+  assert.equal(lesson.arNavigationTimeMinutes, 1);
+  assert.equal(lesson.learningTimeByDevice.phone.lessonSeconds, 420);
+  assert.equal(lesson.preTestScore, 3);
+});

@@ -34,6 +34,6 @@ export function buildAnalyticsOverview(report, sectionId, termId) {
       preCount: pre.length, postCount: post.length, ar: mean(ar), module: mean(module), arCount: ar.length, moduleCount: module.length };
   });
   return { students: students.length, lessons, pre: mean(allPre), post: mean(allPost), change: mean(pairedChanges),
-    assessments: allPre.length + allPost.length, possibleAssessments: students.length * lessons.length * 2,
+    assessments: allPre.length + allPost.length, possibleAssessments: students.length * lessons.length * 2, pairs: pairedChanges.length,
     support: [...support.values()].sort((a, b) => b.lessons.length - a.lessons.length || a.name.localeCompare(b.name)) };
 }
