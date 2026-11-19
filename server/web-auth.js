@@ -95,6 +95,40 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
       // Ignore if Firestore lookup is not used in unit tests
     }
   }
+
+  // Allow additional Firestore/Supabase admin accounts (e.g., ADMIN2) not hardcoded in WEB_STAFF_ACCOUNTS
+  if (!initial && dataEnabled(env) && !/^teach\d{4,10}$/.test(clean)) {
+    try {
+      let adminRows = await store.query("users", { filters: [{ field: "role", op: "==", value: "admin" }], limit: 20 });
+      let match = adminRows.find(row =>
+        row.id.toLowerCase() === clean ||
+        String(row.data?.email || "").trim().toLowerCase() === clean ||
+        String(row.data?.providedEmail || "").trim().toLowerCase() === clean
+      );
+      if (!match && supabaseWebData(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        const fbStore = new FirestoreAdmin(env);
+        const fbAdmins = await fbStore.query("users", { filters: [{ field: "role", op: "==", value: "admin" }], limit: 20 });
+        match = fbAdmins.find(row =>
+          row.id.toLowerCase() === clean ||
+          String(row.data?.email || "").trim().toLowerCase() === clean ||
+          String(row.data?.providedEmail || "").trim().toLowerCase() === clean
+        );
+      }
+      if (match?.data) {
+        const profile = match.data;
+        const adminEmail = String(profile.email || profile.providedEmail || "").trim();
+        if (String(profile.role || "").toLowerCase() === "admin" &&
+            typeof profile.uid === "string" && profile.uid &&
+            adminEmail && profile.active !== false &&
+            !["inactive", "disabled", "archived", "deleted"].includes(String(profile.status || "").toLowerCase())) {
+          return { id: match.id, uid: profile.uid.trim(), role: "admin", email: adminEmail, adminRow: match };
+        }
+      }
+    } catch {
+      // Ignore lookup errors and fall through
+    }
+  }
+
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
   const privateRecord = await stateCall(env, "staff-roster", "roster-get", { id });
