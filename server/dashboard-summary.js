@@ -21,7 +21,9 @@ export async function teacherDashboardSummary(env, store, id, uid, profile) {
   return { enabled: true, ...cached.result, teacherName: profile?.displayName || profile?.fullName || "Teacher" };
 }
 export function dashboardScope(sections, env) {
-  const scope = "activity-v2:" + JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
+  // Rebuild older summaries once when legacy reconciliation is enabled. A warm
+  // summary created before this adapter must not hide results indefinitely.
+  const scope = "activity-v3:" + (env.WEB_LEGACY_LESSON_READS_ENABLED === "true" ? "legacy:" : "current:") + JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
 }
 export function dashboardRefreshInterval(summary) {
@@ -103,7 +105,10 @@ export class DashboardSummary {
     if (!config || config.id !== body.id || config.uid !== body.uid || config.scope !== dashboardScope(body.sections, this.env)) return null;
     if (!summary || summary.scope !== config.scope) return { ready: false };
     const { generation, scope, ...result } = summary;
-    const pending = Boolean(await this.storage.get("dashboard:job")) || (await this.storage.list({ prefix: "dashboard:dirty:", limit: 1 })).size > 0;
+    // Warm reads return before configure() starts reconciliation. Tell the
+    // browser to check again even on that first stale read.
+    const pending = Boolean(await this.storage.get("dashboard:job")) || (await this.storage.list({ prefix: "dashboard:dirty:", limit: 1 })).size > 0 ||
+      this.now() - summary.reconciledAt >= dashboardRefreshInterval(summary);
     return { ready: true, pending, summary: result };
   }
   async start() {

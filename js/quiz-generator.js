@@ -30,6 +30,9 @@ const firestore = getFirestore(firebaseApp);
   const librarySectionFilter = document.getElementById("librarySectionFilter");
   const createView = document.getElementById("createView");
   const libraryView = document.getElementById("libraryView");
+  const gradingView = document.getElementById("gradingView");
+  const gradingTermFilter = document.getElementById("gradingTermFilter");
+  const gradingSectionFilter = document.getElementById("gradingSectionFilter");
   const setupStep = document.getElementById("setupStep");
   const reviewStep = document.getElementById("reviewStep");
   const editorStep = document.getElementById("editorStep");
@@ -155,7 +158,7 @@ const firestore = getFirestore(firebaseApp);
     const step = !editorStep.hidden ? "editor" : !reviewStep.hidden ? "review" : "setup";
     const { questions: completedQuestions, ...reviewed } = reviewedJob || {};
     const saved = saveQuizWorkspace(user.uid, {
-      profileId: teacherProfileId, step, view: createView.hidden ? "library" : "create", dirty: workspaceDirty,
+      profileId: teacherProfileId, step, view: !gradingView.hidden ? "grading" : createView.hidden ? "library" : "create", dirty: workspaceDirty,
       title: document.getElementById("quizTitle").value, editorTitle: document.getElementById("editorTitle").value,
       questionCount: document.getElementById("questionCount").value,
       type: document.querySelector("input[name='questionType']:checked").value, difficulty,
@@ -228,6 +231,10 @@ const firestore = getFirestore(firebaseApp);
     librarySectionFilter.innerHTML = '<option value="">All sections</option>' + teacherSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
     librarySectionFilter.value = teacherSections.some(section => section.id === selected) ? selected : "";
     librarySectionFilter.disabled = teacherSections.length === 0 || scheduleBusy;
+    const gradingSection = gradingSectionFilter.value;
+    gradingSectionFilter.innerHTML = librarySectionFilter.innerHTML;
+    gradingSectionFilter.value = teacherSections.some(section => section.id === gradingSection) ? gradingSection : "";
+    gradingSectionFilter.disabled = teacherSections.length === 0;
   }
 
   async function loadTeacherSections(user) {
@@ -270,10 +277,12 @@ const firestore = getFirestore(firebaseApp);
         }, render: quizzes => {
           saveQuizzes(quizzes);
           if (!expandedScheduleQuizId) renderLibrary();
+          renderGrading();
         }, painted: () => revealContent("quiz-library") });
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
+      showStatus(document.getElementById("gradingStatus"), "Could not load quizzes. Please reopen Quiz Generator to retry.", true);
       revealContent("quiz-library");
     }
   }
@@ -320,14 +329,14 @@ const firestore = getFirestore(firebaseApp);
   function saveQuizzes(quizzes) { quizCache = quizSummaries(quizzes); }
 
   function setView(view) {
-    const showLibrary = view === "library";
-    createView.hidden = showLibrary;
-    libraryView.hidden = !showLibrary;
-    document.getElementById("createTab").classList.toggle("active", !showLibrary);
-    document.getElementById("libraryTab").classList.toggle("active", showLibrary);
-    document.getElementById("createTab").setAttribute("aria-selected", String(!showLibrary));
-    document.getElementById("libraryTab").setAttribute("aria-selected", String(showLibrary));
-    if (showLibrary) renderLibrary();
+    for (const [name, panel] of [["create", createView], ["library", libraryView], ["grading", gradingView]]) {
+      panel.hidden = view !== name;
+      const tab = document.getElementById(name + "Tab");
+      tab.classList.toggle("active", view === name);
+      tab.setAttribute("aria-selected", String(view === name));
+    }
+    if (view === "library") renderLibrary();
+    if (view === "grading") renderGrading();
     persistWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -653,7 +662,22 @@ const firestore = getFirestore(firebaseApp);
     return quiz.availability || "draft";
   }
 
+  function renderGrading() {
+    const quizzes = loadQuizzes().filter(quiz =>
+      (!gradingTermFilter.value || quiz.termId === gradingTermFilter.value) &&
+      (gradingSectionFilter.value ? quizAssignedToSection(quiz, gradingSectionFilter.value)
+        : teacherSections.some(section => quizAssignedToSection(quiz, section.id))));
+    document.getElementById("gradingStatus").textContent = quizzes.length
+      ? `${quizzes.length} ${quizzes.length === 1 ? "quiz" : "quizzes"}. Open submissions to view scores or review written answers.`
+      : "No assigned quizzes match these filters. Assign a section and term in My quizzes first.";
+    document.getElementById("gradingQuizList").innerHTML = quizzes.map(quiz => {
+      const term = terms.find(([id]) => id === quiz.termId)?.[1] || "Term not set";
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><h3>${escapeHtml(quiz.title)}</h3><div class="quiz-library-details"><span>${escapeHtml(term)}</span><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${escapeHtml(questionTypeLabel(quiz.type))}</span></div></div><div class="quiz-library-actions"><button type="button" class="primary-btn" data-grade-quiz="${escapeHtml(quiz.id)}">View submissions / grade</button></div></article>`;
+    }).join("");
+  }
+
   function renderLibrary() {
+    renderGrading();
     const allQuizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
     const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quizAssignedToSection(quiz, librarySectionFilter.value)) : allQuizzes;
     const count = String(allQuizzes.length);
@@ -1019,6 +1043,14 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("saveQuiz").addEventListener("click", saveCurrentQuiz);
   document.getElementById("createTab").addEventListener("click", () => setView("create"));
   document.getElementById("libraryTab").addEventListener("click", () => setView("library"));
+  document.getElementById("gradingTab").addEventListener("click", () => setView("grading"));
+  gradingTermFilter.addEventListener("change", renderGrading);
+  gradingSectionFilter.addEventListener("change", renderGrading);
+  document.getElementById("gradingQuizList").addEventListener("click", event => {
+    const button = event.target.closest("[data-grade-quiz]");
+    const quiz = button && loadQuizzes().find(item => item.id === button.dataset.gradeQuiz);
+    if (quiz && auth.currentUser) void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value);
+  });
   document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
   async function startNewQuiz() {
     if (workspaceDirty && !await confirmAction({ title: "Start a new quiz?", message: "Your unsaved questions will be discarded. Save this quiz first to keep it in My quizzes.", confirmLabel: "Discard changes" })) return;

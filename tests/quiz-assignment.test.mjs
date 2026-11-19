@@ -137,6 +137,21 @@ test("generation, review, unassigned draft and all-section release use the actua
     selector === "[data-results-quiz]" ? { dataset: { resultsQuiz: saves[0].id } } : null } });
   assert.equal(results[1].id, saves[0].id);
   assert.equal(results[3], "C");
+  element("gradingTab").listeners.click();
+  assert.equal(element("gradingView").hidden, false);
+  assert.equal(element("createView").hidden, true);
+  assert.equal(element("libraryView").hidden, true);
+  element("gradingTermFilter").value = "term_03";
+  element("gradingTermFilter").listeners.change();
+  assert.equal(element("gradingQuizList").innerHTML, "");
+  element("gradingTermFilter").value = saves.at(-1).termId;
+  element("gradingSectionFilter").value = "A";
+  element("gradingSectionFilter").listeners.change();
+  assert.match(element("gradingQuizList").innerHTML, /View submissions \/ grade/);
+  element("gradingQuizList").listeners.click({ target: { closest: () => ({ dataset: { gradeQuiz: saves[0].id } }) } });
+  assert.equal(results[1].id, saves[0].id);
+  assert.equal(results[3], "A", "grading uses its own section filter");
+  element("libraryTab").listeners.click();
   await element("quizLibraryList").listeners.click({ target: { closest: selector =>
     selector === "[data-schedule-quiz]" ? { dataset: { scheduleQuiz: saves[0].id } } : null } });
   assert.match(element("quizLibraryList").innerHTML, /name="sectionId"/);
@@ -147,6 +162,9 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(saves.at(-1).availableAt, new Date("2099-10-20T09:30").toISOString());
   assert.equal(element("librarySectionFilter").value, "A");
   assert.match(element("quizLibraryList").innerHTML, /Scheduled · locked/);
+  element("gradingTermFilter").value = "term_02";
+  element("gradingTermFilter").listeners.change();
+  assert.match(element("gradingQuizList").innerHTML, /data-grade-quiz/, "locked scheduled quizzes retain a grading entry point");
   await element("quizLibraryList").listeners.click({ target: { closest: selector =>
     selector === "[data-edit-quiz]" ? { dataset: { editQuiz: saves[0].id } } : null } });
   await new Promise(setImmediate);

@@ -6,7 +6,7 @@
 .quiz-eyebrow { margin-bottom: 4px; }
 .quiz-hero p:not(.quiz-eyebrow) { max-width: 650px; }
 .quiz-library-count, .quiz-view-tab span { display: inline-grid; min-width: 21px; height: 21px; place-items: center; padding: 0 6px; border-radius: 99px; color: #4d86b0; background: #eaf2f8; font-size: 11px; }
-.quiz-view-tabs { display: flex; gap: 8px; margin: 0 0 18px; border-bottom: 1px solid rgba(129,162,193,.25); }
+.quiz-view-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; border-bottom: 1px solid rgba(129,162,193,.25); }
 .quiz-view-tab { display: inline-flex; align-items: center; gap: 8px; padding: 11px 15px 12px; border: 0; border-bottom: 2px solid transparent; color: #6d7a8c; background: transparent; font-size: 13px; font-weight: 700; }
 .quiz-view-tab.active { border-color: var(--steel); color: #3f7198; }
 .quiz-job-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }

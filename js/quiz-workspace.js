@@ -28,7 +28,7 @@ export function readQuizWorkspace(uid, profileId, storage) {
     const value = saved?.value;
     if (saved?.uid === uid && saved.savedAt <= Date.now() && Date.now() - saved.savedAt < lifetime &&
         value?.profileId === profileId && ["setup", "review", "editor"].includes(value.step) &&
-        ["create", "library"].includes(value.view) && Object.hasOwn(QUIZ_TYPES, value.type) &&
+        ["create", "library", "grading"].includes(value.view) && Object.hasOwn(QUIZ_TYPES, value.type) &&
         typeof value.title === "string" && typeof value.editorTitle === "string" &&
         ["Easy", "Medium", "Hard"].includes(value.difficulty) && questions(value.generatedQuestions) && questions(value.editorQuestions)) return value;
     clearQuizWorkspace(source);

@@ -32,6 +32,15 @@ test("another account or teacher profile cannot recover the previous teacher's q
   }
 });
 
+test("opening grading preserves the unsaved editor for refresh recovery", () => {
+  const source = storage(), value = { ...workspace(), view: "grading" };
+  saveQuizWorkspace("teacher-a", value, source);
+  const restored = readQuizWorkspace("teacher-a", "TEACH1000", source);
+  assert.equal(restored.view, "grading");
+  assert.deepEqual(restored.editorQuestions, value.editorQuestions);
+  assert.equal(restored.dirty, true);
+});
+
 test("invalid stored markup IDs, overlong arrays and unavailable storage cannot claim recoverability", () => {
   for (const modify of [
     value => { value.editorQuestions[0].id = '\" onclick=alert(1)'; },

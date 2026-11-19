@@ -222,6 +222,17 @@ test("quiz scores distinguish pending, auto-graded, reviewed and missing submiss
   assert.equal((await f.callReview({ action: "student-average", studentId: "S2" })).status, 403);
 });
 
+test("a locked quiz still permits grading an existing essay", async () => {
+  const f = await setup();
+  f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), availability: "draft" });
+  const opened = await (await f.callReview({ action: "open" })).json();
+  const response = await f.callReview({ action: "grade", revision: opened.revision,
+    scores: [{ questionId: "q-original", score: 3 }], feedback: "Reviewed after locking" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).persisted, true);
+  assert.equal((await (await f.callReview({ action: "open" })).json()).status, "reviewed");
+});
+
 test("locking a quiz preserves its submitted results and archived rows do not consume a page", async () => {
   const f = await setup();
   f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), availability: "draft" });
