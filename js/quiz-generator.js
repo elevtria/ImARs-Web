@@ -511,7 +511,9 @@ const firestore = getFirestore(firebaseApp);
     const available = generatedQuestions.filter((question) => !question.discarded).length;
     const accepted = generatedQuestions.filter((question) => question.accepted && !question.discarded).length;
     const requested = Number(document.getElementById("reviewSummary").dataset.requested || 0);
-    document.getElementById("reviewSummary").innerHTML = "<span><strong>" + available + " AI suggestions</strong> for “" + escapeHtml(selectedFile?.name || sourceFileName || "your file") + "”</span><span>" + escapeHtml(difficulty) + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value) + "</span>";
+    const title = document.getElementById("quizTitle").value.trim() || "Untitled quiz";
+    const sourceFile = selectedFile?.name || sourceFileName || reviewedJob?.details?.fileName;
+    document.getElementById("reviewSummary").innerHTML = `<span class="quiz-review-details"><strong class="quiz-review-title">${escapeHtml(title)}</strong>${sourceFile ? `<span>Source: ${escapeHtml(sourceFile)}</span>` : ""}</span><span>${available} AI suggestions · ${escapeHtml(difficulty)} · ${questionTypeLabel(document.querySelector("input[name='questionType']:checked").value)}</span>`;
     if (requested > available) {
       document.getElementById("reviewSummary").innerHTML += "<span>Requested " + requested + " questions.</span>";
     }

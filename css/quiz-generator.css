@@ -78,8 +78,10 @@
 .quiz-review-heading { align-items: center; }
 .quiz-demo-badge { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 999px; color: #8b6d28; background: #fff5d6; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .quiz-demo-badge i { width: 7px; height: 7px; border-radius: 50%; background: #e8b442; }
-.quiz-review-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; color: #60758a; font-size: 11px; }
+.quiz-review-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 11px; color: #60758a; font-size: 11px; }
 .quiz-review-summary strong { color: #3f7198; }
+.quiz-review-details { display: grid; gap: 4px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.quiz-review-title { font-size: 14px; }
 .quiz-demo-note { margin-bottom: 14px; padding: 10px 12px; border: 1px solid rgba(223,183,71,.22); border-radius: 11px; color: #826b35; background: rgba(255,247,219,.72); font-size: 10px; line-height: 1.5; }
 .quiz-suggestions, .quiz-question-editor-list { display: grid; gap: 11px; }
 .quiz-suggestion-card { padding: 15px 16px 14px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(255,255,255,.83); box-shadow: 0 4px 12px rgba(44,58,79,.04); }

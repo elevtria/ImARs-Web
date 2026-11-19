@@ -79,6 +79,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("quizFile").files=[file]; element("quizFile").listeners.change();
   assert.equal(element("quizFileError").textContent, "");
   assert.equal(element("generateQuiz").disabled,false);
+  element("quizTitle").value = 'Water changes <Grade 6> & "Review"';
   element("questionCount").value="1";
   const generation = element("generateQuiz").listeners.click();
   assert.equal(element("quizGenerationStatusCard").open, true);
@@ -95,6 +96,9 @@ test("generation, review, unassigned draft and all-section release use the actua
   assert.equal(requested.termId, undefined);
   assert.equal(transport.background, true);
   assert.equal(element("reviewStep").hidden,false);
+  assert.match(element("reviewSummary").innerHTML, /Water changes &lt;Grade 6&gt; &amp; &quot;Review&quot;/);
+  assert.match(element("reviewSummary").innerHTML, /Source: water\.pdf/);
+  assert.match(element("reviewSummary").innerHTML, /1 AI suggestions · Medium · Multiple choice/);
   element("acceptAll").listeners.click();
   assert.equal(element("editorStep").hidden,false);
   element("editorTitle").value = "Edited Water Quiz";
@@ -226,6 +230,8 @@ test("generation, review, unassigned draft and all-section release use the actua
   await new Promise(setImmediate);
   assert.equal(element("reviewStep").hidden, false);
   assert.equal(element("quizTitle").value, "Water quiz");
+  assert.match(element("reviewSummary").innerHTML, /Water quiz/);
+  assert.match(element("reviewSummary").innerHTML, /Source: water\.pdf/);
   element("acceptAll").listeners.click();
   await element("saveQuiz").listeners.click();
   assert.equal(job.status, "none");
