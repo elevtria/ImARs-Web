@@ -120,17 +120,21 @@ test("an unknown Teacher ID restores the button after the profile check", async 
   assert.deepEqual(app.calls, [["server", "TEACH1000", "password", "teacher"]]);
 });
 
-test("an expired website session opens the normal login without an automatic error", async () => {
+test("an expired website session explains why sign-in is required", async () => {
   const app = page({ search: "?reason=web-session" });
   assert.equal(app.element("error").innerText, undefined);
-  assert.equal(app.element("error").textContent, undefined);
-  assert.notEqual(app.element("error").style.display, "block");
+  assert.equal(app.element("error").textContent, "You’ve been signed out. Please sign in again.");
+  assert.equal(app.element("error").style.display, "block");
   assert.deepEqual(app.calls, []);
   await app.submit("loginForm");
   assert.equal(app.location.href, "index.html");
 });
 
 test("logout messages are clear for both portals while genuine verification errors remain distinct", () => {
+  for (const [portal, errorId] of [["teacher", "error"], ["admin", "adminError"]]) {
+    const app = page({ portal });
+    assert.equal(app.element(errorId).textContent, undefined, "normal logout returns to login without a warning");
+  }
   for (const [portal, errorId] of [["teacher", "error"], ["admin", "adminError"]]) {
     const app = page({ portal, search: "?reason=signed-out" });
     assert.equal(app.element(errorId).textContent, "You’ve been signed out. Please sign in again.");

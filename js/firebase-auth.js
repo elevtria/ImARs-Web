@@ -75,13 +75,13 @@ function reuseVisitedPage(event, auth, state) {
 
 function denyAccess(auth, state, reason = "web-session") {
   if (state.denied) return;
-  if (reason === "web-session" && state.signedOut) reason = "signed-out";
+  if (state.signedOut) reason = "logout";
   state.denied = true;
   auth.currentUser = null;
   clearVisit();
   document.querySelector("main")?.replaceChildren();
   const loginPath = portalRole() === "admin" ? "/admin-login" : "/login";
-  window.location.replace(`${loginPath}?reason=${reason}`);
+  window.location.replace(reason === "logout" ? loginPath : `${loginPath}?reason=${reason}`);
 }
 async function identity(auth, state) {
   const saved = visit();
@@ -127,7 +127,7 @@ export function getAuth(application = app) {
   });
   window.addEventListener("storage", event => {
     if (event.key !== SIGN_OUT || !auth.currentUser) return;
-    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state, "signed-out"); } catch {}
+    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state, "logout"); } catch {}
   });
   window.addEventListener("imars-session-ended", () => { if (!loginPage()) denyAccess(auth, state); });
   window.addEventListener("click", event => reuseVisitedPage(event, auth, state));

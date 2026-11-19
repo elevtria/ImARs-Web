@@ -227,14 +227,14 @@ test("a late role check from a page being left cannot unhide its history snapsho
 test("logout clears the visit, hides the portal, and notifies other tabs for the same account", async () => {
   const app = page({ saved: grant(), type: "reload" }); app.observe(); await flush();
   await app.api.signOut(app.auth); await flush();
-  assert.equal(app.location.redirect, "/login?reason=signed-out");
+  assert.equal(app.location.redirect, "/login");
   assert.equal(app.sessionStorage.getItem(VISIT), null); assert.equal(app.body.pending, true);
   assert.ok(app.calls.some(call => call[0] === "server-sign-out"));
   assert.ok(app.calls.some(call => call[0] === "clear-quiz-workspace"));
   const other = page({ saved: grant(), type: "reload" }); other.observe(); await flush();
   other.emit("storage", { key: "imars-web-sign-out-v1", newValue: JSON.stringify({ uid: "teacher-a" }) }); await flush();
   assert.equal(other.auth.currentUser, null); assert.equal(other.body.pending, true);
-  assert.equal(other.location.redirect, "/login?reason=signed-out");
+  assert.equal(other.location.redirect, "/login");
 });
 
 test("blocked browser storage cannot leave a partially signed-in account", async () => {
