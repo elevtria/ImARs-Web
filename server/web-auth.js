@@ -134,8 +134,8 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   const privateRecord = await stateCall(env, "staff-roster", "roster-get", { id });
   if (!privateRecord.ok) throw new Error("Staff invitations unavailable");
   const invitation = privateRecord.result.account;
-  if (!invitation) return initial;
-  if (!invitation.active) return null;
+  if (invitation && !invitation.active) return null;
+
   let profile = await store.get("users/" + id);
 
   // If the teacher just registered on Mobile (Firestore), sync their UID into Supabase automatically
@@ -151,7 +151,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
           active: true,
           status: "active",
           isRegistered: true,
-          webInvitationNonce: profile?.data?.webInvitationNonce || invitation.nonce
+          ...(invitation?.nonce ? { webInvitationNonce: profile?.data?.webInvitationNonce || invitation.nonce } : {})
         };
         await store.begin();
         await store.commit([{
@@ -168,8 +168,13 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
     }
   }
 
-  if (!profile?.data.uid || profile.data.webInvitationNonce !== invitation.nonce || profile.data.role !== "teacher") return null;
-  return { id, uid: profile.data.uid, role: "teacher", email: invitation.email, requiresVerifiedEmail: true };
+  if (!profile?.data?.uid || String(profile.data.role || "").toLowerCase() !== "teacher") return initial;
+  if (invitation && profile.data.webInvitationNonce && profile.data.webInvitationNonce !== invitation.nonce) return null;
+  if (profile.data.active === false || ["inactive", "disabled", "archived", "deleted"].includes(String(profile.data.status || "").toLowerCase())) return null;
+
+  const teacherEmail = String(invitation?.email || profile.data.email || profile.data.providedEmail || "").trim();
+  if (!teacherEmail) return null;
+  return { id, uid: profile.data.uid, role: "teacher", email: teacherEmail, requiresVerifiedEmail: true };
 }
 
 async function sessionClaims(request, env, now) {
