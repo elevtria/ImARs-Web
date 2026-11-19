@@ -24,6 +24,10 @@ const showAdminError = (msg) => {
   adminError.classList.remove("hidden");
 };
 
+if (new URLSearchParams(window.location.search).get("reason") === "signed-out") {
+  showAdminError("You’ve been signed out. Please sign in again.");
+}
+
 toggleAdminPassword.addEventListener("click", () => {
   const hidden = adminPasswordInput.type === "password";
 

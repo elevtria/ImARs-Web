@@ -73,6 +73,7 @@ function reuseVisitedPage(event, auth, state) {
 
 function denyAccess(auth, state, reason = "web-session") {
   if (state.denied) return;
+  if (reason === "web-session" && state.signedOut) reason = "signed-out";
   state.denied = true;
   auth.currentUser = null;
   clearVisit();
@@ -82,7 +83,7 @@ function denyAccess(auth, state, reason = "web-session") {
 }
 async function identity(auth, state) {
   const saved = visit();
-  if (!saved || saved.tabId !== state.visitId) throw new Error("A fresh sign-in is required.");
+  if (!saved || saved.tabId !== state.visitId) throw Object.assign(new Error("A fresh sign-in is required."), { status: 401 });
   const { user, session } = await webRequest("/api/web-auth/identity", {});
   if (!user?.uid || user.uid !== saved.uid || user.role !== saved.role || (!sharedPage() && !adminLoginPage() && user.role !== portalRole())) throw Object.assign(new Error("This account cannot access this portal."), { status: 403 });
   if (!state.denied) {
@@ -109,7 +110,7 @@ export function getAuth(application = app) {
   state.visitId = resume ? resume.tabId : null;
   if (!resume) clearVisit();
   state.ready = resume ? identity(auth, state) : Promise.resolve();
-  state.ready.catch(error => { if (!loginPage()) denyAccess(auth, state, error.status === 403 ? "access-denied" : "access-unavailable"); });
+  state.ready.catch(error => { if (!loginPage()) denyAccess(auth, state, error.status === 401 ? "signed-out" : error.status === 403 ? "access-denied" : "access-unavailable"); });
   window.addEventListener("pagehide", () => {
     if (!loginPage()) document.body.setAttribute("data-history-hidden", "");
     hidePortal(); state.suspended = true;
@@ -124,7 +125,7 @@ export function getAuth(application = app) {
   });
   window.addEventListener("storage", event => {
     if (event.key !== SIGN_OUT || !auth.currentUser) return;
-    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state); } catch {}
+    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state, "signed-out"); } catch {}
   });
   window.addEventListener("imars-session-ended", () => { if (!loginPage()) denyAccess(auth, state); });
   window.addEventListener("click", event => reuseVisitedPage(event, auth, state));
@@ -149,7 +150,7 @@ export function onAuthStateChanged(auth, next, error) {
       callback(auth.currentUser, { restored: state.restored });
     } catch (failure) {
       if (stopped || current !== generation || state.suspended) return;
-      denyAccess(auth, state, failure.status === 403 ? "access-denied" : "access-unavailable");
+      denyAccess(auth, state, failure.status === 401 ? "signed-out" : failure.status === 403 ? "access-denied" : "access-unavailable");
       (error || next?.error)?.(failure);
     }
   };
@@ -168,6 +169,7 @@ export async function signInWithEmailAndPassword(auth, identifier, password, rol
     window.sessionStorage.setItem(VISIT, JSON.stringify({ uid: user.uid, role, startedAt: Date.now(), tabId }));
     auth.currentUser = Object.freeze(user);
     state.denied = false;
+    state.signedOut = false;
     return { user: auth.currentUser };
   } catch (error) {
     await closeWebSession().catch(() => {});
@@ -177,6 +179,7 @@ export async function signInWithEmailAndPassword(auth, identifier, password, rol
 }
 export async function signOut(auth) {
   const uid = auth.currentUser?.uid;
+  states.get(auth).signedOut = true;
   // Send the expected UID before removing the visit marker, since cookies are
   // shared with other tabs while the visit marker belongs to this tab alone.
   const closing = closeWebSession();
