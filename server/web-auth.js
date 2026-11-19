@@ -53,6 +53,11 @@ export async function stateCall(env, name, action, body) {
   return { result, status: response.status, ok: response.ok };
 }
 
+async function loginGuardName(identifier) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(identifier.trim().toLowerCase()));
+  return `login-identifier:${base64(new Uint8Array(digest))}`;
+}
+
 export async function signSession(env, account, session, host, teacherSession) {
   const value = base64(encoder.encode(JSON.stringify({ uid: account.uid, role: account.role, id: account.id,
     version: session.version, family: session.family, sid: session.sid, aud: host,
@@ -360,14 +365,13 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       }
       const identifier = body.identifier.trim().toLowerCase();
       const account = await resolveStaff(env, identifier, accounts, store);
-      let attempt;
-      if (!account || account.role !== body.portal) {
-        const digest = await crypto.subtle.digest("SHA-256", encoder.encode(`${body.portal}:${identifier}`));
-        attempt = await stateCall(env, `invalid-login:${base64(new Uint8Array(digest))}`, "invalid-login", {});
-        if (attempt.ok) throw new Error("An invalid login cannot authenticate");
-      } else {
-        attempt = await stateCall(env, `account:${account.uid}`, "login", { uid: account.uid, email: account.email, password: body.password });
-      }
+      // Keep the identifier's cooldown even if its account lookup or portal changes.
+      // The UID object still owns password verification, alias limits and sessions.
+      const guardName = await loginGuardName(account?.id || identifier);
+      const attempt = await stateCall(env, guardName, "guarded-login", {
+        account: account?.role === body.portal ? { uid: account.uid, email: account.email, password: body.password } : null
+      });
+      if (attempt.ok && (!account || account.role !== body.portal)) throw new Error("An invalid login cannot authenticate");
       if (!attempt.ok) return json(attempt.result, attempt.status, attempt.result.retryAfter ? { "Retry-After": String(attempt.result.retryAfter) } : {});
       const approved = dataEnabled(env) ? await staffProfile(account, store || appStore(env), now) : null;
       if (approved?.role === "teacher" && env.TEACHER_SESSION_SYNC_ENABLED !== "true") {
@@ -416,6 +420,8 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       if (!target || (!owner && target.role !== "teacher")) return json({ error: "An administrator can unlock teachers. Maintenance must restore an administrator." }, 403);
       const result = await stateCall(env, `account:${target.uid}`, "unlock", {});
       if (!result.ok) throw new Error("Unlock failed");
+      const guard = await stateCall(env, await loginGuardName(target.id), "unlock", {});
+      if (!guard.ok) throw new Error("Unlock failed");
       return json({ ok: true });
     }
     return json({ error: "Not found." }, 404);

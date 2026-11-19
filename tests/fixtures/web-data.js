@@ -58,7 +58,7 @@ export function fixture() {
   env.WEB_LOGIN_STATE = { idFromName: name => name, get(name) {
     if (!actors.has(name)) {
       const values = new Map();
-      actors.set(name, new WebLoginState({ storage: { get: async key => structuredClone(values.get(key)), put: async (key, value) => values.set(key, structuredClone(value)) } }, {}, {
+      actors.set(name, new WebLoginState({ storage: { get: async key => structuredClone(values.get(key)), put: async (key, value) => values.set(key, structuredClone(value)) } }, env, {
         fetch: async (_url, options) => {
           const body = JSON.parse(options.body);
           const record = [...data.values()].find(row => row.email === body.email && row.uid);

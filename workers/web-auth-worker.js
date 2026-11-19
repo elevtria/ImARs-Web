@@ -10,6 +10,7 @@ const json = (body, status = 200) => Response.json(body, { status, headers: { "C
 export class WebLoginState {
   constructor(state, env, { fetch: fetcher = (...args) => fetch(...args), now = () => Date.now() } = {}) {
     this.storage = state.storage;
+    this.env = env;
     this.state = state;
     this.dashboard = new DashboardSummary(state.storage, env, { now, report: stats => console.info(JSON.stringify({ event: "dashboard-summary-ready", ...stats })) });
     this.fetcher = fetcher;
@@ -124,11 +125,30 @@ export class WebLoginState {
       // Only the private Pages binding sees this state, never browser JSON.
       return json({ ...checked, timing: sessionTiming(checked.session, now) });
     }
-    if (!["/login", "/invalid-login"].includes(action) || request.method !== "POST") return json({ error: "Not found." }, 404);
+    if (!["/login", "/invalid-login", "/guarded-login"].includes(action) || request.method !== "POST") return json({ error: "Not found." }, 404);
     if (!access.allowed) return json({ ...access, error: access.manual
       ? "Web login is locked. Contact your administrator or website maintenance to restore access."
       : "Too many incorrect attempts." }, 429);
     if (action === "/invalid-login") return this.rejectPassword(state);
+
+    if (action === "/guarded-login") {
+      const { account } = await request.json();
+      if (!account) return this.rejectPassword(state);
+      if (typeof account.uid !== "string" || !account.uid || account.uid.length > 128 ||
+          typeof account.email !== "string" || typeof account.password !== "string" ||
+          !account.password || account.password.length > 4096) return json({ error: "Invalid sign-in request." }, 400);
+      const accountState = this.env.WEB_LOGIN_STATE.get(this.env.WEB_LOGIN_STATE.idFromName(`account:${account.uid}`));
+      const response = await accountState.fetch("https://web-auth.internal/login", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(account)
+      });
+      if (response.status === 401 || response.status === 429) {
+        const rejected = await this.rejectPassword(state);
+        if (rejected.status === 429) return rejected;
+      } else if (response.ok) {
+        await this.storage.put("account", verifiedSuccess(state, this.now()));
+      }
+      return response;
+    }
 
     const { uid, email, password } = await request.json();
     if (typeof uid !== "string" || typeof email !== "string" || typeof password !== "string" || !password || password.length > 4096) {
