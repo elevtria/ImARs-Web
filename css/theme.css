@@ -122,6 +122,9 @@
   [data-theme="dark"] #openAdminModalBtn { color: #a6c9ff; border-color: #6089bd; }
   [data-theme="dark"] #teacherSubmitBtn { color: #151200; }
   [data-theme="dark"] body :is(.quiz-release-option.selected, .quiz-suggestion-card.accepted) { background: #29445b; border-color: var(--steel); }
+  [data-theme="dark"] body :is(.quiz-suggestion-question, .quiz-question-number, .quiz-review-summary strong) { color: var(--ink); }
+  [data-theme="dark"] body :is(.quiz-review-summary, .quiz-review-footer > div > span) { color: var(--muted); }
+  [data-theme="dark"] body .quiz-suggestion-answer.correct { color: #90e5bb; background: #1b4038; border-color: #397a65; }
   [data-theme="dark"] body :is(.pill-pending, .st-upcoming, .term-foot, .topic-title, .topic-meta,
     .quiz-option-label, .quiz-release-option strong, .quiz-library-meta, .quiz-field-hint,
     .quiz-stepper li, .quiz-view-tab, .quiz-limit) { color: var(--muted); }
