@@ -202,6 +202,20 @@ test('reports paint the first 25 students before further background work and reu
   app.leave();await app.tick();assert.equal(app.calls.length,3,'leaving stops further background reads');
 });
 
+test('a fresh score summary supplies the matching selected-section report without repeating database reads', async () => {
+  const app = pagedReportHarness(50);
+  await app.open({ rawActivityScores: true });
+  await app.tick();
+  assert.equal(app.paints.at(-1).complete, true);
+  assert.equal(app.calls.length, 2);
+  await app.open({ sectionId: 'A' });
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.paints.at(-1).loaded, 50);
+  assert.equal(app.paints.at(-1).sections[0].classDoc.id, 'A');
+  await app.open({ rawActivityScores: true });
+  assert.equal(app.calls.length, 2, 'returning to the score summary keeps its valid scoped cache');
+});
+
 test('changing terms cancels old work; a late old term or account response cannot paint',async()=>{
   const app=pagedReportHarness();let release;
   app.read(options=>options.termId==='term_02'?new Promise(resolve=>{release=()=>resolve(app.makePage(options));}):app.makePage(options));

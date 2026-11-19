@@ -199,7 +199,7 @@ function editLessonScore(event) {
     onSaved: () => {
       if (!current()) return;
       scoreEditStatus.textContent = "Score saved.";
-      void openReport();
+      void openReport({ refresh: true });
     }
   });
 }
@@ -333,7 +333,7 @@ const report = createTeacherReport({ app,
     revealContent("student-score-summary");
   }
 });
-function openReport({ restoredPage = false } = {}) {
+function openReport({ restoredPage = false, refresh = false } = {}) {
   cancelScoreReport();
   scoreReportStatus.textContent = "";
   closeLessonScoreEditor();
@@ -367,7 +367,7 @@ function openReport({ restoredPage = false } = {}) {
     status.textContent = "";
   }
   return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage,
-    refresh: termChanged || (!restoredPage && !lastReport) });
+    refresh });
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   if (summaryOwner !== user?.uid) {

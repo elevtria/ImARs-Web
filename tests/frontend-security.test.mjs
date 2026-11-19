@@ -433,7 +433,7 @@ test("Analytics preserves raw scores, zeroes and missing cells across three term
       }
     }
     assert.equal(app.requested().termId, termId);
-    if (termIndex) assert.equal(app.requested().refresh, true, "a selected term must check fresh scores");
+    if (termIndex) assert.equal(app.requested().refresh, false, "term changes reuse valid scoped caches; stale pages refresh through the report controller");
   }
   assert.equal(checked, 1908);
 });

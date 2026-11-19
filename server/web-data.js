@@ -30,7 +30,24 @@ const schoolYears = new WeakMap();
 const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
 
-let lastFirestoreClassSync = 0;
+const directorySyncs = new Map();
+
+export function queueClassDirectorySync(env, fetcher, waitUntil, { now = Date.now, run } = {}) {
+  if (!supabaseWebData(env) || !waitUntil) return;
+  const key = env.IMARS_SUPABASE_URL + ":" + env.IMARS_SUPABASE_APP_DATASET_ID;
+  const previous = directorySyncs.get(key);
+  if (previous?.pending) { waitUntil(previous.pending); return previous.pending; }
+  if (previous && now() - previous.at < 300_000) return;
+  if (directorySyncs.size >= 10 && !directorySyncs.has(key)) directorySyncs.delete(directorySyncs.keys().next().value);
+  const state = { at: now(), pending: null };
+  // Use a separate store: maintenance must not share a request's transaction.
+  state.pending = Promise.resolve().then(() => run ? run() : syncClassesAndTeachersFromFirestore(new SupabaseAppStore(env, fetcher), env, fetcher))
+    .catch(() => console.warn("Class directory refresh will retry."))
+    .finally(() => { state.pending = null; });
+  directorySyncs.set(key, state);
+  waitUntil(state.pending);
+  return state.pending;
+}
 
 // Section transfers must move the redundant student teacher reference too.
 // Preserve identity, activation, section membership and all learning records.
@@ -50,8 +67,6 @@ export async function transferredRosterWrites(store, transfers) {
 }
 
 async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
-  if (!supabaseWebData(env) || Date.now() - lastFirestoreClassSync < 15_000) return;
-  lastFirestoreClassSync = Date.now();
   try {
     const firestore = new FirestoreAdmin(env, fetcher);
     const [fsClasses, fsTeachersOnly, fsAdminsOnly, sbClasses, sbTeachersOnly, sbAdminsOnly] = await Promise.all([
@@ -711,7 +726,7 @@ async function teacherTopicOverview(scope) {
 }
 
 export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
-  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch } = {}) {
+  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch, directorySync = queueClassDirectorySync } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -720,13 +735,15 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
   const settingsStore = () => supabaseSettings ? new SupabaseAppStore(env, settingsFetcher) : store;
   try {
     store ??= appStore(env, settingsFetcher);
-    await syncClassesAndTeachersFromFirestore(store, env, settingsFetcher);
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
       return respond(await readSchoolYear(settingsStore()));
     }
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
     const actorBefore = await authenticate(request, env, store);
+    // Compatibility maintenance runs after authorization and off the page's
+    // response path. Ordinary reads no longer wait for a school-wide sync.
+    directorySync(env, settingsFetcher, waitUntil);
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
     if (["commit", "create-teacher"].includes(body.action)) {
