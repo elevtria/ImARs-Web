@@ -404,10 +404,25 @@
   :root[data-theme="light"] :is(.performance-table, .activity-record-results) tbody > tr > :is(th, td) { transition: none; }
   :root[data-theme="light"] .quiz-library-card:is(:hover, :focus-within) { transform: none; }
 }
-/* Keep the actual page visible throughout a palette change; no captured overlay. */
+/* Organic palette reveal. A solid outgoing canvas prevents the native
+   color-scheme change from exposing a black frame beneath the snapshots. */
 @media screen and (prefers-reduced-motion: no-preference) {
-  :root.theme-switching, :root.theme-switching *,
-  :root.theme-switching *::before, :root.theme-switching *::after {
+  :root.theme-switching { view-transition-name: root; background-color: var(--theme-switch-canvas); }
+  :root.theme-switching[data-theme-from="light"] { color-scheme: light !important; }
+  :root.theme-switching[data-theme-from="dark"] { color-scheme: dark !important; }
+  :root.theme-switching * { view-transition-name: none !important; transition: none !important; }
+  :root.theme-switching::view-transition { pointer-events: none; }
+  :root.theme-switching::view-transition-group(root) { animation: none; }
+  :root.theme-switching::view-transition-image-pair(root) { isolation: isolate; }
+  :root.theme-switching::view-transition-old(root),
+  :root.theme-switching::view-transition-new(root) { animation: none; mix-blend-mode: normal; opacity: 1; }
+  :root.theme-switching::view-transition-old(root) { background-color: var(--theme-switch-canvas); }
+  :root.theme-switching[data-theme-reveal="spread"]::view-transition-new(root) { z-index: 2; clip-path: circle(0 at 50% 50%); }
+  :root.theme-switching[data-theme-reveal="spread"]::view-transition-old(root) { z-index: 1; }
+  :root.theme-switching[data-theme-reveal="retract"]::view-transition-old(root) { z-index: 2; }
+  :root.theme-switching[data-theme-reveal="retract"]::view-transition-new(root) { z-index: 1; }
+  :root.theme-fading, :root.theme-fading *,
+  :root.theme-fading *::before, :root.theme-fading *::after {
     transition-property: color, background-color, border-color, outline-color, box-shadow, fill, stroke !important;
     transition-duration: 260ms !important;
     transition-timing-function: ease-out !important;
