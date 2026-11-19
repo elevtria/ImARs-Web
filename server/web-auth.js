@@ -136,54 +136,49 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
 
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
-  const privateRecord = await stateCall(env, "staff-roster", "roster-get", { id });
-  if (!privateRecord.ok) throw new Error("Staff invitations unavailable");
-  const invitation = privateRecord.result.account;
-  if (invitation && !invitation.active) return null;
 
-  let profile = await store.get("users/" + id);
+  let profile = null;
 
-  // If Supabase does not have the teacher's UID yet, pull it directly from Firebase Firestore
-  if (!profile?.data?.uid && supabaseWebData(env)) {
+  // Always check live Firebase Firestore first so newly registered mobile teachers work immediately
+  if (supabaseWebData(env)) {
     try {
       const fbStore = new FirestoreAdmin(env);
       const fbProfile = await fbStore.get("users/" + id);
       if (fbProfile?.data?.uid && String(fbProfile.data.role || "").toLowerCase() === "teacher") {
-        const merged = {
-          ...(profile?.data || {}),
-          ...fbProfile.data,
-          uid: String(fbProfile.data.uid).trim(),
-          active: true,
-          status: "active",
-          isRegistered: true,
-          ...(invitation?.nonce ? { webInvitationNonce: profile?.data?.webInvitationNonce || invitation.nonce } : {})
-        };
-        const prevUpdateTime = profile?.updateTime;
-        profile = { id, data: merged };
+        profile = fbProfile;
+        // Best-effort background sync to Supabase
         try {
-          await store.begin();
-          await store.commit([{
-            operation: "set",
-            path: "users/" + id,
-            data: merged,
-            merge: true,
-            ...(prevUpdateTime ? { updateTime: prevUpdateTime } : {})
-          }]);
+          const sbProfile = await store.get("users/" + id);
+          if (!sbProfile?.data?.uid || sbProfile.data.uid !== fbProfile.data.uid) {
+            const merged = { ...(sbProfile?.data || {}), ...fbProfile.data, active: true, status: "active", isRegistered: true };
+            await store.begin();
+            await store.commit([{
+              operation: "set",
+              path: "users/" + id,
+              data: merged,
+              merge: true,
+              ...(sbProfile ? { updateTime: sbProfile.updateTime } : {})
+            }]);
+          }
         } catch {
-          // Proceed using the verified Firestore profile even if Supabase sync is deferred
+          // Proceed with the verified Firestore profile even if Supabase sync is deferred
         }
       }
     } catch {
-      // Ignore if Firestore lookup is unavailable
+      // Fall back to Supabase below
     }
+  }
+
+  if (!profile) {
+    profile = await store.get("users/" + id);
   }
 
   if (!profile?.data?.uid || String(profile.data.role || "").toLowerCase() !== "teacher") return initial;
   if (profile.data.active === false || ["inactive", "disabled", "archived", "deleted"].includes(String(profile.data.status || "").toLowerCase())) return null;
 
-  const teacherEmail = String(profile.data.email || profile.data.providedEmail || invitation?.email || "").trim();
+  const teacherEmail = String(profile.data.email || profile.data.providedEmail || "").trim();
   if (!teacherEmail) return null;
-  return { id, uid: profile.data.uid, role: "teacher", email: teacherEmail, requiresVerifiedEmail: true, profileRow: profile };
+  return { id, uid: String(profile.data.uid).trim(), role: "teacher", email: teacherEmail, requiresVerifiedEmail: true, profileRow: profile };
 }
 
 async function sessionClaims(request, env, now) {
