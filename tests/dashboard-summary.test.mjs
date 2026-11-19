@@ -73,6 +73,20 @@ test("a confirmed mobile lesson change rereads only that lesson and updates tota
   assert.equal((await f.engine.read(f.scope)).summary.notifications.length, 6, "grading must not create another completion notification");
 });
 
+test("completion markers refresh a warm dashboard without including timestamp-only classmates", async () => {
+  const f = setup(2), lesson = "term_03/lessons/lesson_01";
+  for (const id of ["S00000", "S00001"]) {
+    f.data.set(`users/${id}/test_results/${lesson}`, { lastUpdated: "2026-11-07T04:02:00Z" });
+  }
+  await f.engine.configure(f.scope); await f.finish();
+  assert.deepEqual((await f.engine.read(f.scope)).summary.recent, []);
+  f.batches.length = 0;
+  f.data.get(`users/S00000/test_results/${lesson}`).activityCompletedAt = "2026-11-07T04:01:30Z";
+  await f.engine.invalidate(["S00000"], lesson); await f.finish();
+  assert.deepEqual((await f.engine.read(f.scope)).summary.recent.map(row => row.id), ["S00000"]);
+  assert.deepEqual(f.batches.flat().filter(path => path.includes("/test_results/")), [`users/S00000/test_results/${lesson}`]);
+});
+
 test("archiving and moving a student removes their contribution without a full roster scan", async () => {
   const f = setup(2); await f.engine.configure(f.scope); await f.finish();
   f.data.get("users/S00000").active = false;
@@ -122,6 +136,7 @@ test("assessment validation and AR fallback match the dashboard's existing rules
 
 test("website summaries require teacher authentication and ignore client-supplied owners", async () => {
   const f = fixture(); f.env.DASHBOARD_SUMMARIES_ENABLED = "true";
+  f.data.get("users/TEACH1000").authEmailVerified = true;
   assert.equal((await f.call({ action: "dashboard-summary" })).status, 401);
   const cookie = await f.login(); const original = f.env.WEB_LOGIN_STATE, calls = [];
   f.env.WEB_LOGIN_STATE = { ...original, get(name) {
@@ -132,7 +147,7 @@ test("website summaries require teacher authentication and ignore client-supplie
   const response = await f.call({ action: "dashboard-summary", uid: "teacher-b", sections: ["B"] }, cookie);
   assert.equal(response.status, 200); assert.deepEqual(calls, ["dashboard:teacher-a", { id: "TEACH1000", uid: "teacher-a", sections: [{ id: "A", name: "A" }] }]);
   f.data.get("users/TEACH1000").active = false;
-  assert.equal((await f.call({ action: "dashboard-summary" }, cookie)).status, 403);
+  assert.equal((await f.call({ action: "dashboard-summary" }, cookie)).status, 401);
   assert.equal(calls.length, 2);
 });
 

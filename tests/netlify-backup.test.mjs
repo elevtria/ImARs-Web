@@ -9,6 +9,7 @@ import { netlifyQuizJobs, runNetlifyQuiz, QUIZ_CHUNK_BYTES } from "../server/net
 import { fixture } from "./fixtures/web-data.js";
 import { blobStore } from "./fixtures/netlify-blobs.js";
 import { staffProfile } from "../server/web-auth.js";
+import { dashboardScope } from "../server/dashboard-summary.js";
 
 const callState = (state, name, action, body) => state.get(name).fetch("https://private/" + action, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
@@ -102,8 +103,8 @@ test("dashboard projections return compact rollups with no Firestore or full-sta
   const store = blobStore(), state = new NetlifyState(store, {});
   const body = { id: "TEACH1000", uid: "teacher-a", sections: [{ id: "A", name: "A" }] };
   await state.transact("dashboard:teacher-a", async (_actor, storage) => {
-    await storage.put("dashboard:config", { ...body, scope: JSON.stringify([["A", "A"]]) });
-    await storage.put("dashboard:summary", { scope: JSON.stringify([["A", "A"]]), total: 1000, recent: [], reconciledAt: Date.now() });
+    await storage.put("dashboard:config", { ...body, scope: dashboardScope(body.sections, {}) });
+    await storage.put("dashboard:summary", { scope: dashboardScope(body.sections, {}), total: 1000, recent: [], reconciledAt: Date.now() });
     await storage.put("dashboard:student:S1", { private: "full-rollup-marker" });
   });
   const get = store.get; store.get = async key => { assert.ok(!key.startsWith("state/")); return get(key); };

@@ -86,13 +86,19 @@ export async function saveLearningProgress(request, body, scope, profile, store,
     return { ...ack, acceptedRevision: accepted, item: projectResult(data, record.updateTime, termId, lessonId) };
   }
   const device = { acceptedRevision: revision, payloadDigest };
-  const updates = { lastUpdated: now.toISOString() };
+  const updates = {};
+  let learned = false;
   for (const [key, totalKey] of Object.entries(counters)) {
     const before = number(previous?.[key]);
     device[key] = Math.max(before, body[key]);
+    learned ||= device[key] > before;
     updates[totalKey] = timeTotal(data, key, totalKey) + (device[key] - before) / 60;
   }
-  for (const [key, field] of Object.entries(flags)) if (body[key]) updates[field] = true;
+  for (const [key, field] of Object.entries(flags)) if (body[key]) {
+    updates[field] = true;
+    if (key !== "lessonOpened" && data[field] !== true) learned = true;
+  }
+  if (learned) updates.lastUpdated = now.toISOString();
   updates.learningTimeByDevice = { ...devices, [deviceId]: device };
   await store.commit([{ path, operation: "set", merge: true, updateTime: record?.updateTime, data: updates }]);
   await onSaved(termId, lessonId);

@@ -62,12 +62,15 @@ function studentSummary(classDoc, student) {
     if (post !== null) { postSum += post; postCount++; }
     const ar = minutes(data.arTimeMinutes) || minutes(data.arNavigationTimeMinutes);
     arMinutes += ar;
-    const time = Math.max(activityTime(data.timestamp), activityTime(data.lastUpdated), activityTime(data.completedAt));
-    lastActive = Math.max(lastActive, time);
-    const deviceTime = Object.values(data.learningTimeByDevice || {}).some(device => minutes(device?.lessonSeconds) > 0 || minutes(device?.arSeconds) > 0);
-    hasActivity ||= time > 0 || pre !== null || post !== null || ar > 0 || minutes(data.lessonTimeMinutes) > 0 || deviceTime ||
+    const deviceTime = Object.values(data.learningTimeByDevice || {}).some(device => minutes(device?.lessonSeconds) > 0 || minutes(device?.arSeconds) > 0 || minutes(device?.arNavigationSeconds) > 0);
+    const meaningful = activityTime(data.activityCompletedAt) > 0 || pre !== null || post !== null || ar > 0 || minutes(data.lessonTimeMinutes) > 0 || deviceTime ||
       data.isLessonCompleted === true || data.isARCompleted === true || data.completed === true ||
       (typeof data.activityScore === "number" && data.activityScore >= 0 && (data.activityTotalQuestions > 0 || data.activityTotalPoints > 0));
+    if (meaningful) {
+      hasActivity = true;
+      lastActive = Math.max(lastActive, activityTime(data.timestamp), activityTime(data.lastUpdated), activityTime(data.completedAt),
+        activityTime(data.preTestCompletedAt), activityTime(data.postTestCompletedAt), activityTime(data.activityCompletedAt));
+    }
   }
   const profile = student.studentDoc.data();
   return { id: student.studentDoc.id, name: profile.displayName || profile.fullName || "Student", section: classDoc.data().SectionName || classDoc.id,
