@@ -17,6 +17,8 @@ function page({ saved = null, dark = false, blocked = false, toolbar = true, ani
   let button, mounted;
   const system = { matches: dark, addEventListener: (name, fn) => { systemEvents[name] = fn; } };
   const context = {
+    setTimeout: callback => { events.finishSwitch = callback; return 1; },
+    clearTimeout() {},
     window: { innerWidth: 1000, innerHeight: 700,
       matchMedia: query => query.includes("reduced-motion") ? { matches: reducedMotion } : system,
       addEventListener: (name, fn) => { events[name] = fn; } },
@@ -93,34 +95,23 @@ test("ignores invalid saved themes", () => {
   assert.equal(page({ saved: "invalid", dark: true }).root.dataset.theme, "dark");
 });
 
-test("dark mode spreads from the switch, ignores overlapping clicks, and cleans up before another switch", async () => {
+test("theme colors change on the visible page without a full-page snapshot, even during rapid clicks", () => {
   const app = page({ animated: true });
   app.mount();
   app.events.click();
   assert.equal(app.root.dataset.theme, "dark");
-  assert.equal(app.root.dataset.themeReveal, "spread");
+  assert.equal(app.root.classList.contains("theme-switching"), true);
   app.events.click();
-  assert.equal(app.transitions.length, 1);
-  assert.equal(app.writes.length, 1);
-  app.transitions[0].ready();
-  await Promise.resolve();
-  const spread = app.animations[0];
-  assert.equal(spread.options.pseudoElement, "::view-transition-new(root)");
-  assert.match(spread.frames[0].clipPath, /^polygon\(930\.0px 36\.0px,/);
-  assert.equal(spread.options.duration, 1100);
-  app.transitions[0].finish();
-  await Promise.resolve();
-  assert.equal(app.root.classList.contains("theme-switching"), false);
-  assert.equal(app.root.dataset.themeReveal, undefined);
-
-  app.events.click();
-  app.transitions[1].ready();
-  await Promise.resolve();
+  assert.equal(app.transitions.length, 0);
+  assert.equal(app.animations.length, 0);
+  assert.equal(app.writes.length, 2);
   assert.equal(app.root.dataset.theme, "light");
-  assert.equal(app.animations[1].options.pseudoElement, "::view-transition-old(root)");
-  assert.equal(app.animations[1].frames.at(-1).clipPath, spread.frames[0].clipPath);
-  app.transitions[1].finish();
-  await Promise.resolve();
+  assert.equal(app.root.dataset.themeReveal, undefined);
+  app.events.finishSwitch();
+  assert.equal(app.root.classList.contains("theme-switching"), false);
+  app.events.click();
+  assert.equal(app.root.dataset.theme, "dark");
+  app.events.pagehide();
   assert.equal(app.root.classList.contains("theme-switching"), false);
 });
 
@@ -133,12 +124,12 @@ test("reduced motion changes the palette immediately without a page transition",
   assert.equal(app.animations.length, 0);
 });
 
-test("a failed transition still applies the saved palette and leaves the switch usable", () => {
+test("a browser with broken snapshot transitions still switches both palettes", () => {
   const app = page({ animated: true, failedTransition: true });
   app.mount();
   app.events.click();
   assert.equal(app.root.dataset.theme, "dark");
-  assert.equal(app.root.classList.contains("theme-switching"), false);
+  assert.equal(app.transitions.length, 0);
   assert.equal(app.root.dataset.themeReveal, undefined);
   app.events.click();
   assert.equal(app.root.dataset.theme, "light");

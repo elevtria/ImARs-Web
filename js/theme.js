@@ -6,7 +6,7 @@
   const valid = value => value === "dark" || value === "light";
   let preference;
   try { preference = localStorage.getItem(key); } catch { /* Storage may be disabled. */ }
-  let toggle;
+  let toggle, switchTimer;
 
   function apply() {
     const dark = valid(preference) ? preference === "dark" : system.matches;
@@ -18,19 +18,11 @@
     }
   }
 
-  function spreadFrames(x, y, radius) {
-    return Array.from({ length: 9 }, (_, frame) => {
-      const progress = frame / 8;
-      const points = Array.from({ length: 96 }, (_, index) => {
-        const angle = index * Math.PI / 48;
-        const edge = .85 + .07 * Math.sin(5 * angle + progress * 1.2)
-          + .04 * Math.cos(9 * angle - progress * .8) + .025 * Math.sin(13 * angle);
-        const reach = radius * progress * edge;
-        return `${(x + Math.cos(angle) * reach).toFixed(1)}px ${(y + Math.sin(angle) * reach).toFixed(1)}px`;
-      });
-      return { clipPath: `polygon(${points.join(",")})` };
-    });
+  function finishSwitch() {
+    clearTimeout(switchTimer);
+    root.classList.remove("theme-switching");
   }
+  window.addEventListener("pagehide", finishSwitch);
   apply();
   system.addEventListener("change", apply);
   window.addEventListener("storage", event => {
@@ -46,40 +38,20 @@
     toggle.className = "theme-toggle";
     toggle.innerHTML = '<svg class="theme-moon" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13Z"/></svg><svg class="theme-sun" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.4 1.4m11.2 11.2L19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></svg>';
     toggle.addEventListener("click", () => {
-      if (root.classList.contains("theme-switching")) return;
+      clearTimeout(switchTimer);
       preference = root.dataset.theme === "dark" ? "light" : "dark";
       try { localStorage.setItem(key, preference); } catch { /* Keep the session choice. */ }
-      if (!document.startViewTransition || !root.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        finishSwitch();
         apply();
         return;
       }
 
-      const dark = preference === "dark";
-      const bounds = toggle.getBoundingClientRect();
-      const x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2;
-      const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) * 1.6 + 32;
-      const frames = spreadFrames(x, y, radius);
-      const finish = () => {
-        root.classList.remove("theme-switching");
-        delete root.dataset.themeReveal;
-      };
+      // Fade the real page's colors. Full-page snapshots can briefly go black
+      // while the browser changes color-scheme or composites the camera canvas.
       root.classList.add("theme-switching");
-      root.dataset.themeReveal = dark ? "spread" : "retract";
-      try {
-        const transition = document.startViewTransition(apply);
-        transition.ready.then(() => {
-          root.animate(dark ? frames : frames.slice().reverse(), {
-            duration: 1100,
-            easing: "cubic-bezier(.4,0,.2,1)",
-            fill: "both",
-            pseudoElement: dark ? "::view-transition-new(root)" : "::view-transition-old(root)"
-          });
-        }).catch(() => { /* A skipped transition still applies the chosen palette. */ });
-        transition.finished.then(finish, finish);
-      } catch {
-        apply();
-        finish();
-      }
+      apply();
+      switchTimer = setTimeout(finishSwitch, 300);
     });
     const toolbar = document.querySelector(".topbar-right, .admin-topbar-right");
     if (toolbar) toolbar.prepend(toggle);
