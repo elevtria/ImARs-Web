@@ -224,7 +224,7 @@ function fixture() {
       if (!actors.has(name)) {
         const values = stores.get(name) || new Map(); stores.set(name, values);
         const storage = { get: async key => structuredClone(values.get(key)), put: async (key, value) => values.set(key, structuredClone(value)) };
-        actors.set(name, new WebLoginState({ storage }, {}, { now: () => time, fetch: async (_, options) => {
+        actors.set(name, new WebLoginState({ storage }, env, { now: () => time, fetch: async (_, options) => {
           verifications++;
           if (outage) throw new Error("Network outage");
           await new Promise(resolve => setTimeout(resolve, 1));
@@ -339,12 +339,63 @@ test("parallel requests cannot all verify against a stale two-attempt counter", 
   const app = fixture();
   const responses = await Promise.all(Array.from({ length: 12 }, () => app.login()));
   assert.equal(app.count(), 3);
-  assert.deepEqual(responses.slice(0, 3).map(response => response.status), [401, 401, 429]);
-  assert.equal((await responses[0].json()).error, "Invalid ID or password. Please try again. (1/3 attempts)");
-  assert.equal((await responses[1].json()).error, "Invalid ID or password. Please try again. (2/3 attempts)");
-  assert.ok(responses.slice(3).every(response => response.status === 429));
+  const rejected = responses.filter(response => response.status === 401);
+  assert.equal(rejected.length, 2);
+  assert.deepEqual((await Promise.all(rejected.map(response => response.json()))).map(body => body.error).sort(), [
+    "Invalid ID or password. Please try again. (1/3 attempts)",
+    "Invalid ID or password. Please try again. (2/3 attempts)"
+  ]);
+  assert.equal(responses.filter(response => response.status === 429).length, 10);
   const stored = app.stores.get("account:teacher-a").get("account");
   assert.equal(stored.stage, 1);
+});
+
+test("a locked account rejects correct credentials on another device until the full cooldown expires", async () => {
+  const app = fixture();
+  const deviceA = { "CF-Connecting-IP": "192.0.2.1", "User-Agent": "QA Phone A" };
+  const deviceB = { "CF-Connecting-IP": "198.51.100.2", "User-Agent": "QA Phone B" };
+  const login = (password, headers, identifier = "TEACH1000") => app.call("login", { identifier, password, portal: "teacher" }, undefined, headers);
+  for (let index = 0; index < 3; index++) await login("wrong", deviceA);
+  const verifiedBefore = app.count();
+  app.actors.clear();
+  const blocked = await login("correct", deviceB, " teach1000 ");
+  assert.equal(blocked.status, 429);
+  assert.equal((await blocked.json()).retryAfter, 300);
+  assert.equal(blocked.headers.get("Set-Cookie"), null);
+  assert.equal(app.count(), verifiedBefore, "locked attempts must not reach password verification");
+  assert.equal((await app.login("TEACH1001", "correct")).status, 200);
+  app.advance(cooldowns[0] - 1);
+  assert.equal((await login("correct", deviceB)).status, 429);
+  app.advance(1);
+  assert.equal((await login("correct", deviceB)).status, 200);
+});
+
+test("a cooldown survives an identifier becoming resolvable between devices", async () => {
+  const app = fixture();
+  for (let index = 0; index < 3; index++) await app.login("TEACH2000", "wrong");
+  app.env.WEB_STAFF_ACCOUNTS = JSON.stringify(accounts.map(account => account.id === "TEACH1000" ? { ...account, id: "TEACH2000" } : account));
+  app.actors.clear();
+  const response = await app.login("TEACH2000", "correct");
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("Set-Cookie"), null);
+  assert.equal(app.count(), 0, "account resolution must not bypass the existing identifier cooldown");
+});
+
+test("changing teacher and admin login pages cannot bypass an account cooldown", async () => {
+  const app = fixture();
+  for (let index = 0; index < 3; index++) await app.login("TEACH1000", "wrong", "admin");
+  assert.equal((await app.login("TEACH1000", "correct", "teacher")).status, 429);
+  app.advance(cooldowns[0]);
+  assert.equal((await app.login("TEACH1000", "correct", "teacher")).status, 200);
+});
+
+test("an administrator can clear an identifier cooldown after wrong-portal attempts", async () => {
+  const app = fixture();
+  const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
+  for (let index = 0; index < 3; index++) await app.login("TEACH1000", "wrong", "admin");
+  assert.equal((await app.login("TEACH1000", "correct")).status, 429);
+  assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, admin)).status, 200);
+  assert.equal((await app.login("TEACH1000", "correct")).status, 200);
 });
 
 test("known, unknown and wrong-portal logins show the same server-counted error sequence", async () => {
