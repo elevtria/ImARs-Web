@@ -107,6 +107,7 @@
   }
   [data-theme="dark"] body :is(.sy-chip, .admin-year, .summary-icon, .action-icon, .section-chip,
     .quiz-library-count, .quiz-view-tab span, .student-status-switch span, .teacher-count) { background: #2b4059; color: #d5e7ff; }
+  [data-theme="dark"] body .school-year-control { color: #d5e7ff; }
   [data-theme="dark"] body :is(.side-user, .table-head, thead, th) { background: #223249; color: #bbcee4; }
   [data-theme="dark"] body :is(td, th, .scan-row, .file-row, .profile-info-grid > div, .analytics-card-footer) { border-color: var(--line); }
   [data-theme="dark"] body :is(.table-wrap, .table-scroll) tbody tr:nth-child(even) { background: #22324966; }
@@ -182,6 +183,8 @@
     background: #263a52;
   }
   [data-theme="dark"] body .teacher-performance-table tbody > tr.teacher-table-detail > td { background: #1f3550; }
+  [data-theme="dark"] body .teacher-performance-table tbody > tr.teacher-table-row:nth-of-type(4n+3) > :is(th, td) { background: #1e2d41; }
+  [data-theme="dark"] body .teacher-performance-table tbody > tr.teacher-table-row:is(:hover, :focus-within) > :is(th, td) { background: #263a52; }
   [data-theme="dark"] body .teacher-table-toggle .table-avatar { background: var(--teacher-color); color: #fff; }
   [data-theme="dark"] body :is(.performance-table, .activity-record-results) thead th {
     background: #223249; color: #bbcee4; border-color: var(--line);
