@@ -59,6 +59,7 @@
 .quiz-type-options { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .quiz-type-option { display: flex; min-height: 62px; align-items: center; gap: 10px; padding: 10px; border: 1px solid rgba(129,162,193,.28); border-radius: 13px; background: rgba(255,255,255,.6); cursor: pointer; }
 .quiz-type-option.selected { border-color: rgba(77,134,176,.55); background: rgba(234,242,248,.86); box-shadow: 0 0 0 2px rgba(129,162,193,.09); }
+.quiz-type-option.selected::after { content: "\2713"; display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; margin-left: auto; border-radius: 50%; background: #1765cf; color: #fff; font-size: 14px; font-weight: 800; }
 .quiz-type-option input { position: absolute; opacity: 0; pointer-events: none; }
 .quiz-type-option:focus-within { outline: 3px solid rgba(77,134,176,.2); }
 .quiz-type-icon { display: grid; width: 33px; height: 33px; flex: 0 0 auto; place-items: center; border-radius: 10px; color: #4d86b0; background: #fff; font-size: 13px; font-weight: 800; }
