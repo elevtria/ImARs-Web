@@ -1,3 +1,4 @@
+import { matchesSearch, normalizeSearch, personSearchText } from "../js/search.js";
 import { databaseQuotaFailure, FirestoreAdmin } from "./firestore-admin.js";
 import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { dataEnabled, requireStaff, stateCall, settings, readJson } from "./web-auth.js";
@@ -407,10 +408,10 @@ function quizListEntry(row) {
 async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25 } = {}) {
   if (scope.actor.role !== "teacher") throw fail();
   let sectionId = body.sectionId || "";
-  const search = String(body.search || "").trim().toLowerCase();
+  const search = normalizeSearch(body.search || "");
   const status = body.status || "active", maximum = body.limit ?? 25, cursor = body.cursor;
   if ((sectionId && !part(sectionId)) || (body.search !== undefined && typeof body.search !== "string") ||
-      !["active", "archived"].includes(status) || search.length > 100 ||
+      !["active", "archived"].includes(status) || search.length > 100 || (typeof body.search === "string" && body.search.length > 100) ||
       !Number.isInteger(maximum) || maximum < 1 || maximum > maximumLimit ||
       (cursor != null && (!object(cursor) || !fields(cursor, ["classId", "id"]) || !part(cursor.classId) || (cursor.id !== null && !part(cursor.id))))) {
     throw fail("Invalid student page.", 400);
@@ -435,7 +436,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   const queueClass = (position, size) => {
     const queryFilters = [...filters(selected[position].id), ...(status === "archived" ? [{ field: "active", op: "==", value: false }] : [])];
     queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined,
-      ...(body.rawActivityScores === true ? { fieldPaths: ["uid", "teacherId", "active", "displayName", "fullName"] } : {}) })
+      ...(body.rawActivityScores === true ? { fieldPaths: ["uid", "teacherId", "active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName"] } : {}) })
       .then(rows => ({ rows }), error => ({ error })) });
   };
   const countPromise = body.includeCounts === false ? null : (async () => {
@@ -463,8 +464,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
       if (students.length === maximum) break;
       after = row.id; consumed++; scanned++;
       const archived = row.data.active === false;
-      const matches = !search || [row.id, row.data.displayName, row.data.fullName, row.data.firstName, row.data.lastName]
-        .filter(Boolean).join(" ").toLowerCase().includes(search);
+      const matches = matchesSearch(search, personSearchText(row.id, row.data));
       if (archived === (status === "archived") && matches) students.push({ classId, document: output("users/" + row.id, row) });
     }
     if (consumed === rows.length && rows.length < queuedClass.size) { index++; after = null; }

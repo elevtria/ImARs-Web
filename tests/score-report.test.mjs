@@ -53,6 +53,16 @@ test("a search is explicitly recorded and filters the complete roster, not only 
   assert.deepEqual(data.quizzes[0], ["S52"]);
 });
 
+test("export filtering matches uppercase, reordered names, middle names and leading-zero IDs", async () => {
+  for (const query of ["AMOR KURT S", "MARIA PILAR", "0026270123"]) {
+    const data = source({ count: 53, search: query });
+    data.roster[52].studentDoc = doc("0026270123", { displayName: "Kurt S. Amor", firstName: "Kurt", middleName: "Maria Pilar", lastName: "Amor" });
+    const report = await collectScoreReport(data.options, data.services);
+    assert.equal(report.students.length, 1);
+    assert.equal(report.students[0].name, "Kurt S. Amor");
+  }
+});
+
 test("quiz batches overlap with a limit of three requests while keeping the full class", async () => {
   const data = source({ count: 151 });
   const releases = [], milestones = new Map();

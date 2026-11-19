@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { matchesSearch, normalizeSearch, personSearchText } from "../js/search.js";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
@@ -45,7 +46,7 @@ function page(file, report, resolveReport) {
   const requests = [], controllers = [], revealed = [], quizRequests = [];
   let refreshQuizzes;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, matchesSearch, normalizeSearch, personSearchText, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
@@ -445,6 +446,30 @@ test("teacher document IDs cannot break out of action-button attributes", async 
   assertTextOnly(html);
   assert.ok(html.includes('data-delete-id="&lt;img'));
   assert.ok(html.includes('data-toggle-id="&lt;img'));
+});
+
+test("Analytics searches names and IDs with the same rules as Student Records", async () => {
+  const data = activityReportData(["A"], { count: 2 });
+  data.sections[0].students[0].studentDoc = record("0026270123", { displayName: "Kurt S. Amor", middleName: "Maria Pilar" });
+  const app = page("analytics.js", data);
+  await app.render();
+  for (const query of ["  AMOR KURT S ", "0026270123", "MARIA PILAR"]) {
+    app.element("studentSearch").value = query;
+    app.element("studentSearch").events.input();
+    assert.match(app.element("#studentGrid tbody").html(), /Kurt S\. Amor/);
+    assert.doesNotMatch(app.element("#studentGrid tbody").html(), /No students match/);
+  }
+});
+
+test("teacher search handles uppercase, extra spaces, ID and apostrophe variants", async () => {
+  const app = page("manage-teachers.js", { teachers: [{ id: "TEACH1000", schoolId: "TEACH1000", name: "Maria O’Connor", email: "maria@example.test",
+    subject: "Science", sections: ["Hydrogen"], joined: "Today", active: true, students: 1, pre: 80, post: 90, hours: "0m" }] });
+  await app.render();
+  for (const query of ["  O'CONNOR   MARIA ", "teach1000", "HYDROGEN MARIA"]) {
+    app.element("teacherSearch").value = query;
+    app.element("teacherSearch").events.input();
+    assert.match(app.element("teacherList").html(), /Maria O’Connor/);
+  }
 });
 
 function queuedScanner() {

@@ -1,4 +1,5 @@
 import { scoreOverride } from "./lesson-score.js";
+import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
 import { testRawScore } from "./student-activity-record.js";
 
 export const SCHOOL_NAME = "Pintong Gubat Elementary School";
@@ -51,10 +52,10 @@ export async function collectScoreReport({ termId, sectionId, search = "", teach
     }
   } while (cursor);
   if (!lessons?.length) throw new Error("There are no topics available for this term.");
-  const query = search.trim().toLowerCase();
+  const query = normalizeSearch(search);
   const selected = [...students.values()].filter(row => {
     const data = row.studentDoc.data();
-    return (data.displayName || data.fullName || "Student").toLowerCase().includes(query);
+    return matchesSearch(query, personSearchText(row.studentDoc.id, data));
   });
   if (!selected.length) throw new Error("No students match the selected section and search.");
   onStage("Loading quiz results…");
