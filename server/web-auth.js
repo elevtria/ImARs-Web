@@ -136,7 +136,38 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   const invitation = privateRecord.result.account;
   if (!invitation) return initial;
   if (!invitation.active) return null;
-  const profile = await store.get("users/" + id);
+  let profile = await store.get("users/" + id);
+
+  // If the teacher just registered on Mobile (Firestore), sync their UID into Supabase automatically
+  if ((!profile?.data?.uid) && supabaseWebData(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    try {
+      const fbStore = new FirestoreAdmin(env);
+      const fbProfile = await fbStore.get("users/" + id);
+      if (fbProfile?.data?.uid && String(fbProfile.data.role || "").toLowerCase() === "teacher") {
+        const merged = {
+          ...(profile?.data || {}),
+          ...fbProfile.data,
+          uid: String(fbProfile.data.uid).trim(),
+          active: true,
+          status: "active",
+          isRegistered: true,
+          webInvitationNonce: profile?.data?.webInvitationNonce || invitation.nonce
+        };
+        await store.begin();
+        await store.commit([{
+          operation: "set",
+          path: "users/" + id,
+          data: merged,
+          merge: true,
+          ...(profile ? { updateTime: profile.updateTime } : {})
+        }]);
+        profile = { id, data: merged };
+      }
+    } catch {
+      // Ignore if Firestore lookup is unavailable
+    }
+  }
+
   if (!profile?.data.uid || profile.data.webInvitationNonce !== invitation.nonce || profile.data.role !== "teacher") return null;
   return { id, uid: profile.data.uid, role: "teacher", email: invitation.email, requiresVerifiedEmail: true };
 }
