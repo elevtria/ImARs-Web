@@ -1,7 +1,7 @@
 import { onRequestPost as generateQuiz } from "./generate-quiz.js";
 import { limitedStream } from "../../server/quiz-material.js";
 import { quizExecutionObject, quizJobResponse, verifyQuizJob } from "../../server/quiz-background.js";
-import { staffProfile } from "../../server/web-auth.js";
+import { resolveStaff, settings, staffProfile } from "../../server/web-auth.js";
 
 export async function onRequestPost(context, { generate = generateQuiz } = {}) {
   const { request, env } = context;
@@ -19,7 +19,13 @@ export async function onRequestPost(context, { generate = generateQuiz } = {}) {
     // The signed payload was built after teacher and upload validation in Pages.
     const response = await generate(context, {
       prepared, limitGeneration: false,
-      authenticate: (_request, _env, store) => staffProfile(prepared.actor, store)
+      authenticate: async (_request, env, store) => {
+        const actor = await resolveStaff(env, prepared.actor.id, settings(env), store);
+        if (!actor || actor.uid !== prepared.actor.uid || actor.role !== "teacher") {
+          throw Object.assign(new Error("This account no longer has access to this quiz job."), { status: 403 });
+        }
+        return staffProfile(actor, store);
+      }
     });
     const result = { status: response.status, body: await response.clone().json() };
     const saved = await execution.fetch("https://quiz-job.internal/finish-execution", {

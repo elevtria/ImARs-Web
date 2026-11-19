@@ -156,3 +156,27 @@ test("the server watchdog recovers a later completed result without starting gen
   assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "complete");
   assert.equal(calls, 1);
 });
+
+test("the background callback revalidates the current teacher profile before generation", async () => {
+  const { env } = backgroundFixture();
+  const actor = { uid: "teacher-a", id: "TEACH1000", email: "teacher@example.test", role: "teacher" };
+  Object.assign(env, { WEB_DATA_ENABLED: "true", WEB_STAFF_ACCOUNTS: JSON.stringify([actor,
+    { uid: "admin-a", id: "ADMIN1000", email: "admin@example.test", role: "admin" }]),
+    WEB_LOGIN_STATE: { idFromName: name => name, get: () => ({ fetch: async () => Response.json({ account: null }) }) } });
+  const profile = { ...actor, active: true };
+  const store = { get: async () => ({ data: profile }), identity: async () => ({ email: actor.email, emailVerified: true }) };
+  const callback = await signQuizJob(env.WEB_SESSION_SECRET, { id: crypto.randomUUID(), actor, executeBy: Date.now() + 120_000 });
+  let checked = false;
+  const response = await runJob({ env, request: new Request("https://imars.test/api/run-quiz-job", { method: "POST", body: callback.body,
+    headers: { "X-Imars-Quiz-Signature": callback.signature } }) }, {
+    generate: async (context, options) => {
+      const current = await options.authenticate(context.request, env, store);
+      assert.equal(current.uid, actor.uid);
+      assert.equal(current.requiresVerifiedEmail, true);
+      checked = true;
+      return Response.json({ questions: [{ text: "What is a cell?" }] });
+    }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(checked, true);
+});
