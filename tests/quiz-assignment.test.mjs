@@ -107,11 +107,13 @@ test("generation, review, unassigned draft and all-section release use the actua
   windowEvents.beforeunload({ preventDefault() { warned = true; } });
   assert.equal(warned, true);
   assert.equal(readQuizWorkspace("teacher-a", "TEACH1", workspaceStorage).editorTitle, "Edited Water Quiz");
+  const preservedId = readQuizWorkspace("teacher-a", "TEACH1", workspaceStorage).draftId;
   await authenticated({ uid: "teacher-a" });
   assert.equal(element("editorStep").hidden, false);
   assert.equal(element("editorTitle").value, "Edited Water Quiz");
   assert.match(element("questionEditorList").innerHTML, /Which substance freezes into ice/);
   await element("saveQuiz").listeners.click();
+  assert.equal(saves[0].id, preservedId);
   assert.equal(readQuizWorkspace("teacher-a", "TEACH1", workspaceStorage), null);
   assert.equal(windowEvents.beforeunload, undefined);
   assert.equal(element("generateQuiz").disabled,true);
@@ -200,8 +202,10 @@ test("generation, review, unassigned draft and all-section release use the actua
   job = { ...job, status: "failed", errorCode: "JOB_DELIVERY_FAILED", error: "Interrupted." };
   browserEvents.visibilitychange();
   await new Promise(setImmediate);
-  assert.equal(transport.background, true, "returning to the tab must not start browser-dependent generation");
-  assert.equal(element("reviewStep").hidden, true);
+  assert.equal(transport.background, false);
+  finishGeneration([{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }]);
+  await new Promise(setImmediate);
+  assert.equal(element("reviewStep").hidden, false);
 
   job = { id: "05563121-1488-47bb-939b-b4e930eafcde", status: "failed", errorCode: "JOB_DELIVERY_FAILED",
     error: "The background quiz job was interrupted." };
@@ -211,7 +215,7 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("quizFile").listeners.change();
   const retry = element("generateQuiz").listeners.click();
   await new Promise(setImmediate);
-  assert.equal(transport.background, true);
+  assert.equal(transport.background, false);
   finishGeneration([{ text: "Which material freezes into ice?", options: ["Water", "Milk", "Juice", "Oil"], correctIndex: 0 }]);
   await retry;
   assert.equal(element("reviewStep").hidden, false);

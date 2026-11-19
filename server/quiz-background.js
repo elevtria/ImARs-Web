@@ -25,10 +25,6 @@ export function quizJobObject(env, actor) {
   return env.QUIZ_GENERATION_JOBS.get(env.QUIZ_GENERATION_JOBS.idFromName(JSON.stringify([actor.uid, actor.id])));
 }
 
-export function quizExecutionObject(env, id) {
-  return env.QUIZ_GENERATION_JOBS.get(env.QUIZ_GENERATION_JOBS.idFromName("execution:" + id));
-}
-
 export function quizJobResponse(body, status = 200) {
   return Response.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 }
