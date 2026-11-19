@@ -1,12 +1,12 @@
 import { serviceAccount } from "./firestore-admin.js";
 import { appStore } from "./supabase-app-store.js";
 import { stateCall, resolveStaff, settings, readJson } from "./web-auth.js";
-import { authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
+import { activeProfile, authenticateStudent, studentContext, quizRate } from "./student-quiz-auth.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 import { schoolTodayISO, sectionSchedule, topicAvailability, validateActivityDeadlineUtc } from "../js/topic-availability.js";
 
 const publicFirebaseKey = "AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0";
-const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+const json = (body, status = 200, headers = {}) => Response.json(body, { status, headers: { "Cache-Control": "no-store", ...headers } });
 const fail = (message, status) => Object.assign(new Error(message), { status });
 const normalizeId = value => {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value.trim())) throw fail("Enter your school ID.", 400);
@@ -15,7 +15,7 @@ const normalizeId = value => {
 };
 const email = value => typeof value === "string" ? value.trim().toLowerCase() : "";
 const approvedEmail = data => email(data.providedEmail || data.email);
-const available = data => data && data.active !== false && String(data.status || "").toLowerCase() !== "inactive";
+const available = activeProfile;
 const claimed = data => !!data.uid || data.isClaimed === true || data.isRegistered === true;
 const roleOf = data => data.role || (data.classCode ? "student" : "");
 
@@ -36,6 +36,7 @@ async function identity(path, body, fetcher) {
 
 export async function accountAccess({ request, env }, { store, fetcher = fetch, rate } = {}) {
   const enabled = env.ACCOUNT_ACCESS_ENABLED === "true";
+  const mobilePasswordProtection = enabled || env.MOBILE_PASSWORD_PROTECTION_ENABLED === "true";
   const url = new URL(request.url), action = url.pathname.replace(/\/$/, "").split("/").at(-1);
   const teacherSessions = env.TEACHER_MOBILE_SESSIONS_ENABLED === "true" || enabled;
   const mobileAction = ["teacher-session-login", "mobile-session"].includes(action);
@@ -43,13 +44,15 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
   const studentSchedule = env.STUDENT_SCHEDULE_ENABLED === "true";
   const scheduleAction = action === "learning-schedule" && studentSchedule;
   if (action === "config" && request.method === "GET") {
-    const capabilities = studentSchedule ? { studentSchedule: true } : {};
+    const capabilities = { ...(studentSchedule ? { studentSchedule: true } : {}),
+      ...(mobilePasswordProtection ? { mobilePasswordProtection: true } : {}) };
     if (!enabled) return json({ enabled: false, ...(teacherSessions ? { teacherSessions: true } : {}), ...(teacherSessions && env.TEACHER_SESSION_SYNC_ENABLED === "true" ? { teacherSessionSync: true } : {}), ...capabilities });
     try { serviceAccount(env); if (!env.WEB_LOGIN_STATE) throw new Error(); return json({ enabled: true, ...capabilities }); }
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
   if (action === "learning-schedule" && !studentSchedule) return json({ error: "Student schedules are not enabled." }, 409);
-  if (!enabled && !(teacherSessions && mobileAction) && !progressAction && !scheduleAction) return json({ error: "Account access is not enabled." }, 409);
+  if (!enabled && !(mobilePasswordProtection && action === "login") && !(teacherSessions && mobileAction) && !progressAction && !scheduleAction)
+    return json({ error: "Account access is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return json({ error: "Use JSON." }, 415);
@@ -185,14 +188,14 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       const candidate = profile?.data;
       const access = candidate?.uid ? await store.get("_accountAccess/" + candidate.uid) : null;
       const loginEmail = candidate?.uid ? email(access?.data?.authEmail || approvedEmail(candidate || {})) : approvedEmail(candidate || {});
-      if (!available(candidate) || !loginEmail || (candidate.uid && access && (access.data.active !== true || access.data.profileId !== id || access.data.role !== roleOf(candidate)))) {
-        throw fail("Your ID or password could not be verified.", 401);
-      }
-      const result = await identity("accounts:signInWithPassword", { email: loginEmail, password: body.password, returnSecureToken: true }, fetcher);
-      if (!result.localId || !result.idToken || result.mfaPendingCredential ||
-          email(result.email) !== loginEmail || (candidate.uid && candidate.uid !== result.localId)) {
-        throw fail("Your ID or password could not be verified.", 401);
-      }
+      const invalid = !available(candidate) || !loginEmail ||
+        (access && (access.data.active !== true || access.data.profileId !== id || access.data.role !== roleOf(candidate)));
+      const checked = await stateCall(env, candidate?.uid ? `account:${candidate.uid}` : `mobile-password-id:${id}`, "mobile-password", {
+        uid: candidate?.uid || "", email: loginEmail, password: body.password, invalid
+      });
+      if (!checked.ok) return json(checked.result, checked.status, checked.result.retryAfter
+        ? { "Retry-After": String(checked.result.retryAfter) } : {});
+      if (!checked.result.ok || invalid) throw fail("Sign-in is temporarily unavailable. Please retry.", 503);
       if (roleOf(candidate) === "teacher" && candidate.uid) {
         const opened = await stateCall(env, `account:${candidate.uid}`, "mobile-login", {});
         if (!opened.ok) throw new Error("Mobile sign-in unavailable");

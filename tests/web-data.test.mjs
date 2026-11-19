@@ -454,7 +454,9 @@ test("empty assigned sections use at most four concurrent probes and preserve cl
 });
 
 test("student page searches preserve case-insensitive name matching with bounded scans and cursors across sections", async () => {
-  const app = fixture(), cookie = await app.login();
+  const app = fixture();
+  app.data.get("users/TEACH1000").authEmailVerified = true;
+  const cookie = await app.login();
   app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
   for (let index = 0; index < 160; index++) app.data.set("users/S" + String(index).padStart(3, "0"), {
     role: "student", classCode: index < 120 ? "A" : "C", displayName: index === 159 ? "Target Learner" : "Another Learner", active: true
@@ -467,6 +469,28 @@ test("student page searches preserve case-insensitive name matching with bounded
     found.push(...page.students); cursor = page.cursor;
   } while (cursor);
   assert.deepEqual(found.map(row => row.document.id), ["S159"]);
+});
+
+test("student search uses the same literal name and ID matching without exposing other sections", async () => {
+  const app = fixture();
+  app.data.get("users/TEACH1000").authEmailVerified = true;
+  const cookie = await app.login();
+  app.data.set("users/0026270123", { role: "student", classCode: "A", teacherId: "TEACH1000", active: true,
+    displayName: "Maria C. O’Connor", firstName: "Maria", middleName: "Clara Pilar", lastName: "O’Connor" });
+  app.data.set("users/0026270124", { role: "student", classCode: "A", teacherId: "TEACH1000", active: true, fullName: "Kurt S. Amor" });
+  app.data.set("users/0026270125", { role: "student", classCode: "B", teacherId: "TEACH1001", active: true, fullName: "Foreign Unique" });
+  for (const [search, expected] of [["  MARIA  O'CONNOR ", "0026270123"], ["CLARA PILAR", "0026270123"], ["AMOR KURT S", "0026270124"], ["0026270123", "0026270123"]]) {
+    const response = await app.call({ action: "student-page", search, includeCounts: false }, cookie);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).students.map(row => row.document.id), [expected]);
+  }
+  for (const search of ["FOREIGN UNIQUE", "' OR 1=1--", "%", ".*"]) {
+    const response = await app.call({ action: "student-page", search, includeCounts: false }, cookie);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).students, []);
+  }
+  assert.equal((await app.call({ action: "student-page", search: " ".repeat(101) }, cookie)).status, 400);
+  assert.equal((await app.call({ action: "student-page", search: { name: "Maria" } }, cookie)).status, 400);
 });
 
 test("website identity uses an HttpOnly cookie; anonymous, forged, cross-site and wrong-tab requests fail before database writes", async () => {

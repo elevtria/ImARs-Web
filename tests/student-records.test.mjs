@@ -1,3 +1,4 @@
+import { matchesSearch, normalizeSearch, personSearchText } from "../js/search.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -47,12 +48,12 @@ function harness(size=3) {
   let authChanged,refresh,confirmation=true,denied=false,failBatch=0,batches=0,pageReader,resultReader;
   async function readPage(options) {
     if(auth.currentUser.uid !== "teacher-a") return {classes:[],students:[],counts:[],cursor:null};
-    const all=[...profiles], search=(options.search||"").toLowerCase();
-    const matches=all.filter(([id,row])=>(row.active===false)===(options.status==="archived") && (!options.cursor || id>options.cursor.id) && (!search || (id+" "+row.displayName).toLowerCase().includes(search)));
+    const all=[...profiles], search=normalizeSearch(options.search);
+    const matches=all.filter(([id,row])=>(row.active===false)===(options.status==="archived") && (!options.cursor || id>options.cursor.id) && matchesSearch(search,personSearchText(id,row)));
     const rows=matches.slice(0,options.limit||25);
     return {classes,students:rows.map(([id,row])=>({classId:"A",studentDoc:doc(id,{...row})})),counts:options.includeCounts===false?null:[{classId:"A",active:all.filter(([,r])=>r.active!==false).length,archived:all.filter(([,r])=>r.active===false).length}],cursor:matches.length>rows.length?{classId:"A",id:rows.at(-1)[0]}:null};
   }
-  const context=vm.createContext({Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState, revealContent: () => {},console:{error(){}},
+  const context=vm.createContext({matchesSearch,normalizeSearch,personSearchText,Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState, revealContent: () => {},console:{error(){}},
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,fn)=>{authChanged=fn;},
     watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},
     collection:(_, ...parts)=>({path:parts.join("/")}),doc:(_,name,id)=>({path:name+"/"+id,id}),
@@ -80,6 +81,22 @@ test("1000 students render only 25 profile cards and fetching one visible studen
   assert.equal(app.ids.activeStudentsCount.textContent,1000);assert.doesNotMatch(app.ids.recordsContainer.children[0].innerHTML,/0% overall|No activity recorded/);
   await app.performance("S0000");assert.equal(app.resultReads.length,1);assert.ok(app.resultReads.every(r=>r.path.startsWith("users/S0000/")));
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/50%/);await app.performance("S0000");assert.equal(app.resultReads.length,1);
+});
+
+test("Student Records keeps valid ID, full-name and middle-name matches visible after the server search", async () => {
+  const app = harness(3);
+  app.profiles.set("S0000", { displayName: "MARIA CLARA O’CONNOR", firstName: "Maria", lastName: "O’Connor", active: true });
+  app.profiles.set("S0001", { fullName: "Kurt S. Amor", active: true });
+  app.profiles.set("S0002", { displayName: "Ana M. Peña", firstName: "Ana", middleName: "Maria Pilar", lastName: "Peña", schoolId: "0026270123", active: true });
+  await app.load();
+  for (const [query, id] of [["maria o'connor", "S0000"], ["  AMOR   KURT S  ", "S0001"], ["0026270123", "S0002"], ["MARIA PILAR", "S0002"]]) {
+    app.ids.studentSearch.value = query;
+    await app.ids.studentSearch.emit("input");
+    await new Promise(resolve => setTimeout(resolve, 350));
+    await flush();
+    const visible = app.ids.recordsContainer.children.filter(card => !card.classList.contains("hidden"));
+    assert.deepEqual(visible.map(card => card.dataset.studentId), [id], query);
+  }
 });
 
 test("student cards remain usable while section totals are pending and totals do not rebuild the cards",async()=>{

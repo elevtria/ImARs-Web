@@ -19,7 +19,7 @@ function fixture() {
   env.WEB_LOGIN_STATE = { idFromName: name => name, get(name) {
     if (!actors.has(name)) {
       const values = new Map();
-      actors.set(name, new WebLoginState({ storage: { get: async key => structuredClone(values.get(key)), put: async (key,value) => values.set(key,structuredClone(value)) } }, {}));
+      actors.set(name, new WebLoginState({ storage: { get: async key => structuredClone(values.get(key)), put: async (key,value) => values.set(key,structuredClone(value)) } }, {}, { fetch: fetcher }));
     }
     return { fetch: (url,options) => actors.get(name).fetch(new Request(url,options)) };
   } };

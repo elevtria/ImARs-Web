@@ -1,3 +1,4 @@
+import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
 import { escapeHtml, watchVisibleData } from "./teacher-view.js";
 import { initializeApp } from "./firebase-auth.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -233,11 +234,11 @@ function renderScores(refresh = true) {
   });
   const section = lastReport?.sections.find(item => item.classDoc.id === activitySection);
   const termId = currentTermFilter;
-  const query = search.value.trim().toLowerCase();
+  const query = normalizeSearch(search.value);
   const students = (section?.students || []).map(row => {
     const student = row.studentDoc.data();
     return { ...row, name: student.displayName || student.fullName || "Student" };
-  }).filter(row => row.name.toLowerCase().includes(query));
+  }).filter(row => matchesSearch(query, personSearchText(row.studentDoc.id, row.studentDoc.data())));
   tablePage = Math.min(tablePage, Math.max(0, Math.ceil(students.length / studentsPerPage) - 1));
   const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
   editScores.disabled = !lessons.length || !visible.length;

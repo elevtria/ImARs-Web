@@ -6,6 +6,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
 import { confirmAction } from "./confirm-action.js";
+import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -90,12 +91,12 @@ const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({
 })[character]);
 
 const applyFilters = () => {
-  const searchTerm = searchInput.value.trim().toLowerCase();
+  const searchTerm = normalizeSearch(searchInput.value);
   const selectedSection = sectionFilter.value;
   let shown = 0;
 
   dynamicCards.forEach((card) => {
-    const matchesName = card.dataset.name.includes(searchTerm);
+    const matchesName = matchesSearch(searchTerm, card.dataset.name);
     const matchesSection = !selectedSection || card.dataset.section === selectedSection;
     const visible = matchesName && matchesSection && (recordStatus === "archived" ? card.dataset.archived === "true" : card.dataset.archived !== "true");
     card.classList.toggle("hidden", !visible);
@@ -147,7 +148,7 @@ nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursor
 
 function resetPages() {
   pageIndex = 0; cursors = [null];
-  pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: searchInput.value.trim(), termId: termFilter.value || "term_01" };
+  pageFilter = { sectionId: sectionFilter.value, status: recordStatus, search: normalizeSearch(searchInput.value), termId: termFilter.value || "term_01" };
   return loadRecordsPage();
 }
 
@@ -361,7 +362,8 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   const sectionName = classDoc.data().SectionName || classCode;
   const sData = studentDoc.data();
 
-  const sName = sData.displayName || "Unknown Student";
+  const sName = sData.displayName || sData.fullName ||
+    [sData.firstName, sData.middleName || sData.middleInitial, sData.lastName].filter(Boolean).join(" ") || "Unknown Student";
 
   // Generate Initials
   const nameParts = sName.split(" ");
@@ -441,7 +443,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   card.className = "record";
   card.dataset.studentId = studentDoc.id;
   card.dataset.archived = String(sData.active === false);
-  card.dataset.name = sName.toLowerCase();
+  card.dataset.name = personSearchText(studentDoc.id, sData);
   card.dataset.section = classCode;
   card.dataset.autoLoad = String(!resultsLoaded && !resultsLoading && !resultsError);
   card.setAttribute("aria-busy", String(resultsLoading));

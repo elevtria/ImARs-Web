@@ -1,3 +1,4 @@
+import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
 import { formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 import { webProtectionEnabled } from "./web-login.js";
@@ -34,7 +35,7 @@ const initials = (name) => {
 };
 
 function render() {
-  const queryText = (search?.value || "").trim().toLowerCase();
+  const queryText = normalizeSearch(search?.value);
   const visible = teachers.filter((teacher) => {
     const searchable = [
       teacher.schoolId, // <-- Can now search by "TEACH1000"
@@ -42,8 +43,8 @@ function render() {
       teacher.email, 
       teacher.subject, 
       ...(teacher.sections || [])
-    ].join(" ").toLowerCase();
-    return searchable.includes(queryText);
+    ].join(" ");
+    return matchesSearch(queryText, personSearchText(teacher.id, teacher), searchable);
   });
 
   const activeCount = teachers.filter((t) => t.active).length;
