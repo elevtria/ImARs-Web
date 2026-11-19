@@ -124,7 +124,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
     if (refresh) state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
     // Report pages contain many lesson records. A five-minute background step
     // avoids repeatedly rereading entire class reports on the free database.
-    stopUpdates = watchVisibleData(app, user, () => update(token), 300_000);
+    stopUpdates = watchVisibleData(app, user, () => update(token), 300_000, rawActivityScores);
     if (!state.pages.length || (includeCurriculum && !state.curriculumSnap) || Date.now() - state.checkedAt >= 300_000) await update(token);
     else if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
   } };

@@ -1,5 +1,6 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
 import { legacyActivityFields } from "./mobile-activity-store.js";
+import { lessonResultPath, lessonResultFields, lessonMergeFields, mergeLegacyLesson } from "./legacy-lesson-results.js";
 
 import { RESULT_LIMIT, SUMMARY_FIELDS } from "./student-quiz-store.js";
 
@@ -67,6 +68,7 @@ export class SupabaseAppStore {
     } catch {
       this.firestoreMirror = null;
     }
+    this.legacyLessons = mirrorToFirestore && env.WEB_LEGACY_LESSON_READS_ENABLED === "true" ? new FirestoreAdmin(env, fetcher) : null;
   }
 
   async mirrorWritesToFirestore(writes) {
@@ -142,11 +144,36 @@ export class SupabaseAppStore {
   }
 
   async getAll(paths, { fieldPaths } = {}) {
-    const rows = await this.rawDocuments(paths, fieldPaths);
-    return new Map(paths.map(path => {
+    const lessonPaths = this.legacyLessons ? paths.filter(lessonResultPath) : [];
+    const selected = lessonPaths.length && fieldPaths ? [...new Set([...fieldPaths, ...lessonMergeFields])] : fieldPaths;
+    const rows = await this.rawDocuments(paths, selected);
+    const records = new Map(paths.map(path => {
       const row = rows.get(supabaseDocumentPath(path));
-      return [path, row ? this.projected(row, fieldPaths) : null];
+      return [path, row ? this.projected(row, selected) : null];
     }));
+    if (lessonPaths.length) {
+      const profiles = [...new Set(lessonPaths.map(path => path.split("/").slice(0, 2).join("/")))];
+      const identityFields = ["uid", "role", "classCode", "schoolId"];
+      const [currentProfiles, legacyProfiles] = await Promise.all([
+        this.rawDocuments(profiles, identityFields), this.legacyLessons.getAll(profiles, { fieldPaths: identityFields })
+      ]);
+      const accepted = new Set(profiles.filter(path => {
+        const current = currentProfiles.get(path), legacy = legacyProfiles.get(path)?.data;
+        const data = current && this.projected(current, identityFields).data;
+        return data?.role === "student" && legacy?.role === "student" && part.test(data.classCode || "") && data.classCode === legacy.classCode &&
+          (!data.uid || data.uid === legacy.uid) && (!legacy.schoolId || legacy.schoolId === path.split("/")[1]);
+      }));
+      const requested = lessonPaths.filter(path => accepted.has(path.split("/").slice(0, 2).join("/")));
+      if (requested.length) {
+        const legacy = await this.legacyLessons.getAll(requested, { fieldPaths: lessonResultFields });
+        for (const path of requested) records.set(path, mergeLegacyLesson(records.get(path), legacy.get(path), fieldPaths));
+      }
+      if (fieldPaths) for (const [path, record] of records) if (record) {
+        const pick = data => Object.fromEntries(fieldPaths.filter(field => Object.hasOwn(data, field)).map(field => [field, data[field]]));
+        records.set(path, { ...record, data: pick(record.data), wire: pick(record.wire) });
+      }
+    }
+    return records;
   }
 
   async adminLessonResults(fieldPaths) {

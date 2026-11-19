@@ -273,7 +273,7 @@ async function loadRecordsPage({ background = false, scroll = false, restoredPag
     if (!Array.isArray(data.counts)) void refreshCounts();
     if (background) for (const card of dynamicCards) {
       const bounds = card.getBoundingClientRect?.();
-      if (bounds && bounds.bottom >= 0 && bounds.top <= window.innerHeight && !card.classList.contains("hidden")) void loadStudentPerformance(card.dataset.studentId, { background: true });
+      if (bounds && bounds.bottom >= 0 && bounds.top <= window.innerHeight && !card.classList.contains("hidden")) void loadStudentPerformance(card.dataset.studentId, { background: true, force: true });
     }
   } catch (error) {
     if (generation !== pageGeneration || auth.currentUser?.uid !== user.uid || error.name === "AbortError") return;
@@ -350,7 +350,7 @@ async function loadStudentPerformance(id, { background = false, force = false } 
   }
 }
 
-recordsContainer.addEventListener("student-record-open", event => { void loadStudentPerformance(event.detail.studentId); });
+recordsContainer.addEventListener("student-record-open", event => { void loadStudentPerformance(event.detail.studentId, { force: event.detail.refresh === true }); });
 recordsContainer.addEventListener("click", event => {
   const button = event.target.closest(".load-student-results");
   if (button) { event.stopPropagation(); void loadStudentPerformance(button.dataset.id); }
@@ -497,7 +497,7 @@ onAuthStateChanged(auth, async (user, { restored = false } = {}) => {
   }
   termFilter.value = pageFilter.termId;
   await loadRecordsPage({ restoredPage: restored });
-  stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }), 300_000);
+  stopUpdates = watchVisibleData(app, user, () => loadRecordsPage({ background: true }), 300_000, true);
 });
 
 

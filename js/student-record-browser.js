@@ -46,10 +46,10 @@ function showScoreTiles(studentId, stats) {
 }
 const rows = () => Array.from(list.querySelectorAll(".record")).filter(row => !row.classList.contains("hidden"));
 const id = row => row.dataset.studentId;
-function showRecord(row) {
+function showRecord(row, { refresh = true } = {}) {
   if (!row) return;
   selectedId = id(row);
-  list.dispatchEvent(new CustomEvent("student-record-open", { detail: { studentId: selectedId } }));
+  if (refresh) list.dispatchEvent(new CustomEvent("student-record-open", { detail: { studentId: selectedId, refresh: true } }));
   row = rows().find(candidate => id(candidate) === selectedId) || row;
   const current = rows();
   const index = current.indexOf(row);
@@ -75,7 +75,7 @@ function enhanceRows() {
   });
   if (dialog.open) {
     const row = rows().find(row => id(row) === selectedId);
-    if (row) showRecord(row); else dialog.close();
+    if (row) showRecord(row, { refresh: false }); else dialog.close();
   }
 }
 list.addEventListener("click", event => {

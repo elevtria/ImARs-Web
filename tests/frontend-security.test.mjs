@@ -507,6 +507,39 @@ test("the shared term and activity section drive completion rates without anothe
   assert.equal(topics.html(), before, "late Term 2 results must not overwrite Term 3");
 });
 
+test("Topic Completion Rate displays 40% for two completed learners out of five and excludes incomplete work", async () => {
+  const app = page("analytics.js", null, input => {
+    const data = activityReportData(["A"], { termId: input.termId, count: 5 });
+    data.curriculumSnap = snapshot([record("lesson_01", { title: "Completion sample" })]);
+    const results = [
+      { isLessonCompleted: true },
+      { isARCompleted: true },
+      { isLessonOpened: true, lessonTimeMinutes: 20, isLessonCompleted: false, isARCompleted: false },
+      { isPreTestCompleted: true, preTestScore: 5, preTestTotalQuestions: 5,
+        isPostTestCompleted: true, postTestScore: 10, postTestTotalQuestions: 10, activityScore: 100, activityTotalQuestions: 100 },
+      null
+    ];
+    for (const [index, student] of data.sections[0].students.entries()) student.results = [
+      { termId: input.termId, lessonsSnap: snapshot(results[index] ? [record("lesson_01", results[index])]
+        : [record("lesson_02", { isLessonCompleted: true })]) },
+      { termId: input.termId === "term_01" ? "term_03" : "term_01",
+        lessonsSnap: snapshot([record("lesson_01", { isLessonCompleted: true })]) }
+    ];
+    const [topic] = buildStudentActivityRecords([data.curriculumSnap], data.sections, {}, [input.termId]);
+    assert.equal(topic.learnerCount, 5, input.termId);
+    assert.equal(topic.completedCount, 2, input.termId);
+    assert.deepEqual(topic.learners.map(learner => learner.completed), [true, true, false, false, false]);
+    return data;
+  });
+  await app.render();
+  for (let term = 0; term < 3; term++) {
+    if (term) await app.termButtons[term].events.click();
+    assert.match(app.element("topicsContainer").html(), /<strong[^>]*>40%<\/strong>/);
+    assert.match(app.element("topicsContainer").html(), /Completion sample/);
+    assert.equal(app.element("topicCompletionScope").textContent, `Term ${term + 1} · Section A`);
+  }
+});
+
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {
   const app = page("sync-offline-results.js");
   await vm.runInContext('activeTeacherId = "T1"; loadRecentScans();', app.context);

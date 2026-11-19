@@ -69,7 +69,7 @@ function harness(size=3, { visible = false } = {}) {
   });
   vm.runInContext(source,context);
   const click=async(selector,button)=>{await ids.recordsContainer.emit("click",{target:{closest:k=>k===selector?button:null}});await flush();};
-  const performance=async id=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id}});await flush();};
+  const performance=async (id, refresh = false)=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id,refresh}});await flush();};
   const archive=async id=>{await click(".archive-student-btn",ids.recordsContainer.children.find(c=>c.dataset.studentId===id).querySelector(".archive-student-btn"));ids.archiveReason.value="graduated";await ids.archiveStudentForm.emit("submit");};
   return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:options=>authChanged(auth.currentUser,options),refresh:()=>refresh(),advanceCache:ms=>{cacheTime+=ms;},
     setEncoder:encode=>{context.encodeView=encode;},
@@ -92,6 +92,17 @@ test("individual duration displays keep a recorded zero different from missing t
   await app.performance("S0000"); await app.performance("S0001");
   const values = app.ids.recordsContainer.children.map(card => card.innerHTML.match(/<span>Module Time<\/span><b[^>]*>([^<]*)/)[1]);
   assert.deepEqual(values, ["0 min", "-- min"]);
+});
+
+test("reopening a student record checks added minutes even while its saved results are fresh", async () => {
+  const app = harness(2); let minutes = 2;
+  app.setResultReader(async () => snap([doc("lesson_01", { lessonTimeMinutes: minutes })]));
+  await app.load(); await app.performance("S0000", true);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML, /Module Time<\/span><b[^>]*>2 min/);
+  minutes = 12;
+  await app.performance("S0000", true);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML, /Module Time<\/span><b[^>]*>12 min/);
+  assert.equal(app.resultReads.length, 2);
 });
 
 test("switching back from Term 2 refreshes changed Term 1 and Term 3 durations instead of keeping cached records", async () => {
