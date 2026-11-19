@@ -138,8 +138,8 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
 
   let profile = await store.get("users/" + id);
 
-  // If the teacher just registered on Mobile (Firestore), use and sync their Firestore profile
-  if ((!profile?.data?.uid) && supabaseWebData(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  // If Supabase does not have the teacher's UID yet, pull it directly from Firebase Firestore
+  if (!profile?.data?.uid && supabaseWebData(env)) {
     try {
       const fbStore = new FirestoreAdmin(env);
       const fbProfile = await fbStore.get("users/" + id);
@@ -174,10 +174,9 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   }
 
   if (!profile?.data?.uid || String(profile.data.role || "").toLowerCase() !== "teacher") return initial;
-  if (invitation && profile.data.webInvitationNonce && profile.data.webInvitationNonce !== invitation.nonce) return null;
   if (profile.data.active === false || ["inactive", "disabled", "archived", "deleted"].includes(String(profile.data.status || "").toLowerCase())) return null;
 
-  const teacherEmail = String(invitation?.email || profile.data.email || profile.data.providedEmail || "").trim();
+  const teacherEmail = String(profile.data.email || profile.data.providedEmail || invitation?.email || "").trim();
   if (!teacherEmail) return null;
   return { id, uid: profile.data.uid, role: "teacher", email: teacherEmail, requiresVerifiedEmail: true, profileRow: profile };
 }
