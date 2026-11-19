@@ -130,6 +130,16 @@ test("an expired website session opens the normal login without an automatic err
   assert.equal(app.location.href, "index.html");
 });
 
+test("logout messages are clear for both portals while genuine verification errors remain distinct", () => {
+  for (const [portal, errorId] of [["teacher", "error"], ["admin", "adminError"]]) {
+    const app = page({ portal, search: "?reason=signed-out" });
+    assert.equal(app.element(errorId).textContent, "You’ve been signed out. Please sign in again.");
+    assert.deepEqual(app.calls, []);
+  }
+  const unavailable = page({ search: "?reason=access-unavailable" });
+  assert.equal(unavailable.element("error").textContent, "We could not verify access. Check your connection and sign in again.");
+});
+
 for (const [role, form, errorId] of [["teacher", "loginForm", "error"], ["admin", "adminLoginForm", "adminError"]]) {
   test(`${role} login shows server attempts and lock durations without inventing a browser counter`, async () => {
     const responses = [
