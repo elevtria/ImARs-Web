@@ -257,6 +257,19 @@ test("grading summaries count current students and latest saved submissions with
   assert.equal((await f.callReview({ action: "grading-summary", sectionId: "B" })).status, 403);
 });
 
+test("Analytics grading counts match the selected term and currently assigned section", async () => {
+  const f = await setup("essay", { termId: "term_01" });
+  f.store.scorePage = async () => [{ path: f.path, data: f.data.get(f.path) }];
+  f.put("generatedQuizzes/next-term", quiz("next-term", "essay", { termId: "term_02" }));
+  f.put("generatedQuizzes/other-section", quiz("other-section", "essay", { termId: "term_01", sectionId: "B" }));
+  const read = async termId => (await f.callReview({ action: "grading-summary", sectionId: "A", termId })).json();
+  const first = await read("term_01");
+  assert.equal(first.quizCount, 1); assert.equal(first.items[0].awaitingGrade, 1);
+  const next = await read("term_02");
+  assert.equal(next.quizCount, 1); assert.deepEqual(next.items, []);
+  assert.equal((await f.callReview({ action: "grading-summary", sectionId: "A", termId: "invalid" })).status, 400);
+});
+
 test("locking a quiz preserves its submitted results and archived rows do not consume a page", async () => {
   const f = await setup();
   f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), availability: "draft" });

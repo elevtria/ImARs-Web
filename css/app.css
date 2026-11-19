@@ -1147,6 +1147,20 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
   white-space: nowrap;
 }
 .score-summary-wrap { max-width: 100%; }
+.analytics-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 14px; margin: 20px 0 12px; }
+.analytics-metric { padding: 20px; display: grid; gap: 12px; }
+.analytics-metric span { font-size: .85rem; color: var(--muted); }
+.analytics-metric strong { font-size: 1.7rem; }
+.analytics-lesson { padding: 18px 0; border-bottom: 1px solid var(--line, #b5cde3); }
+.analytics-lesson h3 { margin: 0 0 12px; font-weight: 700; }
+.analytics-bar-row { display: grid; grid-template-columns: 70px minmax(40px,1fr) 48px 90px; gap: 12px; align-items: center; margin: 10px 0; font-size: .85rem; }
+.analytics-bar { height: 12px; border-radius: 99px; background: #c8ddef; overflow: hidden; }
+.analytics-bar i { display: block; height: 100%; background: #548cb7; border-radius: inherit; }
+.analytics-bar-row:nth-of-type(2) .analytics-bar i { background: #1a9b88; }
+.analytics-time-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line, #b5cde3); }
+.analytics-time-row a { text-decoration: underline; font-weight: 700; }
+#studentScoreSummary { margin-top: 20px; }
+@media (max-width: 540px) { .analytics-bar-row { grid-template-columns: 60px minmax(30px,1fr) 40px; gap: 6px; } .analytics-bar-row small { grid-column: 2 / -1; } }
 .score-summary-controls { flex-wrap: wrap; }
 .score-summary-head { flex-wrap: wrap; }
 .score-summary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 100%; }

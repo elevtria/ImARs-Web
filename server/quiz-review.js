@@ -111,14 +111,23 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
   return [...totals.values()];
 }
 
-async function sectionSummary(actor, store, sectionId, grading = false) {
+async function sectionSummary(actor, store, sectionId, grading = false, termId) {
   await ownedSection(actor, store, sectionId);
   if (store.quizReport && !grading) return store.quizReport(actor, sectionId);
   const roster = await store.query("users", { filters: rosterFilters(sectionId), fieldPaths: ["active", "status", "teacherId"] });
   const students = new Set(roster.filter(student => rosterMember(actor, student)).map(student => student.id));
   const totals = await summarizeScores(actor, store, sectionId, students);
-  if (grading) return { learners: students.size, items: totals.map(({ quizId, submitted, awaitingGrade, graded }) =>
-    ({ quizId, submitted, awaitingGrade, graded, notSubmitted: Math.max(0, students.size - submitted) })) };
+  if (grading) {
+    let assigned;
+    if (termId !== undefined) {
+      if (!["term_01", "term_02", "term_03"].includes(termId)) throw fail("INVALID_REQUEST", 400);
+      const quizzes = await store.query("generatedQuizzes", { filters: [{ field: "teacherUid", value: actor.uid }, { field: "termId", value: termId }],
+        fieldPaths: ["teacherProfileId", "sectionId", "assignmentScope"] });
+      assigned = new Set(quizzes.filter(row => row.data.teacherProfileId === actor.id && quizAssignedToSection(row.data, sectionId)).map(row => row.id));
+    }
+    return { learners: students.size, ...(assigned ? { quizCount: assigned.size } : {}), items: totals.filter(row => !assigned || assigned.has(row.quizId)).map(({ quizId, submitted, awaitingGrade, graded }) =>
+      ({ quizId, submitted, awaitingGrade, graded, notSubmitted: Math.max(0, students.size - submitted) })) };
+  }
   return { learners: students.size, items: [...totals.values()].map(({ quizId, submitted, graded, percentTotal }) =>
     ({ quizId, submitted, average: graded ? Math.round(percentTotal / graded) : null })) };
 }
@@ -220,7 +229,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (body.action === "term-results") return respond(await termResults(actor, store, body));
     if (body.action === "student-average") return respond(await studentAverage(actor, store, body.studentId));
     if (body.action === "section-summary") return respond(await sectionSummary(actor, store, body.sectionId));
-    if (body.action === "grading-summary") return respond(await sectionSummary(actor, store, body.sectionId, true));
+    if (body.action === "grading-summary") return respond(await sectionSummary(actor, store, body.sectionId, true, body.termId));
     const q = await ownedQuiz(actor, store, body.quizId);
     const sectionId = body.sectionId || "";
     if (sectionId) await ownedSection(actor, store, sectionId);

@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
   <link rel="stylesheet" href="css/theme.css" />
+<link rel="preload" as="image" href="assets/school-logo.png" />
 </head>
 <body data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
@@ -43,7 +44,7 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-      <section class="hero" data-auth-shell data-await-content="student-records">
+<div class="analytics-term-switch" role="group" aria-label="Student Records view"><button type="button" class="term-tab-btn" id="recordsDirectoryTab" aria-pressed="true" aria-controls="recordsDirectory">Students</button><button type="button" class="term-tab-btn" id="recordsSummaryTab" aria-pressed="false" aria-controls="studentScoreSummary">Score summary</button></div><div id="recordsDirectory">      <section class="hero" data-auth-shell data-await-content="student-records">
         <div>
           <h1 data-auth-shell>Student Records</h1>
           <p>Term performance · AR &amp; module engagement</p>
@@ -88,6 +89,66 @@
         <p id="recordsPageStatus" class="view-data-status" role="status" aria-live="polite" data-loading="true" aria-label="Loading students"></p>
         <button type="button" class="ghost-btn" id="nextRecordsPage" disabled>Next page</button>
       </div>
+</div><section id="studentScoreSummary" class="class-analytics" hidden data-auth-shell><p class="scheduler-progress-copy"><span id="score-analyticsTermLabel">Term 1</span> · <span id="score-sectionSummary">—</span> · <span id="score-studentCount">—</span> students</p>      <div class="analytics-term-switch" id="score-termSwitch" role="group" aria-label="Analytics term">
+        <button type="button" class="term-tab-btn" data-term="term_01" aria-pressed="true">Term 1</button>
+        <button type="button" class="term-tab-btn" data-term="term_02" aria-pressed="false">Term 2</button>
+        <button type="button" class="term-tab-btn" data-term="term_03" aria-pressed="false">Term 3</button>
+      </div>
+      <p class="view-data-status" id="score-analyticsReportStatus" role="status"></p>
+      <section class="section" style="padding: 8px 4px 20px;" data-auth-shell>
+        <div class="section-head performance-head score-summary-head">
+          <h2 data-auth-shell>Student Score Summary</h2>
+          <div class="score-summary-actions" role="group" aria-label="Score summary actions">
+            <button class="ghost-btn" id="score-editScores" type="button" aria-pressed="false" aria-controls="score-studentGrid" disabled>Edit scores</button>
+            <div class="document-export-actions">
+              <button class="document-export-button" id="score-printScoreReport" type="button" title="Print the current analytics table page" disabled>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v7H6z"/><path d="M18 12h.01"/></svg>
+                <span>Print report</span>
+              </button>
+              <button class="document-export-button" id="score-downloadScoreReport" type="button" disabled>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 17v4h14v-4"/></svg>
+                <span>Download PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="performance-controls score-summary-controls">
+          <label class="select-wrap">
+            <select id="score-sectionFilter" aria-label="Filter by section" aria-controls="score-studentGrid score-questionHeatmapRows score-topicsContainer" disabled>
+              <option value="">Select a section</option>
+            </select>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </label>
+          <label class="search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.2-3.2" />
+            </svg>
+            <input id="score-studentSearch" type="search" maxlength="100" placeholder="Search student..." aria-label="Search student" />
+          </label>
+        </div>
+        <div class="table-top-scroll" data-scroll-target="score-studentGrid" role="region" aria-label="Scroll student scores horizontally" aria-controls="score-studentGrid" tabindex="0" hidden><div></div></div>
+        <div class="performance-table-wrap score-summary-wrap" role="region" aria-label="Student score table" tabindex="0">
+          <table class="performance-table score-summary-table" id="score-studentGrid" role="table" aria-label="Student score summary">
+            <colgroup><col class="score-student-column" /></colgroup>
+            <thead id="score-scoreSummaryHead" role="rowgroup"><tr><th scope="col">Student / Section</th><th scope="col">Scores</th></tr></thead>
+            <tbody id="score-studentTableBody" role="rowgroup" aria-busy="true"><tr class="empty-row"><td colspan="2"><span data-loading="true" role="status" aria-label="Loading scores"></span></td></tr></tbody>
+          </table>
+        </div>
+        <div class="student-detail-navigation" aria-label="Student performance pages">
+          <button type="button" class="ghost-btn" id="score-analyticsPrevious" disabled>Previous page</button>
+          <span id="score-analyticsPageStatus" role="status"></span>
+          <button type="button" class="ghost-btn" id="score-analyticsNext" disabled>Next page</button>
+        </div>
+        <p class="scheduler-progress-copy">Scores show points earned out of points possible. A dash means no raw score is available. Choose Edit scores to update an activity, pre-test, or post-test score.</p>
+        <p id="score-scoreEditStatus" class="view-data-status" role="status" aria-live="polite"></p>
+        <p id="score-scoreReportStatus" class="view-data-status" role="status" aria-live="polite"></p>
+        <p id="score-activitySyncStatus" class="view-data-status" role="status" hidden></p>
+        <p id="score-teacherQuizStatus" class="view-data-status" role="status"></p>
+        <button id="score-teacherQuizRefresh" class="ghost-btn" type="button" hidden>Retry quiz scores</button>
+      </section>
+
+</section>
     </main>
   </div>
 
@@ -184,5 +245,7 @@
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>
   <script type="module" src="js/student-record-browser.js"></script>
+<script type="module" src="js/student-record-tabs.js"></script>
+<script type="module" src="js/table-top-scroll.js"></script>
 </body>
 </html>
