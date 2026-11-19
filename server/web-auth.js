@@ -138,7 +138,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
 
   let profile = await store.get("users/" + id);
 
-  // If the teacher just registered on Mobile (Firestore), sync their UID into Supabase automatically
+  // If the teacher just registered on Mobile (Firestore), use and sync their Firestore profile
   if ((!profile?.data?.uid) && supabaseWebData(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON) {
     try {
       const fbStore = new FirestoreAdmin(env);
@@ -153,15 +153,20 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
           isRegistered: true,
           ...(invitation?.nonce ? { webInvitationNonce: profile?.data?.webInvitationNonce || invitation.nonce } : {})
         };
-        await store.begin();
-        await store.commit([{
-          operation: "set",
-          path: "users/" + id,
-          data: merged,
-          merge: true,
-          ...(profile ? { updateTime: profile.updateTime } : {})
-        }]);
+        const prevUpdateTime = profile?.updateTime;
         profile = { id, data: merged };
+        try {
+          await store.begin();
+          await store.commit([{
+            operation: "set",
+            path: "users/" + id,
+            data: merged,
+            merge: true,
+            ...(prevUpdateTime ? { updateTime: prevUpdateTime } : {})
+          }]);
+        } catch {
+          // Proceed using the verified Firestore profile even if Supabase sync is deferred
+        }
       }
     } catch {
       // Ignore if Firestore lookup is unavailable
@@ -174,7 +179,7 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
 
   const teacherEmail = String(invitation?.email || profile.data.email || profile.data.providedEmail || "").trim();
   if (!teacherEmail) return null;
-  return { id, uid: profile.data.uid, role: "teacher", email: teacherEmail, requiresVerifiedEmail: true };
+  return { id, uid: profile.data.uid, role: "teacher", email: teacherEmail, requiresVerifiedEmail: true, profileRow: profile };
 }
 
 async function sessionClaims(request, env, now) {
@@ -222,8 +227,9 @@ const requestSessions = new WeakMap();
 export async function staffProfile(account, store, now = Date.now()) {
   // The approved account supplies both IDs. Its live profile and Auth status
   // can be read independently; neither result grants access on its own.
-  const pendingProfile = account.adminRow ? Promise.resolve({ row: account.adminRow }) :
-    store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
+  const pendingProfile = (account.adminRow || account.profileRow)
+    ? Promise.resolve({ row: account.adminRow || account.profileRow })
+    : store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
   const key = store.env?.staffIdentityCacheKey || store.env || store;
   let cache = identities.get(key);
