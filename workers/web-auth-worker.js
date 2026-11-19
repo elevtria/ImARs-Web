@@ -47,6 +47,7 @@ export class WebLoginState {
 
   async handle(request) {
     const action = new URL(request.url).pathname;
+    if (action === "/mobile-password" && request.method === "POST") return this.mobilePassword(request);
     if (action === "/dashboard-dirty" && request.method === "POST") {
       const body = await request.json();
       await this.dashboard.invalidate(body.ids, body.lesson);
@@ -190,6 +191,46 @@ export class WebLoginState {
       ? `Invalid ID or password. Please try again. (${next.failures}/3 attempts)`
       : access.manual ? "Web login is locked. Contact your administrator or website maintenance to restore access."
         : "Too many incorrect attempts." }, access.allowed ? 401 : 429);
+  }
+
+  async mobilePassword(request) {
+    const now = this.now();
+    let state = (await this.storage.get("mobilePassword")) ?? emptyState();
+    // Mobile repeats the five-minute cooldown after each set of three failures.
+    if (state.until && now >= state.until) state = emptyState();
+    const access = decision(state, now);
+    const respond = (body, status) => json({ loginProtection: true, attemptsRemaining: 3 - state.failures, ...body }, status);
+    if (!access.allowed) return respond({ retryAfter: access.retryAfter, error: "Too many incorrect attempts." }, 429);
+    const { uid, email, password, invalid } = await request.json();
+    if (typeof password !== "string" || !password || password.length > 4096 ||
+        (invalid !== true && (typeof uid !== "string" || typeof email !== "string" || !email)))
+      return json({ error: "Invalid sign-in request." }, 400);
+    if (invalid !== true) {
+      let response, account;
+      try {
+        response = await this.fetcher(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, returnSecureToken: true }), signal: AbortSignal.timeout(10_000)
+        });
+        account = await response.json();
+      } catch { return json({ error: "Sign-in is temporarily unavailable. Your attempt was not counted." }, 503); }
+      if (response.ok && typeof account.localId === "string" && account.localId &&
+          (!uid || account.localId === uid) && String(account.email || "").toLowerCase() === email.toLowerCase() &&
+          typeof account.idToken === "string" && !account.mfaPendingCredential) {
+        await this.storage.put("mobilePassword", verifiedSuccess(state, now));
+        return json({ ok: true });
+      }
+      const error = String(account.error?.message || "").split(" : ")[0];
+      if (!["INVALID_PASSWORD", "INVALID_LOGIN_CREDENTIALS", "EMAIL_NOT_FOUND"].includes(error))
+        return json({ error: error === "USER_DISABLED" ? "This account is disabled. Contact your teacher."
+          : "Sign-in is temporarily unavailable. Your attempt was not counted." }, error === "USER_DISABLED" ? 403 : 503);
+    }
+    state = passwordFailed(state, now);
+    await this.storage.put("mobilePassword", state);
+    const next = decision(state, now);
+    return respond({ retryAfter: next.retryAfter, error: next.allowed
+      ? `Invalid ID or password. Please try again. (${state.failures}/3 attempts)`
+      : "Too many incorrect attempts." }, next.allowed ? 401 : 429);
   }
 }
 
