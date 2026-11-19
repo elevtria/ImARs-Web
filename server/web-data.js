@@ -36,15 +36,20 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
   lastFirestoreClassSync = Date.now();
   try {
     const firestore = new FirestoreAdmin(env, fetcher);
-    const [fsClasses, fsTeachers, sbClasses, sbTeachers] = await Promise.all([
+    const [fsClasses, fsTeachersOnly, fsAdminsOnly, sbClasses, sbTeachersOnly, sbAdminsOnly] = await Promise.all([
       firestore.query("classes", { limit: 100 }),
       firestore.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 }),
+      firestore.query("users", { filters: [{ field: "role", op: "==", value: "admin" }], limit: 20 }),
       store.query("classes", { limit: 100 }),
-      store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 })
+      store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 }),
+      store.query("users", { filters: [{ field: "role", op: "==", value: "admin" }], limit: 20 })
     ]);
 
+    const fsStaff = [...fsTeachersOnly, ...fsAdminsOnly];
+    const sbStaff = [...sbTeachersOnly, ...sbAdminsOnly];
+
     const sbClassMap = new Map(sbClasses.map(row => [row.id, row]));
-    const sbTeacherMap = new Map(sbTeachers.map(row => [row.id, row]));
+    const sbStaffMap = new Map(sbStaff.map(row => [row.id, row]));
     const writes = [];
     const affectedTeacherUids = new Set();
 
@@ -63,26 +68,37 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
       }
     }
 
-    // 2. Sync teacher sections array and active/registered status from Firebase Firestore -> Supabase
-    for (const fsTeacher of fsTeachers) {
-      if (!fsTeacher?.id || !fsTeacher?.data) continue;
-      const sbTeacher = sbTeacherMap.get(fsTeacher.id);
-      if (fsTeacher.data.uid) affectedTeacherUids.add(fsTeacher.data.uid);
-      if (sbTeacher?.data?.uid) affectedTeacherUids.add(sbTeacher.data.uid);
+    // 2. Sync teacher & admin profiles (including ADMIN2) from Firebase Firestore -> Supabase
+    for (const fsUser of fsStaff) {
+      if (!fsUser?.id || !fsUser?.data) continue;
+      const sbUser = sbStaffMap.get(fsUser.id);
+      const isTeacher = fsUser.data.role === "teacher";
 
-      const fsSections = JSON.stringify(fsTeacher.data.sections || []);
-      const sbSections = JSON.stringify(sbTeacher?.data?.sections || []);
-      if (!sbTeacher || fsSections !== sbSections || sbTeacher.data.uid !== fsTeacher.data.uid || sbTeacher.data.status !== fsTeacher.data.status) {
+      if (isTeacher) {
+        if (fsUser.data.uid) affectedTeacherUids.add(fsUser.data.uid);
+        if (sbUser?.data?.uid) affectedTeacherUids.add(sbUser.data.uid);
+      }
+
+      const fsSections = JSON.stringify(fsUser.data.sections || []);
+      const sbSections = JSON.stringify(sbUser?.data?.sections || []);
+      if (!sbUser ||
+          (isTeacher && fsSections !== sbSections) ||
+          sbUser.data.uid !== fsUser.data.uid ||
+          sbUser.data.status !== fsUser.data.status ||
+          sbUser.data.active !== fsUser.data.active ||
+          sbUser.data.email !== fsUser.data.email) {
         writes.push({
           operation: "set",
-          path: "users/" + fsTeacher.id,
+          path: "users/" + fsUser.id,
           data: {
-            ...(sbTeacher?.data || {}),
-            ...fsTeacher.data,
-            sections: Array.isArray(fsTeacher.data.sections) ? fsTeacher.data.sections : (sbTeacher?.data?.sections || [])
+            ...(sbUser?.data || {}),
+            ...fsUser.data,
+            ...(isTeacher
+              ? { sections: Array.isArray(fsUser.data.sections) ? fsUser.data.sections : (sbUser?.data?.sections || []) }
+              : {})
           },
           merge: true,
-          ...(sbTeacher ? { updateTime: sbTeacher.updateTime } : {})
+          ...(sbUser ? { updateTime: sbUser.updateTime } : {})
         });
       }
     }
@@ -96,7 +112,7 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
       }
     }
   } catch (err) {
-    console.warn("Firestore -> Supabase class sync skipped:", err?.message || err);
+    console.warn("Firestore -> Supabase class/staff sync skipped:", err?.message || err);
   }
 }
 
