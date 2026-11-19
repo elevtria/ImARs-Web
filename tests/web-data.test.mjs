@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { webData } from "../server/web-data.js";
+import { webData, transferredRosterWrites } from "../server/web-data.js";
 import { mobileApi } from "../server/mobile-api.js";
 import { FirestoreAdmin } from "../server/firestore-admin.js";
 import { requireStaff, protectWebsite, staffProfile } from "../server/web-auth.js";
@@ -8,6 +8,24 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 
 import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
+
+test("section transfer updates student teacher references without changing accounts or scores", async () => {
+  const app = fixture();
+  app.data.set("users/archived", { role: "student", classCode: "A", teacherId: "TEACH1000", active: false });
+  app.data.set("users/foreign", { role: "student", classCode: "B", teacherId: "TEACH1000" });
+  app.data.set("users/conflicting", { role: "student", classCode: "A", teacherId: "TEACH9999" });
+  const original = structuredClone(app.data.get("users/0026271000"));
+  const resultPath = "users/0026271000/test_results/term_01/lessons/lesson_01";
+  app.data.set(resultPath, { preTestScore: 3, postTestScore: 9 });
+  const writes = await transferredRosterWrites(app.store, [{ sectionId: "A", previousTeacherId: "TEACH1000", teacherId: "TEACH1001" }]);
+  assert.deepEqual(writes.map(write => write.path).sort(), ["users/0026271000", "users/archived"]);
+  assert.ok(writes.every(write => JSON.stringify(write.data) === JSON.stringify({ teacherId: "TEACH1001" })));
+  await app.store.begin(); await app.store.commit(writes);
+  assert.deepEqual(app.data.get("users/0026271000"), { ...original, teacherId: "TEACH1001" });
+  assert.equal(app.data.get("users/archived").active, false);
+  assert.deepEqual(app.data.get(resultPath), { preTestScore: 3, postTestScore: 9 });
+  assert.deepEqual(await transferredRosterWrites(app.store, [{ sectionId: "A", previousTeacherId: "TEACH1000", teacherId: "TEACH1001" }]), []);
+});
 import { currentScheduledTerm } from "../js/topic-availability.js";
 const stamp = { $type: "serverTimestamp" };
 

@@ -32,6 +32,23 @@ const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.en
 
 let lastFirestoreClassSync = 0;
 
+// Section transfers must move the redundant student teacher reference too.
+// Preserve identity, activation, section membership and all learning records.
+export async function transferredRosterWrites(store, transfers) {
+  const writes = [];
+  for (const { sectionId, previousTeacherId, teacherId } of transfers) {
+    if (!part(sectionId) || !part(teacherId) || !part(previousTeacherId) || teacherId === previousTeacherId) continue;
+    const students = await store.query("users", { filters: [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }],
+      fieldPaths: ["role", "classCode", "teacherId"] });
+    for (const student of students) {
+      if (student.data.role !== "student" || student.data.classCode !== sectionId || student.data.teacherId === teacherId ||
+          (student.data.teacherId && student.data.teacherId !== previousTeacherId)) continue;
+      writes.push({ operation: "update", path: "users/" + student.id, updateTime: student.updateTime, data: { teacherId } });
+    }
+  }
+  return writes;
+}
+
 async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
   if (!supabaseWebData(env) || Date.now() - lastFirestoreClassSync < 15_000) return;
   lastFirestoreClassSync = Date.now();
@@ -54,11 +71,15 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
     const writes = [];
     const fsBackfillWrites = [];
     const affectedTeacherUids = new Set();
+    const transfers = [];
 
     // 1. Sync any class ownership or section changes from Firebase Firestore -> Supabase
     for (const fsClass of fsClasses) {
       if (!fsClass?.id || !fsClass?.data) continue;
       const sbClass = sbClassMap.get(fsClass.id);
+      if (sbClass && sbClass.data.teacherId !== fsClass.data.teacherId) {
+        transfers.push({ sectionId: fsClass.id, previousTeacherId: sbClass.data.teacherId, teacherId: fsClass.data.teacherId });
+      }
       if (!sbClass || sbClass.data.teacherId !== fsClass.data.teacherId || sbClass.data.SectionName !== fsClass.data.SectionName) {
         writes.push({
           operation: "set",
@@ -147,6 +168,7 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
       }
     }
 
+    writes.push(...await transferredRosterWrites(store, transfers));
     if (writes.length) {
       await store.begin();
       await store.commit(writes);

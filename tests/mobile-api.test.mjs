@@ -78,6 +78,20 @@ function fixture() {
   return { env, post, records, results, store, at: time => { clock = Date.parse(time); } };
 }
 
+test("a completed section transfer restores mobile schedule access without granting another section", async () => {
+  const app = fixture();
+  app.records.get("users/S1").teacherId = "T1";
+  app.records.get("classes/A").teacherId = "T2";
+  assert.equal((await app.post("schedules")).code, "SCOPE_CHANGED", "an incomplete transfer is rejected");
+  app.records.get("users/S1").teacherId = "T2";
+  const schedules = await app.post("schedules");
+  assert.equal(schedules.status, 200);
+  assert.equal(schedules.scope.teacherProfileId, "T2");
+  assert.equal(schedules.scope.classCode, "A");
+  assert.equal(schedules.items[0].isLocked, false);
+  assert.equal((await app.post("schedules", { sectionId: "B" })).status, 403);
+});
+
 async function recentActivity(app) {
   const values = new Map();
   const storage = {
