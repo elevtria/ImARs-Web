@@ -562,7 +562,7 @@ function openReport({ restoredPage = false } = {}) {
     setLoadingState(status, false);
     status.textContent = "";
   }
-  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage });
+  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage, refresh: termChanged });
 }
 onAuthStateChanged(auth, (user, { restored = false } = {}) => {
   if (heatmapOwner !== user?.uid) {

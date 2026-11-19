@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { collectScoreReport, reportLessonScores, scoreReportFilename } from "../js/score-report-data.js";
 import { layoutScoreReport, renderScoreReport, REPORT_PAGE } from "../js/score-report-renderer.js";
 import { PDFDocument, PDFName, PDFDict } from "../js/vendor/pdf-lib.esm.min.js";
+import { analyticsScoreMatrix, scoreTerms, scoreLessons } from "./fixtures/analytics-score-matrix.js";
 
 const doc = (id, data) => ({ id, data: () => data });
 const student = i => ({ classId: "A", studentDoc: doc(`S${i}`, { displayName: `José Student ${i}` }), results: [
@@ -42,6 +43,29 @@ test("reports collect every roster page and bounded quiz batches, and preserve z
   assert.deepEqual(report.students[0].quizzes, ["Pending review"]);
   assert.equal(report.generatedDate, "2026-11-15", "the filename uses the user's UTC+08 date");
   assert.equal(scoreReportFilename(report), "ImARs_Hydrogen_term_01_2026-11-15.pdf");
+});
+
+for (const termId of scoreTerms) test(`${termId} complete score report preserves every raw score and missing result beyond page one`, async () => {
+  const matrix = analyticsScoreMatrix(), requests = [];
+  const report = await collectScoreReport({ termId, sectionId: "A", teacherName: "Test Teacher" }, {
+    fetchPage: async options => {
+      requests.push(options);
+      const offset = options.cursor?.offset || 0;
+      return { classes: [doc("A", { SectionName: "Section A" })], students: matrix.roster.slice(offset, offset + 25),
+        curriculum: offset ? null : { curriculumSnap: matrix.curriculum(termId) },
+        cursor: offset + 25 < matrix.roster.length ? { offset: offset + 25 } : null };
+    },
+    fetchQuizzes: async () => ({ quizzes: [], items: [] }), fetchSchoolYear: async () => 2026
+  });
+  assert.equal(report.termId, termId);
+  assert.equal(report.students.length, 53);
+  assert.deepEqual(report.lessons.map(lesson => lesson.id), scoreLessons);
+  assert.equal(requests.length, 3);
+  assert.ok(requests.every(request => request.termId === termId && request.rawActivityScores === true));
+  for (const [index, student] of report.students.entries()) {
+    assert.equal(student.name, `Matrix Student ${String(index).padStart(2, "0")}`);
+    assert.deepEqual(student.lessons, matrix.expected(termId, index, "-"), `${termId}, student ${index}`);
+  }
 });
 
 test("a search is explicitly recorded and filters the complete roster, not only the screen's current page", async () => {

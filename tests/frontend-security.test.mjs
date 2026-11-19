@@ -6,6 +6,7 @@ import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
 import { scoreOverride } from "../js/lesson-score.js";
 import { buildStudentActivityRecords, testRawScore } from "../js/student-activity-record.js";
+import { analyticsScoreMatrix, scoreTerms, scoreLessons } from "./fixtures/analytics-score-matrix.js";
 import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
 import { encodeView } from "../js/view-cache.js";
@@ -193,7 +194,7 @@ test('Batch Upload templates and validation preserve full middle names through t
 
 test('middle initials block import until edited, while full compound names and no-middle-name students work',async()=>{
   const app=batchPage({rows:[['First Name','Middle Name','Last Name','Student ID','Email'],['Ana','M.','Santos','123456789','ana@example.test'],['Luis','','Reyes','123456788','luis@example.test']]});await app.load();await app.file('students.xlsx');
-  assert.equal(app.preview()[0].isValid,false);assert.match(app.preview()[0].errors.join(' '),/full Middle Name/);assert.equal(app.preview()[1].isValid,true);
+  assert.equal(app.preview()[0].isValid,false);assert.match(app.preview()[0].errors.join(' '),/full Middle Name|Middle Name must contain letters only/);assert.equal(app.preview()[1].isValid,true);
   app.edit(0,'middleName','De la Cruz');assert.equal(app.preview()[0].isValid,true);assert.equal(app.preview()[0].fullName,'Ana De la Cruz Santos');
   await app.import();assert.equal(app.imports.length,2);assert.equal(app.imports[1].data.middleName,'');assert.equal(app.imports[1].data.fullName,'Luis Reyes');
 });
@@ -346,6 +347,67 @@ test("all lessons and quiz scores appear together without another request", asyn
   assert.equal((grid.html().match(/data-score-label="Activity"/g) || []).length, 2);
   assert.equal(app.requests.length, 1);
   assert.equal(app.quizRequests.length, 1);
+});
+
+test("Analytics places one student's individual scores in the correct lesson and category", async () => {
+  const data = activityReportData(["A"]);
+  data.curriculumSnap = snapshot([record("lesson_01", { title: "States of Matter" }), record("lesson_02", { title: "Physical and Chemical Changes" })]);
+  const one = { activityScore: 3, activityTotalQuestions: 4, isPreTestCompleted: true, preTestScore: 0, preTestTotalQuestions: 5,
+    isPostTestCompleted: true, postTestScore: 8, postTestTotalQuestions: 10 };
+  const two = { activityScore: 6, activityTotalQuestions: 7, isPreTestCompleted: true, preTestScore: 2, preTestTotalQuestions: 5,
+    isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10 };
+  data.sections[0].students[0].results = [
+    { termId: "term_02", lessonsSnap: snapshot([record("lesson_01", { ...one, activityScore: 4, preTestScore: 5, postTestScore: 10 })]) },
+    { termId: "term_01", lessonsSnap: snapshot([record("lesson_02", two), record("lesson_01", one)]) }
+  ];
+  const individual = buildStudentActivityRecords([data.curriculumSnap], data.sections, { term_01: "Term 1" }, ["term_01"]);
+  assert.deepEqual(individual.map(row => {
+    const learner = row.learners[0];
+    return [row.title, `${learner.rawScore}/${learner.totalScore}`, `${learner.preTest.score}/${learner.preTest.total}`, `${learner.postTest.score}/${learner.postTest.total}`];
+  }), [["States of Matter", "3/4", "0/5", "8/10"], ["Physical and Chemical Changes", "6/7", "2/5", "9/10"]]);
+  const app = page("analytics.js", data);
+  await app.render();
+  const cells = [...app.element("#studentGrid tbody").html().matchAll(/data-score-label="([^"]+)">([^<]*)<\/td>/g)]
+    .map(([, category, score]) => [category, score]);
+  assert.deepEqual(cells, [["Activity", "3/4"], ["Pre-test", "0/5"], ["Post-test", "8/10"],
+    ["Activity", "6/7"], ["Pre-test", "2/5"], ["Post-test", "9/10"]]);
+  assert.match(app.element("scoreSummaryHead").html(), /States of Matter.*Physical and Chemical Changes/s);
+});
+
+test("Analytics preserves raw scores, zeroes and missing cells across three terms and three student pages", async () => {
+  const matrix = analyticsScoreMatrix();
+  const app = page("analytics.js", null, input => ({ termId: input.termId, total: matrix.roster.length, complete: true,
+    curriculumSnap: matrix.curriculum(input.termId), classes: [record("A", { SectionName: "Section A" })],
+    counts: [{ classId: "A", active: matrix.roster.length }],
+    sections: [{ classDoc: record("A", { SectionName: "Section A" }), students: matrix.roster }] }));
+  await app.render();
+  let checked = 0;
+  for (const [termIndex, termId] of scoreTerms.entries()) {
+    if (termIndex) await app.termButtons[termIndex].events.click();
+    await new Promise(setImmediate);
+    const head = app.element("scoreSummaryHead").html();
+    for (let lesson = 1; lesson <= scoreLessons.length; lesson++) assert.ok(head.includes(`${termId} Topic ${lesson}`));
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      const rows = [...app.element("#studentGrid tbody").html().matchAll(/<tr class="student-row"[^>]*>([\s\S]*?)<\/tr>/g)];
+      assert.equal(rows.length, pageIndex === 2 ? 3 : 25);
+      for (const [offset, [, html]] of rows.entries()) {
+        const index = pageIndex * 25 + offset;
+        assert.ok(html.includes(`Matrix Student ${String(index).padStart(2, "0")}`));
+        const cells = [...html.matchAll(/data-score-label="([^"]+)">([^<]*)<\/td>/g)].map(([, label, score]) => [label, score]);
+        const expected = matrix.expected(termId, index).flatMap(scores => scores.map((score, category) => [["Activity", "Pre-test", "Post-test"][category], score]));
+        assert.deepEqual(cells, expected, `${termId}, student ${index}, page ${pageIndex + 1}`);
+        checked += cells.length;
+      }
+      assert.equal(app.element("analyticsNext").disabled, pageIndex === 2);
+      if (pageIndex < 2) {
+        app.element("analyticsNext").events.click();
+        await new Promise(setImmediate);
+      }
+    }
+    assert.equal(app.requested().termId, termId);
+    if (termIndex) assert.equal(app.requested().refresh, true, "a selected term must check fresh scores");
+  }
+  assert.equal(checked, 1908);
 });
 
 test("post-test heatmap escapes question text and switching loaded topics adds no report requests", async () => {

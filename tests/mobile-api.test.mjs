@@ -185,6 +185,23 @@ test("syncing an unchanged learning revision preserves the last meaningful activ
   assert.equal(second.item.updatedAtUtc, first.item.updatedAtUtc);
 });
 
+test("learning-time sync saves and updates Terms 1, 2 and 3 independently", async () => {
+  const app = fixture();
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  for (const revision of [1, 2]) for (const [index, termId] of ["term_01", "term_02", "term_03"].entries()) {
+    const seconds = 60 * (index + 1) * revision;
+    const saved = await app.post("lesson-progress", { requestId: `phone-${termId}-lesson_01-${revision}`, deviceId: "phone", revision,
+      termId, lessonId: "lesson_01", expectedClassCode: "A", expectedTeacherProfileId: "T1",
+      lessonSeconds: seconds, arSeconds: 0, arNavigationSeconds: 0, lessonDone: false, lessonOpened: true, arDone: false });
+    assert.equal(saved.persisted, true, termId);
+    assert.equal(saved.item.termId, termId);
+    assert.equal(saved.item.lessonTimeMinutes, (index + 1) * revision);
+  }
+  const result = await app.post("progress");
+  assert.deepEqual(result.items.map(item => [item.termId, item.lessonTimeMinutes]), [["term_01", 2], ["term_02", 4], ["term_03", 6]]);
+});
+
 test("BFF recent activity excludes an empty progress sync with no learning", async () => {
   const app = fixture(); loginOnlyPeer(app);
   Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",

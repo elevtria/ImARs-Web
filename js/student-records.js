@@ -7,6 +7,7 @@ import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
 import { confirmAction } from "./confirm-action.js";
 import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
+import { recordedLearningMinutes } from "./learning-duration.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -122,7 +123,7 @@ for (const status of ["active", "archived"]) document.getElementById(status + "S
 });
 searchInput.addEventListener("input", () => { clearTimeout(searchTimer); applyFilters(); searchTimer = setTimeout(resetPages, 300); });
 sectionFilter.addEventListener("change", () => { applyFilters(); return resetPages(); });
-termFilter.addEventListener("change", () => {
+termFilter.addEventListener("change", async () => {
   pageFilter.termId = termFilter.value;
   reportRequests.clear();
   if (!recordData || pageBusy || pageError || recordOwnerUid !== auth.currentUser?.uid) return loadRecordsPage();
@@ -142,6 +143,12 @@ termFilter.addEventListener("change", () => {
   cache.put(user.uid, "records:state", { filter: pageFilter, pageIndex, cursors });
   renderRecords({ ...recordData, sections }, key);
   cacheCurrentPage();
+  // A deliberate term switch must check visible results even when that term's
+  // saved view is still within the passive five-minute refresh interval.
+  await Promise.all(dynamicCards.filter(card => {
+    const bounds = card.getBoundingClientRect?.();
+    return bounds && bounds.bottom >= 0 && bounds.top <= window.innerHeight && !card.classList.contains("hidden");
+  }).map(card => loadStudentPerformance(card.dataset.studentId, { background: true, force: true })));
 });
 previousPage.addEventListener("click", () => { if (pageIndex > 0 && !pageBusy) { pageIndex--; return loadRecordsPage({ scroll: true }); } });
 nextPage.addEventListener("click", () => { if (nextCursor && !pageBusy) { cursors[++pageIndex] = nextCursor; return loadRecordsPage({ scroll: true }); } });
@@ -287,12 +294,12 @@ function startRecordLoading(generation) {
   return () => { if (generation === pageGeneration) recordsContainer.removeAttribute("aria-busy"); };
 }
 
-async function loadStudentPerformance(id, { background = false } = {}) {
+async function loadStudentPerformance(id, { background = false, force = false } = {}) {
   const user = auth.currentUser;
   const termId = pageFilter.termId || "term_01", requestKey = termId + ":" + id;
   const find = () => recordData?.sections.flatMap(section => section.students.map(student => ({ section, student }))).find(item => item.student.studentDoc.id === id);
   let row = find();
-  if (!user || !row || (row.student.resultsLoaded && (!background || Date.now() - (row.student.resultsAt || 0) < 300_000)) || reportRequests.has(requestKey)) return;
+  if (!user || !row || (!force && row.student.resultsLoaded && (!background || Date.now() - (row.student.resultsAt || 0) < 300_000)) || reportRequests.has(requestKey)) return;
   const current = row.student;
   if (!background) { current.resultsLoading = true; current.resultsError = false; }
   const replace = () => {
@@ -317,7 +324,7 @@ async function loadStudentPerformance(id, { background = false } = {}) {
   let changed = false;
   try {
     const results = await request;
-    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
+    if (reportRequests.get(requestKey) !== request || auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
     changed = true;
     if (latest?.student.resultsLoaded) try { changed = JSON.stringify(encodeView(latest.student.results)) !== JSON.stringify(encodeView(results)); } catch {}
@@ -326,7 +333,7 @@ async function loadStudentPerformance(id, { background = false } = {}) {
     try { prepareTeacherCache(app, user).put(user.uid, "records:results:" + termId + ":" + id, encodeView(results)); }
     catch { /* The live result remains usable when caching is unavailable. */ }
   } catch (error) {
-    if (auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
+    if (reportRequests.get(requestKey) !== request || auth.currentUser?.uid !== user.uid || recordOwnerUid !== user.uid || pageFilter.termId !== termId) return;
     const latest = find();
     if (["permission-denied", "unauthenticated"].includes(error.code)) {
       prepareTeacherCache(app, user).invalidate(); recordData = null; dynamicCards = []; recordsContainer.replaceChildren(); pageError = true;
@@ -334,10 +341,12 @@ async function loadStudentPerformance(id, { background = false } = {}) {
     } else if (latest && !background && error.name !== "AbortError" && auth.currentUser?.uid === user.uid && pageFilter.termId === termId) latest.student.resultsError = true;
     console.error("Could not load this student's performance:", error);
   } finally {
-    if (reportRequests.get(requestKey) === request) reportRequests.delete(requestKey);
-    const latest = find(); if (latest && pageFilter.termId === termId) latest.student.resultsLoading = false;
-    if (!background || changed) replace();
-    cacheCurrentPage();
+    if (reportRequests.get(requestKey) === request) {
+      reportRequests.delete(requestKey);
+      const latest = find(); if (latest && pageFilter.termId === termId) latest.student.resultsLoading = false;
+      if (!background || changed) replace();
+      cacheCurrentPage();
+    }
   }
 }
 
@@ -349,7 +358,8 @@ recordsContainer.addEventListener("click", event => {
 
 // Helper to format minutes nicely
 function formatMinutes(totalMinutes) {
-  if (!totalMinutes || totalMinutes <= 0) return "-- min";
+  if (typeof totalMinutes !== "number" || !Number.isFinite(totalMinutes) || totalMinutes < 0) return "-- min";
+  if (totalMinutes === 0) return "0 min";
   if (totalMinutes < 1) return "< 1 min";
   return `${Math.round(totalMinutes)} min`;
 }
@@ -374,8 +384,8 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
   let studentPreSum = 0;
   let studentPostSum = 0;
   let testCount = 0;
-  let totalArTime = 0;
-  let totalModuleTime = 0;
+  let totalArTime = null;
+  let totalModuleTime = null;
   let lastActiveDate = new Date(0);
 
   // Only the selected term is loaded.
@@ -394,25 +404,11 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
         testCount++;
       }
 
-      // 1. AR Time (arTimeMinutes + arNavigationTimeMinutes)
-      if (typeof tData.arTimeMinutes === "number") {
-        totalArTime += tData.arTimeMinutes;
-      }
-      if (typeof tData.arNavigationTimeMinutes === "number" && !tData.arTimeMinutes) {
-        totalArTime += tData.arNavigationTimeMinutes;
-      }
-
-      // 2. Module Time (lessonTimeMinutes)
-      if (typeof tData.lessonTimeMinutes === "number") {
-        totalModuleTime += tData.lessonTimeMinutes;
-      } else if (tData.learningTimeByDevice && typeof tData.learningTimeByDevice === "object") {
-        // Fallback: sum lessonSeconds across devices if lessonTimeMinutes isn't top-level
-        Object.values(tData.learningTimeByDevice).forEach((dev) => {
-          if (dev && typeof dev.lessonSeconds === "number") {
-            totalModuleTime += dev.lessonSeconds / 60;
-          }
-        });
-      }
+      const ar = recordedLearningMinutes(tData, "arTimeMinutes", "arSeconds") ??
+        recordedLearningMinutes(tData, "arNavigationTimeMinutes", "arNavigationSeconds");
+      const module = recordedLearningMinutes(tData, "lessonTimeMinutes", "lessonSeconds");
+      if (ar !== null) totalArTime = (totalArTime ?? 0) + ar;
+      if (module !== null) totalModuleTime = (totalModuleTime ?? 0) + module;
 
       // Last Active Timestamp
       const ts = tData.timestamp || tData.lastUpdated || tData.completedAt;

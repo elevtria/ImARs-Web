@@ -32,6 +32,42 @@ test("activity time falls back to device seconds", () => {
   assert.equal(activityMinutes({}), null);
 });
 
+function durationRecord(results) {
+  return buildStudentActivityRecords([{ docs: [doc("lesson_01", { title: "Duration check" })] }], [{
+    classDoc: doc("A", { SectionName: "A" }), students: results.map((data, index) => ({
+      studentDoc: doc(`S${index}`, { displayName: `Student ${index}` }),
+      results: [{ termId: "term_01", lessonsSnap: { docs: data === undefined ? [] : [doc("lesson_01", data)] } }]
+    }))
+  }], { term_01: "Term 1" })[0];
+}
+
+test("average duration counts valid recorded zeroes and excludes missing or invalid durations", () => {
+  const record = durationRecord([
+    { lessonTimeMinutes: 12 }, { arTimeMinutes: 24 }, { lessonTimeMinutes: 0 },
+    { learningTimeByDevice: { phone: { lessonSeconds: 90 }, tablet: { lessonSeconds: 270 } } },
+    undefined, {}, { lessonTimeMinutes: -1 }, { lessonTimeMinutes: Infinity },
+    { lessonTimeMinutes: NaN }, { lessonTimeMinutes: "18" }
+  ]);
+  assert.deepEqual(record.learners.map(learner => learner.minutes), [12, 24, 0, 6, null, null, null, null, null, null]);
+  assert.equal(record.averageMinutes, 11, "(12 + 24 + 0 + 6) / 4 = 10.5, displayed as 11 minutes");
+  assert.equal(durationRecord([{}, undefined]).averageMinutes, null);
+  assert.equal(durationRecord([{ lessonTimeMinutes: 0 }, { arTimeMinutes: 0 }]).averageMinutes, 0);
+});
+
+test("a valid device-recorded zero remains zero and contributes to average duration", () => {
+  const record = durationRecord([{ lessonTimeMinutes: 12 },
+    { learningTimeByDevice: { phone: { lessonSeconds: 0 } } }, {}]);
+  assert.deepEqual({ durations: record.learners.map(learner => learner.minutes), average: record.averageMinutes },
+    { durations: [12, 0, null], average: 6 });
+});
+
+test("device duration fallback skips invalid values while retaining real lesson and AR zeroes", () => {
+  assert.equal(activityMinutes({ learningTimeByDevice: { phone: { arSeconds: 0 } } }), 0);
+  assert.equal(activityMinutes({ learningTimeByDevice: { a: { lessonSeconds: -1 }, b: { lessonSeconds: NaN }, c: { lessonSeconds: 0 } } }), 0);
+  assert.equal(activityMinutes({ learningTimeByDevice: { a: { lessonSeconds: Infinity }, b: { lessonSeconds: "60" } } }), null);
+  assert.equal(activityMinutes({ lessonTimeMinutes: 0, arTimeMinutes: 5 }), 0);
+});
+
 test("topic results keep raw tests, activity and time scoped to the selected lesson and term", () => {
   const selected = { isPreTestCompleted: true, preTestScore: 0, preTestTotalQuestions: 5,
     isPostTestCompleted: true, postTestScore: 7, postTestTotalQuestions: 10,

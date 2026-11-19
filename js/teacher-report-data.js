@@ -94,7 +94,7 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false }) {
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false, refresh = false }) {
     const key = (rawActivityScores ? "teacher-raw-report:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
     const nextCache = prepareTeacherCache(app, account);
     const nextVersion = nextCache.version();
@@ -119,6 +119,9 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
         }
       }
     }
+    // A deliberate filter change reloads the chosen term in bounded pages.
+    // Keep the saved view painted until the first fresh page arrives.
+    if (refresh) state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
     // Report pages contain many lesson records. A five-minute background step
     // avoids repeatedly rereading entire class reports on the free database.
     stopUpdates = watchVisibleData(app, user, () => update(token), 300_000);
