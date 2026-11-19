@@ -1,6 +1,6 @@
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getStudentPage } from "./firebase-data.js";
-import { escapeHtml, watchVisibleData } from "./teacher-view.js";
+import { escapeHtml, watchVisibleData, prepareTeacherCache } from "./teacher-view.js";
 import { rankStudents } from "./leaderboard-ranking.js";
 
 const app = initializeApp();
@@ -22,9 +22,18 @@ let generation = 0;
 let controller;
 let stopWatching;
 let ownerId;
+let cache;
+let rendered;
+const cacheKey = "leaderboard:app-points:v1";
 
 function render() {
+  if (complete) panel.setAttribute("data-ready", "");
+  else panel.removeAttribute("data-ready");
   const sectionId = scope === "section" ? sectionSelect.value : "";
+  const signature = JSON.stringify([complete, sectionId, students, sections]);
+  if (signature === rendered) return;
+  rendered = signature;
+  const scrollTop = list.parentElement.scrollTop;
   const section = sections.find(row => row.id === sectionId);
   const ranked = rankStudents(students, sectionId);
   document.getElementById("podiumScope").textContent = section?.name || "All assigned sections";
@@ -46,6 +55,7 @@ function render() {
   </li>`).join("");
   document.getElementById("podiumEmpty").hidden = !complete || winners.length > 0;
   document.getElementById("leaderboardEmpty").hidden = !complete || ranked.length > 0;
+  list.parentElement.scrollTop = scrollTop;
 }
 
 function chooseScope(value) {
@@ -77,6 +87,7 @@ async function loadLeaderboard() {
   controller?.abort();
   controller = new AbortController();
   const token = ++generation;
+  const version = cache.version();
   const current = () => token === generation && auth.currentUser?.uid === user.uid;
   refresh.disabled = true;
   panel.setAttribute("aria-busy", "true");
@@ -86,7 +97,7 @@ async function loadLeaderboard() {
     let cursor = null;
     let classes = [];
     do {
-      const page = await getStudentPage({ status: "active", limit: 25, cursor, includePoints: true, includeCounts: false },
+      const page = await getStudentPage({ status: "active", limit: 100, cursor, includePoints: true, includeCounts: false },
         { signal: controller.signal });
       if (!current()) return;
       classes = page.classes;
@@ -115,12 +126,14 @@ async function loadLeaderboard() {
     sectionSelect.disabled = sections.length === 0;
     complete = true;
     render();
+    cache.put(user.uid, cacheKey, { students, sections }, version);
     status.textContent = sections.length ? "Latest synced app points · Updated " +
       new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date()) :
       "No sections are assigned to your account yet.";
   } catch (error) {
     if (!current() || error.name === "AbortError") return;
     if (["permission-denied", "unauthenticated"].includes(error.code)) {
+      cache.remove(cacheKey);
       students = [];
       sections = [];
       complete = false;
@@ -143,11 +156,16 @@ onAuthStateChanged(auth, user => {
   controller?.abort();
   if (!user) {
     generation++;
+    ownerId = null;
     students = [];
+    sections = [];
+    sectionSelect.replaceChildren();
+    sectionSelect.disabled = true;
     complete = false;
     render();
     return;
   }
+  cache = prepareTeacherCache(app, user);
   if (ownerId !== user.uid) {
     ownerId = user.uid;
     students = [];
@@ -156,6 +174,18 @@ onAuthStateChanged(auth, user => {
     sectionSelect.replaceChildren();
     sectionSelect.disabled = true;
     render();
+  }
+  if (!complete) {
+    const saved = cache.get(user.uid, cacheKey);
+    if (Array.isArray(saved?.students) && Array.isArray(saved.sections)) {
+      students = saved.students;
+      sections = saved.sections;
+      sectionSelect.innerHTML = sections.map(section =>
+        `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
+      sectionSelect.disabled = sections.length === 0;
+      complete = true;
+      render();
+    }
   }
   void loadLeaderboard();
   stopWatching = watchVisibleData(app, user, loadLeaderboard, 60000, true);

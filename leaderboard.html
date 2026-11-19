@@ -45,13 +45,13 @@
 
     <main class="content leaderboard-content" inert data-auth-shell>
       <section class="hero" data-auth-shell>
-        <div><h1>Leaderboard</h1><p>Total points earned in the ImARs app · Your assigned sections</p></div>
-        <button class="ghost-btn" id="refreshLeaderboard" type="button">Refresh</button>
+        <div><h1 data-public-label>Leaderboard</h1><p data-public-label>Total points earned in the ImARs app · Your assigned sections</p></div>
+        <button class="ghost-btn" id="refreshLeaderboard" type="button" data-public-label>Refresh</button>
       </section>
       <div class="leaderboard-toolbar" data-auth-shell>
         <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard view">
-          <button id="overallTab" type="button" role="tab" aria-selected="true" aria-controls="leaderboardPanel" tabindex="0" data-scope="overall">Overall</button>
-          <button id="sectionTab" type="button" role="tab" aria-selected="false" aria-controls="leaderboardPanel" tabindex="-1" data-scope="section">By section</button>
+          <button id="overallTab" type="button" role="tab" aria-selected="true" aria-controls="leaderboardPanel" tabindex="0" data-scope="overall" data-public-label>Overall</button>
+          <button id="sectionTab" type="button" role="tab" aria-selected="false" aria-controls="leaderboardPanel" tabindex="-1" data-scope="section" data-public-label>By section</button>
         </div>
         <label class="leaderboard-section" id="leaderboardSectionControl" hidden>Section
           <select id="leaderboardSection" disabled><option value="">Loading sections…</option></select>
@@ -59,13 +59,15 @@
       </div>
       <p class="leaderboard-status" id="leaderboardStatus" role="status" aria-live="polite" data-auth-shell>Loading student points…</p>
       <section id="leaderboardPanel" class="leaderboard-layout" role="tabpanel" aria-labelledby="overallTab" aria-busy="true" data-auth-shell>
-        <section class="leaderboard-stage" aria-labelledby="podiumHeading">
-          <div class="leaderboard-stage-heading"><span class="leaderboard-trophy" aria-hidden="true">🏆</span><div><h2 id="podiumHeading">Top achievers</h2><p id="podiumScope">All assigned sections</p></div></div>
+        <section class="leaderboard-stage" aria-labelledby="podiumHeading" data-auth-shell>
+          <div class="leaderboard-stage-heading"><span class="leaderboard-trophy" aria-hidden="true" data-public-label>🏆</span><div><h2 id="podiumHeading" data-public-label>Top achievers</h2><p id="podiumScope">All assigned sections</p></div></div>
+          <div class="leaderboard-skeleton podium-skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
           <div class="leaderboard-podium" id="leaderboardPodium"></div>
           <p class="leaderboard-podium-empty" id="podiumEmpty" hidden>Earn points in the ImARs app to appear on the podium.</p>
         </section>
-        <section class="leaderboard-rankings" aria-labelledby="rankingsHeading">
-          <div class="leaderboard-list-heading"><div><h2 id="rankingsHeading">All rankings</h2><p id="rankingsCount">Loading students…</p></div><span>Points</span></div>
+        <section class="leaderboard-rankings" aria-labelledby="rankingsHeading" data-auth-shell>
+          <div class="leaderboard-list-heading"><div><h2 id="rankingsHeading" data-public-label>All rankings</h2><p id="rankingsCount">Loading students…</p></div><span data-public-label>Points</span></div>
+          <div class="leaderboard-skeleton list-skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           <div class="leaderboard-list-scroll"><ol id="leaderboardList" class="leaderboard-list" aria-label="Student rankings"></ol></div>
           <p class="leaderboard-empty" id="leaderboardEmpty" hidden>No active students in this section yet.</p>
           <p class="leaderboard-tie-note">Students with equal points share a rank.</p>

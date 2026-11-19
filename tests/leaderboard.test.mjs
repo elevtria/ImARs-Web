@@ -62,3 +62,29 @@ test("the leaderboard page requires sign-in and app points cannot be read by adm
   const admin = await app.login("ADMIN1000", "admin");
   assert.equal((await app.call({ action: "student-page", includePoints: true }, admin)).status, 403);
 });
+
+test("a leaderboard request loads a class of 76 in one bounded page with projected fields", async () => {
+  const app = verifiedTeacherFixture();
+  const cookie = await app.login();
+  for (let index = 1; index < 76; index++) {
+    app.data.set("users/ranked-" + String(index).padStart(3, "0"), {
+      role: "student", classCode: "A", active: true, displayName: "Student " + index,
+      gamification: { totalPoints: index }, privateField: "not needed"
+    });
+  }
+  const queries = [];
+  const query = app.store.query.bind(app.store);
+  app.store.query = (path, options) => { queries.push({ path, ...options }); return query(path, options); };
+  app.store.count = () => assert.fail("Leaderboard pages do not need section count queries");
+  const response = await app.call({ action: "student-page", limit: 100, includePoints: true, includeCounts: false }, cookie);
+  assert.equal(response.status, 200);
+  const page = await response.json();
+  assert.equal(page.students.length, 76);
+  assert.equal(page.cursor, null);
+  assert.ok(page.students.every(row => row.classId === "A" && row.document.data.privateField === undefined));
+  const studentQueries = queries.filter(row => row.path === "users" && row.filters?.some(filter => filter.field === "classCode"));
+  assert.equal(studentQueries.length, 1);
+  assert.ok(studentQueries.every(row => row.limit <= 100 && row.fieldPaths.includes("gamification") && !row.fieldPaths.includes("email")));
+  assert.equal((await app.call({ action: "student-page", limit: 101, includePoints: true }, cookie)).status, 400);
+  assert.equal((await app.call({ action: "student-page", limit: 100 }, cookie)).status, 400);
+});

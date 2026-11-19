@@ -526,8 +526,11 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   const queued = new Map();
   const queueClass = (position, size) => {
     const queryFilters = [...filters(selected[position].id), ...(status === "archived" ? [{ field: "active", op: "==", value: false }] : [])];
+    const fieldPaths = body.includePoints === true
+      ? ["active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName", "gamification"]
+      : body.rawActivityScores === true ? ["uid", "teacherId", "active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName"] : undefined;
     queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined,
-      ...(body.rawActivityScores === true ? { fieldPaths: ["uid", "teacherId", "active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName"] } : {}) })
+      ...(fieldPaths ? { fieldPaths } : {}) })
       .then(rows => ({ rows }), error => ({ error })) });
   };
   const countPromise = body.includeCounts === false ? null : (async () => {
@@ -780,7 +783,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if (actor.role !== "teacher") throw fail();
       return respond(await teacherDashboardSummary(env, store, actor.id, actor.uid, actor.profile));
     }
-    if (body.action === "student-page") return respond(await studentPage(scope, body));
+    if (body.action === "student-page") return respond(await studentPage(scope, body, { maximumLimit: body.includePoints === true ? 100 : 25 }));
     if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "admin-report") {
       if (actor.role !== "admin") throw fail();
