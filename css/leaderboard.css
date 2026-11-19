@@ -8,16 +8,16 @@
 .leaderboard-section select { min-width: 180px; max-width: 100%; padding: 12px 16px; border: 1px solid #91bce0; border-radius: 12px; color: #102e54; background: #fff; font: inherit; }
 .leaderboard-section[hidden], .leaderboard-content [hidden] { display: none; }
 .leaderboard-status { margin-bottom: 18px; color: #375c7e; font-size: 12px; min-height: 18px; }
-.leaderboard-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: 24px; align-items: start; }
+.leaderboard-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: 24px; align-items: stretch; }
 .leaderboard-stage, .leaderboard-rankings { border: 1px solid #91bce0; border-radius: 24px; box-shadow: 0 16px 42px #367bb21f; }
-.leaderboard-stage { position: relative; isolation: isolate; overflow: hidden; padding: 30px 26px 0; background: radial-gradient(ellipse at 50% 48%, #fffbea 0, #e5f5ff80 38%, transparent 68%), linear-gradient(145deg, #eaf8ff, #9bd4ff); }
+.leaderboard-stage { display: flex; flex-direction: column; position: relative; isolation: isolate; overflow: hidden; padding: 30px 26px 0; background: radial-gradient(ellipse at 50% 48%, #fffbea 0, #e5f5ff80 38%, transparent 68%), linear-gradient(145deg, #eaf8ff, #9bd4ff); }
 .leaderboard-stage::before { content: ""; position: absolute; z-index: -1; inset: 0; background: radial-gradient(circle at 16% 24%, #ffca4980 0 3px, transparent 4px), radial-gradient(circle at 84% 38%, #1262e845 0 4px, transparent 5px), radial-gradient(circle at 74% 18%, #ffca4970 0 3px, transparent 4px), radial-gradient(circle at 32% 42%, #1262e830 0 2px, transparent 3px); }
 .leaderboard-stage::after { content: ""; position: absolute; z-index: -1; height: 110px; bottom: -38px; left: -10%; right: -10%; background: repeating-linear-gradient(90deg, transparent 0 60px, #247bce18 61px 62px), repeating-linear-gradient(0deg, transparent 0 32px, #247bce18 33px 34px); transform: perspective(240px) rotateX(48deg); }
 .leaderboard-stage-heading { display: flex; align-items: center; gap: 14px; }
 .leaderboard-stage-heading h2, .leaderboard-list-heading h2 { margin: 0; font-size: 20px; color: #102e54; letter-spacing: -.6px; }
 .leaderboard-stage-heading p, .leaderboard-list-heading p { margin-top: 6px; color: #526f8a; font-size: 12px; }
 .leaderboard-trophy { display: grid; place-items: center; font-size: 32px; width: 58px; height: 58px; border-radius: 18px; background: #fff1b9; border: 1px solid #f4d373; }
-.leaderboard-podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 12px; min-height: 480px; padding-top: 34px; }
+.leaderboard-podium { display: grid; flex: 1; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 12px; min-height: 480px; padding-top: 34px; }
 .podium-place { min-width: 0; text-align: center; animation: podium-arrive 600ms cubic-bezier(.2,.8,.2,1) both; }
 .podium-place-2 { animation-delay: 80ms; }
 .podium-place-3 { animation-delay: 160ms; }
@@ -51,7 +51,7 @@
 .podium-rank { display: block; margin-top: 14px; font-size: 44px; font-weight: 800; color: #174b7a; line-height: 1; }
 .podium-place-1 .podium-rank { color: #906000; }
 .podium-place-3 .podium-rank { color: #8a5122; }
-.leaderboard-rankings { overflow: hidden; background: #fff; }
+.leaderboard-rankings { display: flex; flex-direction: column; overflow: hidden; background: #fff; }
 .leaderboard-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 24px 20px; border-bottom: 1px solid #d3e7f7; }
 .leaderboard-list-heading > span { font-size: 11px; font-weight: 700; color: #526f8a; }
 .leaderboard-list-scroll { max-height: 470px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #91bce0 #f1f8ff; scrollbar-width: thin; }
@@ -78,7 +78,7 @@
 .leaderboard-student span { display: block; font-size: 11px; color: #526f8a; margin-top: 5px; }
 .leaderboard-points { white-space: nowrap; color: #095de0; font-size: 16px; font-variant-numeric: tabular-nums; }
 .leaderboard-points small { font-size: 10px; font-weight: 600; }
-.leaderboard-tie-note { border-top: 1px solid #d3e7f7; padding: 16px 24px; font-size: 11px; color: #526f8a; }
+.leaderboard-tie-note { margin-top: auto; border-top: 1px solid #d3e7f7; padding: 16px 24px; font-size: 11px; color: #526f8a; }
 .leaderboard-empty, .leaderboard-podium-empty { padding: 28px; color: #526f8a; font-size: 14px; text-align: center; line-height: 1.7; }
 .leaderboard-podium:empty { min-height: 300px; }
 .leaderboard-content :is(button, select):focus-visible { outline: 3px solid #247bce; outline-offset: 3px; }
