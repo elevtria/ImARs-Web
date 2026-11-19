@@ -34,7 +34,8 @@ test("generation, review, unassigned draft and all-section release use the actua
   let authenticated, requested, transport, results, showSlowMessage, finishGeneration, confirmDelete = false, confirmDiscard = true;
   let job = { status: "none" };
   const context = {
-    console, Blob, Date, Math, JSON, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
+    console, Blob, Date, Math, JSON, AbortController, quizFileSizeError, questionTypeLabel, writtenQuestion, normalizeQuizQuestion, quizAssignmentScope, quizAssignedToSection, setLoadingState, revealContent: () => {},
+    requestQuizReview: async (_uid, body) => ({ learners: 36, items: [...quizzes.keys()].map(quizId => ({ quizId, submitted: 30, awaitingGrade: 6, graded: 24 })) }),
     setTimeout: (callback, delay) => {
       if (delay === 5000) return 2;
       showSlowMessage = callback; return 1;
@@ -151,6 +152,8 @@ test("generation, review, unassigned draft and all-section release use the actua
   element("gradingQuizList").listeners.click({ target: { closest: () => ({ dataset: { gradeQuiz: saves[0].id } }) } });
   assert.equal(results[1].id, saves[0].id);
   assert.equal(results[3], "A", "grading uses its own section filter");
+  await new Promise(setImmediate);
+  assert.match(element("gradingQuizList").innerHTML, /30\/36 submitted · 6 awaiting grade · 24 graded · 6 not submitted/);
   element("libraryTab").listeners.click();
   await element("quizLibraryList").listeners.click({ target: { closest: selector =>
     selector === "[data-schedule-quiz]" ? { dataset: { scheduleQuiz: saves[0].id } } : null } });

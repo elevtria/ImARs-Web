@@ -1,7 +1,7 @@
 import { clearQuizWorkspace, readQuizWorkspace, saveQuizWorkspace } from "./quiz-workspace.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { closeQuizReview, openQuizReview } from "./quiz-review.js";
+import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "./firebase-data.js";
 import { discardQuizJob, readQuizJob, requestQuiz } from "./quiz-request.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -56,6 +56,8 @@ const firestore = getFirestore(firebaseApp);
   let retryUpload;
   let draftId;
   let workspaceDirty = false, restoringWorkspace = true, sourceFileName = "";
+  const gradingSummaries = new Map();
+  let gradingRequest;
   const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
   const updateGenerateButton = () => {
     generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile;
@@ -128,6 +130,7 @@ const firestore = getFirestore(firebaseApp);
   }
   reviewJob.addEventListener("click", openCompletedJob);
   window.addEventListener("pagehide", () => {
+    gradingRequest?.abort();
     persistWorkspace();
     ++jobCheck;
     clearTimeout(jobTimer);
@@ -336,7 +339,7 @@ const firestore = getFirestore(firebaseApp);
       tab.setAttribute("aria-selected", String(view === name));
     }
     if (view === "library") renderLibrary();
-    if (view === "grading") renderGrading();
+    if (view === "grading") { renderGrading(); void loadGradingSummaries(); }
     persistWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -662,6 +665,33 @@ const firestore = getFirestore(firebaseApp);
     return quiz.availability || "draft";
   }
 
+  async function loadGradingSummaries(force = false) {
+    if (!auth.currentUser || gradingView.hidden) return;
+    gradingRequest?.abort();
+    const request = gradingRequest = new AbortController(), user = auth.currentUser;
+    const button = document.getElementById("refreshGrading");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      for (const section of teacherSections) {
+        if (gradingSectionFilter.value && gradingSectionFilter.value !== section.id) continue;
+        if (!loadQuizzes().some(quiz => quizAssignedToSection(quiz, section.id))) continue;
+        const cached = gradingSummaries.get(section.id);
+        if (!force && cached && Date.now() - cached.at < 300_000) continue;
+        const result = await requestQuizReview(user.uid, { action: "grading-summary", sectionId: section.id }, request.signal);
+        if (request.signal.aborted || auth.currentUser?.uid !== user.uid) return;
+        gradingSummaries.set(section.id, { ...result, at: Date.now() });
+        renderGrading();
+      }
+    } catch (error) {
+      if (!request.signal.aborted && auth.currentUser?.uid === user.uid) {
+        document.getElementById("gradingStatus").textContent = "Could not update submission counts. Use Refresh results to retry. Previously loaded counts remain visible.";
+      }
+    } finally {
+      if (gradingRequest === request) { button.disabled = false; button.setAttribute("aria-busy", "false"); }
+    }
+  }
+
   function renderGrading() {
     const quizzes = loadQuizzes().filter(quiz =>
       (!gradingTermFilter.value || quiz.termId === gradingTermFilter.value) &&
@@ -672,7 +702,20 @@ const firestore = getFirestore(firebaseApp);
       : "No assigned quizzes match these filters. Assign a section and term in My quizzes first.";
     document.getElementById("gradingQuizList").innerHTML = quizzes.map(quiz => {
       const term = terms.find(([id]) => id === quiz.termId)?.[1] || "Term not set";
-      return `<article class="quiz-library-card"><div class="quiz-library-main"><h3>${escapeHtml(quiz.title)}</h3><div class="quiz-library-details"><span>${escapeHtml(term)}</span><span>${escapeHtml(assignmentLabel(quiz))}</span><span>${escapeHtml(questionTypeLabel(quiz.type))}</span></div></div><div class="quiz-library-actions"><button type="button" class="primary-btn" data-grade-quiz="${escapeHtml(quiz.id)}">View submissions / grade</button></div></article>`;
+      const sections = teacherSections.filter(section => quizAssignedToSection(quiz, section.id) && (!gradingSectionFilter.value || section.id === gradingSectionFilter.value));
+      let learners = 0, submitted = 0, awaitingGrade = 0, graded = 0;
+      const ready = sections.every(section => gradingSummaries.has(section.id));
+      for (const section of sections) {
+        const summary = gradingSummaries.get(section.id);
+        if (!summary) continue;
+        learners += summary.learners;
+        const item = summary.items.find(row => row.quizId === quiz.id);
+        submitted += item?.submitted || 0; awaitingGrade += item?.awaitingGrade || 0; graded += item?.graded || 0;
+      }
+      const counts = ready ? `${submitted}/${learners} submitted · ${awaitingGrade} awaiting grade · ${graded} graded · ${Math.max(0, learners - submitted)} not submitted` : "Loading submission counts…";
+      const deadline = quiz.deadlineUtc ? (Date.parse(quiz.deadlineUtc) <= Date.now() ? "Closed " : "Due ") + formatDate(quiz.deadlineUtc) : "No deadline";
+      const sectionLabel = gradingSectionFilter.value ? sections[0]?.name || assignmentLabel(quiz) : assignmentLabel(quiz);
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><h3>${escapeHtml(quiz.title)}</h3><div class="quiz-library-details"><span>${escapeHtml(term)}</span><span>${escapeHtml(sectionLabel)}</span><span>${escapeHtml(questionTypeLabel(quiz.type))}</span><span>${escapeHtml(deadline)}</span></div><p class="quiz-submission-counts">${escapeHtml(counts)}</p></div><div class="quiz-library-actions"><button type="button" class="primary-btn" data-grade-quiz="${escapeHtml(quiz.id)}">View submissions / grade</button></div></article>`;
     }).join("");
   }
 
@@ -880,6 +923,9 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    gradingRequest?.abort();
+    gradingSummaries.clear();
+    gradingTermFilter.value = gradingSectionFilter.value = "";
     restoringWorkspace = true;
     workspaceDirty = false;
     activeGenerationId = undefined;
@@ -1045,11 +1091,13 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("libraryTab").addEventListener("click", () => setView("library"));
   document.getElementById("gradingTab").addEventListener("click", () => setView("grading"));
   gradingTermFilter.addEventListener("change", renderGrading);
-  gradingSectionFilter.addEventListener("change", renderGrading);
+  gradingSectionFilter.addEventListener("change", () => { renderGrading(); void loadGradingSummaries(); });
+  document.getElementById("refreshGrading").addEventListener("click", () => void loadGradingSummaries(true));
   document.getElementById("gradingQuizList").addEventListener("click", event => {
     const button = event.target.closest("[data-grade-quiz]");
     const quiz = button && loadQuizzes().find(item => item.id === button.dataset.gradeQuiz);
-    if (quiz && auth.currentUser) void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value);
+    if (quiz && auth.currentUser) void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value,
+      { onReviewed: () => void loadGradingSummaries(true) });
   });
   document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
   async function startNewQuiz() {

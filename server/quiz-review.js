@@ -93,9 +93,10 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
         const submitted = latest.get(quizId);
         if (submitted.has(id)) continue;
         submitted.add(id);
-        if (!totals.has(quizId)) totals.set(quizId, { quizId, submitted: 0, graded: 0, percentTotal: 0 });
+        if (!totals.has(quizId)) totals.set(quizId, { quizId, submitted: 0, awaitingGrade: 0, graded: 0, percentTotal: 0 });
         const total = totals.get(quizId);
         total.submitted++;
+        if (row.data.status === "pending-review") total.awaitingGrade++;
         const { score, maximum } = resultFor(row);
         if (score !== null && maximum > 0) {
           total.graded++;
@@ -110,12 +111,14 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
   return [...totals.values()];
 }
 
-async function sectionSummary(actor, store, sectionId) {
+async function sectionSummary(actor, store, sectionId, grading = false) {
   await ownedSection(actor, store, sectionId);
-  if (store.quizReport) return store.quizReport(actor, sectionId);
+  if (store.quizReport && !grading) return store.quizReport(actor, sectionId);
   const roster = await store.query("users", { filters: rosterFilters(sectionId), fieldPaths: ["active", "status", "teacherId"] });
   const students = new Set(roster.filter(student => rosterMember(actor, student)).map(student => student.id));
   const totals = await summarizeScores(actor, store, sectionId, students);
+  if (grading) return { learners: students.size, items: totals.map(({ quizId, submitted, awaitingGrade, graded }) =>
+    ({ quizId, submitted, awaitingGrade, graded, notSubmitted: Math.max(0, students.size - submitted) })) };
   return { learners: students.size, items: [...totals.values()].map(({ quizId, submitted, graded, percentTotal }) =>
     ({ quizId, submitted, average: graded ? Math.round(percentTotal / graded) : null })) };
 }
@@ -209,7 +212,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     store ??= supabaseWebData(env) ? appStore(env) : new QuizReviewStore(env);
     const initialActor = await authenticate(request, env, store);
     const body = await readJson(request, 65536);
-    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback", "termId", "studentIds"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary", "term-results"].includes(body.action) ||
+    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback", "termId", "studentIds"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary", "grading-summary", "term-results"].includes(body.action) ||
         (body.sectionId !== undefined && body.sectionId !== "" && !validPart(body.sectionId))) throw fail("INVALID_REQUEST", 400);
     if (body.action === "grade") { await store.begin(); transaction = true; }
     const actor = transaction ? await authenticate(request, env, store) : initialActor;
@@ -217,6 +220,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (body.action === "term-results") return respond(await termResults(actor, store, body));
     if (body.action === "student-average") return respond(await studentAverage(actor, store, body.studentId));
     if (body.action === "section-summary") return respond(await sectionSummary(actor, store, body.sectionId));
+    if (body.action === "grading-summary") return respond(await sectionSummary(actor, store, body.sectionId, true));
     const q = await ownedQuiz(actor, store, body.quizId);
     const sectionId = body.sectionId || "";
     if (sectionId) await ownedSection(actor, store, sectionId);

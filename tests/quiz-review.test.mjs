@@ -233,6 +233,30 @@ test("a locked quiz still permits grading an existing essay", async () => {
   assert.equal((await (await f.callReview({ action: "open" })).json()).status, "reviewed");
 });
 
+test("grading summaries count current students and latest saved submissions without leaking answers", async () => {
+  const f = await setup();
+  f.store.scorePage = async (actor, studentId, sectionId, { limit }) => {
+    assert.equal(actor.uid, "teacher-a"); assert.equal(sectionId, "A"); assert.equal(limit, 250);
+    return [{ path: f.path, data: f.data.get(f.path) }, { path: f.path, data: f.data.get(f.path) },
+      { path: f.path.replace("users/S1/", "users/S4/"), data: f.data.get(f.path) }];
+  };
+  f.put("users/S3", { role: "student", classCode: "A", active: true });
+  f.put("users/S4", { role: "student", classCode: "A", active: false });
+  const summary = async () => {
+    const response = await f.callReview({ action: "grading-summary", sectionId: "A" });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const before = await summary();
+  assert.equal(before.learners, 2);
+  assert.deepEqual(before.items, [{ quizId: "quiz1", submitted: 1, awaitingGrade: 1, graded: 0, notSubmitted: 1 }]);
+  assert.ok(!JSON.stringify(before).includes("Student essay"));
+  const opened = await (await f.callReview({ action: "open" })).json();
+  await f.callReview({ action: "grade", revision: opened.revision, scores: [{ questionId: "q-original", score: 3 }], feedback: "" });
+  assert.deepEqual((await summary()).items, [{ quizId: "quiz1", submitted: 1, awaitingGrade: 0, graded: 1, notSubmitted: 1 }]);
+  assert.equal((await f.callReview({ action: "grading-summary", sectionId: "B" })).status, 403);
+});
+
 test("locking a quiz preserves its submitted results and archived rows do not consume a page", async () => {
   const f = await setup();
   f.put("generatedQuizzes/quiz1", { ...f.data.get("generatedQuizzes/quiz1"), availability: "draft" });

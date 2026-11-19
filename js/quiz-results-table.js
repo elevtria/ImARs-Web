@@ -2,7 +2,7 @@ import { escapeHtml } from "./teacher-view.js";
 
 export function quizScoreLabel(row) {
   if (row.status === "not-submitted") return "Not submitted";
-  if (row.status === "pending-review") return "Pending review";
+  if (row.status === "pending-review") return "Awaiting grade";
   return row.score == null || row.maximum == null ? "Score unavailable" : `${row.score}/${row.maximum}`;
 }
 
@@ -37,7 +37,8 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         const initials = student.name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase();
         const completed = student.status === "graded" || student.status === "reviewed";
         const badge = completed ? "is-completed" : student.status === "pending-review" ? "is-pending" : "is-empty";
-        const label = completed ? "Completed" : quizScoreLabel(student);
+        const label = completed ? "Graded" : student.status === "pending-review" ? "Awaiting grade"
+          : student.status === "not-submitted" ? "Not submitted" : "Submitted";
         line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span>${escapeHtml(student.name)}</span></th>
           ${compact ? "" : `<td class="quiz-result-points">${escapeHtml(completed ? quizScoreLabel(student) : "—")}</td>`}
           <td><span class="activity-result-score quiz-result-status ${badge}">${escapeHtml(label)}</span></td>
@@ -51,7 +52,7 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         review.addEventListener("click", () => reviewAnswers(student, review, grade => {
           if (signal.aborted || !line.isConnected) return;
           const status = line.querySelector(".quiz-result-status");
-          status.textContent = "Completed";
+          status.textContent = "Graded";
           status.classList.remove("is-pending", "is-empty");
           status.classList.add("is-completed");
           if (!compact) line.querySelector(".quiz-result-points").textContent = quizScoreLabel({ ...grade, status: "reviewed" });

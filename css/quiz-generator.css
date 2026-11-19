@@ -150,6 +150,7 @@
 .quiz-library-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 3px 0 17px; }
 .quiz-library-filters { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
 .quiz-library-filters .quiz-field { width: min(100%, 260px); }
+.quiz-submission-counts { margin: 10px 0 0; font-size: .9rem; line-height: 1.6; color: var(--text, #234c72); }
 .quiz-library-list { display: grid; gap: 10px; }
 .quiz-library-card { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 16px; padding: 16px 18px; border: 1px solid rgba(255,255,255,.85); border-radius: 16px; background: rgba(255,255,255,.75); box-shadow: var(--shadow); }
 .quiz-library-main { min-width: 0; }

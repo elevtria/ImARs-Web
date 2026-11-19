@@ -121,6 +121,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
           }
           back();
           updateScore?.(result);
+          onReviewed?.(result);
           status.textContent = "";
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
