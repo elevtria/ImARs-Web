@@ -153,7 +153,7 @@ function renderSchoolAnalytics(report) {
     // 4. Render Sections Analytics Cards
     if (sectionContainer) {
       if (sectionMap.size === 0) {
-        sectionContainer.innerHTML = `<p style="text-align: center; color: #64748b; padding: 32px;">No student sections found.</p>`;
+        sectionContainer.innerHTML = `<p style="text-align: center; color: var(--theme-muted, #64748b); padding: 32px;">No student sections found.</p>`;
       } else {
         sectionContainer.innerHTML = Array.from(sectionMap.values()).map((section) => {
           const { pre, post, gain } = section;

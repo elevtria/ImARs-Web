@@ -128,7 +128,7 @@
   :root[data-theme="dark"] body:not(.login-page) .app main :is(.hero, .intro) { background: #1d324b; border-color: #577899; border-left-color: #78baff; box-shadow: 0 10px 26px #020d1e55; }
   :root[data-theme="dark"] body:not(.login-page) .app main :is(.record, .teacher-record, .module):is(:hover, :focus-within) { background: #28496d; border-color: #83c6ff; box-shadow: inset 3px 0 #83c6ff, 0 6px 18px #020d1e33; }
   :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn) { background: #1262e8; border-color: #4085ed; }
-  :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #297bf5; }
+  :root[data-theme="dark"] body:not(.login-page) .app main :is(.scan-btn, .banner-btn):is(:hover, :focus-visible) { background: #246fdb; }
 }
 @media screen and (max-width: 640px) {
   :root body:not(.login-page) .app main :is(.hero, .intro) { padding: 18px; border-radius: 18px; }

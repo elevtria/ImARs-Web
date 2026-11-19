@@ -75,7 +75,7 @@ function render() {
             <div class="teacher-name-line" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong>${escapeHtml(teacher.name)}</strong>
               <span class="teacher-status ${teacher.active ? "" : "inactive"}">${teacher.active ? "active" : "inactive"}</span>
-              <span class="teacher-id-badge" style="background: #eef2ff; color: #4f46e5; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
+              <span class="teacher-id-badge" style="background: var(--theme-info-bg, #eef2ff); color: var(--theme-link, #4f46e5); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
             </div>
             <small class="teacher-contact">${escapeHtml(teacher.email)}${teacher.subject ? ` · ${escapeHtml(teacher.subject)}` : ""} · Joined ${escapeHtml(teacher.joined)}</small>
             <div class="section-chips">

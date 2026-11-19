@@ -764,22 +764,22 @@ function renderPreviewTable() {
     }
 
     const tr = document.createElement("tr");
-    tr.style.borderBottom = "1px solid #f1f5f9";
+    tr.style.borderBottom = "1px solid var(--line, #f1f5f9)";
     
     let statusBadge = "";
     let statusColor = "";
     
     if (!item.isValid) {
-      tr.style.backgroundColor = "#fef2f2"; 
+      tr.style.backgroundColor = "var(--theme-danger-bg, #fef2f2)";
       statusBadge = "⚠️ " + item.errors.join(" · ");
-      statusColor = "#dc2626"; 
+      statusColor = "var(--theme-danger, #dc2626)";
     } else if (item.isExisting && item.allowUpdate) {
-      tr.style.backgroundColor = "#f0f9ff"; 
+      tr.style.backgroundColor = "var(--theme-info-bg, #f0f9ff)";
       statusBadge = "🔄 Approved Update";
-      statusColor = "#0284c7"; 
+      statusColor = "var(--theme-link, #0284c7)";
     } else {
       statusBadge = "✓ Ready (New)";
-      statusColor = "#16a34a"; 
+      statusColor = "var(--theme-success, #16a34a)";
     }
     
     const idHasError = item.errors.some(e => e.includes("ID") || e.includes("digits") || e.includes("section"));
@@ -789,27 +789,27 @@ function renderPreviewTable() {
     const emailHasError = item.errors.some(e => e.includes("Email") || e.includes("email"));
 
     const updateToggleHtml = item.isExisting
-      ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:0.78rem;color:#0284c7;cursor:pointer;font-weight:600;">
+      ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:0.78rem;color:var(--theme-link, #0284c7);cursor:pointer;font-weight:600;">
            <input type="checkbox" data-index="${index}" data-field="allowUpdate" ${item.allowUpdate ? "checked" : ""}> Allow Update
          </label>`
       : "";
 
     tr.innerHTML = `
-      <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
+      <td style="padding: 10px 8px; color: var(--theme-muted, #64748b);">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${firstNameHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid var(--theme-control-border, #cbd5e1); border-radius: 4px; padding: 4px; outline: none; background: transparent; ${firstNameHasError ? 'border-color: var(--theme-danger, #dc2626); color: var(--theme-danger, #dc2626); font-weight: 600; background: var(--theme-danger-bg, #fff5f5);' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.rawMiddle ?? item.middleName ?? '-')}" placeholder="Full middle name or -" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${middleNameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.rawMiddle ?? item.middleName ?? '-')}" placeholder="Full middle name or -" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid var(--theme-control-border, #cbd5e1); border-radius: 4px; padding: 4px; outline: none; background: transparent; ${middleNameHasError ? 'border-color: var(--theme-danger, #dc2626); color: var(--theme-danger, #dc2626); background: var(--theme-danger-bg, #fff5f5);' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${lastNameHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid var(--theme-control-border, #cbd5e1); border-radius: 4px; padding: 4px; outline: none; background: transparent; ${lastNameHasError ? 'border-color: var(--theme-danger, #dc2626); color: var(--theme-danger, #dc2626); font-weight: 600; background: var(--theme-danger-bg, #fff5f5);' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="studentId" value="${escapeHtml(item.studentId)}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="studentId" value="${escapeHtml(item.studentId)}" placeholder="0026271000" style="width: 115px; border: 1px solid var(--theme-control-border, #cbd5e1); border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: var(--theme-danger, #dc2626); color: var(--theme-danger, #dc2626); font-weight: bold; background: var(--theme-danger-bg, #fff5f5);' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="email" data-index="${index}" data-field="email" value="${escapeHtml(item.email)}" placeholder="Email Address" style="width: 170px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="email" data-index="${index}" data-field="email" value="${escapeHtml(item.email)}" placeholder="Email Address" style="width: 170px; border: 1px solid var(--theme-control-border, #cbd5e1); border-radius: 4px; padding: 4px; outline: none; background: transparent; ${emailHasError ? 'border-color: var(--theme-danger, #dc2626); color: var(--theme-danger, #dc2626); font-weight: 600; background: var(--theme-danger-bg, #fff5f5);' : ''}">
       </td>
       <td style="padding: 10px 8px; color: ${statusColor}; font-size: 0.85rem; font-weight: 500;">
         <span>${statusBadge}</span>${updateToggleHtml}

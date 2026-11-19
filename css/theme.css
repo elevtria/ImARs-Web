@@ -39,12 +39,12 @@
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="dark"] {
     color-scheme: dark;
-    --mist: #101824; --ice: #293a50; --sky: #90aed3; --steel: #81a2c1;
-    --ink: #e3ebf5; --muted: #a5b4c7; --surface: #1b2738; --line: #35465d;
+    --mist: #101824; --ice: #293a50; --sky: #90aed3; --steel: #a6d4ff;
+    --ink: #e3ebf5; --muted: #bbd4ec; --surface: #1b2738; --line: #35465d;
     --shadow: 0 10px 30px #00000030;
-    --portal-ink: #e3ebf5; --portal-muted: #a5b4c7; --portal-line: #35465d;
+    --portal-ink: #e3ebf5; --portal-muted: #bbd4ec; --portal-line: #35465d;
     --admin-card: #1b2738; --admin-ink: #e3ebf5;
-    --admin-muted: #a5b4c7; --admin-line: #35465d;
+    --admin-muted: #bbd4ec; --admin-line: #35465d;
     --admin-purple: #b6a2ff; --admin-cyan: #70d1f4; --admin-green: #5ed9b0; --admin-pink: #ff8ac6;
     --topic-chip-ink: #c5bdff; --topic-chip-bg: #34345a; --chart-track: #35465d;
   }
@@ -226,6 +226,118 @@
   [data-theme="dark"] .web-session-notice button { background: #223249; color: var(--ink); }
 }
 @media print { .theme-toggle { display: none !important; } }
+
+/* Page-specific light colors must not survive on dark cards or selected rows.
+   Keep semantic colors paired with their surfaces, including inline import states. */
+@media screen {
+  :root[data-theme="dark"] {
+    --text: var(--ink);
+    --theme-text: #e3ebf5;
+    --theme-muted: #bbd4ec;
+    --theme-link: #a6d4ff;
+    --theme-success: #85e0b5;
+    --theme-warning: #ffda85;
+    --theme-danger: #ffadb8;
+    --theme-primary: #1262e8;
+    --theme-success-bg: #1d3b32;
+    --theme-warning-bg: #3b321e;
+    --theme-danger-bg: #482732;
+    --theme-info-bg: #223249;
+    --theme-input-bg: #142031;
+    --theme-control-border: #8dafd0;
+  }
+  :root[data-theme="dark"] body :is(
+    .teacher-metric strong, .analytics-post-score, .analytics-donut-inner span,
+    .analytics-card-footer strong, .section-meter-head, .quiz-file-name,
+    .quiz-editor-section b, .quiz-question-card-head strong, .quiz-release-option b,
+    .quiz-library-scheduler strong, .quiz-availability-title h3, .quiz-submission-counts,
+    .donut-label strong, .account-menu a, .banner, .qr-box, .ghost,
+    .manual-stamp, .manual-meta-row, .col em, .status
+  ) { color: var(--theme-text); }
+  :root[data-theme="dark"] body :is(
+    .teacher-metric small, .progress-label, .dialog-heading p, .teacher-dialog label,
+    .teacher-dialog label small, .teacher-table-empty, .analytics-teacher-sections,
+    .analytics-post-label, .analytics-card-footer, .analytics-test-stage,
+    .section-student-count, .section-meter-head, .quiz-eyebrow, .quiz-section-tag,
+    .quiz-dropzone small, .quiz-lock-note, .quiz-lock-note span, .quiz-status,
+    .quiz-editor-meta, .quiz-correct-hint, .quiz-add-question small,
+    .quiz-availability-title p, .quiz-release-option small, .quiz-schedule-fields small,
+    .quiz-library-details, .quiz-library-scheduler p, .quiz-library-scheduler-fields label,
+    .quiz-empty-state p, .quiz-schedule-controls label, .quiz-schedule-section,
+    .question-heatmap label, .modal-card p, .term-head-right, .topic-row small,
+    .donut-label span, .meter-row span, .muted-cell, .student small, .topic span,
+    .record .stat span, .record-progress-title, .section-pick span, .section-form > label,
+    .banner small, .col span, .drop p, .pct, .files .topic small, .size, .files-foot p,
+    .finder-copy, .scan-row small, .article p, .empty, .view-data-status, label, .improve,
+    .brand small, .side-user small, .user-more,
+    .manual-kicker, .manual-kicker span:last-child, .manual-meta-row,
+    .manual-step-card .manual-step-kicker, .manual-tool-card .manual-step-kicker,
+    .manual-page .manual-step-card .manual-step-kicker, .manual-page .manual-tool-card .manual-step-kicker,
+    .manual-page .manual-step-card p, .manual-page .manual-tool-card p,
+    .manual-page .manual-checklist, .ar-eyebrow, .section-data-loading,
+    [data-loading="true"], .sy, .login-card > form + p
+  ) { color: var(--theme-muted); }
+  :root[data-theme="dark"] body :is(
+    .snapshot-details-toggle, .manual-link, .manual-section-nav-arrow,
+    .quiz-dropzone strong span, .quiz-view-tab.active, .select-wrap svg,
+    .teacher-search svg, .record-action, .quiz-icon-action, .ar-stage-placeholder,
+    .login-card [data-school-year], .login-page #togglePassword, .login-page #toggleAdminPassword,
+    .ar-stage-placeholder > span
+  ) { color: var(--theme-link); }
+  :root[data-theme="dark"] body :is(
+    .teacher-gain, .teacher-table-gain, .analytics-card-footer strong.teacher-gain,
+    .section-meter-head strong, .score-up, .upload-status, .improve b,
+    .scheduler-sync-status[data-state="success"], .teacher-progress-item.post .progress-label strong,
+    .record-action.activate, .c-green, .green
+  ) { color: var(--theme-success); }
+  :root[data-theme="dark"] body :is(
+    .quiz-status.error, .quiz-file-error, .scheduler-sync-status[data-state="error"],
+    .quiz-question-controls button.delete, .quiz-library-actions button.delete,
+    .record-action.delete:is(:hover, :focus-visible)
+  ) { color: var(--theme-danger); }
+  :root[data-theme="dark"] body :is(.record-action.deactivate, .c-amber, .lock-btn.locked) { color: var(--theme-warning); }
+  :root[data-theme="dark"] body :is(.c-cyan, .progress-label strong) { color: var(--theme-link); }
+  :root[data-theme="dark"] body :is(
+    .no-teachers, .tabs button, .quiz-icon-action, .quiz-empty-icon,
+    .quiz-file-type, .quiz-new-pill, .quiz-question-card-head .quiz-q-badge,
+    .quiz-locked-chip, .quiz-status-badge, .quiz-suggestion-actions button,
+    .manual-print-btn, .drop-icon, .i-purple, .term-1, .tag-qr, .pending, .record-head .overall, span.overall
+  ) { background: var(--theme-info-bg); color: var(--theme-muted); border-color: var(--line); }
+  :root[data-theme="dark"] body :is(
+    .teacher-status, .st-completed, .pill-done, .ready, .sheet-icon,
+    .quiz-status-badge.available, .quiz-suggestion-actions button.restore
+  ) { background: var(--theme-success-bg); color: var(--theme-success); }
+  :root[data-theme="dark"] body :is(
+    .quiz-demo-badge, .quiz-demo-note, .quiz-status-badge.scheduled, .st-active,
+    .i-pink, .i-amber, .term-2
+  ) { background: var(--theme-warning-bg); color: var(--theme-warning); }
+  :root[data-theme="dark"] body :is(.quiz-file-error, .remove-student-btn) { background: var(--theme-danger-bg); color: var(--theme-danger); }
+  :root[data-theme="dark"] body .teacher-status.inactive { background: var(--theme-info-bg); color: var(--theme-muted); }
+  :root[data-theme="dark"] body .btn-green { background: #247346; color: #fff; }
+  :root[data-theme="dark"] body :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), select, textarea) { border-color: var(--theme-control-border); }
+  :root[data-theme="dark"] body .term-3 { background: #34345a; color: #d4caff; }
+  :root[data-theme="dark"] body .record-avatar.inactive { background: #354d67; color: var(--theme-text); }
+  :root[data-theme="dark"] body .teacher-avatar { background: #2b4059; color: var(--theme-text); }
+  :root[data-theme="dark"] body :is(.analytics-avatar, .teacher-table-toggle .table-avatar) { background: #223249; color: var(--theme-text); border: 2px solid var(--teacher-color); }
+  :root[data-theme="dark"] body :is(
+    .primary-btn, .btn-purple, .cam-btn, .avatar, .badge.next, .i-cyan, .theme-blue .term-num,
+    .theme-blue .topic-num, .nav-item.active, .tabs button.active,
+    .student-status-switch button[aria-pressed="true"], .quiz-stepper li.active span,
+    .quiz-stepper li.done span, .quiz-suggestion-actions button.accept[aria-pressed="true"],
+    .manual-stamp-mark, #editScores[aria-pressed="true"]
+  ) { background: var(--theme-primary); color: #fff; }
+  :root[data-theme="dark"] #drawer .nav-item.active:is(:hover, :focus-visible) { background: #0b50c4; color: #fff; }
+  :root[data-theme="dark"] body :is(.ghost-btn, .btn-ghost, .record-action, .quiz-icon-action):is(:hover, :focus-visible) { background: #28496d; }
+  :root[data-theme="dark"] body :is(.quiz-view-tab.active, .quiz-stepper li.active, .quiz-stepper li.done) { color: var(--theme-link); }
+  :root[data-theme="dark"] body .manual-feature-card { background: #1d4a78; color: var(--theme-text); }
+  :root[data-theme="dark"] body :is(.theme-green .term-num, .theme-green .topic-num) { background: var(--theme-success-bg); color: var(--theme-success); }
+  :root[data-theme="dark"] body :is(.ar-toolbar button, .ar-stage-top span) { background: var(--theme-info-bg); color: var(--theme-text); border-color: var(--theme-control-border); }
+  :root[data-theme="dark"] body .ar-stage-top [data-found="true"] { background: var(--theme-success-bg); color: var(--theme-success); }
+  :root[data-theme="dark"] body .ar-toolbar button[aria-pressed="true"] { background: var(--theme-primary); color: #fff; }
+  :root[data-theme="dark"] body.login-scene .login-card :is(#teacherSubmitBtn, #adminSubmitBtn) { background: var(--theme-primary); color: #fff; }
+  :root[data-theme="dark"] body.login-page :is(.save-password-option, .password-toggle, .login-error) { color: var(--theme-muted); }
+  :root[data-theme="dark"] body.login-page .login-error:not(:empty) { color: var(--theme-danger); }
+}
 
 /* Keep each portal page heading distinct from the decorative background. */
 @media screen {
