@@ -576,33 +576,33 @@ async function handleFileSelected(file) {
   await loadAllExistingStudentsForValidation(uniqueCandidateIds);
 
   for (let i = 1; i < rows.length; i++) {
-  const row = rows[i];
-  if (!row || row.join("").trim() === "") continue;
+    const row = rows[i];
+    if (!row || row.join("").trim() === "") continue;
 
-  const firstName = String(row[0] ?? "").trim();
-  const lastName = String(row[withMiddle ? 2 : 1] ?? "").trim();
-  const studentId = normalizeUploadedId(row[idColumn]);
-  const rawMiddleInput = withMiddle ? String(row[1] ?? "").trim() : (dbExistingMiddleNames[studentId] || "");
-  const { middleName, middleInitial, fullName, displayName } = buildStudentNames(firstName, rawMiddleInput, lastName);
-  const email = String(row[idColumn + 1] ?? "").trim().toLowerCase();
+    const firstName = String(row[0] ?? "").trim();
+    const lastName = String(row[withMiddle ? 2 : 1] ?? "").trim();
+    const studentId = normalizeUploadedId(row[idColumn]);
+    const rawMiddleInput = withMiddle ? String(row[1] ?? "").trim() : (dbExistingMiddleNames[studentId] || "");
+    const { middleName, middleInitial, fullName, displayName } = buildStudentNames(firstName, rawMiddleInput, lastName);
+    const email = String(row[idColumn + 1] ?? "").trim().toLowerCase();
 
-  previewData.push({
-    rowNum: i + 1,
-    firstName,
-    rawMiddle: rawMiddleInput || "-",
-    middleName,
-    middleInitial,
-    lastName,
-    fullName,
-    displayName,
-    studentId,
-    email,
-    allowUpdate: false,
-    isValid: false, 
-    isExisting: false, 
-    errors: []
-  });
-}
+    previewData.push({
+      rowNum: i + 1,
+      firstName,
+      rawMiddle: rawMiddleInput || "-",
+      middleName,
+      middleInitial,
+      lastName,
+      fullName,
+      displayName,
+      studentId,
+      email,
+      allowUpdate: false,
+      isValid: false, 
+      isExisting: false, 
+      errors: []
+    });
+  }
 
   validateAllRows();
 }
@@ -628,6 +628,7 @@ function validateAllRows() {
   });
 
   const targetSecCode = String(sectionSelect.value).trim();
+  const validAlphaName = value => /^[\p{L}\p{M}]+(?:\s+[\p{L}\p{M}]+)*$/u.test(value);
 
   // 2. Apply both in-file and database duplicate errors globally
   previewData.forEach(row => {
@@ -642,10 +643,25 @@ function validateAllRows() {
 
     row.isExisting = existsInDb && !belongsToAnotherSection;
 
-    if (!row.firstName) rowErrors.push("Missing First Name");
-    if (!row.lastName) rowErrors.push("Missing Last Name");
-    if (row.middleName && (row.middleName.length > 200 || (row.middleName.match(/\p{L}/gu) || []).length < 2 || !/^[\p{L}\p{M}'’ -]+$/u.test(row.middleName) || /(^|\s)\p{L}(?=\s|$)/u.test(row.middleName)))
-    rowErrors.push("Enter the full Middle Name, not a middle initial (or '-' if none)");
+    if (!row.firstName) {
+      rowErrors.push("Missing First Name");
+    } else if (!validAlphaName(row.firstName)) {
+      rowErrors.push("First Name must contain letters only");
+    }
+
+    if (!row.lastName) {
+      rowErrors.push("Missing Last Name");
+    } else if (!validAlphaName(row.lastName)) {
+      rowErrors.push("Last Name must contain letters only");
+    }
+
+    if (row.middleName) {
+      if (row.middleName.length > 200 || !validAlphaName(row.middleName)) {
+        rowErrors.push("Middle Name must contain letters only (or '-' if none)");
+      } else if ((row.middleName.match(/\p{L}/gu) || []).length < 2 || /(^|\s)\p{L}(?=\s|$)/u.test(row.middleName)) {
+        rowErrors.push("Enter the full Middle Name, not a middle initial (or '-' if none)");
+      }
+    }
     
     // Student ID Checks
     if (!cleanId) {
@@ -767,7 +783,9 @@ function renderPreviewTable() {
     }
     
     const idHasError = item.errors.some(e => e.includes("ID") || e.includes("digits") || e.includes("section"));
-    const nameHasError = item.errors.some(e => e.includes("Name"));
+    const firstNameHasError = !item.firstName || item.errors.some(e => e.includes("First Name") || e.includes("Duplicate Name"));
+    const middleNameHasError = item.errors.some(e => e.includes("Middle Name") || e.includes("Duplicate Name"));
+    const lastNameHasError = !item.lastName || item.errors.some(e => e.includes("Last Name") || e.includes("Duplicate Name"));
     const emailHasError = item.errors.some(e => e.includes("Email") || e.includes("email"));
 
     const updateToggleHtml = item.isExisting
@@ -779,13 +797,13 @@ function renderPreviewTable() {
     tr.innerHTML = `
       <td style="padding: 10px 8px; color: #64748b;">${item.rowNum}</td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.firstName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="firstName" value="${escapeHtml(item.firstName)}" placeholder="First Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${firstNameHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.rawMiddle ?? item.middleName ?? '-')}" placeholder="Full middle name or -" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="middleName" value="${escapeHtml(item.rawMiddle ?? item.middleName ?? '-')}" placeholder="Full middle name or -" maxlength="200" aria-label="Full middle name" style="width: 140px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${middleNameHasError ? 'border-color: #dc2626; color: #dc2626; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
-        <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${nameHasError || !item.lastName ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
+        <input type="text" data-index="${index}" data-field="lastName" value="${escapeHtml(item.lastName)}" placeholder="Last Name" style="width: 120px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${lastNameHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: 600; background: #fff5f5;' : ''}">
       </td>
       <td style="padding: 10px 8px;">
         <input type="text" data-index="${index}" data-field="studentId" value="${escapeHtml(item.studentId)}" placeholder="0026271000" style="width: 115px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; outline: none; background: transparent; ${idHasError ? 'border-color: #dc2626; color: #dc2626; font-weight: bold; background: #fff5f5;' : ''}">
@@ -802,6 +820,18 @@ function renderPreviewTable() {
 
   const inputs = tbody.querySelectorAll("input");
   inputs.forEach(input => {
+    if (["firstName", "lastName"].includes(input.dataset.field)) {
+      input.addEventListener("input", (e) => {
+        e.target.value = e.target.value.replace(/[^\p{L}\p{M}\s]/gu, "");
+      });
+    } else if (input.dataset.field === "middleName") {
+      input.addEventListener("input", (e) => {
+        if (e.target.value.trim() !== "-") {
+          e.target.value = e.target.value.replace(/[^\p{L}\p{M}\s-]/gu, "");
+        }
+      });
+    }
+
     input.addEventListener("change", (e) => {
       const field = e.target.dataset.field;
       const val = field === "allowUpdate" ? e.target.checked : e.target.value;
@@ -897,14 +927,14 @@ confirmImportBtn.addEventListener("click", async () => {
       const finalEmail = stu.email || `${finalStudentId}@imars.edu`;
 
       const strictUpdateData = {
-      firstName: stu.firstName,
-      middleName: stu.middleName,       // "" if "-" was entered, or "Malabanan"
-      middleInitial: stu.middleInitial, // "" if "-" was entered, or "M."
-      lastName: stu.lastName,
-      displayName: stu.displayName,     // Student side: "Lans Raven M. Aniciete"
-      fullName: stu.fullName,           // Thesis/Records: "Lans Raven Malabanan Aniciete"
-      updatedAt: serverTimestamp()
-    };
+        firstName: stu.firstName,
+        middleName: stu.middleName,       // "" if "-" was entered, or "Malabanan"
+        middleInitial: stu.middleInitial, // "" if "-" was entered, or "M."
+        lastName: stu.lastName,
+        displayName: stu.displayName,     // Student side: "Lans Raven M. Aniciete"
+        fullName: stu.fullName,           // Thesis/Records: "Lans Raven Malabanan Aniciete"
+        updatedAt: serverTimestamp()
+      };
 
       if (!dbExistingClaimedIds.has(finalStudentId)) {
         strictUpdateData.email = finalEmail;
