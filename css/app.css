@@ -1169,6 +1169,8 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .analytics-support-table thead th:first-child { width: 28%; }
 .analytics-support-table thead th:last-child { width: 18%; }
 .analytics-support-table a { text-decoration: underline; text-underline-offset: 3px; }
+#supportMore, #heatmapMore { margin-top: 20px; margin-bottom: 6px; }
+#supportMore[hidden], #heatmapMore[hidden] { display: none !important; }
 [data-theme="dark"] .analytics-data-table thead th { background: #263c55; color: #c4dfff; }
 @media (max-width: 540px) { .analytics-data-table { font-size: .8rem; } .analytics-data-table :is(th,td) { padding: 12px 8px; } }
 .analytics-lesson { padding: 18px 0; border-bottom: 1px solid var(--line, #b5cde3); }
