@@ -10,7 +10,7 @@ if (navigationDrawer) {
       link.classList.add("active");
       link.setAttribute("aria-current", "page");
     }
-    link.innerHTML = '<span class="leaderboard-nav-icon" aria-hidden="true">♛</span>Leaderboard';
+    link.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 13v5m-4 3h8m-7-3h6v3H9z"/></svg>Leaderboard';
     const records = teacherNavigation.querySelector('a[href="student-records.html"]');
     if (records) records.after(link);
     else teacherNavigation.append(link);
