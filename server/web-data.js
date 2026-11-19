@@ -51,6 +51,7 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
     const sbClassMap = new Map(sbClasses.map(row => [row.id, row]));
     const sbStaffMap = new Map(sbStaff.map(row => [row.id, row]));
     const writes = [];
+    const fsBackfillWrites = [];
     const affectedTeacherUids = new Set();
 
     // 1. Sync any class ownership or section changes from Firebase Firestore -> Supabase
@@ -100,6 +101,48 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
           merge: true,
           ...(sbUser ? { updateTime: sbUser.updateTime } : {})
         });
+      }
+    }
+
+    // 3. Backfill missing `classes` documents for sections listed on a teacher's profile (e.g., admin-assigned sections)
+    const allClassIds = new Set([...fsClasses.map(c => c.id), ...sbClasses.map(c => c.id)]);
+    let maxClassNum = 0;
+    for (const cid of allClassIds) {
+      const m = /^SCIG6A(\d+)$/.exec(cid);
+      if (m) maxClassNum = Math.max(maxClassNum, Number(m[1]));
+    }
+    const normalizeSectionName = raw => String(raw || "").replace(/^Grade\s+\d+\s*[-–—]\s*/i, "").trim();
+
+    for (const fsUser of fsTeachersOnly) {
+      if (!fsUser?.id || !Array.isArray(fsUser.data?.sections) || !fsUser.data.sections.length) continue;
+      const teacherClasses = [...fsClasses, ...sbClasses].filter(c => c.data?.teacherId === fsUser.id);
+      const existingNames = new Set(teacherClasses.map(c => normalizeSectionName(c.data?.SectionName || c.data?.sectionName || c.id).toLowerCase()));
+
+      for (const rawSec of fsUser.data.sections) {
+        const cleanName = normalizeSectionName(rawSec);
+        if (!cleanName || existingNames.has(cleanName.toLowerCase())) continue;
+        existingNames.add(cleanName.toLowerCase());
+        maxClassNum += 1;
+        const newClassId = `SCIG6A${String(maxClassNum).padStart(2, "0")}`;
+        const classData = {
+          SectionName: cleanName,
+          teacherId: fsUser.id,
+          gradeLevel: "Grade 6",
+          createdAt: { $type: "serverTimestamp" }
+        };
+        const writeOp = { operation: "set", path: "classes/" + newClassId, data: classData, merge: true };
+        writes.push(writeOp);
+        fsBackfillWrites.push(writeOp);
+        if (fsUser.data.uid) affectedTeacherUids.add(fsUser.data.uid);
+      }
+    }
+
+    if (fsBackfillWrites.length) {
+      try {
+        await firestore.begin();
+        await firestore.commit(fsBackfillWrites);
+      } catch (err) {
+        console.warn("Firestore class backfill skipped:", err?.message || err);
       }
     }
 
@@ -705,7 +748,25 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
         subject: profile.subject, sections: profile.sections, role: "teacher", active: true, status: "invited", isRegistered: false,
         webInvitationNonce: invitation.nonce, createdAt: { $type: "serverTimestamp" } };
       await scope.get("users/" + invitation.id);
-      await transaction.commit([{ operation: "set", path: "users/" + invitation.id, data: teacher }]); transaction = null;
+      const existingClasses = await store.query("classes", { limit: 200 });
+      let maxClassNum = 0;
+      for (const row of existingClasses) {
+        const m = /^SCIG6A(\d+)$/.exec(row.id);
+        if (m) maxClassNum = Math.max(maxClassNum, Number(m[1]));
+      }
+      const createWrites = [{ operation: "set", path: "users/" + invitation.id, data: teacher }];
+      for (const rawSec of profile.sections) {
+        const cleanName = String(rawSec || "").replace(/^Grade\s+\d+\s*[-–—]\s*/i, "").trim();
+        if (!cleanName) continue;
+        maxClassNum += 1;
+        const newClassId = `SCIG6A${String(maxClassNum).padStart(2, "0")}`;
+        createWrites.push({
+          operation: "set",
+          path: "classes/" + newClassId,
+          data: { SectionName: cleanName, teacherId: invitation.id, gradeLevel: "Grade 6", createdAt: { $type: "serverTimestamp" } }
+        });
+      }
+      await transaction.commit(createWrites); transaction = null;
       return respond({ id: invitation.id });
     }
     if (body.action === "check-student-ids") {
