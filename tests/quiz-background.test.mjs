@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { QuizGenerationJob } from "../workers/quiz-jobs-worker.js";
 import { onRequestPost as runJob } from "../functions/api/run-quiz-job.js";
-import { signQuizJob, verifyQuizJob } from "../server/quiz-background.js";
+import { quizExecutionObject, quizJobObject, signQuizJob, verifyQuizJob } from "../server/quiz-background.js";
 
 test("a queued job survives its initiating request and keeps its result for review", async context => {
   const storage = {
@@ -57,4 +57,102 @@ test("the private callback rejects altered and expired job signatures", async ()
     env: { WEB_SESSION_SECRET: secret, QUIZ_GENERATION_JOBS: {} }
   });
   assert.equal(response.status, 401);
+});
+
+function backgroundFixture() {
+  const objects = new Map();
+  const env = { WEB_SESSION_SECRET: "test-session-secret-with-sufficient-length", QUIZ_JOB_CALLBACK_ORIGIN: "https://imars.test" };
+  env.QUIZ_GENERATION_JOBS = {
+    idFromName: value => value,
+    get(name) {
+      if (!objects.has(name)) {
+        const values = new Map();
+        const storage = { get: async key => values.get(key), put: async (key, value) => values.set(key, structuredClone(value)),
+          delete: async key => values.delete(key), setAlarm: async () => {}, deleteAlarm: async () => {},
+          transaction: async callback => callback(storage) };
+        objects.set(name, new QuizGenerationJob({ storage }, env));
+      }
+      return { fetch: (url, options) => objects.get(name).fetch(new Request(url, options)) };
+    }
+  };
+  return { env, objects };
+}
+
+for (const loseResponse of [false, true]) {
+  test(`background generation completes without browser polling, lost callback response=${loseResponse}`, async context => {
+    const { env, objects } = backgroundFixture();
+    const actor = { uid: "teacher-a", id: "TEACH1000", role: "teacher" };
+    const id = crypto.randomUUID();
+    const callback = await signQuizJob(env.WEB_SESSION_SECRET, { id, actor, executeBy: Date.now() + 120_000 });
+    let generated = 0;
+    const generate = async () => { generated++; return Response.json({ questions: [{ text: "What is a food web?" }] }); };
+    const request = options => new Request("https://imars.test/api/run-quiz-job", options);
+    context.mock.method(globalThis, "fetch", async (_url, options) => {
+      const response = await runJob({ env, request: request(options) }, { generate });
+      if (loseResponse) throw new TypeError("Connection interrupted after result storage");
+      return response;
+    });
+    const job = quizJobObject(env, actor);
+    await job.fetch("https://quiz-job.internal/", { method: "POST", body: JSON.stringify({ id, details: { title: "Food Webs" }, callback }) });
+    const worker = objects.get(JSON.stringify([actor.uid, actor.id]));
+    const originalFetch = worker.fetch.bind(worker);
+    worker.fetch = request => {
+      assert.notEqual(new URL(request.url).pathname, "/claim", "callback must not reenter the waiting job object");
+      return originalFetch(request);
+    };
+    await worker.alarm();
+    assert.equal(generated, 1);
+    assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "complete");
+    const duplicate = await runJob({ env, request: request({ method: "POST", body: callback.body,
+      headers: { "X-Imars-Quiz-Signature": callback.signature } }) }, { generate });
+    assert.equal(duplicate.status, 409);
+    assert.equal(generated, 1);
+  });
+}
+
+test("a callback that has not started receives one server-side retry", async context => {
+  const { env, objects } = backgroundFixture();
+  const actor = { uid: "teacher-a", id: "TEACH1000", role: "teacher" };
+  const id = crypto.randomUUID();
+  const callback = await signQuizJob(env.WEB_SESSION_SECRET, { id, actor, executeBy: Date.now() + 120_000 });
+  let calls = 0, generated = 0;
+  context.mock.method(globalThis, "fetch", async (_url, options) => {
+    if (++calls === 1) throw new TypeError("Connection failed before acceptance");
+    return runJob({ env, request: new Request("https://imars.test/api/run-quiz-job", options) }, {
+      generate: async () => { generated++; return Response.json({ questions: [{ text: "What is a cell?" }] }); }
+    });
+  });
+  const job = quizJobObject(env, actor);
+  await job.fetch("https://quiz-job.internal/", { method: "POST", body: JSON.stringify({ id, details: {}, callback }) });
+  const worker = objects.get(JSON.stringify([actor.uid, actor.id]));
+  await worker.alarm();
+  assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "queued");
+  await worker.alarm();
+  assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "complete");
+  assert.equal(calls, 2);
+  assert.equal(generated, 1);
+});
+
+test("the server watchdog recovers a later completed result without starting generation again", async context => {
+  const { env, objects } = backgroundFixture();
+  const actor = { uid: "teacher-a", id: "TEACH1000", role: "teacher" };
+  const id = crypto.randomUUID(), executeBy = Date.now() + 120_000;
+  const callback = await signQuizJob(env.WEB_SESSION_SECRET, { id, actor, executeBy });
+  let calls = 0;
+  const execution = quizExecutionObject(env, id);
+  context.mock.method(globalThis, "fetch", async () => {
+    calls++;
+    await execution.fetch("https://quiz-job.internal/claim-execution", { method: "POST", body: JSON.stringify({ id, executeBy }) });
+    throw new TypeError("Response disconnected while execution continues");
+  });
+  const job = quizJobObject(env, actor);
+  await job.fetch("https://quiz-job.internal/", { method: "POST", body: JSON.stringify({ id, details: {}, callback }) });
+  const worker = objects.get(JSON.stringify([actor.uid, actor.id]));
+  await worker.alarm();
+  assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "running");
+  await execution.fetch("https://quiz-job.internal/finish-execution", { method: "POST", body: JSON.stringify({ id,
+    result: { status: 200, body: { questions: [{ text: "What is an ecosystem?" }] } } }) });
+  await worker.alarm();
+  assert.equal((await (await job.fetch("https://quiz-job.internal/")).json()).status, "complete");
+  assert.equal(calls, 1);
 });

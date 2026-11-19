@@ -1,5 +1,6 @@
 import { closeWebSession, protectedWebLogin, webRequest } from "./web-login.js";
 import { invalidateTeacherViews } from "./view-cache.js";
+import { clearQuizWorkspace } from "./quiz-workspace.js";
 
 const VISIT = "imars-web-visit-v1";
 const SIGN_OUT = "imars-web-sign-out-v1";
@@ -29,6 +30,7 @@ function visit() {
   return null;
 }
 function clearVisit() {
+  clearQuizWorkspace();
   try { window.sessionStorage.removeItem(VISIT); } catch {}
   if (window.name.startsWith("imars-web:")) window.name = "";
   invalidateTeacherViews();
