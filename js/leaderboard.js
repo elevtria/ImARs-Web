@@ -39,18 +39,14 @@ function render() {
   document.getElementById("podiumScope").textContent = section?.name || "All assigned sections";
   document.getElementById("rankingsCount").textContent = complete ? number.format(ranked.length) + " students" : "Loading students…";
   const winners = ranked.filter(row => row.points > 0).slice(0, 3);
-  podium.innerHTML = winners.map((student, index) => {
-    const position = index + 1;
-    return `<article class="podium-place podium-place-${position}" data-rank="${student.rank}" aria-label="Rank ${student.rank}: ${escapeHtml(student.name)}, ${student.points} points">
-      <div class="podium-award" aria-hidden="true"><span>★</span><b>${student.rank}</b></div>
-      <div class="podium-name"><strong>${escapeHtml(student.name)}</strong><span>${escapeHtml(student.sectionName)}</span><b>${number.format(student.points)} <small>pts</small></b></div>
-      <div class="podium-column"><span class="podium-medal" aria-hidden="true">${position === 1 ? "★" : "✦"}</span><span class="podium-rank">${student.rank}</span></div>
-    </article>`;
-  }).join("");
-  const highestPoints = ranked[0]?.points || 1;
-  list.innerHTML = ranked.map(student => `<li class="leaderboard-row${student.rank <= 3 && student.points > 0 ? " leaderboard-row-top" : ""}" data-rank="${student.rank}">
+  podium.innerHTML = winners.map(student => `<li class="leaderboard-achiever" data-rank="${student.rank}">
+    <span class="leaderboard-achiever-rank" aria-label="Rank ${student.rank}">${student.rank}</span>
+    <div class="leaderboard-student"><strong>${escapeHtml(student.name)}</strong><span>${escapeHtml(student.sectionName)}</span></div>
+    <b class="leaderboard-points">${number.format(student.points)} <small>pts</small></b>
+  </li>`).join("");
+  list.innerHTML = ranked.map(student => `<li class="leaderboard-row" data-rank="${student.rank}">
     <span class="leaderboard-rank" aria-label="Rank ${student.rank}">${student.rank}</span>
-    <div class="leaderboard-student"><strong>${escapeHtml(student.name)}</strong><span>${escapeHtml(student.sectionName)}</span><div class="leaderboard-score-track" aria-hidden="true"><i style="width:${Math.round(student.points / highestPoints * 100)}%"></i></div></div>
+    <div class="leaderboard-student"><strong>${escapeHtml(student.name)}</strong><span>${escapeHtml(student.sectionName)}</span></div>
     <b class="leaderboard-points">${number.format(student.points)} <small>pts</small></b>
   </li>`).join("");
   document.getElementById("podiumEmpty").hidden = !complete || winners.length > 0;

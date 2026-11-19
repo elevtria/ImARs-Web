@@ -60,10 +60,10 @@
       <p class="leaderboard-status" id="leaderboardStatus" role="status" aria-live="polite" data-auth-shell>Loading student points…</p>
       <section id="leaderboardPanel" class="leaderboard-layout" role="tabpanel" aria-labelledby="overallTab" aria-busy="true" data-auth-shell>
         <section class="leaderboard-stage" aria-labelledby="podiumHeading" data-auth-shell>
-          <div class="leaderboard-stage-heading"><span class="leaderboard-trophy" aria-hidden="true" data-public-label>🏆</span><div><h2 id="podiumHeading" data-public-label>Top achievers</h2><p id="podiumScope">All assigned sections</p></div></div>
+          <div class="leaderboard-stage-heading"><span class="leaderboard-trophy" aria-hidden="true" data-public-label><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v5a4 4 0 0 1-8 0V3Z"/><path d="M8 5H5v2a4 4 0 0 0 4 4M16 5h3v2a4 4 0 0 1-4 4M12 12v5M8 21v-2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M7 21h10"/></svg></span><div><h2 id="podiumHeading" data-public-label>Top achievers</h2><p id="podiumScope">All assigned sections</p></div></div>
           <div class="leaderboard-skeleton podium-skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
-          <div class="leaderboard-podium" id="leaderboardPodium"></div>
-          <p class="leaderboard-podium-empty" id="podiumEmpty" hidden>Earn points in the ImARs app to appear on the podium.</p>
+          <ol class="leaderboard-podium" id="leaderboardPodium" aria-label="Top achievers" role="list"></ol>
+          <p class="leaderboard-podium-empty" id="podiumEmpty" hidden>Students appear here once they earn points in the ImARs app.</p>
         </section>
         <section class="leaderboard-rankings" aria-labelledby="rankingsHeading" data-auth-shell>
           <div class="leaderboard-list-heading"><div><h2 id="rankingsHeading" data-public-label>All rankings</h2><p id="rankingsCount">Loading students…</p></div><span data-public-label>Points</span></div>
