@@ -42,6 +42,12 @@ export function activityDeadlineInput(value) {
   } catch { return ""; }
 }
 
+export function activityDeadlineMinimum(releaseDate = "", now = new Date()) {
+  const futureMinute = activityDeadlineInput(new Date(Math.floor(now.getTime() / 60_000) * 60_000 + 60_000).toISOString());
+  const releaseMinimum = validDate(releaseDate) ? `${releaseDate}T00:01` : "";
+  return releaseMinimum > futureMinute ? releaseMinimum : futureMinute;
+}
+
 export function activityDeadlineFromInput(value) {
   if (value === "") return "";
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) throw new Error("Enter a valid activity deadline.");

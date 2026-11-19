@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, validateActivityDeadlineUtc, activityDeadlineInput, activityDeadlineFromInput, currentScheduledTerm, schoolTodayISO } from "../js/topic-availability.js";
+import { topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, sectionSchedule, validateActivityDeadlineUtc, activityDeadlineInput, activityDeadlineMinimum, activityDeadlineFromInput, currentScheduledTerm, schoolTodayISO } from "../js/topic-availability.js";
 
 const today = "2026-10-14";
 const locked = { locked: true, date: "" };
 const unlocked = { locked: false, date: "" };
 const fromUpdate = (update) => ({ locked: update.isLocked, date: update.scheduledDate });
+
+test("deadline picker excludes past Philippine dates and times and respects a future release", () => {
+  const now = new Date("2026-11-19T15:59:25Z");
+  assert.equal(activityDeadlineMinimum("", now), "2026-11-20T00:00");
+  assert.equal(activityDeadlineMinimum("2026-11-21", now), "2026-11-21T00:01");
+  assert.equal(activityDeadlineMinimum("2026-11-18", now), "2026-11-20T00:00");
+});
 
 test('the dashboard follows the latest term actually released to an owned section, not shared defaults or future releases',()=>{
   const terms=['term_01','term_02','term_03'].map(id=>({id,lessons:[{isLocked:false,sectionSchedules:{}}]}));
