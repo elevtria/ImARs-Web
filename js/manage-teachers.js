@@ -77,7 +77,7 @@ function render() {
               <span class="teacher-status ${teacher.active ? "" : "inactive"}">${teacher.active ? "active" : "inactive"}</span>
               <span class="teacher-id-badge" style="background: #eef2ff; color: #4f46e5; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
             </div>
-            <small class="teacher-contact">${escapeHtml(teacher.email)} · ${escapeHtml(teacher.subject)} · Joined ${escapeHtml(teacher.joined)}</small>
+            <small class="teacher-contact">${escapeHtml(teacher.email)}${teacher.subject ? ` · ${escapeHtml(teacher.subject)}` : ""} · Joined ${escapeHtml(teacher.joined)}</small>
             <div class="section-chips">
               ${(teacher.sections || []).map((sec) => `<span class="section-chip">${escapeHtml(sec)}</span>`).join("")}
             </div>
@@ -218,28 +218,26 @@ if (form) {
     const formData = new FormData(form);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim().toLowerCase();
-    const subject = String(formData.get("subject") || "").trim();
-    const sections = String(formData.get("sections") || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (!name || !email || !subject) return;
+    if (!name || !email) return;
+    if (name.length > 120 || !/^\p{L}[\p{L}\p{M} .'’\-]*$/u.test(name)) {
+      alert("Use letters, spaces, periods, hyphens, or apostrophes in the teacher name. Numbers are not allowed.");
+      return;
+    }
 
     submitting = true;
     const submitButton = form.querySelector('[type="submit"]');
     if (submitButton) submitButton.disabled = true;
     try {
-      const { id: nextTeacherId } = await createTeacher({ name, email, subject, sections });
+      const { id: nextTeacherId } = await createTeacher({ name, email });
 
       teachers.unshift({
         id: nextTeacherId,
         schoolId: nextTeacherId,
         name,
         email,
-        subject,
+        subject: "",
         joined: "Just now",
-        sections,
+        sections: [],
         students: 0,
         pre: null,
         post: null,

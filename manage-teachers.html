@@ -96,10 +96,8 @@
         <div><h2 id="dialogTitle">Add Teacher</h2><p>Add a teacher account.</p></div>
         <button class="dialog-close" id="closeTeacherDialog" type="button" aria-label="Close">×</button>
       </div>
-      <label>Teacher name<input name="name" required placeholder="e.g. Alex Reyes" /></label>
+      <label>Teacher name<input name="name" required maxlength="120" autocomplete="name" pattern="\p{L}[\p{L}\p{M} .’'\-]*" title="Use letters, spaces, periods, hyphens, or apostrophes. Numbers are not allowed." placeholder="e.g. Alex Reyes" /></label>
       <label>Email address<input name="email" type="email" required placeholder="name@school.edu" /></label>
-      <label>Subject<input name="subject" required placeholder="e.g. Science" /></label>
-      <label>Sections <small>Separate section names with commas.</small><input name="sections" placeholder="Grade 8 – Malinao, Grade 8 – Sampaguita" /></label>
       <div class="dialog-actions">
         <button class="cancel-button" id="cancelTeacherDialog" type="button">Cancel</button>
         <button class="add-teacher-button" type="submit">Add Teacher</button>

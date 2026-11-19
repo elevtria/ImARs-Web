@@ -19,11 +19,12 @@
   }
 
   function spreadFrames(x, y, radius) {
-    return [0, .12, .34, .65, 1].map((progress, frame) => {
-      const points = Array.from({ length: 72 }, (_, index) => {
-        const angle = index * Math.PI / 36;
-        const edge = .85 + .08 * Math.sin(5 * angle + frame * .3)
-          + .05 * Math.cos(9 * angle - frame * .2) + .03 * Math.sin(13 * angle);
+    return Array.from({ length: 9 }, (_, frame) => {
+      const progress = frame / 8;
+      const points = Array.from({ length: 96 }, (_, index) => {
+        const angle = index * Math.PI / 48;
+        const edge = .85 + .07 * Math.sin(5 * angle + progress * 1.2)
+          + .04 * Math.cos(9 * angle - progress * .8) + .025 * Math.sin(13 * angle);
         const reach = radius * progress * edge;
         return `${(x + Math.cos(angle) * reach).toFixed(1)}px ${(y + Math.sin(angle) * reach).toFixed(1)}px`;
       });
@@ -68,8 +69,8 @@
         const transition = document.startViewTransition(apply);
         transition.ready.then(() => {
           root.animate(dark ? frames : frames.slice().reverse(), {
-            duration: 900,
-            easing: "cubic-bezier(.22,.61,.36,1)",
+            duration: 1100,
+            easing: "cubic-bezier(.4,0,.2,1)",
             fill: "both",
             pseudoElement: dark ? "::view-transition-new(root)" : "::view-transition-old(root)"
           });

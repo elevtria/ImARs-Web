@@ -584,6 +584,32 @@ test("teacher document IDs cannot break out of action-button attributes", async 
   assert.ok(html.includes('data-toggle-id="&lt;img'));
 });
 
+test("Add Teacher sends only the name and email and rejects numbers in names", async () => {
+  const app = page("manage-teachers.js", { teachers: [] });
+  await app.render();
+  const values = { name: "Alex Reyes2", email: "new@example.test" }, created = [], messages = [];
+  app.context.FormData = class { get(name) { return values[name]; } };
+  app.context.createTeacher = async profile => { created.push(JSON.parse(JSON.stringify(profile))); return { id: "TEACH1002" }; };
+  app.context.alert = message => messages.push(message);
+  app.element("teacherForm").querySelector = () => ({ disabled: false });
+  app.element("teacherForm").reset = () => {};
+  app.element("teacherDialog").close = () => {};
+  const submit = () => app.element("teacherForm").events.submit({ preventDefault() {} });
+  await submit();
+  assert.equal(created.length, 0);
+  assert.match(messages[0], /Numbers are not allowed/);
+  values.name = "Ma. José Niño O’Connor";
+  await submit();
+  assert.deepEqual(created, [{ name: values.name, email: values.email }]);
+  assert.match(app.element("teacherList").html(), /Ma\. José Niño O’Connor/);
+  const html = readFileSync(new URL("../manage-teachers.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /<input\b[^>]*name="(?:subject|sections)"/);
+  assert.match(html, /name="name"[^>]*pattern=/);
+  const namePattern = new RegExp("^(?:" + html.match(/name="name"[^>]*pattern="([^"]+)"/)[1] + ")$", "v");
+  assert.equal(namePattern.test(values.name), true);
+  assert.equal(namePattern.test("Alex Reyes2"), false);
+});
+
 test("Analytics searches names and IDs with the same rules as Student Records", async () => {
   const data = activityReportData(["A"], { count: 2 });
   data.sections[0].students[0].studentDoc = record("0026270123", { displayName: "Kurt S. Amor", middleName: "Maria Pilar" });

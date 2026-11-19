@@ -107,7 +107,7 @@ test("dark mode spreads from the switch, ignores overlapping clicks, and cleans 
   const spread = app.animations[0];
   assert.equal(spread.options.pseudoElement, "::view-transition-new(root)");
   assert.match(spread.frames[0].clipPath, /^polygon\(930\.0px 36\.0px,/);
-  assert.equal(spread.options.duration, 900);
+  assert.equal(spread.options.duration, 1100);
   app.transitions[0].finish();
   await Promise.resolve();
   assert.equal(app.root.classList.contains("theme-switching"), false);

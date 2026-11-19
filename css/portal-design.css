@@ -1,4 +1,30 @@
 /* Shared visual rhythm for the teacher and administrator portals. */
+@media screen {
+  :root {
+    --portal-page-width: 1440px;
+    --portal-page-gutter: clamp(16px, 2.5vw, 32px);
+    scrollbar-gutter: stable;
+  }
+  :root body:has(#drawer) .app > main:is(.content, .dashboard-content),
+  :root body:has(#drawer) .app .topbar-inner {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: var(--portal-page-width);
+    margin-inline: auto;
+    padding-inline: var(--portal-page-gutter);
+  }
+  :root body:has(#drawer) .app > main:is(.content, .dashboard-content) {
+    padding-top: 28px;
+    padding-bottom: 80px;
+  }
+}
+@media screen and (max-width: 640px) {
+  :root body:has(#drawer) .app > main:is(.content, .dashboard-content) {
+    padding-top: 20px;
+    padding-bottom: 88px;
+  }
+}
+
 @media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
   :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link { position: relative; overflow: hidden; transform: perspective(900px) rotateX(0deg) rotateY(0deg); transition: transform 220ms cubic-bezier(.2,.65,.3,1), border-color 220ms ease, box-shadow 220ms ease; }
   :root body:is(.admin-overview, .teacher-dashboard) .app main .stats .stat-link[data-tilt-active] { transform: perspective(900px) rotateX(var(--summary-rotate-x, 0deg)) rotateY(var(--summary-rotate-y, 0deg)) translateY(-4px); }

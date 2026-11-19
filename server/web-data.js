@@ -781,8 +781,13 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();
-      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections"]) || !text(profile.name) || !email(profile.email) || !text(profile.subject) ||
-          !Array.isArray(profile.sections) || profile.sections.length > 50 || profile.sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
+      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections"]) || !email(profile.email)) throw fail("Enter valid teacher details.", 400);
+      if (typeof profile.name !== "string" || profile.name.trim().length > 120 || !/^\p{L}[\p{L}\p{M} .'’\-]*$/u.test(profile.name.trim())) {
+        throw fail("Use letters, spaces, periods, hyphens, or apostrophes in the teacher name. Numbers are not allowed.", 400);
+      }
+      const subject = profile.subject === undefined ? "" : profile.subject;
+      const sections = profile.sections === undefined ? [] : profile.sections;
+      if ((subject !== "" && !text(subject)) || !Array.isArray(sections) || sections.length > 50 || sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
       const existing = await store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }] });
       const normalizedEmail = profile.email.toLowerCase();
       if (existing.some(row => [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
@@ -792,18 +797,18 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       const reserved = await stateCall(env, "staff-roster", "allocate-teacher", { minimum: maximum + 1, email: profile.email });
       if (!reserved.ok) throw new Error("Invitation allocation failed");
       const invitation = reserved.result;
-      const teacher = { schoolId: invitation.id, displayName: profile.name, fullName: profile.name, providedEmail: invitation.email, email: invitation.email,
-        subject: profile.subject, sections: profile.sections, role: "teacher", active: true, status: "invited", isRegistered: false,
+      const teacher = { schoolId: invitation.id, displayName: profile.name.trim(), fullName: profile.name.trim(), providedEmail: invitation.email, email: invitation.email,
+        subject, sections, role: "teacher", active: true, status: "invited", isRegistered: false,
         webInvitationNonce: invitation.nonce, createdAt: { $type: "serverTimestamp" } };
       await scope.get("users/" + invitation.id);
-      const existingClasses = await store.query("classes", { limit: 200 });
+      const existingClasses = sections.length ? await store.query("classes", { limit: 200 }) : [];
       let maxClassNum = 0;
       for (const row of existingClasses) {
         const m = /^SCIG6A(\d+)$/.exec(row.id);
         if (m) maxClassNum = Math.max(maxClassNum, Number(m[1]));
       }
       const createWrites = [{ operation: "set", path: "users/" + invitation.id, data: teacher }];
-      for (const rawSec of profile.sections) {
+      for (const rawSec of sections) {
         const cleanName = String(rawSec || "").replace(/^Grade\s+\d+\s*[-–—]\s*/i, "").trim();
         if (!cleanName) continue;
         maxClassNum += 1;
