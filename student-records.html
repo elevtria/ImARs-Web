@@ -44,11 +44,14 @@
     </header>
 
     <main class="content" inert data-auth-shell>
-<div class="analytics-term-switch" role="group" aria-label="Student Records view"><button type="button" class="term-tab-btn" id="recordsDirectoryTab" aria-pressed="true" aria-controls="recordsDirectory">Students</button><button type="button" class="term-tab-btn" id="recordsSummaryTab" aria-pressed="false" aria-controls="studentScoreSummary">Score summary</button></div><div id="recordsDirectory">      <section class="hero" data-auth-shell data-await-content="student-records">
-        <div>
-          <h1 data-auth-shell>Student Records</h1>
-          <p>Term performance · AR &amp; module engagement</p>
-        </div>
+      <section class="hero" data-auth-shell>
+        <div><h1 data-auth-shell>Student Records</h1><p>Term performance · AR &amp; module engagement</p></div>
+      </section>
+      <div class="analytics-term-switch records-view-tabs" role="group" aria-label="Student Records view">
+        <button type="button" class="term-tab-btn" id="recordsSummaryTab" aria-pressed="true" aria-controls="studentScoreSummary">Score summary</button>
+        <button type="button" class="term-tab-btn" id="recordsDirectoryTab" aria-pressed="false" aria-controls="recordsDirectory">Student management</button>
+      </div>
+      <div id="recordsDirectory" hidden><section class="card records-management-filters" data-auth-shell data-await-content="student-records">
         <div class="record-controls">
           <div class="select-wrap">
             <select id="recordsTerm" aria-label="Filter student performance by term"><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select>
@@ -89,7 +92,7 @@
         <p id="recordsPageStatus" class="view-data-status" role="status" aria-live="polite" data-loading="true" aria-label="Loading students"></p>
         <button type="button" class="ghost-btn" id="nextRecordsPage" disabled>Next page</button>
       </div>
-</div><section id="studentScoreSummary" class="class-analytics" hidden data-auth-shell><p class="scheduler-progress-copy"><span id="score-analyticsTermLabel">Term 1</span> · <span id="score-sectionSummary">—</span> · <span id="score-studentCount">—</span> students</p>      <div class="analytics-term-switch" id="score-termSwitch" role="group" aria-label="Analytics term">
+</div><section id="studentScoreSummary" class="class-analytics" data-auth-shell><p class="scheduler-progress-copy"><span id="score-analyticsTermLabel">Term 1</span> · <span id="score-sectionSummary">—</span> · <span id="score-studentCount">—</span> students</p>      <div class="analytics-term-switch" id="score-termSwitch" role="group" aria-label="Analytics term">
         <button type="button" class="term-tab-btn" data-term="term_01" aria-pressed="true">Term 1</button>
         <button type="button" class="term-tab-btn" data-term="term_02" aria-pressed="false">Term 2</button>
         <button type="button" class="term-tab-btn" data-term="term_03" aria-pressed="false">Term 3</button>

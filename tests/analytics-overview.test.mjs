@@ -33,6 +33,11 @@ test("spreadsheet moves to Student Records with unique IDs and Analytics keeps c
   assert.equal(ids.length, new Set(ids).size);
   assert.match(records, /id="score-studentGrid"/); assert.match(records, /id="recordsContainer"/);
   assert.match(records, /id="score-editScores"/); assert.match(records, /id="score-downloadScoreReport"/);
+  assert.match(records, /id="recordsDirectory" hidden/);
+  assert.doesNotMatch(records, /id="studentScoreSummary"[^>]*\bhidden\b/);
+  assert.ok(records.indexOf("<h1") < records.indexOf('id="recordsSummaryTab"'));
+  assert.ok(records.indexOf('id="recordsSummaryTab"') < records.indexOf('id="recordsDirectoryTab"'));
+  assert.match(records, /id="recordsDirectoryTab"[^>]*>Student management</);
   assert.doesNotMatch(analytics, /id="studentGrid"|Student Score Summary/);
   assert.ok(analytics.indexOf('id="topicsContainer"') > analytics.indexOf('id="questionHeatmapRows"'));
 });

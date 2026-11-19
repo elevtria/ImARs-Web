@@ -1180,6 +1180,11 @@ a.brand:focus-visible { outline: 2px solid var(--steel); outline-offset: -3px; }
 .analytics-time-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line, #b5cde3); }
 .analytics-time-row a { text-decoration: underline; font-weight: 700; }
 #studentScoreSummary { margin-top: 20px; }
+.analytics-term-switch.records-view-tabs { display: inline-flex; grid-template-columns: none; width: fit-content; max-width: 100%; flex-wrap: wrap; margin: 22px 0 26px; }
+.records-view-tabs button { padding: 10px 20px; white-space: nowrap; }
+.records-management-filters { padding: 20px; margin-bottom: 24px; }
+.records-management-filters .record-controls { justify-content: flex-start; flex-wrap: wrap; }
+.records-view-tabs + #recordsDirectory + #studentScoreSummary { margin-top: 0; }
 @media (max-width: 540px) { .analytics-bar-row { grid-template-columns: 60px minmax(30px,1fr) 40px; gap: 6px; } .analytics-bar-row small { grid-column: 2 / -1; } }
 .score-summary-controls { flex-wrap: wrap; }
 .score-summary-head { flex-wrap: wrap; }

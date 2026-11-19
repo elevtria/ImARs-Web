@@ -11,7 +11,7 @@ async function selectSummary(selected) {
   if (selected && !summaryModule) {
     summaryModule = import("./student-score-summary.js");
     try { await summaryModule; }
-    catch { summaryModule = null; document.getElementById("score-analyticsReportStatus").textContent = "Could not open the summary. Choose Students, then try Score summary again."; }
+    catch { summaryModule = null; document.getElementById("score-analyticsReportStatus").textContent = "Could not open the summary. Choose Student management, then try Score summary again."; }
   } else window.dispatchEvent(new Event("imars-score-summary-view"));
 }
 directoryTab.addEventListener("click", () => void selectSummary(false));
@@ -21,4 +21,5 @@ if (student && /^[A-Za-z0-9_-]{1,100}$/.test(student)) {
   const search = document.getElementById("studentSearch");
   search.value = student;
   search.dispatchEvent(new Event("input"));
-}
+  void selectSummary(false);
+} else void selectSummary(true);
