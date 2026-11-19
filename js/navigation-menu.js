@@ -24,54 +24,10 @@ if (navigationDrawer) {
     };
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
-    const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
-    let pointerInside = false;
-    let keyboardNavigation = false;
-    let collapseTimer;
-    const updateCompact = () => {
-      const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
-      const compact = desktop.matches && hoverPointer.matches && !pointerInside && !focused;
-      navigationDrawer.classList.toggle("is-compact", compact);
-      if (compact) setAccountOpen(false);
-    };
-    const setPointerInside = inside => {
-      if (inside === pointerInside) return;
-      pointerInside = inside;
-      clearTimeout(collapseTimer);
-      if (inside) updateCompact();
-      else collapseTimer = setTimeout(updateCompact, 220);
-    };
-    const resetHover = () => {
-      pointerInside = false;
-      keyboardNavigation = false;
-      clearTimeout(collapseTimer);
-      updateCompact();
-    };
-    panel.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") setPointerInside(true); });
-    panel.addEventListener("pointerleave", () => setPointerInside(false));
-    // Pointerleave can be missed when the page, window or hit-tested element
-    // changes. An outside pointer move must not leave the menu expanded.
-    document.addEventListener("pointermove", event => {
-      if (!desktop.matches || !hoverPointer.matches || event.pointerType === "touch") return;
-      const wasKeyboardNavigation = keyboardNavigation;
-      keyboardNavigation = false;
-      setPointerInside(panel.contains(event.target));
-      if (!pointerInside && wasKeyboardNavigation) updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerdown", event => {
-      keyboardNavigation = false;
-      if (desktop.matches && hoverPointer.matches) setPointerInside(panel.contains(event.target));
-      updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerleave", () => setPointerInside(false));
-    document.addEventListener("keydown", event => {
-      if (event.key === "Tab") keyboardNavigation = true;
-    });
-    window.addEventListener("blur", resetHover);
-    panel.addEventListener("focusin", updateCompact);
-    panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
-    hoverPointer.addEventListener("change", resetHover);
+    // Desktop navigation stays expanded on every page. No pointer-driven width
+    // changes or navigation handoff are needed, so document changes cannot shrink it.
     const syncDrawer = () => {
+      navigationDrawer.classList.remove("is-compact");
       const open = !desktop.matches && navigationDrawer.classList.contains("open");
       const hidden = !desktop.matches && !open;
       navigationDrawer.setAttribute("aria-hidden", String(hidden));
@@ -85,19 +41,15 @@ if (navigationDrawer) {
       if (wasOpen && restoreFocus) menuButton?.focus();
       syncDrawer();
     };
-    const resetNavigation = () => {
-      resetHover();
-      closeNavigation();
-    };
-    desktop.addEventListener("change", resetNavigation);
-    window.addEventListener("pagehide", resetNavigation);
-    window.addEventListener("pageshow", resetNavigation);
+    desktop.addEventListener("change", () => closeNavigation());
+    window.addEventListener("pagehide", () => closeNavigation());
+    window.addEventListener("pageshow", () => closeNavigation());
     menuButton?.addEventListener("click", () => {
+      if (desktop.matches) return;
       navigationDrawer.classList.add("open");
       syncDrawer();
       brand.focus();
     });
-    resetHover();
     syncDrawer();
 
     const close = document.createElement("button");
@@ -122,10 +74,7 @@ if (navigationDrawer) {
         accountButton?.focus();
         return;
       }
-      if (desktop.matches) {
-        resetHover();
-        if (panel.contains(document.activeElement)) document.activeElement.blur();
-      } else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
+      if (!desktop.matches && navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();

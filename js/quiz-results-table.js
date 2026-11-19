@@ -39,8 +39,10 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         const badge = completed ? "is-completed" : student.status === "pending-review" ? "is-pending" : "is-empty";
         const label = completed ? "Graded" : student.status === "pending-review" ? "Awaiting grade"
           : student.status === "not-submitted" ? "Not submitted" : "Submitted";
+        const points = student.score == null || student.maximum == null ? "—" : `${student.score}/${student.maximum}`;
+        const preliminary = points !== "—" && student.status === "pending-review" ? ' title="Preliminary score before teacher review"' : "";
         line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span>${escapeHtml(student.name)}</span></th>
-          ${compact ? "" : `<td class="quiz-result-points">${escapeHtml(completed ? quizScoreLabel(student) : "—")}</td>`}
+          ${compact ? "" : `<td class="quiz-result-points"${preliminary}>${escapeHtml(points)}</td>`}
           <td><span class="activity-result-score quiz-result-status ${badge}">${escapeHtml(label)}</span></td>
           ${compact ? '<td class="quiz-grading-action">—</td>' : `<td>${escapeHtml(date)}</td><td></td>`}`;
         if (!student.attemptId) continue;
@@ -59,7 +61,11 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
             review.textContent = "View / edit grade";
             review.setAttribute("aria-label", `View / edit grade for ${student.name}`);
           }
-          if (!compact) line.querySelector(".quiz-result-points").textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+          if (!compact) {
+            const score = line.querySelector(".quiz-result-points");
+            score.textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+            score.removeAttribute("title");
+          }
           review.focus();
           message.textContent = "Grade saved.";
         }));

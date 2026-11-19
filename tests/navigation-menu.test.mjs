@@ -51,39 +51,31 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
-test("sidebar does not inherit a stale expanded hover state after navigation", () => {
+test("desktop sidebar starts expanded and stays expanded during pointer, window and navigation changes", () => {
   const f = menu({ inheritedHover: true });
-  assert.equal(f.compact(), true);
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
-  f.panel.emit("pointerleave"); f.flush(); assert.equal(f.compact(), true);
-});
-
-test("moving outside collapses the sidebar even when its pointerleave event is missed", () => {
-  const f = menu();
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.flush(); assert.equal(f.compact(), true);
-  f.document.emit("pointermove", { target: f.panel, pointerType: "mouse" }); assert.equal(f.compact(), false);
-  f.document.emit("pointerdown", { target: f.outside }); assert.equal(f.compact(), true);
-});
-
-test("reentering cancels collapse and window blur or history restoration clears the hover state", () => {
-  const f = menu();
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.panel.emit("pointerleave");
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
-  for (const event of ["blur", "pagehide", "pageshow"]) {
-    f.panel.emit("pointerenter", { pointerType: "mouse" }); f.window.emit(event); assert.equal(f.compact(), true);
+  assert.equal(f.compact(), false);
+  assert.equal(f.drawer.inert, false);
+  for (const event of ["pointerenter", "pointerleave", "pointercancel"]) {
+    f.panel.emit(event, { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
   }
+  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
+  f.document.emit("pointerdown", { target: f.outside }); f.flush(); assert.equal(f.compact(), false);
+  for (const event of ["blur", "pagehide", "pageshow"]) {
+    f.window.emit(event, { persisted: true }); assert.equal(f.compact(), false);
+  }
+  const link = { href: "https://imars.test/analytics.html" };
+  f.drawer.emit("click", { target: { closest: () => link } });
+  f.window.emit("pagehide"); assert.equal(f.compact(), false);
+  const destination = menu();
+  assert.equal(destination.compact(), false, "new pages need no saved mouse position to stay expanded");
 });
 
-test("keyboard focus keeps navigation accessible but pointer movement and Escape cannot leave it stuck", () => {
+test("keyboard navigation and Escape do not collapse the desktop sidebar or lose its focused link", () => {
   const f = menu();
   f.document.activeElement = f.focusedLink;
-  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), true);
-  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
-  f.document.emit("keydown", { key: "Escape" }); assert.equal(f.compact(), true); assert.equal(f.document.activeElement, f.outside);
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
+  f.document.emit("keydown", { key: "Escape" });
+  assert.equal(f.compact(), false); assert.equal(f.document.activeElement, f.focusedLink);
 });
 
 test("mobile close controls and breakpoint changes retain the drawer behavior", () => {
@@ -99,7 +91,7 @@ test("mobile close controls and breakpoint changes retain the drawer behavior", 
   assert.equal(f.drawer.classes.has("open"), false);
   assert.equal(f.accountMenu.hidden, true);
   assert.equal(f.drawer.inert, true);
-  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), true); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
+  f.screen.matches = true; f.screen.emit("change"); assert.equal(f.compact(), false); assert.equal(f.drawer.attributes.get("aria-hidden"), "false");
 });
 
 test("mobile link navigation and history restoration clear the drawer and its backdrop", () => {

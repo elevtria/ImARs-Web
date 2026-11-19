@@ -129,3 +129,12 @@ body:not(.login-page) :is(input,select,textarea):focus-visible { outline:2px sol
 body:not(.login-page) :is(.tabs button,.ghost-btn,.action):focus-visible { outline:3px solid var(--portal-blue); outline-offset:3px; }
 @media(max-width:640px) { body:not(.login-page) :is(.hero,.intro) { padding:18px; } }
 }
+
+/* Keep desktop navigation at its expanded width from the first paint through
+   navigation. Mobile continues to use the existing menu drawer. */
+@media screen and (min-width: 1000px) {
+  :root body:has(#drawer) { --navigation-width: 260px; }
+  :root body:has(#drawer) .app { margin-left: 260px; transition: none; }
+  :root #drawer, :root #drawer .drawer-panel { width: 260px; transition: none; }
+  :root #drawer :is(.brand > div, .nav-label, .user-meta) { display: block; opacity: 1; pointer-events: auto; transition: none; }
+}

@@ -17,6 +17,19 @@
       toggle.title = toggle.getAttribute("aria-label");
     }
   }
+
+  function spreadFrames(x, y, radius) {
+    return [0, .12, .34, .65, 1].map((progress, frame) => {
+      const points = Array.from({ length: 72 }, (_, index) => {
+        const angle = index * Math.PI / 36;
+        const edge = .85 + .08 * Math.sin(5 * angle + frame * .3)
+          + .05 * Math.cos(9 * angle - frame * .2) + .03 * Math.sin(13 * angle);
+        const reach = radius * progress * edge;
+        return `${(x + Math.cos(angle) * reach).toFixed(1)}px ${(y + Math.sin(angle) * reach).toFixed(1)}px`;
+      });
+      return { clipPath: `polygon(${points.join(",")})` };
+    });
+  }
   apply();
   system.addEventListener("change", apply);
   window.addEventListener("storage", event => {
@@ -35,15 +48,37 @@
       if (root.classList.contains("theme-switching")) return;
       preference = root.dataset.theme === "dark" ? "light" : "dark";
       try { localStorage.setItem(key, preference); } catch { /* Keep the session choice. */ }
-      if (!document.startViewTransition || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (!document.startViewTransition || !root.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         apply();
         return;
       }
 
+      const dark = preference === "dark";
+      const bounds = toggle.getBoundingClientRect();
+      const x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2;
+      const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) * 1.6 + 32;
+      const frames = spreadFrames(x, y, radius);
+      const finish = () => {
+        root.classList.remove("theme-switching");
+        delete root.dataset.themeReveal;
+      };
       root.classList.add("theme-switching");
-      const transition = document.startViewTransition(apply);
-      const finish = () => root.classList.remove("theme-switching");
-      transition.finished.then(finish, finish);
+      root.dataset.themeReveal = dark ? "spread" : "retract";
+      try {
+        const transition = document.startViewTransition(apply);
+        transition.ready.then(() => {
+          root.animate(dark ? frames : frames.slice().reverse(), {
+            duration: 900,
+            easing: "cubic-bezier(.22,.61,.36,1)",
+            fill: "both",
+            pseudoElement: dark ? "::view-transition-new(root)" : "::view-transition-old(root)"
+          });
+        }).catch(() => { /* A skipped transition still applies the chosen palette. */ });
+        transition.finished.then(finish, finish);
+      } catch {
+        apply();
+        finish();
+      }
     });
     const toolbar = document.querySelector(".topbar-right, .admin-topbar-right");
     if (toolbar) toolbar.prepend(toggle);

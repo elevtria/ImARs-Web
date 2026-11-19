@@ -3,6 +3,7 @@ import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
 import { QUIZ_TYPES, quizAssignedToSection, quizReviewPoints } from "../js/quiz-limits.js";
+import { hasPreliminaryScore, preliminaryQuizScore } from "./quiz-preliminary-score.js";
 
 const bytes = value => new TextEncoder().encode(value);
 const b64 = value => btoa(String.fromCharCode(...value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -15,7 +16,8 @@ export class QuizReviewStore extends FirestoreAdmin {
       ["context.sectionId", sectionId], ...(quizId ? [["quizId", quizId]] : [])]
       .map(([fieldPath, stringValue]) => ({ fieldFilter: { field: { fieldPath }, op: "EQUAL", value: { stringValue } } }));
     const parent = studentId ? `/users/${studentId}` : "";
-    const fields = ["quizId", "submittedAt", "status", "receipt.score", "receipt.maximum", "review.score", "review.maximum"];
+    const fields = ["quizId", "submittedAt", "status", "receipt.score", "receipt.maximum", "review.score", "review.maximum",
+      ...(quizId ? ["preliminary"] : [])];
     const rows = await this.request(`documents${parent}:runQuery`, { method: "POST", body: JSON.stringify({
       structuredQuery: {
         from: [{ collectionId: "generated_quiz_attempts", ...(!studentId ? { allDescendants: true } : {}) }],
@@ -66,10 +68,12 @@ async function ownedSection(actor, store, id) {
   if (!activeProfile(section) || section.teacherId !== actor.id) throw fail("FORBIDDEN");
 }
 function resultFor(row) {
-  const { status, submittedAt, receipt, review } = row.data;
-  const grade = status === "reviewed" ? review : status === "graded" ? receipt : null;
+  const { status, submittedAt, receipt, review, preliminary } = row.data;
+  const grade = status === "reviewed" ? review : preliminary || receipt;
+  const hasScore = Number.isFinite(grade?.score) && Number.isFinite(grade?.maximum)
+    && grade.maximum > 0 && grade.score >= 0 && grade.score <= grade.maximum;
   return { attemptId: row.path.split("/").at(-1), status, submittedAtUtc: submittedAt,
-    score: grade?.score ?? null, maximum: grade?.maximum ?? null };
+    score: hasScore ? grade.score : null, maximum: hasScore ? grade.maximum : null };
 }
 const rosterFilters = sectionId => [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }];
 const rosterMember = (actor, student) => activeProfile(student.data) && (!student.data.teacherId || student.data.teacherId === actor.id);
@@ -98,7 +102,7 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
         total.submitted++;
         if (row.data.status === "pending-review") total.awaitingGrade++;
         const { score, maximum } = resultFor(row);
-        if (score !== null && maximum > 0) {
+        if (score !== null && ["graded", "reviewed"].includes(row.data.status)) {
           total.graded++;
           total.percentTotal += score / maximum * 100;
         }
@@ -162,11 +166,24 @@ async function sectionResults(actor, store, quiz, body) {
     ? await store.quizReport(actor, body.sectionId, body.quizId, page.map(student => student.id))
     : null;
   const scores = new Map(report?.items.map(item => [item.studentId, item]));
+  const snapshots = new Map();
   const items = await Promise.all(page.map(async ({ id, data }) => {
-    let result = scores.get(id);
+    let result = scores.get(id), latest;
     if (!store.quizReport) {
-      const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
+      [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
       if (latest) result = resultFor(latest);
+    }
+    if (result?.status === "pending-review" && result.score == null && hasPreliminaryScore(quiz.type)) {
+      const path = latest?.path || (validPart(result.attemptId) ? `users/${id}/generated_quiz_attempts/${result.attemptId}` : null);
+      const attempt = path ? (await store.get(path))?.data : null;
+      if (attempt?.quizId === body.quizId && attempt.status === "pending-review" && validPart(attempt.snapshotId)) {
+        if (!snapshots.has(attempt.snapshotId)) snapshots.set(attempt.snapshotId, store.get("generatedQuizRevisions/" + attempt.snapshotId));
+        const snapshot = (await snapshots.get(attempt.snapshotId))?.data;
+        if (snapshot?.quizId === body.quizId && snapshot.revision === attempt.revision) {
+          const preliminary = preliminaryQuizScore(snapshot, attempt.answers);
+          if (preliminary) Object.assign(result, preliminary);
+        }
+      }
     }
     if (!result && !currentlyAssigned) return null;
     return { ...result, studentId: id, name: studentName(data) || id, status: result?.status || "not-submitted" };

@@ -62,6 +62,72 @@ for (const type of ["essay", "identification-explanation", "modified-true-false"
   assert.doesNotMatch(JSON.stringify(gradedPage), /Student essay|Student correction|Student explanation|PRIVATE|feedback|reviewerUid/);
   assert.deepEqual(await (await f.call("submit", f.body)).json(), before.receipt);
 });
+test("reassigning a quiz changes student access and keeps submitted grades in the new section's Analytics", async () => {
+  const f = fixture();
+  f.put("generatedQuizzes/quiz1", quiz("quiz1", "essay", { assignmentScope: "section", termId: "term_02" }));
+  f.put("classes/C", { teacherId: "TEACH1" });
+  f.put("users/S3", { uid: "student-c", role: "student", active: true, classCode: "C", teacherId: "TEACH1" });
+  f.put("_accountAccess/student-c", { profileId: "S3", role: "student", active: true, authEmail: "student-c@example.test" });
+  f.identities.set("student-c", { localId: "student-c", email: "student-c@example.test", emailVerified: true, validSince: "0" });
+  const old = await f.begin();
+  assert.equal((await (await f.call("list", { limit: 20, cursor: "" })).json()).items.length, 1);
+  assert.equal((await (await f.call("list", { limit: 20, cursor: "" }, { uid: "student-c" })).json()).items.length, 0);
+
+  const original = structuredClone(f.data.get("generatedQuizzes/quiz1"));
+  f.put("generatedQuizzes/quiz1", { ...original, sectionId: "C" });
+  assert.equal((await (await f.call("list", { limit: 20, cursor: "" })).json()).items.length, 0);
+  assert.equal((await f.call("access", old.request)).status, 403);
+  const stale = f.submission(old.request);
+  Object.assign(stale.answers[0], { optionIndex: -1, value: "An answer from the previous section" });
+  assert.equal((await f.call("submit", stale)).status, 403);
+  assert.equal(f.data.get("users/S1/generated_quiz_attempts/" + old.request.attemptId).receipt, undefined);
+
+  const page = await (await f.call("list", { limit: 20, cursor: "" }, { uid: "student-c" })).json();
+  assert.equal(page.items.length, 1);
+  assert.equal(page.items[0].title, original.title);
+  const request = { quizId: "quiz1", revision: page.items[0].revision, attemptId: "c".repeat(32) };
+  const start = await f.call("start", request, { uid: "student-c" });
+  assert.equal(start.status, 200);
+  const opened = await start.json();
+  assert.equal(opened.questions[0].id, original.questions[0].id);
+  assert.equal(opened.questions[0].text, original.questions[0].text);
+  assert.doesNotMatch(JSON.stringify(opened), /PRIVATE KEY|PRIVATE GUIDE|correctIndex/);
+  const submitted = f.submission(request);
+  Object.assign(submitted.answers[0], { optionIndex: -1, value: "An answer from the assigned section" });
+  const response = await f.call("submit", submitted, { uid: "student-c" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).status, "pending-review");
+  const path = "users/S3/generated_quiz_attempts/" + request.attemptId;
+  const teacher = { id: "TEACH1", uid: "teacher-a", role: "teacher" };
+  const review = (input, actor = teacher) => quizReview({ env: f.env, request: new Request("https://imars.test/api/quiz-review/action", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quizId: "quiz1", studentId: "S3", attemptId: request.attemptId, ...input })
+  }) }, { store: f.store, authenticate: async () => actor });
+  const guide = await (await review({ action: "open", sectionId: "C" })).json();
+  const graded = await review({ action: "grade", sectionId: "C", revision: guide.revision,
+    scores: [{ questionId: "q-original", score: 3 }], feedback: "Reviewed" });
+  assert.equal(graded.status, 200);
+  assert.deepEqual(await graded.json(), { persisted: true, score: 3, maximum: 4 });
+  assert.deepEqual(f.data.get(path).answers, submitted.answers);
+  f.store.getAll = async paths => new Map(await Promise.all(paths.map(async path => [path, await f.store.get(path)])));
+  f.store.scorePage = async (_actor, studentId, sectionId) => studentId === "S3" && sectionId === "C"
+    ? [{ path, data: f.data.get(path) }] : [];
+  const analytics = sectionId => review({ action: "term-results", sectionId, termId: "term_02", studentIds: ["S1", "S3"] });
+  const previous = await analytics("A"), current = await analytics("C");
+  assert.equal(previous.status, 200);
+  assert.deepEqual(await previous.json(), { quizzes: [], items: [] });
+  assert.equal(current.status, 200);
+  const result = await current.json();
+  assert.deepEqual(result.quizzes.map(item => item.id), ["quiz1"]);
+  assert.deepEqual(result.items, [{ quizId: "quiz1", studentId: "S3", attemptId: request.attemptId,
+    status: "reviewed", score: 3, maximum: 4 }]);
+  assert.equal((await review({ action: "open", sectionId: "A" })).status, 403);
+  assert.equal((await review({ action: "term-results", sectionId: "C", termId: "term_02", studentIds: ["S3"] },
+    { id: "TEACH2", uid: "teacher-b", role: "teacher" })).status, 403);
+  const studentResult = await (await f.call("list", { limit: 20, cursor: "" }, { uid: "student-c" })).json();
+  assert.deepEqual(studentResult.items[0].result, { status: "reviewed", score: 3, maximum: 4 });
+});
+
 test("a teacher can adjust an automatically graded submission within its original point limit", async () => {
   const f = await setup("multiple-choice");
   const response = await f.callReview({ action: "open" });
@@ -208,6 +274,11 @@ test("quiz scores distinguish pending, auto-graded, reviewed and missing submiss
   const section = () => f.callReview({ action: "section-results", sectionId: "A" });
   assert.deepEqual((await (await section()).json()).items.map(({ studentId, status }) => [studentId, status]),
     [["S1", "pending-review"], ["S3", "not-submitted"]]);
+  const pending = f.data.get(f.path);
+  f.put(f.path, { ...pending, receipt: { ...pending.receipt, score: 0, maximum: 4 } });
+  const pendingScore = (await (await section()).json()).items[0];
+  assert.deepEqual([pendingScore.status, pendingScore.score, pendingScore.maximum], ["pending-review", 0, 4]);
+  assert.equal((await (await f.callReview({ action: "section-summary", sectionId: "A" })).json()).items[0].average, null);
   const opened = await (await f.callReview({ action: "open" })).json();
   assert.equal((await f.callReview({ action: "grade", revision: opened.revision,
     scores: [{ questionId: "q-original", score: 3 }], feedback: "Private comment" })).status, 200);
@@ -292,4 +363,21 @@ test("locking a quiz preserves its submitted results and archived rows do not co
   assert.equal(second.nextCursor, "");
   assert.equal(new Set(requests.flat()).size, 11);
   assert.deepEqual(requests.map(ids => ids.length), [10, 1]);
+});
+
+test("existing identification and modified true or false submissions can show a preliminary score", async () => {
+  for (const [type, answer, maximum] of [
+    ["identification-explanation", { value: "  private   key " }, 3],
+    ["modified-true-false", { correction: "Private guide" }, 1]
+  ]) {
+    const f = await setup(type);
+    const attempt = f.data.get(f.path);
+    const { preliminary, ...legacy } = attempt;
+    f.put(f.path, { ...legacy, answers: [{ ...legacy.answers[0], ...answer }] });
+    f.store.scorePage = async () => [{ path: f.path, data: f.data.get(f.path) }];
+    const response = await f.callReview({ action: "section-results", sectionId: "A" });
+    const [result] = (await response.json()).items;
+    assert.deepEqual([result.status, result.score, result.maximum], ["pending-review", maximum, maximum]);
+    assert.equal(f.data.get(f.path).preliminary, undefined);
+  }
 });

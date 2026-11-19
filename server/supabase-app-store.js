@@ -350,7 +350,7 @@ export class SupabaseAppStore {
   }
 
   async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
-    const fields = ["quizId", "status", "submittedAt", "receipt", "review"];
+    const fields = ["quizId", "status", "submittedAt", "receipt", "review", ...(quizId ? ["preliminary"] : [])];
     const submittedAt = "fields->submittedAt->>timestampValue";
     const context = { teacherUid: actor.uid, teacherProfileId: actor.id, sectionId };
     const boundary = after && quoted(sortableTimestamp(after[0]));
