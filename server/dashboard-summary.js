@@ -9,7 +9,7 @@ const time = value => { const date = new Date(value || 0); return Number.isFinit
 const emptyTotals = () => ({ total: 0, preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0, recent: [], notifications: [] });
 const profileFields = ["active", "status", "role", "classCode", "displayName", "fullName"];
 const resultFields = ["isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isPostTestCompleted", "postTestScore", "postTestTotalQuestions", "postTestHeatmap",
-  "preTestCompletedAt", "postTestCompletedAt", "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
+  "preTestCompletedAt", "postTestCompletedAt", "activityCompletedAt", "arTimeMinutes", "arNavigationTimeMinutes", "timestamp", "lastUpdated", "completedAt", "learningTimeByDevice", "lessonTimeMinutes", "isLessonCompleted", "isARCompleted", "completed", "activityScore", "activityTotalQuestions", "activityTotalPoints"];
 
 export async function teacherDashboardSummary(env, store, id, uid, profile) {
   if (env.DASHBOARD_SUMMARIES_ENABLED !== "true") return { enabled: false };
@@ -21,7 +21,7 @@ export async function teacherDashboardSummary(env, store, id, uid, profile) {
   return { enabled: true, ...cached.result, teacherName: profile?.displayName || profile?.fullName || "Teacher" };
 }
 export function dashboardScope(sections, env) {
-  const scope = JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
+  const scope = "activity-v2:" + JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
 }
 export function dashboardRefreshInterval(summary) {
@@ -46,12 +46,15 @@ export function summarizeStudent(id, profile, section, lessons) {
     if (post !== null) { row.postSum += post; row.postCount++; }
     const ar = positive(data.arTimeMinutes) || positive(data.arNavigationTimeMinutes);
     row.arMinutes += ar;
-    const at = Math.max(time(data.timestamp), time(data.lastUpdated), time(data.completedAt));
-    row.lastActive = Math.max(row.lastActive, at);
-    row.hasActivity ||= at > 0 || pre !== null || post !== null || ar > 0 || positive(data.lessonTimeMinutes) > 0 ||
-      Object.values(data.learningTimeByDevice || {}).some(device => positive(device?.lessonSeconds) > 0 || positive(device?.arSeconds) > 0) ||
+    const meaningful = time(data.activityCompletedAt) > 0 || pre !== null || post !== null || ar > 0 || positive(data.lessonTimeMinutes) > 0 ||
+      Object.values(data.learningTimeByDevice || {}).some(device => positive(device?.lessonSeconds) > 0 || positive(device?.arSeconds) > 0 || positive(device?.arNavigationSeconds) > 0) ||
       data.isLessonCompleted === true || data.isARCompleted === true || data.completed === true ||
       (typeof data.activityScore === "number" && data.activityScore >= 0 && (data.activityTotalQuestions > 0 || data.activityTotalPoints > 0));
+    if (meaningful) {
+      row.hasActivity = true;
+      row.lastActive = Math.max(row.lastActive, time(data.timestamp), time(data.lastUpdated), time(data.completedAt),
+        time(data.preTestCompletedAt), time(data.postTestCompletedAt), time(data.activityCompletedAt));
+    }
   }
   return row;
 }

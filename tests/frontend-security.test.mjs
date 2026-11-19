@@ -218,7 +218,7 @@ test('a late Batch Upload count cannot update another signed-in account',async()
 test("dashboard names, sections, and lesson titles render as text rather than executable markup", async () => {
   const student = record("S1", { displayName: attack });
   const app = page("dashboard.js", { teacherName: "Teacher", total: 1, counts: [{ classId: "A", active: 1 }],
-    sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: student, results: [{ lessonsSnap: snapshot([record("lesson_01",{timestamp:"2026-10-27T00:00:00Z"})]) }] }] }],
+    sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: student, results: [{ lessonsSnap: snapshot([record("lesson_01",{timestamp:"2026-10-27T00:00:00Z",isLessonCompleted:true})]) }] }] }],
     termSnap: record("term_01", { title: "Term 1" }), curriculumSnap: snapshot([record("lesson_01", { title: attack })]) });
   await app.render();
   assertTextOnly(app.element("studentTableBody").html());
@@ -258,6 +258,19 @@ test("dashboard orders activity before limiting rows and keeps earned zeroes",as
   const students=Array.from({length:30},(_,index)=>({studentDoc:record("S"+index,{displayName:"Learner "+index}),results:[{termId:"term_03",lessonsSnap:snapshot([record("lesson_01",{timestamp:new Date(Date.UTC(2026,9,index+1)).toISOString(),isPreTestCompleted:true,preTestScore:0,preTestTotalQuestions:5})])}]}));
   const app=page("dashboard.js",{teacherName:"Teacher",total:30,sections:[{classDoc:record("A",{SectionName:"A"}),students}],curriculumSnap:snapshot([])});await app.render();
   const rows=app.element("studentTableBody").children;assert.equal(rows.length,25);assert.match(rows[0].innerHTML,/Learner 29/);assert.doesNotMatch(app.element("studentTableBody").html(),/>Learner 0</);assert.equal(app.element("avgPreTestVal").textContent,"0/5");
+});
+
+test("dashboard excludes timestamp-only syncs and displays submitted activity markers", async () => {
+  const student = (id, data) => ({ studentDoc: record(id, { displayName: id }),
+    results: [{ lessonsSnap: snapshot([record("lesson_01", data)]) }] });
+  const app = page("dashboard.js", { teacherName: "Teacher", total: 2, sections: [{
+    classDoc: record("A", { SectionName: "A" }), students: [
+      student("LoginOnly", { lastUpdated: "2026-11-07T04:02:00Z", lessonTimeMinutes: 0 }),
+      student("Submitted", { activityCompletedAt: "2026-11-07T04:01:30Z" })
+    ] }] });
+  await app.render();
+  assert.doesNotMatch(app.element("studentTableBody").html(), /LoginOnly/);
+  assert.match(app.element("studentTableBody").html(), /Submitted/);
 });
 
 test("the prepared dashboard renders safe summaries without starting the full student report", async () => {

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mobileApi } from "../server/mobile-api.js";
+import { DashboardSummary } from "../server/dashboard-summary.js";
 
 const requestTime = Date.parse("2026-11-07T04:00:00.000Z");
 const lessonPath = "terms/term_01/lessons/lesson_01";
@@ -32,7 +33,10 @@ function fixture() {
     },
     get: async path => row(path),
     getAll: async paths => new Map(paths.map(path => [path, row(path)])),
-    query: async (_path, { filters }) => [...records.keys()].filter(path => path.startsWith("users/") && records.get(path).uid === filters[0].value).map(row),
+    query: async (collection, { filters = [], limit = 5000, after } = {}) => [...records.keys()]
+      .filter(path => path.startsWith(collection + "/") && path.split("/").length === collection.split("/").length + 1 &&
+        (!after || path.split("/").at(-1) > after) && filters.every(filter => records.get(path)[filter.field] === filter.value))
+      .sort().slice(0, limit).map(row),
     identity: async uid => ({ emailVerified: true, email: uid + "@example.test" })
   };
   const saved = new Map(), results = new Map();
@@ -71,8 +75,126 @@ function fixture() {
     assert.equal(response.headers.get("Cache-Control"), "private, no-store");
     return { status: response.status, ...(await response.json()) };
   }
-  return { env, post, records, results, at: time => { clock = Date.parse(time); } };
+  return { env, post, records, results, store, at: time => { clock = Date.parse(time); } };
 }
+
+async function recentActivity(app) {
+  const values = new Map();
+  const storage = {
+    get: async key => structuredClone(values.get(key)),
+    put: async (key, value) => { values.set(key, structuredClone(value)); },
+    delete: async key => values.delete(key),
+    getAlarm: async () => null,
+    setAlarm: async () => {},
+    list: async ({ prefix, limit, startAfter }) => new Map([...values]
+      .filter(([key]) => key.startsWith(prefix) && (!startAfter || key > startAfter))
+      .sort(([a], [b]) => a.localeCompare(b)).slice(0, limit))
+  };
+  const dashboard = new DashboardSummary(storage, {}, { store: app.store });
+  const scope = { id: "T1", uid: "teacher", sections: [{ id: "A", name: "Section A" }] };
+  await dashboard.configure(scope);
+  for (let step = 0; step < 30 && await storage.get("dashboard:job"); step++) await dashboard.step();
+  assert.equal(await storage.get("dashboard:job"), undefined, "summary preparation must finish");
+  return (await dashboard.read(scope)).summary;
+}
+
+function loginOnlyPeer(app) {
+  Object.assign(app.records.get("users/S2"), { classCode: "A", lastLogin: "2026-11-07T04:00:00Z" });
+}
+
+test("BFF recent activity includes synced learning and excludes a login-only classmate", async () => {
+  const app = fixture(); loginOnlyPeer(app);
+  assert.equal((await app.post("me", {}, "second")).status, 200);
+  assert.deepEqual((await recentActivity(app)).recent, []);
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  const body = { requestId: "phone-term_01-lesson_01-1", deviceId: "phone", revision: 1,
+    termId: "term_01", lessonId: "lesson_01", expectedClassCode: "A", expectedTeacherProfileId: "T1",
+    lessonSeconds: 60, arSeconds: 120, arNavigationSeconds: 0, lessonDone: true, lessonOpened: true, arDone: true };
+  const saved = await app.post("lesson-progress", body);
+  assert.equal(saved.status, 200); assert.equal(saved.persisted, true);
+  assert.equal((await app.post("lesson-progress", body)).persisted, true);
+  const summary = await recentActivity(app);
+  assert.equal(summary.total, 2);
+  assert.deepEqual(summary.recent.map(row => row.id), ["S1"]);
+  assert.equal(summary.arMinutes, 2, "sync retry must not double-count learning time");
+});
+
+test("BFF recent activity includes a newly submitted activity without lesson-progress sync", async () => {
+  const app = fixture(); loginOnlyPeer(app);
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  assert.equal((await app.post("me", {}, "second")).status, 200);
+  const activityId = "states-of-matter", deviceId = "phone";
+  const start = await app.post("activity-start", { requestId: "recent-start", activityId, deviceId });
+  assert.equal(start.status, 200);
+  app.at("2026-11-07T04:02:00Z");
+  const result = await app.post("activity-submit", { requestId: "recent-submit", activityId, deviceId,
+    runId: start.item.runId, checkpointRevision: 1, checkpoint: "", rawScore: 4, rawMaximum: 5,
+    durationSeconds: 90, timedOut: false, completedAtUtc: "2026-11-07T04:01:30Z" });
+  assert.equal(result.persisted, true); assert.equal(result.score, 80);
+  assert.equal((await app.post("activity-results")).items.length, 1);
+  assert.deepEqual((await recentActivity(app)).recent.map(row => row.id), ["S1"]);
+});
+
+test("a submission retry repairs a failed completion marker without changing lesson scores", async () => {
+  const app = fixture();
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1",
+    DASHBOARD_SUMMARIES_ENABLED: "true" });
+  const dirty = [];
+  app.env.WEB_LOGIN_STATE = { idFromName: name => name, get: name => ({ fetch: async (url, options) => {
+    dirty.push({ name, action: new URL(url).pathname, body: JSON.parse(options.body) });
+    return Response.json({ ok: true });
+  } }) };
+  const activityId = "states-of-matter", deviceId = "phone";
+  const start = await app.post("activity-start", { requestId: "retry-start", activityId, deviceId });
+  assert.equal(start.status, 200);
+  const path = "users/S1/test_results/term_01/lessons/lesson_01";
+  const original = { preTestScore: 2, activityScore: 95, arTimeMinutes: 3 };
+  app.records.set(path, original);
+  app.at("2026-11-07T04:02:00Z");
+  const body = { requestId: "retry-submit", activityId, deviceId, runId: start.item.runId,
+    checkpointRevision: 1, checkpoint: "", rawScore: 4, rawMaximum: 5,
+    durationSeconds: 90, timedOut: false, completedAtUtc: "2026-11-07T04:01:30Z" };
+  const commit = app.store.commit;
+  app.store.commit = async () => { throw new Error("Temporary outage"); };
+  assert.equal((await app.post("activity-submit", body)).status, 503);
+  assert.equal(app.results.size, 1);
+  app.store.commit = commit;
+  const saved = await app.post("activity-submit", body);
+  assert.equal(saved.persisted, true);
+  assert.deepEqual(app.records.get(path), { ...original, activityCompletedAt: saved.completedAtUtc });
+  assert.deepEqual(await app.post("activity-submit", body), saved);
+  assert.deepEqual(dirty[0], { name: "dashboard:teacher", action: "/dashboard-dirty",
+    body: { ids: ["S1"], lesson: "term_01/lessons/lesson_01" } });
+});
+
+test("syncing an unchanged learning revision preserves the last meaningful activity time", async () => {
+  const app = fixture();
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  const payload = revision => ({ requestId: `phone-term_01-lesson_01-${revision}`, deviceId: "phone", revision,
+    termId: "term_01", lessonId: "lesson_01", expectedClassCode: "A", expectedTeacherProfileId: "T1",
+    lessonSeconds: 60, arSeconds: 0, arNavigationSeconds: 0, lessonDone: false, lessonOpened: true, arDone: false });
+  const first = await app.post("lesson-progress", payload(1));
+  assert.equal(first.status, 200);
+  app.at("2026-11-07T04:04:00Z");
+  const second = await app.post("lesson-progress", payload(2));
+  assert.equal(second.status, 200);
+  assert.equal(second.item.updatedAtUtc, first.item.updatedAtUtc);
+});
+
+test("BFF recent activity excludes an empty progress sync with no learning", async () => {
+  const app = fixture(); loginOnlyPeer(app);
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false",
+    MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  const saved = await app.post("lesson-progress", { requestId: "phone-term_01-lesson_01-1", deviceId: "phone", revision: 1,
+    termId: "term_01", lessonId: "lesson_01", expectedClassCode: "A", expectedTeacherProfileId: "T1",
+    lessonSeconds: 0, arSeconds: 0, arNavigationSeconds: 0, lessonDone: false, lessonOpened: false, arDone: false });
+  assert.equal(saved.status, 200); assert.equal(saved.persisted, true);
+  assert.deepEqual((await recentActivity(app)).recent, []);
+});
 
 test("mobile profile and schedule are scoped to the verified Firebase account", async () => {
   const { post, records } = fixture();
@@ -151,6 +273,8 @@ test("activity retry, monotonic checkpoints, offline submission and teacher repo
   assert.equal(result.score, 80);
   assert.equal(result.persisted, true);
   assert.deepEqual(await post("activity-submit", submit), result);
+  assert.equal(records.get("users/S1/test_results/term_01/lessons/lesson_01"), undefined,
+    "staging submissions must not project completion into the application dataset");
   assert.equal((await post("activity-submit", { ...submit, rawScore: 3 })).code, "IDEMPOTENCY_CONFLICT");
   assert.equal((await post("activity-submit", { ...submit, requestId: "submit2" })).code, "ALREADY_COMPLETED");
   assert.equal((await post("activity-results")).items.length, 1);

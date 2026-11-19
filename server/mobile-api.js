@@ -417,7 +417,27 @@ export async function mobileApi({ request, env, waitUntil }, dependencies = {}) 
       const items = await activityStore.studentResults(scope, body);
       return json({ scope, items, revision: await digest(items.map(item => [item.runId, item.updatedAtUtc, item.checkpointRevision, item.status])) });
     }
-    return json(await activityWrite(request, action, body, scope, store, activityStore, now));
+    const result = await activityWrite(request, action, body, scope, store, activityStore, now);
+    if (action === "activity-submit" && activityDataset === "production" && supabaseWebData(env)) {
+      // Project only a completion marker, preserving grades and learning time.
+      // Replayed receipts also repair a projection that failed after submission.
+      const path = `users/${scope.profileId}/test_results/${result.termId}/lessons/${result.lessonId}`;
+      await store.begin();
+      const record = await store.get(path);
+      if (Date.parse(record?.data.activityCompletedAt || "") !== Date.parse(result.completedAtUtc)) {
+        await store.commit([{ path, operation: "set", merge: true, updateTime: record?.updateTime,
+          data: { activityCompletedAt: result.completedAtUtc } }]);
+      } else await store.rollback?.();
+      if (env.DASHBOARD_SUMMARIES_ENABLED === "true" && env.WEB_LOGIN_STATE) {
+        const update = stateCall(env, "dashboard:" + scope.teacherUid, "dashboard-dirty", {
+          ids: [scope.profileId], lesson: result.termId + "/lessons/" + result.lessonId
+        }).then(response => { if (!response.ok) throw unavailable(); })
+          .catch(() => console.warn("Activity dashboard update will retry on reconciliation."));
+        if (waitUntil) waitUntil(update);
+        else await update;
+      }
+    }
+    return json(result);
   } catch (error) {
     const problem = error.code && error.status && error.status < 500 ? error :
       error.status === 400 || error.status === 413 ? invalid() :

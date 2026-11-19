@@ -122,6 +122,19 @@
   [data-theme="dark"] #openAdminModalBtn { color: #a6c9ff; border-color: #6089bd; }
   [data-theme="dark"] #teacherSubmitBtn { color: #151200; }
   [data-theme="dark"] body :is(.quiz-release-option.selected, .quiz-suggestion-card.accepted) { background: #29445b; border-color: var(--steel); }
+  [data-theme="dark"] body :is(.quiz-suggestion-question, .quiz-question-number, .quiz-review-summary strong) { color: var(--ink); }
+  [data-theme="dark"] body :is(.quiz-review-summary, .quiz-review-footer > div > span) { color: var(--muted); }
+  [data-theme="dark"] body .quiz-suggestion-answer.correct { color: #90e5bb; background: #1b4038; border-color: #397a65; }
+  [data-theme="dark"] body #archiveStudentForm > p,
+  [data-theme="dark"] body #archiveStudentForm .archive-reason-choice small { color: var(--muted); }
+  [data-theme="dark"] body #archiveStudentForm #archiveStudentName { color: var(--ink); background: #2b4059; }
+  [data-theme="dark"] body #archiveStudentForm .archive-reason-choice { background: #223249; border-color: var(--line); }
+  [data-theme="dark"] body #archiveStudentForm .archive-reason-choice:has(input:checked) { background: #29445b; border-color: var(--steel); }
+  [data-theme="dark"] body #archiveStudentForm .archive-reason-choice input { accent-color: #90bfea; }
+  [data-theme="dark"] body #archiveStudentForm .modal-actions { border-color: var(--line); }
+  [data-theme="dark"] body #archiveStudentForm #cancelArchiveStudent { color: var(--ink); background: #223249; border: 1px solid #49617e; }
+  [data-theme="dark"] body #archiveStudentForm #cancelArchiveStudent:is(:hover, :focus-visible) { background: #2b4059; border-color: #90bfea; }
+  [data-theme="dark"] body #archiveStudentForm #archiveStudentError { color: #ff9c9c; }
   [data-theme="dark"] body :is(.pill-pending, .st-upcoming, .term-foot, .topic-title, .topic-meta,
     .quiz-option-label, .quiz-release-option strong, .quiz-library-meta, .quiz-field-hint,
     .quiz-stepper li, .quiz-view-tab, .quiz-limit) { color: var(--muted); }
@@ -132,7 +145,7 @@
   [data-theme="dark"] body :is(.c-pink, .pink) { color: #ff8ac6; }
   /* Nested controls must not retain translucent white light-mode fills. */
   [data-theme="dark"] body :is(.module, .search, .teacher-search, .quiz-choice, .quiz-type-option,
-    .quiz-stepper-input button, .quiz-stepper li:not(.active):not(.done) span) {
+    .quiz-stepper-input button, :where(.quiz-stepper li:not(.active):not(.done) span)) {
     background: #223249; border-color: var(--line); color: var(--ink);
   }
   [data-theme="dark"] body .module span { color: var(--muted); }
@@ -152,6 +165,9 @@
   [data-theme="dark"] body .quiz-type-option b { color: var(--ink); }
   [data-theme="dark"] body .quiz-type-option small { color: var(--muted); }
   [data-theme="dark"] body .quiz-type-option:focus-within { outline: 2px solid #90bfea; outline-offset: 2px; }
+  [data-theme="dark"] body .quiz-type-option.selected { background: #1f4a70; border-color: #90bfea; box-shadow: inset 0 0 0 1px #90bfea; }
+  [data-theme="dark"] body .quiz-type-option.selected small { color: #d5e7ff; }
+  [data-theme="dark"] body .quiz-type-option.selected::after { background: #90bfea; color: #102033; }
   /* Apply the same fill to row headers and data cells, including expanded records. */
   [data-theme="dark"] body :is(.performance-table-wrap, .activity-record-results-wrap) {
     background: var(--surface); border-color: var(--line);
