@@ -22,10 +22,8 @@ export function wrapReportText(value, width, measure) {
   return lines;
 }
 
-// One measured layout drives the PDF and the browser's print view.
-export function layoutScoreReport(report, fonts) {
-  const { width, height, margin } = REPORT_PAGE;
-  const available = width - 2 * margin, pages = [];
+function reportDrawing(fonts) {
+  const available = REPORT_PAGE.width - 2 * REPORT_PAGE.margin;
   const textLines = (value, size, bold, maxWidth) => wrapReportText(value, maxWidth, text => fonts[bold ? "bold" : "regular"].widthOfTextAtSize(text, size));
   function text(ops, value, x, top, size = 9, bold = false, fill = ink, align = "left", maxWidth) {
     const lines = textLines(value, size, bold, maxWidth ?? available);
@@ -36,6 +34,20 @@ export function layoutScoreReport(report, fonts) {
     return lines.length * size * 1.35;
   }
   function rect(ops, x, y, w, h, fill, border = line) { ops.push({ type: "rect", x, y, w, h, fill, border }); }
+  function cell(ops, value, x, y, w, h, { fill = "#ffffff", bold = false, align = "center", size = 9 } = {}) {
+    rect(ops, x, y, w, h, fill);
+    const lines = textLines(value, size, bold, w - 12);
+    const textHeight = lines.length * size * 1.35;
+    text(ops, value, align === "left" ? x + 6 : x + w / 2, y + Math.max(5, (h - textHeight) / 2), size, bold, ink, align, w - 12);
+  }
+  return { textLines, text, rect, cell };
+}
+
+// One measured layout drives the PDF and the browser's print view.
+export function layoutScoreReport(report, fonts) {
+  const { width, height, margin } = REPORT_PAGE;
+  const available = width - 2 * margin, pages = [];
+  const { textLines, text, rect, cell } = reportDrawing(fonts);
   function header(ops, label) {
     ops.push({ type: "logo", x: margin, y: 24, size: 66 });
     text(ops, report.schoolName.toUpperCase(), width / 2, 30, 15, true, blue, "center", 560);
@@ -52,12 +64,6 @@ export function layoutScoreReport(report, fonts) {
     top += 20;
     if (report.activitySyncPending) top += text(ops, "Note: Recent submissions from older app versions could not be checked.", margin, top, 8, false, muted) + 5;
     return top;
-  }
-  function cell(ops, value, x, y, w, h, { fill = "#ffffff", bold = false, align = "center", size = 9 } = {}) {
-    rect(ops, x, y, w, h, fill);
-    const lines = textLines(value, size, bold, w - 12);
-    const textHeight = lines.length * size * 1.35;
-    text(ops, value, align === "left" ? x + 6 : x + w / 2, y + Math.max(5, (h - textHeight) / 2), size, bold, ink, align, w - 12);
   }
   const bands = [];
   for (let offset = 0; offset < report.lessons.length; offset += 4) {
@@ -112,6 +118,90 @@ export function layoutScoreReport(report, fonts) {
   return pages;
 }
 
+export function layoutSchoolYearHistory(report, fonts) {
+  const { width, height, margin } = REPORT_PAGE;
+  const available = width - 2 * margin, pages = [];
+  const { textLines, text, rect, cell } = reportDrawing(fonts);
+  const score = (row, offset) => row[offset] === "" && row[offset + 1] === "" ? "" : `${row[offset] ?? ""} / ${row[offset + 1] ?? ""}`;
+  const identity = row => [row[2], row[3], row[4], String(row[6] ?? "").replace(/^term_0/, "Term "), row[7]];
+  const studentCount = report.rows.filter(row => row[1] === "Roster").length;
+  const bands = [
+    { label: "Archived student roster", type: "Roster", weights: [12, 28, 17, 24, 19],
+      heads: ["Student ID", "Student name", "Section", "Teacher", "Status"],
+      values: row => [row[2], row[3], row[4], row[5], row[18]] },
+    { label: "Lesson assessment results", type: "Lesson", weights: [8, 16, 10, 6, 24, 9, 9, 9, 9],
+      heads: ["Student ID", "Student name", "Section", "Term", "Lesson", "Pre-test", "Post-test", "Activity", "Status"],
+      values: row => [...identity(row), score(row, 8), score(row, 10), score(row, 12), row[18]] },
+    { label: "Recorded lesson and AR time", type: "Lesson", weights: [8, 16, 10, 6, 30, 10, 10, 10],
+      heads: ["Student ID", "Student name", "Section", "Term", "Lesson", "AR minutes", "Module minutes", "Status"],
+      values: row => [...identity(row), row[16], row[17], row[18]] },
+    { label: "Teacher-generated quiz results", type: "Generated quiz", weights: [8, 16, 10, 6, 32, 12, 16],
+      heads: ["Student ID", "Student name", "Section", "Term", "Quiz", "Score / total", "Status"],
+      values: row => [...identity(row), score(row, 14), row[18]] },
+    { label: "AR activity results", type: "AR activity", weights: [8, 16, 10, 6, 32, 12, 16],
+      heads: ["Student ID", "Student name", "Section", "Term", "Activity", "Score / total", "Status"],
+      values: row => [...identity(row), score(row, 12), row[18]] }
+  ];
+  function header(ops, label) {
+    ops.push({ type: "logo", x: margin, y: 24, size: 66 });
+    text(ops, report.schoolName.toUpperCase(), width / 2, 30, 15, true, blue, "center", 560);
+    text(ops, report.schoolAddress, width / 2, 53, 9, false, muted, "center");
+    text(ops, "ARCHIVED SCHOOL YEAR REPORT", width / 2, 76, 12, true, ink, "center");
+    rect(ops, margin, 104, available, 1.5, blue, blue);
+    text(ops, `School year ${report.startYear}-${report.startYear + 1}`, margin, 119, 10, true);
+    text(ops, `Closed: ${report.closedLabel} (UTC+08)`, margin, 137, 8, false, muted);
+    const preparedHeight = text(ops, `Prepared by: ${report.teacherName}`, margin, 154, 8, false, muted, "left", 390);
+    text(ops, `Generated: ${report.generatedLabel} (UTC+08)`, width - margin, 119, 8, false, muted, "right", 330);
+    text(ops, `${report.rows.length} saved records | ${studentCount} students`,
+      width - margin, 137, 8, false, muted, "right", 330);
+    const top = Math.max(179, 154 + preparedHeight + 12);
+    text(ops, label, margin, top, 10, true, blue);
+    return top + 20;
+  }
+  for (const band of bands) {
+    const rows = report.rows.filter(row => row[1] === band.type);
+    if (!rows.length) continue;
+    const widths = band.weights.map(weight => available * weight / 100);
+    const headerHeight = Math.max(29, ...band.heads.map((value, i) => textLines(value, 8, true, widths[i] - 12).length * 10.8 + 12));
+    let index = 0;
+    while (index < rows.length) {
+      const ops = [], top = header(ops, band.label), bottom = height - 69;
+      let x = margin;
+      band.heads.forEach((value, i) => {
+        cell(ops, value, x, top, widths[i], headerHeight, { fill: pale, bold: true, size: 8 });
+        x += widths[i];
+      });
+      let y = top + headerHeight;
+      const first = index;
+      for (; index < rows.length; index++) {
+        const values = band.values(rows[index]);
+        const rowHeight = Math.max(26, ...values.map((value, i) => textLines(value, 8, false, widths[i] - 12).length * 10.8 + 12));
+        if (y + rowHeight > bottom) break;
+        x = margin;
+        values.forEach((value, i) => {
+          cell(ops, value, x, y, widths[i], rowHeight, { fill: index % 2 ? "#f6f8fc" : "#ffffff", align: "left", size: 8 });
+          x += widths[i];
+        });
+        y += rowHeight;
+      }
+      if (index === first) throw new Error("An archived record is too long to fit on a report page. Download the detailed JSON report to view the complete record.");
+      pages.push({ ops });
+    }
+  }
+  if (!pages.length) {
+    const ops = [], top = header(ops, "Archived records");
+    text(ops, "No student records were saved in this archive.", margin, top + 6);
+    pages.push({ ops });
+  }
+  pages.forEach((page, index) => {
+    text(page.ops, "Scores = points earned / points possible. Blank values have no recorded result.", margin, height - 55, 7.5, false, muted);
+    rect(page.ops, margin, height - 42, available, 0.5, line, line);
+    text(page.ops, "Archived school records | ImARs | For school use only", margin, height - 30, 7.5, false, muted);
+    text(page.ops, `Page ${index + 1} of ${pages.length}`, width - margin, height - 30, 7.5, false, muted, "right");
+  });
+  return pages;
+}
+
 function base64(bytes) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
@@ -148,15 +238,15 @@ export async function loadScoreReportAssets(signal) {
   return { logo, regular, bold };
 }
 
-export async function renderScoreReport(report, assets, { mode = "both" } = {}) {
+export async function renderScoreReport(report, assets, { mode = "both", layout = layoutScoreReport } = {}) {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  pdf.setTitle(`${report.schoolName} - ${report.section} - ${report.term} Student Score Summary`);
+  pdf.setTitle(report.reportTitle || `${report.schoolName} - ${report.section} - ${report.term} Student Score Summary`);
   pdf.setAuthor(report.teacherName);
   pdf.setCreator("ImARs");
   pdf.setCreationDate(new Date(report.generatedAt));
   const [regular, bold] = await Promise.all([pdf.embedFont(assets.regular, { subset: true }), pdf.embedFont(assets.bold, { subset: true })]);
-  const fonts = { regular, bold }, pages = layoutScoreReport(report, fonts);
+  const fonts = { regular, bold }, pages = layout(report, fonts);
   if (mode === "print") return { html: scoreReportHtml(report, pages, assets), pageCount: pages.length };
   const logo = await pdf.embedPng(assets.logo);
   for (const layout of pages) {

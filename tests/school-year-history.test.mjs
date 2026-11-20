@@ -5,6 +5,8 @@ import vm from "node:vm";
 import { archivedSchoolReport, schoolYearHistory } from "../server/school-year-history.js";
 import { encodeFields } from "../server/firestore-admin.js";
 import { fixture } from "./fixtures/web-data.js";
+import { layoutSchoolYearHistory, renderScoreReport, REPORT_PAGE } from "../js/score-report-renderer.js";
+import { PDFDocument } from "../js/vendor/pdf-lib.esm.min.js";
 
 const dataset = "a176e0fd-0b7e-4840-99c5-413452160b6a";
 const revision = "00000000-0000-4000-8000-000000000001";
@@ -92,4 +94,108 @@ test("the old generic year-label write cannot bypass archival", async () => {
   const response = await app.call({ action: "commit", password: "correct", writes: [{ operation: "set", path: "webSettings/schoolYear", merge: true,
     data: { startYear: 2028, endYear: 2029, updatedBy: "admin-a", updatedAt: { $type: "serverTimestamp" } } }] }, cookie);
   assert.equal(response.status, 409); assert.equal(app.data.get("webSettings/schoolYear").startYear, 2027);
+});
+
+function printableArchive(count = 32) {
+  const rows = [];
+  for (let index = 0; index < count; index++) {
+    const base = Array(19).fill("");
+    Object.assign(base, { 0: "2025–2026", 2: `S${String(index).padStart(4, "0")}`,
+      3: index === 0 ? "José María de la Cruz Peña Santos" : `Archived student ${index + 1}`,
+      4: "Hydrogen", 5: "Archived Teacher", 6: "term_02" });
+    rows.push(Object.assign([...base], { 1: "Roster", 18: "Active at year close" }));
+    rows.push(Object.assign([...base], { 1: "Lesson", 7: "Properties of Water and Sound Waves",
+      8: 0, 9: 5, 10: 8, 11: 10, 12: 9, 13: 10, 16: 0, 17: 7.5, 18: "Recorded" }));
+    rows.push(Object.assign([...base], { 1: "Generated quiz", 7: "Long written assessment title",
+      14: "", 15: "", 18: "pending-review" }));
+    rows.push(Object.assign([...base], { 1: "AR activity", 7: "Separation Techniques", 12: 0, 13: 100, 18: "completed" }));
+  }
+  return { startYear: 2025, schoolName: "Pintong Gubat Elementary School", schoolAddress: "City of Dasmariñas, Cavite",
+    teacherName: "School Administrator", closedLabel: "5/1/2026, 8:00:00 AM", generatedLabel: "11/20/2026, 6:00:00 PM",
+    generatedAt: "2026-11-20T10:00:00Z", reportTitle: "Archived School Year Report 2025-2026", rows };
+}
+
+test("archived PDF layout contains every historical record, raw zero, pending grade and learning-time value", () => {
+  const report = printableArchive();
+  const font = { widthOfTextAtSize: (value, size) => value.length * size * 0.55 };
+  const pages = layoutSchoolYearHistory(report, { regular: font, bold: font });
+  const text = pages.flatMap(page => page.ops.filter(op => op.type === "text").map(op => op.value)).join("\n");
+  for (const label of ["Archived student roster", "Lesson assessment results", "Recorded lesson and AR time",
+    "Teacher-generated quiz results", "AR activity results", "0 / 5", "0 / 100", "7.5", "pending-review"])
+    assert.ok(text.includes(label), label);
+  for (let index = 0; index < 32; index++)
+    assert.equal(text.match(new RegExp(`S${String(index).padStart(4, "0")}`, "g")).length, 5, "each student appears in all five report tables");
+  assert.ok(pages.length > 5);
+  for (const [index, page] of pages.entries()) {
+    assert.equal(page.ops.filter(op => op.type === "logo").length, 1);
+    assert.ok(page.ops.some(op => op.value === `Page ${index + 1} of ${pages.length}`));
+    for (const op of page.ops) {
+      assert.ok(op.x >= 0 && op.y >= 0 && op.y < REPORT_PAGE.height);
+      if (op.type === "rect") assert.ok(op.x + op.w <= REPORT_PAGE.width + 0.01 && op.y + op.h < REPORT_PAGE.height);
+    }
+  }
+});
+
+test("an empty archived year still produces a branded report and historical exports create a readable PDF", async () => {
+  const assets = Object.fromEntries(["logo", "regular", "bold"].map((key, index) => [key,
+    new Uint8Array(readFileSync(new URL(["../assets/school-logo.png", "../assets/fonts/NotoSans-Regular.ttf",
+      "../assets/fonts/NotoSans-Bold.ttf"][index], import.meta.url)))]));
+  for (const count of [0, 2]) {
+    const output = await renderScoreReport(printableArchive(count), assets, { mode: "download", layout: layoutSchoolYearHistory });
+    const pdf = await PDFDocument.load(output.pdfBytes);
+    assert.equal(pdf.getPageCount(), count ? 5 : 1);
+    assert.equal(pdf.getTitle(), "Archived School Year Report 2025-2026");
+    assert.equal(output.html, undefined);
+  }
+});
+
+test("the archived-year PDF button fetches the selected saved year and cancels on account changes", async () => {
+  const elements = new Map(), requests = [], outputs = [];
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { innerHTML: "", textContent: "", disabled: false,
+      events: {}, addEventListener(name, handler) { this.events[name] = handler; } });
+    return elements.get(id);
+  };
+  let authChanged, complete, deferred = false;
+  const user = { uid: "admin-a", role: "admin", displayName: "Test Administrator" }, auth = { currentUser: user };
+  const context = vm.createContext({
+    console, AbortController,
+    initializeApp: () => ({}), getAuth: () => auth, onAuthStateChanged: (_, callback) => { authChanged = callback; },
+    document: { getElementById: element }, showAdminView: async () => {},
+    escapeHtml: value => String(value), teacherViewCache: () => ({ invalidate() {} }), confirmAdminAction: async () => null,
+    webRequest: async (path, body) => {
+      requests.push({ path, body });
+      if (deferred) await new Promise(resolve => { complete = resolve; });
+      return { startYear: 2025, rows: [] };
+    },
+    createSchoolYearHistoryOutput: async (report, options) => {
+      assert.equal(options.preparedBy, "Test Administrator");
+      assert.equal(report.startYear, 2025);
+      return { filename: "ImARs-SY-2025-2026-report.pdf" };
+    },
+    showScoreReport: async output => outputs.push(output)
+  });
+  const source = readFileSync(new URL("../js/school-year-history.js", import.meta.url), "utf8")
+    .replace(/^import\s[\s\S]*?from\s+"[^"]+";\r?\n/gm, "").replace(/^export /gm, "");
+  vm.runInContext(source, context);
+  const button = { disabled: false, dataset: { yearReport: revision, format: "pdf" } };
+  const click = () => element("schoolYearArchives").events.click({ target: { closest: () => button } });
+  await click();
+  assert.equal(requests[0].path, "/api/school-years/action");
+  assert.equal(requests[0].body.action, "report");
+  assert.equal(requests[0].body.archiveId, revision);
+  assert.equal(outputs[0].filename, "ImARs-SY-2025-2026-report.pdf");
+  assert.equal(element("schoolYearHistoryStatus").textContent, "Archived PDF report downloaded.");
+  assert.equal(button.disabled, false);
+  deferred = true;
+  const pending = click();
+  assert.equal(button.disabled, true);
+  auth.currentUser = null;
+  authChanged(null);
+  complete();
+  await pending;
+  assert.equal(outputs.length, 1, "the former administrator's late response cannot download");
+  auth.currentUser = { uid: "teacher-a", role: "teacher" };
+  await click();
+  assert.equal(requests.length, 2, "teachers cannot request this admin download");
 });

@@ -1,4 +1,4 @@
-import { collectScoreReport, scoreReportFilename } from "./score-report-data.js";
+import { collectScoreReport, scoreReportFilename, SCHOOL_NAME, SCHOOL_ADDRESS } from "./score-report-data.js";
 
 // Cache only public rendering resources; student scores are fetched for every export.
 let resources;
@@ -30,4 +30,20 @@ export async function showScoreReport(output, { signal }) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function createSchoolYearHistoryOutput(archive, { signal, preparedBy, now = new Date() }) {
+  signal.throwIfAborted();
+  if (!Number.isInteger(archive.startYear) || !Array.isArray(archive.rows) ||
+      archive.rows.some(row => !Array.isArray(row) || row.length !== 19))
+    throw new Error("The archived report could not be read. Please try again.");
+  const formatDate = value => new Date(value).toLocaleString("en-PH", { timeZone: "Asia/Manila" });
+  const report = { ...archive, schoolName: SCHOOL_NAME, schoolAddress: SCHOOL_ADDRESS,
+    teacherName: preparedBy, generatedAt: now.toISOString(), generatedLabel: formatDate(now),
+    closedLabel: formatDate(archive.closedAt), reportTitle: `Archived School Year Report ${archive.startYear}-${archive.startYear + 1}` };
+  const { renderer, assets } = await loadReportResources();
+  signal.throwIfAborted();
+  const output = await renderer.renderScoreReport(report, assets, { mode: "download", layout: renderer.layoutSchoolYearHistory });
+  signal.throwIfAborted();
+  return { ...output, filename: `ImARs-SY-${archive.startYear}-${archive.startYear + 1}-report.pdf` };
 }
