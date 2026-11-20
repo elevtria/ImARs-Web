@@ -13,7 +13,7 @@ public sealed partial class ARGraphicsSettingsView
     {
         public string requestId, category, issue, description, appVersion, platform, scene;
     }
-    [Serializable] sealed class BugReportAcknowledgement { public bool ok; public string id; }
+    [Serializable] sealed class BugReportAcknowledgement { public bool ok; public string id, error; }
     static readonly string[] BugCategories =
     {
         "Choose an issue", "Sign-in or account", "AR camera or scanning", "Lesson or activity",
@@ -345,16 +345,20 @@ public sealed partial class ARGraphicsSettingsView
         try {
             var reply = await BugReportApi.SendAuthenticatedAsync("submit", JsonUtility.ToJson(payload), user);
             if (this == null || reportStatus == null || Firebase.Auth.FirebaseAuth.DefaultInstance.CurrentUser?.UserId != uid) return;
-            var saved = reply.Succeeded && reply.IsJson && !reply.TooLarge ? JsonUtility.FromJson<BugReportAcknowledgement>(reply.Body) : null;
-            if (saved == null || !saved.ok || string.IsNullOrEmpty(saved.id)) throw new InvalidOperationException("Report was not acknowledged.");
+            var saved = reply.IsJson && !reply.TooLarge ? JsonUtility.FromJson<BugReportAcknowledgement>(reply.Body) : null;
+            if (!reply.Succeeded || saved == null || !saved.ok || string.IsNullOrEmpty(saved.id))
+                throw new InvalidOperationException(reply.Status == 0
+                    ? "The connection timed out or could not reach the report service. Please retry."
+                    : "Report service returned HTTP " + reply.Status + ". "
+                        + (saved?.error ?? "The report could not be confirmed. Please retry."));
             reportStatus.text = "Report sent. Your school administrator can now review it.";
             explanation.text = "";
             otherIssue.text = "";
             pendingReportFingerprint = pendingReportId = null;
         }
-        catch (Exception) {
+        catch (Exception error) {
             if (this != null && reportStatus != null && Firebase.Auth.FirebaseAuth.DefaultInstance.CurrentUser?.UserId == uid)
-                reportStatus.text = "Could not confirm delivery. Check your connection and tap Send Report to retry. Your text is kept.";
+                reportStatus.text = error.Message + " Your text is kept.";
         }
         finally {
             sendingReport = false;
