@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSchoolAnalyticsReport, schoolAnalyticsCsv, schoolTrend } from "../js/school-analytics-report-data.js";
+import { buildSchoolAnalyticsReport, schoolAnalyticsCsv } from "../js/school-analytics-report-data.js";
 
 const sample = { pre: 46, post: 75, gain: 29, totalStudents: 76, termId: "term_02", sectionId: "A",
   sectionDirectory: [{ id: "A", name: "Hydrogen" }],
@@ -24,11 +24,4 @@ test("missing scores remain missing and CSV quotes untrusted names safely", () =
   const csv = schoolAnalyticsCsv(report);
   assert.ok(csv.includes('"\'=HYPERLINK(""example"")"'));
   assert.ok(csv.includes('"Term 2","Hydrogen","By teacher"'));
-});
-test("the arrow represents the two actual averages, including decline, ties, zeros and missing results", () => {
-  assert.equal(schoolTrend(46, 75).direction, "up");
-  assert.ok(schoolTrend(46, 75).postY < schoolTrend(46, 75).preY);
-  assert.equal(schoolTrend(80, 40).direction, "down");
-  assert.equal(schoolTrend(0, 0).direction, "flat");
-  for (const pair of [[null, 75], [undefined, 75], [-1, 50], [40, 101]]) assert.equal(schoolTrend(...pair), null);
 });

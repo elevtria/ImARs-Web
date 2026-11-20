@@ -1,7 +1,7 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getAdminReport, getFirestore, doc, getDoc } from "./firebase-data.js";
-import { buildSchoolAnalyticsReport, schoolAnalyticsCsv, schoolTrend } from "./school-analytics-report-data.js";
+import { buildSchoolAnalyticsReport, schoolAnalyticsCsv } from "./school-analytics-report-data.js";
 import { formatAdminGain, formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 
@@ -68,19 +68,6 @@ const getInitials = (name) => {
 let reportingPeriod = "All terms";
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
-function arrowGraph(pre, post) {
-  const trend = schoolTrend(pre, post);
-  if (!trend) return '<div class="school-trend school-trend-empty"><h3>Pre-test to post-test</h3><p>Both test averages are needed to show the comparison.</p></div>';
-  return `<div class="school-trend school-trend-${trend.direction}">
-    <svg viewBox="0 0 640 185" role="img" aria-label="Pre-test ${pre} percent to post-test ${post} percent; change ${trend.change} percentage points">
-      <defs><marker id="school-trend-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
-      <g class="school-trend-grid"><path d="M60 40H590M60 90H590M60 140H590"/><text x="12" y="44">100%</text><text x="20" y="94">50%</text><text x="26" y="144">0%</text></g>
-      <path class="school-trend-line" d="M100 ${trend.preY} L550 ${trend.postY}" marker-end="url(#school-trend-arrow)"/><circle cx="100" cy="${trend.preY}" r="5" fill="currentColor"/>
-      <text class="school-trend-value" x="100" y="${trend.preY - 15}">${pre}%</text><text class="school-trend-value" x="550" y="${trend.postY - 15}">${post}%</text>
-      <text class="school-trend-label" x="100" y="173">Pre-test</text><text class="school-trend-label" x="550" y="173">Post-test</text>
-    </svg></div>`;
-}
-
 function performanceCard({ name, details, initials, color, pre, post, gain, preCount, postCount, students }) {
   const countLabel = count => Number.isInteger(count) && count >= 0 ? `${count} completed lesson test result${count === 1 ? "" : "s"}` : "Completed-result count unavailable";
   const preHint = `Pre-test: results before learning each topic. ${countLabel(preCount)} for ${reportingPeriod.toLowerCase()}. Missing tests are excluded.`;
@@ -91,16 +78,11 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
       <span class="analytics-avatar">${escapeHtml(initials)}</span>
       <h2 class="analytics-teacher-name">${escapeHtml(name)}</h2>
       <p class="analytics-teacher-sections">${escapeHtml(details)}</p>
-      ${arrowGraph(pre, post)}
-      <div class="analytics-metric-help analytics-post-result" tabindex="0" aria-describedby="${initials}-post-help">
-        <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
-        <span class="analytics-post-label">Post-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span>
-        <small class="analytics-test-stage">After learning</small>
-        <span class="analytics-card-tooltip" id="${initials}-post-help" role="tooltip">${escapeHtml(postHint)}</span>
-      </div>
-      <div class="analytics-card-footer">
-        <div class="analytics-metric-help" tabindex="0" aria-describedby="${initials}-pre-help"><span>Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong>${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
-        <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Change in average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
+      <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}"><div class="analytics-donut-inner" aria-hidden="true"></div></div>
+      <div class="school-performance-metrics">
+        <div class="analytics-metric-help analytics-pre-result" tabindex="0" aria-describedby="${initials}-pre-help"><span class="analytics-post-label">Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="analytics-post-score">${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
+        <div class="analytics-metric-help analytics-post-result" tabindex="0" aria-describedby="${initials}-post-help"><span class="analytics-post-label">Post-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="analytics-post-score">${formatAdminPercent(post)}</strong><small class="analytics-test-stage">After learning</small><span class="analytics-card-tooltip" id="${initials}-post-help" role="tooltip">${escapeHtml(postHint)}</span></div>
+        <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span class="analytics-post-label">Change in average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="analytics-post-score teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
       </div>
       <details class="analytics-performance-details"><summary>View performance details</summary><dl>
         <div><dt>Students included</dt><dd>${Number.isInteger(students) ? students : "Not available"}</dd></div>

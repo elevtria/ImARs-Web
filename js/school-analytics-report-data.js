@@ -3,11 +3,6 @@ import { SCHOOL_NAME, SCHOOL_ADDRESS } from "./score-report-data.js";
 const percent = value => Number.isFinite(value) ? `${value}%` : "—";
 const gain = value => Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value} pp` : "—";
 const count = value => Number.isInteger(value) && value >= 0 ? value : "—";
-export function schoolTrend(pre, post) {
-  if (![pre, post].every(value => Number.isFinite(value) && value >= 0 && value <= 100)) return null;
-  return { pre, post, preY: 140 - pre, postY: 140 - post, change: post - pre,
-    direction: post > pre ? "up" : post < pre ? "down" : "flat" };
-}
 export function buildSchoolAnalyticsReport(report, { startYear, view = "teachers", generatedAt = new Date(), generatedBy = "Administrator" } = {}) {
   if (!Number.isInteger(startYear) || startYear < 2000 || startYear > 2100) throw new Error("The current school year could not be verified. Try again.");
   const sections = view === "sections";

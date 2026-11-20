@@ -108,33 +108,26 @@
 .analytics-report-downloads button { min-height: 44px; white-space: nowrap; }
 .analytics-report-downloads button:disabled { opacity: .55; cursor: wait; }
 #schoolExportStatus:empty { display: none; }
-.admin-portal .analytics-overview .teacher-analytics-card.school-performance { grid-template-columns: minmax(0, 1fr) minmax(210px, 280px); gap: 12px 28px; min-height: 0; }
-.admin-portal .analytics-overview .school-performance .analytics-teacher-name { grid-column: 1 / -1; grid-row: 1; font-size: 20px; line-height: 1.4; }
-.admin-portal .analytics-overview .school-performance .analytics-teacher-sections { grid-column: 1 / -1; grid-row: 2; font-size: 12px; }
-.admin-portal .analytics-overview .school-performance .school-trend { grid-column: 1; grid-row: 3 / span 2; align-self: center; min-width: 0; margin: 0; padding: 8px 0; border: 0; background: transparent; color: #247bce; }
-.admin-portal .analytics-overview .school-performance .analytics-post-result { grid-column: 2; grid-row: 3; align-items: flex-start; text-align: left; margin: 0; padding-top: 12px; }
-.admin-portal .analytics-overview .school-performance .analytics-post-score { font-size: 30px; }
-.admin-portal .analytics-overview .school-performance .analytics-card-footer { grid-column: 2; grid-row: 4; display: grid; gap: 16px; padding-top: 14px; align-self: start; }
-.admin-portal .analytics-overview .school-performance .analytics-gain-result { align-items: flex-start; text-align: left; }
-.admin-portal .analytics-overview .school-performance .analytics-performance-details { grid-column: 1 / -1; grid-row: 5; }
-.school-trend svg { display: block; width: 100%; height: auto; max-height: 230px; overflow: visible; }
-.school-trend-line { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
-.school-trend-grid path { fill: none; stroke: var(--line, #c0d9ed); stroke-width: 1; }
-.school-trend-grid text { fill: var(--muted); font-size: 11px; }
-.school-trend-value { fill: var(--ink); font-size: 15px; font-weight: 700; text-anchor: middle; }
-.school-trend-label { fill: var(--ink); font-size: 12px; text-anchor: middle; }
-.school-trend-empty { color: var(--muted); font-size: 13px; line-height: 1.6; }
-.school-trend-empty h3 { color: var(--ink); font-size: 15px; margin: 0 0 8px; }
-.admin-portal .analytics-overview .school-performance .school-trend-down { color: #bb4655; }
-[data-theme="dark"] .admin-portal .analytics-overview .school-performance .school-trend { color: #83c6ff; }
-[data-theme="dark"] .admin-portal .analytics-overview .school-performance .school-trend-down { color: #ff9cab; }
+.admin-portal .analytics-overview .teacher-analytics-card.school-performance { grid-template-columns: minmax(0, 1fr) 170px; gap: 12px 24px; min-height: 0; }
+.admin-portal .analytics-overview .school-performance .analytics-teacher-name { grid-column: 1; grid-row: 1; font-size: 17px; }
+.admin-portal .analytics-overview .school-performance .analytics-teacher-sections { grid-column: 1; grid-row: 2; font-size: 12px; }
+.admin-portal .analytics-overview .school-performance .analytics-donut { grid-column: 2; grid-row: 1 / span 3; }
+.school-performance-metrics { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 18px; padding: 18px 0 4px; }
+.admin-portal .analytics-overview .school-performance-metrics > .analytics-metric-help { grid-column: auto; grid-row: 1; display: flex; align-items: flex-start; text-align: left; min-width: 0; gap: 7px; margin: 0; }
+.school-performance-metrics > .analytics-post-result { align-items: center; text-align: center; }
+.school-performance-metrics > .analytics-gain-result { align-items: flex-end; text-align: right; }
+.school-performance-metrics .analytics-post-label { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.school-performance-metrics .analytics-post-score { font-size: 24px; line-height: 1.3; }
+.school-performance-metrics .analytics-post-score.teacher-gain { color: #0a986d; }
+.admin-portal .analytics-overview .school-performance .analytics-performance-details { grid-column: 1 / -1; grid-row: 4; }
 @media(max-width:700px) {
-  .admin-portal .analytics-overview .teacher-analytics-card.school-performance { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
-  .admin-portal .analytics-overview .school-performance .school-trend { grid-column: 1; grid-row: 3; }
-  .admin-portal .analytics-overview .school-performance .analytics-post-result { grid-column: 1; grid-row: 4; }
-  .admin-portal .analytics-overview .school-performance .analytics-card-footer { grid-column: 1; grid-row: 5; display: flex; }
-  .admin-portal .analytics-overview .school-performance .analytics-gain-result { align-items: flex-end; text-align: right; }
-  .admin-portal .analytics-overview .school-performance .analytics-performance-details { grid-row: 6; }
+  .admin-portal .analytics-overview .teacher-analytics-card.school-performance { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .admin-portal .analytics-overview .school-performance .analytics-donut { grid-column: 1; grid-row: 3; margin: 8px auto; }
+  .school-performance-metrics { grid-column: 1; grid-row: 4; }
+  .admin-portal .analytics-overview .school-performance .analytics-performance-details { grid-row: 5; }
+  .school-performance-metrics .analytics-post-label { min-height: 36px; font-size: 11px; }
+  .school-performance-metrics .analytics-post-score { font-size: 20px; }
+  .school-performance-metrics { gap: 10px; }
 }
 @media(max-width:640px) { .analytics-report-downloads { width: 100%; } .analytics-report-downloads button { flex: 1; } }
 
@@ -143,8 +136,4 @@
   .school-analytics-page select.admin-year { width: 100%; min-width: 0; max-width: 100%; }
   .school-analytics-page .topbar-right { gap: 8px; }
   .school-analytics-page .topbar-left .page-title { display: none; }
-  .school-trend-label { font-size: 24px; }
-  .school-trend-value { font-size: 28px; }
-  .school-trend-grid text { font-size: 20px; }
-  .school-trend-line { stroke-width: 6; }
 }
