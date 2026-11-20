@@ -1,3 +1,25 @@
+/* Recent activity uses cell backgrounds so striped rows cannot hide hover. */
+@media screen {
+  .teacher-dashboard #studentTableBody tr:has(.student) > td {
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+  }
+  .teacher-dashboard #studentTableBody tr:has(.student):is(:hover, :focus-within) > td {
+    background-color: #c8e2ff;
+  }
+  .teacher-dashboard #studentTableBody tr:has(.student):is(:hover, :focus-within) > td:first-child {
+    box-shadow: inset 4px 0 #247bce;
+  }
+  [data-theme="dark"] .teacher-dashboard #studentTableBody tr:has(.student):is(:hover, :focus-within) > td {
+    background-color: #28496d;
+  }
+  [data-theme="dark"] .teacher-dashboard #studentTableBody tr:has(.student):is(:hover, :focus-within) > td:first-child {
+    box-shadow: inset 4px 0 #83c6ff;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .teacher-dashboard #studentTableBody tr:has(.student) > td { transition: none; }
+}
+
 /* Shared theme controls; palette overrides are screen-only to preserve exports. */
 .theme-toggle {
   display: grid; place-items: center; flex: 0 0 40px; width: 40px; height: 40px;
