@@ -155,6 +155,24 @@ test("assessment validation and AR fallback match the dashboard's existing rules
   assert.equal(row.preCount, 0); assert.equal(row.postSum, 5); assert.equal(row.arMinutes, 4);
 });
 
+test("dashboard sums all-term device time and targeted syncs refresh it without counting twice", async () => {
+  const f = setup();
+  const first = "users/S00000/test_results/term_01/lessons/lesson_01";
+  const second = "users/S00000/test_results/term_02/lessons/lesson_01";
+  const third = "users/S00000/test_results/term_03/lessons/lesson_01";
+  f.data.set(first, { arTimeMinutes: 0, learningTimeByDevice: { phone: { arSeconds: 90 }, tablet: { arSeconds: 30 } } });
+  f.data.set(second, { arTimeMinutes: 3, learningTimeByDevice: { phone: { arSeconds: 180 } } });
+  f.data.set(third, { arNavigationTimeMinutes: 1 });
+  await f.engine.configure(f.scope); await f.finish();
+  assert.equal((await f.engine.read(f.scope)).summary.arMinutes, 6);
+  f.data.set(first, { arTimeMinutes: 0, learningTimeByDevice: { phone: { arSeconds: 150 }, tablet: { arSeconds: 30 } } });
+  await f.engine.invalidate(["S00000"], "term_01/lessons/lesson_01"); await f.finish();
+  assert.equal((await f.engine.read(f.scope)).summary.arMinutes, 7);
+  await f.engine.invalidate(["S00000"], "term_01/lessons/lesson_01"); await f.finish();
+  assert.equal((await f.engine.read(f.scope)).summary.arMinutes, 7);
+  assert.equal(f.data.get(first).arTimeMinutes, 0, "a report must not rewrite the underlying data");
+});
+
 test("website summaries require teacher authentication and ignore client-supplied owners", async () => {
   const f = fixture(); f.env.DASHBOARD_SUMMARIES_ENABLED = "true";
   f.data.get("users/TEACH1000").authEmailVerified = true;

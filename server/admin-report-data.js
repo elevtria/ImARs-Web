@@ -1,8 +1,9 @@
 import { assessmentPoints, lessonPaths } from "./dashboard-summary.js";
+import { recordedArMinutes } from "../js/learning-duration.js";
 
 const teacherFields = ["schoolId", "fullName", "name", "displayName", "section", "sections", "subject", "providedEmail", "email", "joined", "createdAt", "active", "status"];
 const studentFields = ["teacherId", "adviserId", "teacher", "classCode", "section", "gradeSection", "sectionName", "className", "active", "status"];
-const resultFields = ["isPreTestCompleted", "preTestTotalQuestions", "preTestScore", "isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "arTimeMinutes", "arNavigationTimeMinutes"];
+const resultFields = ["isPreTestCompleted", "preTestTotalQuestions", "preTestScore", "isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "arTimeMinutes", "arNavigationTimeMinutes", "learningTimeByDevice"];
 
 function averages({ prePctSum, preCount, postPctSum, postCount }) {
   const pre = preCount ? Math.round(prePctSum / preCount) : null;
@@ -11,6 +12,7 @@ function averages({ prePctSum, preCount, postPctSum, postCount }) {
 }
 
 function duration(minutes) {
+  if (minutes > 0 && minutes < 0.5) return "<1 min";
   const rounded = Math.round(minutes);
   const hours = Math.floor(rounded / 60), rest = rounded % 60;
   return hours ? (rest ? `${hours} h ${rest} min` : `${hours} h`) : `${rest} min`;
@@ -63,7 +65,7 @@ export function summarizeAdminReports(teacherDocs, students, classes = []) {
         section.postPctSum += post; section.postCount++;
         if (teacher) { teacher.postPctSum += post; teacher.postCount++; }
       }
-      const minutes = [result.arTimeMinutes, result.arNavigationTimeMinutes].find(value => Number.isFinite(value) && value > 0) || 0;
+      const minutes = recordedArMinutes(result) ?? 0;
       arMinutes += minutes;
       if (teacher) teacher.arMinutes += minutes;
     }

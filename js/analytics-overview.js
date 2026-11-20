@@ -1,5 +1,5 @@
 import { testRawScore } from "./student-activity-record.js";
-import { recordedLearningMinutes } from "./learning-duration.js";
+import { recordedLearningMinutes, recordedArMinutes } from "./learning-duration.js";
 
 const mean = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
 export function buildAnalyticsOverview(report, sectionId, termId) {
@@ -24,7 +24,7 @@ export function buildAnalyticsOverview(report, sectionId, termId) {
         }
       }
       if (before && after) changes.push(after.score / after.total * 100 - before.score / before.total * 100);
-      const arMinutes = recordedLearningMinutes(data, "arTimeMinutes", "arSeconds") ?? recordedLearningMinutes(data, "arNavigationTimeMinutes", "arNavigationSeconds");
+      const arMinutes = recordedArMinutes(data);
       const moduleMinutes = recordedLearningMinutes(data, "lessonTimeMinutes", "lessonSeconds");
       if (arMinutes !== null) ar.push(arMinutes);
       if (moduleMinutes !== null) module.push(moduleMinutes);

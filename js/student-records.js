@@ -7,7 +7,7 @@ import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { getFirestore, collection, doc, updateDoc, deleteDoc, writeBatch, getStudentPage } from "./firebase-data.js";
 import { confirmAction } from "./confirm-action.js";
 import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
-import { recordedLearningMinutes } from "./learning-duration.js";
+import { recordedLearningMinutes, recordedArMinutes } from "./learning-duration.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -404,8 +404,7 @@ function studentCard(classDoc, { studentDoc, results, resultsLoaded = true, resu
         testCount++;
       }
 
-      const ar = recordedLearningMinutes(tData, "arTimeMinutes", "arSeconds") ??
-        recordedLearningMinutes(tData, "arNavigationTimeMinutes", "arNavigationSeconds");
+      const ar = recordedArMinutes(tData);
       const module = recordedLearningMinutes(tData, "lessonTimeMinutes", "lessonSeconds");
       if (ar !== null) totalArTime = (totalArTime ?? 0) + ar;
       if (module !== null) totalModuleTime = (totalModuleTime ?? 0) + module;

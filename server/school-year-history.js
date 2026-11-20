@@ -4,6 +4,7 @@ import { confirmAdministratorPassword } from "./admin-security.js";
 import { loadAdminReports } from "./admin-report-data.js";
 import { decodeFields } from "./firestore-admin.js";
 import { invalidateSchoolYearCache } from "./web-data.js";
+import { recordedArMinutes, recordedLearningMinutes } from "../js/learning-duration.js";
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const uuid = value => typeof value === "string" && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(value);
@@ -33,7 +34,7 @@ export function archivedSchoolReport(archive) {
         const lesson = docs.get(`terms/${parts[3]}/lessons/${parts[5]}`) || {};
         rows.push([...base(id, student, "Lesson"), parts[3], lesson.title || lesson.name || parts[5], score(data, "preTest"), number(data.preTestTotalQuestions),
           score(data, "postTest"), number(data.postTestTotalQuestions), number(data.activityRawScore ?? data.activityScore), number(data.activityRawMaximum ?? data.activityTotalQuestions ?? data.activityTotalPoints),
-          "", "", number(data.arTimeMinutes ?? data.arNavigationTimeMinutes), number(data.lessonTimeMinutes), "Recorded"]);
+          "", "", number(recordedArMinutes(data)), number(recordedLearningMinutes(data, "lessonTimeMinutes", "lessonSeconds")), "Recorded"]);
       } else if (parts[2] === "generated_quiz_attempts" && parts.length === 4) {
         const quiz = docs.get("generatedQuizzes/" + data.quizId) || {};
         const result = data.review || data.receipt || {};

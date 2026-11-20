@@ -310,10 +310,11 @@ test("teacher sign-in and session checks use Supabase even when Firestore is una
   const signedIn = await app.login(teacher.id, "correct");
   assert.equal(signedIn.status, 200);
   assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 200);
+  assert.equal(firestoreCalls, 0, "active teacher sign-in and sessions use Supabase only");
   rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, email: teacher.email, active: false });
   assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 401);
   assert.equal(identityCalls, 1);
-  assert.equal(firestoreCalls, 0);
+  assert.equal(firestoreCalls, 1, "the existing manual-restoration check may consult Firestore for an inactive teacher, but still denies access during its outage");
 });
 
 test("three failures cause five minutes, the next three five hours, and the final three require manual recovery", () => {

@@ -1,6 +1,7 @@
 import { escapeHtml, showTeacherView } from "./teacher-view.js";
 import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
+import { recordedArMinutes, formatLearningMinutes } from "./learning-duration.js";
 import { setLoadingState, revealContent } from "./loading.js";
 import { getTeacherTopicOverview, getDashboardSummary } from "./firebase-data.js";
 import { currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability } from "./topic-availability.js";
@@ -60,7 +61,7 @@ function studentSummary(classDoc, student) {
     const data = lesson.data(), pre = assessmentPoints(data, "pre", 5), post = assessmentPoints(data, "post", 10);
     if (pre !== null) { preSum += pre; preCount++; }
     if (post !== null) { postSum += post; postCount++; }
-    const ar = minutes(data.arTimeMinutes) || minutes(data.arNavigationTimeMinutes);
+    const ar = recordedArMinutes(data) ?? 0;
     arMinutes += ar;
     const deviceTime = Object.values(data.learningTimeByDevice || {}).some(device => minutes(device?.lessonSeconds) > 0 || minutes(device?.arSeconds) > 0 || minutes(device?.arNavigationSeconds) > 0);
     const meaningful = activityTime(data.activityCompletedAt) > 0 || pre !== null || post !== null || ar > 0 || minutes(data.lessonTimeMinutes) > 0 || deviceTime ||
@@ -84,7 +85,9 @@ function renderDashboard({ teacherName, sectionNames, total, sums, recent }) {
     document.getElementById("studentCountVal").textContent = total ?? "—";
     document.getElementById("avgPreTestVal").textContent = scoreLabel(sums.preSum, sums.preCount, 5);
     document.getElementById("avgPostTestVal").textContent = scoreLabel(sums.postSum, sums.postCount, 10);
-    document.getElementById("avgArTimeVal").textContent = `${total ? Math.round(sums.arMinutes / total) : 0} min`;
+    document.getElementById("avgArTimeVal").textContent = formatLearningMinutes(total ? sums.arMinutes / total : 0);
+    const arHint = document.getElementById("arTimeHint");
+    if (arHint) arHint.textContent = `${formatLearningMinutes(sums.arMinutes)} total · per active student · all 3 terms`;
 
     const table = document.getElementById("studentTableBody"); table.innerHTML = "";
     const rows = document.createDocumentFragment();
@@ -94,7 +97,7 @@ function renderDashboard({ teacherName, sectionNames, total, sums, recent }) {
       const row = document.createElement("tr");
       row.innerHTML = `<td><div class="student"><div class="avatar">${escapeHtml(initials)}</div><div><strong>${escapeHtml(student.name)}</strong><small>Grade 6 – ${escapeHtml(student.section)}</small></div></div></td>
         <td class="muted-cell">${scoreLabel(student.preSum,student.preCount,5)}</td><td class="${student.postCount ? "score-up" : "muted-cell"}">${scoreLabel(student.postSum,student.postCount,10)}</td>
-        <td class="muted-cell">${Math.round(student.arMinutes)} min</td><td class="muted-cell">${lastActive}</td>`;
+        <td class="muted-cell">${escapeHtml(formatLearningMinutes(student.arMinutes))}</td><td class="muted-cell">${lastActive}</td>`;
       rows.appendChild(row);
     }
     if (!recent.length) { const row=document.createElement("tr"); row.innerHTML='<td colspan="5" class="muted-cell">No saved app activity yet.</td>'; rows.appendChild(row); }
@@ -135,7 +138,7 @@ onAuthStateChanged(auth, async user => {
         revealContent("dashboard-topics");
       }
     });
-  const summaryOptions = { app, user, page: "dashboard-summary-v2", freshForMs: 300_000, refreshIntervalMs: 300_000, load: async () => {
+  const summaryOptions = { app, user, page: "dashboard-summary-v3", freshForMs: 15_000, refreshIntervalMs: 30_000, refreshOnFocus: true, load: async () => {
     let result = await getDashboardSummary();
     if (!result.enabled) return { legacy: true };
     // Only the first preparation waits. Subsequent visits get the durable

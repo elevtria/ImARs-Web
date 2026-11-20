@@ -1,6 +1,7 @@
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { stateCall } from "./web-auth.js";
 import { lessonNotifications, latestNotifications } from "../js/test-notifications.js";
+import { recordedArMinutes } from "../js/learning-duration.js";
 
 const valid = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 const active = data => data && data.active !== false && !["inactive", "disabled", "deleted", "archived"].includes(String(data.status || "").toLowerCase());
@@ -23,7 +24,7 @@ export async function teacherDashboardSummary(env, store, id, uid, profile) {
 export function dashboardScope(sections, env) {
   // Rebuild older summaries once when legacy reconciliation is enabled. A warm
   // summary created before this adapter must not hide results indefinitely.
-  const scope = "activity-v3:" + (env.WEB_LEGACY_LESSON_READS_ENABLED === "true" ? "legacy:" : "current:") + JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
+  const scope = "activity-v4-learning-time:" + (env.WEB_LEGACY_LESSON_READS_ENABLED === "true" ? "legacy:" : "current:") + JSON.stringify(sections.map(row => [row.id, row.name]).sort(([a], [b]) => a.localeCompare(b)));
   return supabaseWebData(env) ? env.IMARS_SUPABASE_APP_DATASET_ID + ":" + scope : scope;
 }
 export function dashboardRefreshInterval(summary) {
@@ -46,7 +47,7 @@ export function summarizeStudent(id, profile, section, lessons) {
     const pre = assessmentPoints(data, "pre", 5), post = assessmentPoints(data, "post", 10);
     if (pre !== null) { row.preSum += pre; row.preCount++; }
     if (post !== null) { row.postSum += post; row.postCount++; }
-    const ar = positive(data.arTimeMinutes) || positive(data.arNavigationTimeMinutes);
+    const ar = recordedArMinutes(data) ?? 0;
     row.arMinutes += ar;
     const meaningful = time(data.activityCompletedAt) > 0 || pre !== null || post !== null || ar > 0 || positive(data.lessonTimeMinutes) > 0 ||
       Object.values(data.learningTimeByDevice || {}).some(device => positive(device?.lessonSeconds) > 0 || positive(device?.arSeconds) > 0 || positive(device?.arNavigationSeconds) > 0) ||

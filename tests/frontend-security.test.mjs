@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
+import { recordedLearningMinutes, recordedArMinutes, formatLearningMinutes } from "../js/learning-duration.js";
 import { scoreOverride } from "../js/lesson-score.js";
 import { buildStudentActivityRecords, testRawScore } from "../js/student-activity-record.js";
 import { analyticsScoreMatrix, scoreTerms, scoreLessons } from "./fixtures/analytics-score-matrix.js";
@@ -55,7 +56,7 @@ function page(file, report, resolveReport) {
     getDashboardSummary: async () => report?.preparedSummary || { enabled: false },
     showTeacherView: async options => options.render(options.page.startsWith("dashboard-summary-") ? await options.load() : file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
-    currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
+    currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability, recordedLearningMinutes, recordedArMinutes, formatLearningMinutes,
     setTimeout:()=>1,clearTimeout(){},
     closeQuizReview() {}, openQuizReview() {}, scoreOverride, closeLessonScoreEditor() {}, openLessonScoreEditor() {},
     warmScoreReportResources() {},
@@ -287,6 +288,16 @@ test("the prepared dashboard renders safe summaries without starting the full st
   assert.equal(app.element("avgPreTestVal").textContent, "0/5");
   assert.equal(app.element("avgArTimeVal").textContent, "6 min");
   assertTextOnly(app.element("studentTableBody").html());
+});
+
+test("dashboard keeps fractional AR time visible and distinguishes its total from the per-student average", async () => {
+  const app = page("dashboard.js", { sections: [], preparedSummary: { enabled: true, ready: true, teacherName: "Teacher", summary: {
+    total: 40, sectionNames: ["A"], preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 1,
+    recent: [{ id: "S1", name: "Learner", section: "A", preSum: 0, preCount: 0, postSum: 0, postCount: 0, arMinutes: 0.25, lastActive: Date.now() }] } } });
+  await app.render();
+  assert.equal(app.element("avgArTimeVal").textContent, "<0.1 min");
+  assert.match(app.element("arTimeHint").textContent, /^1 min total/);
+  assert.match(app.element("studentTableBody").html(), /0.3 min/);
 });
 
 test("score summary names, sections, and topic titles cannot inject HTML into reports", async () => {
