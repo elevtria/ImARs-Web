@@ -21,9 +21,16 @@ export async function bugReports({ request, env }, { store, identityStore, staff
     if (action === "submit") {
       identityStore ??= new FirestoreAdmin(env);
       const identity = await mobileAuth(request, env, identityStore);
-      const profile = await identityStore.findUser(identity.uid);
+      // Prefer the migrated profile so Firestore quota failures cannot block a
+      // report from a student whose records already live in Supabase.
+      let profile = await store.findUser(identity.uid);
+      let profileStore = store;
+      if (!profile) {
+        profile = await identityStore.findUser(identity.uid);
+        profileStore = identityStore;
+      }
       if (!profile || !activeProfile(profile.data) || profile.data.role !== "student") throw fail("An active student account is required.", 403);
-      const binding = await identityStore.get("_accountAccess/" + identity.uid);
+      const binding = await profileStore.get("_accountAccess/" + identity.uid);
       if (binding ? binding.data.active !== true || binding.data.role !== "student" || binding.data.profileId !== profile.id ||
           String(binding.data.authEmail || "").toLowerCase() !== identity.email : env.ACCOUNT_ACCESS_ENABLED === "true") {
         throw fail("Please sign in again or contact your teacher.", 403);

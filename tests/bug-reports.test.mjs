@@ -31,6 +31,21 @@ test("mobile submissions use verified profile data and retry without duplicate r
   assert.equal([...app.data.keys()].filter(key => key.startsWith("bugReports/")).length, 1);
   assert.equal((await app.call("submit", { ...report, reporterId: "someone-else" })).status, 400);
 });
+
+test("migrated student reports reach the admin inbox while Firestore profile reads are unavailable", async () => {
+  const app = await harness();
+  const identityStore = {
+    identity: app.store.identity,
+    findUser: async () => assert.fail("Migrated students must not query Firestore profiles"),
+    get: async () => assert.fail("Migrated students must not query Firestore bindings")
+  };
+  const submitted = await app.call("submit", report, "", { identityStore });
+  assert.equal(submitted.status, 201);
+  const receipt = await submitted.json();
+  assert.equal((await app.call("submit", report, "", { identityStore })).status, 200);
+  const inbox = await (await app.call("list")).json();
+  assert.equal(inbox.reports.filter(row => row.id === receipt.id).length, 1);
+});
 test("only admins can list reports and change status; anonymous mobile requests fail authentication", async () => {
   const app = await harness();
   const { id } = await (await app.call("submit", report)).json();
