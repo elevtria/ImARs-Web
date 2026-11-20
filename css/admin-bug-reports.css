@@ -1,0 +1,37 @@
+.reports-toolbar, .bug-report-heading { display: flex; justify-content: space-between; align-items: start; gap: 24px; }
+.reports-toolbar > div > p, #reportsStatus { color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 10px; }
+.reports-filters { display: flex; flex-wrap: wrap; gap: 12px; }
+.reports-filters label, .report-status-control { display: grid; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 700; }
+.reports-filters :is(input,select), .report-status-control select { min-height: 42px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface, #fff); font: inherit; }
+.reports-filters :is(input,select):focus-visible, .report-status-control select:focus-visible { outline: 3px solid #71b7f4; outline-offset: 2px; }
+.bug-report-list { display: grid; gap: 18px; margin-top: 22px; }
+.bug-report { padding: 24px; border: 1px solid var(--line); border-left: 4px solid #247bce; border-radius: 18px; background: var(--surface, #fff); transition: border-color 160ms ease, box-shadow 160ms ease; }
+.bug-report:hover { border-color: #71b7f4; box-shadow: 0 6px 18px #247bce15; }
+.bug-report[data-status="resolved"] { border-left-color: #21a377; }
+.bug-report[data-status="in-progress"] { border-left-color: #e8ac28; }
+.report-category { display: inline-block; padding: 6px 10px; border-radius: 8px; background: #e1f1ff; color: #1e5e94; font-size: 11px; font-weight: 700; }
+.bug-report h3 { margin: 12px 0 0; color: var(--ink); font-size: 20px; overflow-wrap: anywhere; }
+.report-author { margin: 14px 0 0; font-size: 12px; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+.report-author span { display: block; }
+.report-description { margin: 20px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); font-size: 14px; line-height: 1.8; }
+.report-details { padding-top: 16px; border-top: 1px solid var(--line); }
+.report-details summary { color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 700; }
+.report-details dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin: 20px 0 0; }
+.report-details dt { color: var(--muted); font-size: 11px; }
+.report-details dd { color: var(--ink); font-size: 12px; margin: 5px 0 0; overflow-wrap: anywhere; }
+.reports-empty { text-align: center; padding: 44px 24px; color: var(--muted); }
+.reports-empty > span { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 18px; background: #e1f1ff; color: #247bce; font-size: 28px; }
+.reports-empty h3 { color: var(--ink); margin-bottom: 10px; }
+.reports-empty p { max-width: 480px; margin: auto; font-size: 13px; line-height: 1.8; }
+.reports-empty[hidden], #moreReports[hidden] { display: none; }
+#moreReports { margin-top: 20px; }
+[data-theme="dark"] .report-category, [data-theme="dark"] .reports-empty > span { background: #28496d; color: #b9e0ff; }
+@media(max-width:700px) { .reports-toolbar, .bug-report-heading { flex-direction: column; gap: 18px; } .reports-filters, .reports-filters label { width: 100%; } .reports-filters label { flex: 1; min-width: 140px; } .bug-report { padding: 18px; } .report-details dl { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media(prefers-reduced-motion:reduce) { .bug-report { transition: none; } }
+
+@media(max-width:640px) {
+  .bug-reports-page .school-year-control { width: 150px; min-width: 0; }
+  .bug-reports-page select.admin-year { width: 100%; min-width: 0; max-width: 100%; }
+  .bug-reports-page .topbar-right { gap: 8px; }
+}
+@media(max-width:400px) { .bug-reports-page .topbar-left .page-title { display: none; } }

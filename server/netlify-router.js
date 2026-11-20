@@ -3,6 +3,7 @@ import { authApi } from "./web-auth.js";
 import { webData } from "./web-data.js";
 import { accountAccess } from "./account-access.js";
 import { studentQuizzes } from "./student-quizzes.js";
+import { bugReports } from "./bug-reports.js";
 import { quizReview } from "./quiz-review.js";
 
 export async function netlifyRouter({ request, env, store, ip, jobs, waitUntil = () => {} }) {
@@ -15,6 +16,7 @@ export async function netlifyRouter({ request, env, store, ip, jobs, waitUntil =
   const context = { request, env, waitUntil };
   return protect({ ...context, next: async () => {
     const path = new URL(request.url).pathname;
+    if (/^\/api\/bug-reports\/(?:submit|list|status)\/?$/.test(path)) return bugReports({ ...context }, { store });
     if (/^\/api\/web-auth\/[a-z-]+\/?$/.test(path)) return authApi(context);
     if (/^\/api\/web-data(?:\/[a-z-]+)?\/?$/.test(path)) return webData(context);
     if (/^\/api\/account-access\/[a-z-]+\/?$/.test(path)) return accountAccess(context);
