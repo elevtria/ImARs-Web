@@ -289,9 +289,8 @@ export class SupabaseAppStore {
       throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     }
     const results = rows.slice(0, limit).map(row => this.projected(row, fieldPaths));
-    if (!fieldPaths && (path === "users" || path === "classes")) {
-      await this.mirrorDocsToFirestore(path, results);
-    }
+    // A roster read must not rewrite the legacy database. Explicit mutations
+    // retain their compatibility mirror through commit().
     return results;
   }
 

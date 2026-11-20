@@ -90,11 +90,23 @@
         <span data-login-label>Log in</span>
       </button>
     </form>
-
+    <button type="button" class="forgot-password-link" id="forgotPasswordButton">Forgot password?</button>
   </main>
   </div>
 
+  <dialog class="teacher-recovery" id="teacherRecoveryDialog" aria-labelledby="teacherRecoveryTitle" aria-describedby="teacherRecoveryDescription">
+    <form id="teacherRecoveryForm">
+      <h2 id="teacherRecoveryTitle">Reset your password</h2>
+      <p id="teacherRecoveryDescription">Enter your Teacher ID. We’ll send a reset link to your account’s verified email.</p>
+      <label for="recoveryTeacherId">Teacher ID</label>
+      <input id="recoveryTeacherId" name="identifier" type="text" autocomplete="username" placeholder="e.g. TEACH1000" maxlength="15" required />
+      <p id="teacherRecoveryStatus" role="status" aria-live="polite"></p>
+      <div class="teacher-recovery-actions"><button type="button" id="closeTeacherRecovery">Cancel</button><button type="submit" id="sendTeacherRecovery">Send reset link</button></div>
+    </form>
+  </dialog>
+
   <script type="module" src="js/login.js"></script>
+  <script type="module" src="js/teacher-password-recovery.js"></script>
   <script type="module" src="js/vendor/model-viewer.js"></script>
   <script type="module" src="js/showcase.js"></script>
 </body>

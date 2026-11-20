@@ -3,6 +3,7 @@ import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestor
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
 import { confirmAdministratorPassword } from "./admin-reauth.js";
+import { teacherPasswordRecovery } from "./password-recovery.js";
 
 const cookieName = "__Host-imars-web";
 const encoder = new TextEncoder();
@@ -341,7 +342,7 @@ async function maintenance(request, env) {
   return crypto.subtle.verify("HMAC", await hmacKey(expected), proof, message);
 }
 
-export async function authApi({ request, env }, now = Date.now(), { store } = {}) {
+export async function authApi({ request, env, waitUntil }, now = Date.now(), { store, fetcher = fetch } = {}) {
   const action = new URL(request.url).pathname.replace(/\/$/, "").split("/").at(-1);
   if (action === "config" && request.method === "GET") {
     if (!enabled(env)) return dataEnabled(env) ? json({ error: "Website account setup is incomplete." }, 503) : json({ enabled: false });
@@ -357,6 +358,12 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     const accounts = settings(env);
     const body = await readJson(request);
     if (!body || typeof body !== "object") return json({ error: "Invalid request." }, 400);
+
+    if (action === "forgot-password") {
+      if (!dataEnabled(env)) return json({ error: "Account recovery is temporarily unavailable. Contact school support." }, 503);
+      return teacherPasswordRecovery({ request, env, body, store: store || appStore(env), callState: stateCall,
+        waitUntil, fetcher, now });
+    }
 
     if (action === "login") {
       if (typeof body.identifier !== "string" || body.identifier.length > 254 || typeof body.password !== "string" ||

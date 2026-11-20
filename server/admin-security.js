@@ -3,6 +3,7 @@ import { requireStaff, stateCall, readJson } from "./web-auth.js";
 import { transferredRosterWrites } from "./web-data.js";
 import { auditCollection, securityAudit } from "./security-audit.js";
 import { confirmAdministratorPassword } from "./admin-reauth.js";
+import { sendPasswordRecoveryEmail } from "./password-recovery.js";
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -76,11 +77,9 @@ export async function adminSecurity({ request, env }, { store, authenticate = re
       if (Number(limit?.data.until) > Date.now()) throw fail("A recovery email was recently requested. Wait five minutes before retrying.", 429);
       await store.commit([{ operation: "set", path, ...(limit ? { updateTime: limit.updateTime } : {}), data: { until: Date.now() + 300_000 } },
         securityAudit(actor, "password-reset-requested", body.targetId)]); transaction = false;
-      const response = await fetcher("https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=AIzaSyBwH8D-mJSpjqu_C7Y7e7ljCjSZiO7FTm0", {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestType: "PASSWORD_RESET", email: user.email }), signal: AbortSignal.timeout(10_000)
-      });
-      await store.commit([securityAudit(actor, response.ok ? "password-reset-sent" : "password-reset-failed", body.targetId)]);
-      if (!response.ok) throw fail("The recovery email could not be sent. Contact school support or retry after five minutes.", 503);
+      const sent = await sendPasswordRecoveryEmail(fetcher, user.email);
+      await store.commit([securityAudit(actor, sent ? "password-reset-sent" : "password-reset-failed", body.targetId)]);
+      if (!sent) throw fail("The recovery email could not be sent. Contact school support or retry after five minutes.", 503);
       return json({ ok: true, message: "Firebase accepted the recovery email request for the account’s verified address. Check the inbox and spam folder." });
     }
     // Invalidate existing portal sessions, including the shared mobile teacher receipt.
