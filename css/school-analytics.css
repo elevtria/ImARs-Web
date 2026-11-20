@@ -113,6 +113,7 @@
 .admin-portal .analytics-overview .school-performance .analytics-teacher-sections { grid-column: 1; grid-row: 2; font-size: 12px; }
 .school-performance-metrics { grid-column: 1; grid-row: 3; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(190px,.7fr); gap: 0; padding: 12px 0; }
 .admin-portal .analytics-overview .school-performance-metrics > .analytics-metric-help { grid-column: auto; grid-row: 1; display: grid; grid-template-columns: 112px minmax(0,1fr); grid-template-rows: 1fr 1fr; align-items: center; text-align: left; min-width: 0; column-gap: 18px; row-gap: 6px; padding: 6px 22px; margin: 0; }
+.admin-portal .analytics-overview .school-performance-metrics > .analytics-post-result { padding-left: 44px; }
 .school-performance-metrics > .analytics-metric-help + .analytics-metric-help { border-left: 1px solid var(--line); }
 .school-performance-metrics .analytics-post-label { grid-column: 2; grid-row: 1; align-self: end; margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.5; }
 .school-performance-metrics .analytics-test-stage { grid-column: 2; grid-row: 2; align-self: start; line-height: 1.6; }
@@ -129,6 +130,7 @@
   .admin-portal .analytics-overview .school-performance .analytics-donut { width: 88px; height: 88px; }
   .admin-portal .analytics-overview .school-performance .analytics-donut-inner { width: 66px; height: 66px; }
   .school-performance-metrics .analytics-donut-inner .analytics-post-score { font-size: 23px; }
+  .admin-portal .analytics-overview .school-performance-metrics > .analytics-post-result { padding-left: 28px; }
 }
 @media(max-width:900px) {
   .school-performance-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }

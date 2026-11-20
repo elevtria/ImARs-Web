@@ -43,7 +43,7 @@
   <main class="dashboard-content bug-reports-content" inert data-auth-shell>
     <section class="hero" data-auth-shell><div><h1 data-public-label>Bug Reports</h1><p data-public-label>Issues submitted from the ImARs mobile app.</p></div><button class="ghost-btn" id="refreshReports" type="button" disabled>Refresh</button></section>
     <section class="panel reports-panel" aria-labelledby="reportsHeading" data-auth-shell>
-      <div class="reports-toolbar"><div><h2 id="reportsHeading" data-public-label>Mobile app inbox</h2><p id="reportCount">Loading reports…</p></div><div class="reports-filters"><label>Search<input type="search" id="reportSearch" maxlength="120" placeholder="Search loaded reports…" /></label><label>Status<select id="reportFilter"><option value="all">All statuses</option><option value="new">New</option><option value="in-progress">In progress</option><option value="resolved">Resolved</option></select></label></div></div>
+      <div class="reports-toolbar"><div><h2 id="reportsHeading" data-public-label>Mobile app inbox</h2><p id="reportCount">Loading reports…</p></div><div class="reports-filters"><label>Search<input type="search" id="reportSearch" maxlength="120" placeholder="Search loaded reports…" /></label></div></div>
       <p id="reportsStatus" role="status" aria-live="polite">Checking mobile submissions…</p>
       <div id="bugReportList" class="bug-report-list"></div>
       <div id="reportsEmpty" class="reports-empty" hidden><span aria-hidden="true">✓</span><h3>No reports yet</h3><p>New mobile submissions will appear here. Reports sent by email in older app versions are not included.</p></div>
