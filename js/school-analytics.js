@@ -71,14 +71,14 @@ const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 function arrowGraph(pre, post) {
   const trend = schoolTrend(pre, post);
   if (!trend) return '<div class="school-trend school-trend-empty"><h3>Pre-test to post-test</h3><p>Both test averages are needed to show the comparison.</p></div>';
-  return `<div class="school-trend school-trend-${trend.direction}"><div class="school-trend-heading"><h3>Pre-test to post-test</h3><span>${formatAdminGain(trend.change)}</span></div>
+  return `<div class="school-trend school-trend-${trend.direction}">
     <svg viewBox="0 0 640 185" role="img" aria-label="Pre-test ${pre} percent to post-test ${post} percent; change ${trend.change} percentage points">
       <defs><marker id="school-trend-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
       <g class="school-trend-grid"><path d="M60 40H590M60 90H590M60 140H590"/><text x="12" y="44">100%</text><text x="20" y="94">50%</text><text x="26" y="144">0%</text></g>
       <path class="school-trend-line" d="M100 ${trend.preY} L550 ${trend.postY}" marker-end="url(#school-trend-arrow)"/><circle cx="100" cy="${trend.preY}" r="5" fill="currentColor"/>
       <text class="school-trend-value" x="100" y="${trend.preY - 15}">${pre}%</text><text class="school-trend-value" x="550" y="${trend.postY - 15}">${post}%</text>
       <text class="school-trend-label" x="100" y="173">Pre-test</text><text class="school-trend-label" x="550" y="173">Post-test</text>
-    </svg><p>Comparison of two averages, not a timeline of student progress.</p></div>`;
+    </svg></div>`;
 }
 
 function performanceCard({ name, details, initials, color, pre, post, gain, preCount, postCount, students }) {
@@ -87,13 +87,11 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
   const postHint = `Post-test: results after learning each topic. ${countLabel(postCount)} for ${reportingPeriod.toLowerCase()}. Missing tests are excluded.`;
   const gainHint = "Post-test average minus pre-test average, measured in percentage points (pp). These are independent averages; this is not a paired student comparison. Both averages are needed.";
   return `
-    <article class="teacher-analytics-card" style="--teacher-color:${color};--score:${post ?? 0}%">
+    <article class="teacher-analytics-card school-performance" style="--teacher-color:${color};--score:${post ?? 0}%">
       <span class="analytics-avatar">${escapeHtml(initials)}</span>
       <h2 class="analytics-teacher-name">${escapeHtml(name)}</h2>
       <p class="analytics-teacher-sections">${escapeHtml(details)}</p>
-      <div class="analytics-donut" role="img" aria-label="${post === null ? "No completed post-tests" : `${post} percent average post-test`}">
-        <div class="analytics-donut-inner" aria-hidden="true"></div>
-      </div>
+      ${arrowGraph(pre, post)}
       <div class="analytics-metric-help analytics-post-result" tabindex="0" aria-describedby="${initials}-post-help">
         <strong class="analytics-post-score">${formatAdminPercent(post)}</strong>
         <span class="analytics-post-label">Post-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span>
@@ -104,7 +102,6 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
         <div class="analytics-metric-help" tabindex="0" aria-describedby="${initials}-pre-help"><span>Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong>${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
         <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Change in average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
       </div>
-      ${arrowGraph(pre, post)}
       <details class="analytics-performance-details"><summary>View performance details</summary><dl>
         <div><dt>Students included</dt><dd>${Number.isInteger(students) ? students : "Not available"}</dd></div>
         <div><dt>Pre-test · Before learning</dt><dd>${formatAdminPercent(pre)} · ${countLabel(preCount)}</dd></div>
