@@ -51,7 +51,7 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
     catch { return json({ error: "Account access setup needs website maintenance." }, 503); }
   }
   if (action === "learning-schedule" && !studentSchedule) return json({ error: "Student schedules are not enabled." }, 409);
-  if (!enabled && !(mobilePasswordProtection && action === "login") && !(teacherSessions && mobileAction) && !progressAction && !scheduleAction)
+  if (!enabled && !(mobilePasswordProtection && ["login", "password-recovery"].includes(action)) && !(teacherSessions && mobileAction) && !progressAction && !scheduleAction)
     return json({ error: "Account access is not enabled." }, 409);
   if (request.method !== "POST") return json({ error: "Use POST." }, 405);
   if (request.headers.has("Origin") && request.headers.get("Origin") !== url.origin) return json({ error: "Invalid request origin." }, 403);
@@ -67,6 +67,32 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (!limited.ok) return json({ error: "Too many requests. Please wait a minute." }, limited.status === 429 ? 429 : 503);
     }
 
+    if (action === "password-recovery") {
+      if (Object.keys(body).some(key => key !== "identifier")) throw fail("Enter only your school ID.", 400);
+      const id = normalizeId(body.identifier);
+      const accepted = () => json({ ok: true });
+      const profile = (await store.get("users/" + id))?.data;
+      if (!available(profile) || !profile.uid) return accepted();
+      const binding = (await store.get("_accountAccess/" + profile.uid))?.data;
+      if (binding && (binding.active !== true || binding.profileId !== id || binding.role !== roleOf(profile))) return accepted();
+      const user = await store.identity(profile.uid);
+      if (!user || user.disabled || user.emailVerified !== true || !user.email) return accepted();
+      if (binding?.authEmail && email(binding.authEmail) !== email(user.email)) return accepted();
+      await store.begin();
+      try {
+        const path = "webSettings/security/resetLimits/" + id;
+        const limit = await store.get(path);
+        if (Number(limit?.data.until) > Date.now()) return accepted();
+        await store.commit([{ operation: "set", path, ...(limit ? { updateTime: limit.updateTime } : {}),
+          data: { until: Date.now() + 300_000 } }]);
+      } finally { await store.rollback().catch(() => {}); }
+      const response = await fetcher("https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=" + publicFirebaseKey, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestType: "PASSWORD_RESET", email: user.email }), signal: AbortSignal.timeout(10_000)
+      });
+      if (!response.ok) throw fail("The recovery email could not be sent. Please retry in five minutes.", 503);
+      return accepted();
+    }
     if (scheduleAction) {
       if (Object.keys(body).length !== 1 || typeof body.termId !== "string" || !/^term_0[1-3]$/.test(body.termId)) {
         throw fail("Choose a valid term.", 400);
