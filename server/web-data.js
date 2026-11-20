@@ -109,6 +109,23 @@ export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, {
       }
     }
 
+    // 1b. Remove ghost classes in Supabase that no longer exist in Firestore
+    if (fsClasses.length) {
+      const fsClassIds = new Set(fsClasses.map(row => row.id));
+      for (const sbClass of sbClasses) {
+        if (!sbClass?.id || fsClassIds.has(sbClass.id)) continue;
+        writes.push({
+          operation: "delete",
+          path: "classes/" + sbClass.id,
+          updateTime: sbClass.updateTime
+        });
+        if (sbClass.data?.teacherId) {
+          const owner = sbStaffMap.get(sbClass.data.teacherId);
+          if (owner?.data?.uid) affectedTeacherUids.add(owner.data.uid);
+        }
+      }
+    }
+
     // 2. Sync teacher & admin profiles (including ADMIN2) from Firebase Firestore -> Supabase
     for (const fsUser of fsStaff) {
       if (!fsUser?.id || !fsUser?.data) continue;
