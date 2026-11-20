@@ -32,14 +32,15 @@ onAuthStateChanged(auth, async user => {
     load: () => webRequest("/api/admin-security/action", { action: "directory" }),
     render: directory => {
       const selected = account.value;
-      account.innerHTML = `<option value="${escapeHtml(directory.self.id)}">My account · ${escapeHtml(directory.self.name)}</option>` + directory.teachers.map(row => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)} · ${escapeHtml(row.id)}${row.active ? "" : " (inactive)"}</option>`).join("");
+      account.innerHTML = directory.teachers.map(row => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)} · ${escapeHtml(row.id)}${row.active ? "" : " (inactive)"}</option>`).join("") || '<option value="">No teacher accounts available</option>';
+      account.disabled = directory.teachers.length === 0;
       if ([...account.options].some(option => option.value === selected)) account.value = selected;
       ready = true;
     } });
   if (ready) await loadAudit();
 });
 document.getElementById("accountSecurityForm").addEventListener("submit", async event => {
-  event.preventDefault(); if (!ready || auth.currentUser?.role !== "admin") return;
+  event.preventDefault(); if (!ready || !account.value || auth.currentUser?.role !== "admin") return;
   const action = document.getElementById("securityAction").value;
   const result = await confirmAdminAction({ action, targetId: account.value }, action === "reset-password" ? "Send recovery email?" : "End portal sessions?",
     `${account.selectedOptions[0].textContent}. ${action === "reset-password" ? "A reset link will be sent to the account’s verified Firebase email. This does not change its password immediately." : "Existing portal access will end on the next protected request. Saved learning records are preserved."}`);
