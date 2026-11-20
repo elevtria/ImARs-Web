@@ -45,7 +45,11 @@
       return { clipPath: `polygon(${points.join(",")})` };
     });
   }
-  function fade() {
+  function applyWithoutSpread(adminPortal) {
+    if (adminPortal) {
+      apply();
+      return;
+    }
     root.classList.add("theme-fading");
     apply();
     switchTimer = setTimeout(finishSwitch, 300);
@@ -62,6 +66,7 @@
   });
 
   document.addEventListener("DOMContentLoaded", () => {
+    const adminPortal = document.body.classList?.contains("admin-portal");
     toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = "theme-toggle";
@@ -77,12 +82,18 @@
         apply();
         return;
       }
-      if (interrupted || !document.startViewTransition || !root.animate) { fade(); return; }
+      if (interrupted || !document.startViewTransition || !root.animate) {
+        applyWithoutSpread(adminPortal);
+        return;
+      }
       const dark = preference === "dark";
       const bounds = toggle.getBoundingClientRect();
       const x = bounds.left + bounds.width / 2, y = bounds.top + bounds.height / 2;
-      const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) * 1.6 + 32;
-      const frames = spreadFrames(x, y, radius);
+      const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+      const frames = adminPortal ? [
+        { clipPath: `circle(0px at ${x}px ${y}px)` },
+        { clipPath: `circle(${radius + 1}px at ${x}px ${y}px)` }
+      ] : spreadFrames(x, y, radius * 1.6 + 32);
       // Keep an opaque outgoing canvas and its native color-scheme until the
       // reveal finishes. The old page stays visible beneath the growing mask.
       root.style.setProperty("--theme-switch-canvas", from === "dark" ? "#101824" : "#e9f5ff");
@@ -96,7 +107,7 @@
         transition.ready.then(() => {
           if (revision !== current) return;
           animation = root.animate(dark ? frames : frames.slice().reverse(), {
-            duration: 1100, easing: "cubic-bezier(.4,0,.2,1)", fill: "both",
+            duration: adminPortal ? 360 : 1100, easing: "cubic-bezier(.4,0,.2,1)", fill: "both",
             pseudoElement: dark ? "::view-transition-new(root)" : "::view-transition-old(root)"
           });
           animation.finished.then(complete, complete);
@@ -105,7 +116,7 @@
         switchTimer = setTimeout(() => { if (revision === current) { apply(); complete(); } }, 2600);
       } catch {
         finishSwitch();
-        fade();
+        applyWithoutSpread(adminPortal);
       }
     });
     const toolbar = document.querySelector(".topbar-right, .admin-topbar-right");

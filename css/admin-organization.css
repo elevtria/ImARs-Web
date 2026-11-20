@@ -1,6 +1,9 @@
 .admin-portal .admin-filters,.admin-portal .admin-security-form{display:flex;align-items:end;gap:20px;flex-wrap:wrap;margin:24px 0}
 .admin-portal .admin-filters label,.admin-portal .admin-security-form label{display:grid;gap:9px;min-width:220px;flex:1;font-weight:700}
 .admin-portal .admin-filters select,.admin-portal .admin-security-form select,.admin-portal .admin-transfer-select{width:100%;padding:13px 16px;border:1px solid var(--line,#aaccea);border-radius:14px;background:var(--surface,#fff);color:inherit;font:inherit}
+.admin-portal .admin-security-form > label { margin-bottom: 0; }
+.admin-portal .admin-security-form > :is(label, .primary-btn) { flex: 1 1 220px; }
+.admin-portal .admin-security-form :is(select, .primary-btn) { min-block-size: 46px; }
 .admin-portal .admin-filters p{flex-basis:100%;margin:0;font-size:.88rem}
 .admin-actions{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:22px}
 .admin-actions h2{margin:0;flex:1}
