@@ -6,14 +6,14 @@ import { webRequest } from "./web-login.js";
 
 const app = initializeApp(), auth = getAuth(app);
 const list = document.getElementById("bugReportList"), status = document.getElementById("reportsStatus");
-const search = document.getElementById("reportSearch");
+const search = document.getElementById("reportSearch"), filter = document.getElementById("reportFilter");
 const refresh = document.getElementById("refreshReports"), more = document.getElementById("moreReports");
 const labels = { new: "New", "in-progress": "In progress", resolved: "Resolved" };
 let reports = [], cursor = null, ready = false, loading = false;
 const date = value => Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" }) : "Not recorded";
 function render() {
   const query = search.value.trim().toLowerCase();
-  const visible = reports.filter(row => [row.issue, row.description, row.reporterName, row.reporterId, row.category, row.scene].join(" ").toLowerCase().includes(query));
+  const visible = reports.filter(row => row.status === filter.value && [row.issue, row.description, row.reporterName, row.reporterId, row.category, row.scene].join(" ").toLowerCase().includes(query));
   document.getElementById("reportCount").textContent = `${reports.length} reports loaded · ${reports.filter(row => row.status === "new").length} new`;
   list.innerHTML = visible.map(row => `<article class="bug-report" data-status="${escapeHtml(row.status)}">
     <div class="bug-report-heading"><div><span class="report-category">${escapeHtml(row.category)}</span><h3>${escapeHtml(row.issue)}</h3></div>
@@ -25,7 +25,7 @@ function render() {
   const empty = document.getElementById("reportsEmpty");
   empty.hidden = visible.length !== 0;
   empty.querySelector("h3").textContent = reports.length ? "No matching reports" : "No reports yet";
-  empty.querySelector("p").textContent = reports.length ? "Try another search. Load older reports to search more submissions." : "New mobile submissions will appear here. Reports sent by email in older app versions are not included.";
+  empty.querySelector("p").textContent = reports.length ? "Try another search or status. Load older reports to search more submissions." : "New mobile submissions will appear here. Reports sent by email in older app versions are not included.";
   more.hidden = !cursor;
 }
 function accept(result, append = false) {
@@ -56,7 +56,7 @@ onAuthStateChanged(auth, async user => {
 });
 refresh.addEventListener("click", () => load());
 more.addEventListener("click", () => load(true));
-search.addEventListener("input", render);
+search.addEventListener("input", render); filter.addEventListener("change", render);
 list.addEventListener("change", async event => {
   const select = event.target.closest("select[data-report-id]");
   if (!select || !ready) return;
