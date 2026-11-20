@@ -1,4 +1,4 @@
-import { appStore } from "./supabase-app-store.js";
+import { appStore, SupabaseAppStore, supabaseWebData } from "./supabase-app-store.js";
 import { FirestoreAdmin } from "./firestore-admin.js";
 import { requireStaff, readJson, stateCall } from "./web-auth.js";
 import { authenticateStudent, activeProfile } from "./student-quiz-auth.js";
@@ -17,7 +17,7 @@ export async function bugReports({ request, env }, { store, identityStore, staff
     if (request.method !== "POST") throw fail("Use POST.", 405);
     if (!request.headers.get("Content-Type")?.startsWith("application/json")) throw fail("Use JSON.", 415);
     const action = new URL(request.url).pathname.split("/").filter(Boolean).at(-1);
-    store ??= appStore(env);
+    store ??= supabaseWebData(env) ? new SupabaseAppStore(env, fetch, { mirrorToFirestore: false }) : appStore(env);
     if (action === "submit") {
       identityStore ??= new FirestoreAdmin(env);
       const identity = await mobileAuth(request, env, identityStore);
