@@ -1,6 +1,6 @@
 import { getApps, initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { collection, doc, getDoc, getDocs, getFirestore, limit, query, serverTimestamp, setDoc, where } from "./firebase-data.js";
+import { doc, getDoc, getFirestore } from "./firebase-data.js";
 import { setLoadingState } from "./loading.js";
 
 const app = getApps().find(candidate => candidate.name === "[DEFAULT]") || initializeApp();
@@ -48,23 +48,13 @@ function displayYear(year) {
   confirmedYear = year;
   labels.forEach(element => { element.textContent = label(year); });
   if (!select) return;
-  const current = new Date().getFullYear();
-  const from = Math.max(2000, Math.min(current - 3, year));
-  const through = Math.min(2100, Math.max(current + 10, year));
-  select.replaceChildren(...Array.from({ length: through - from + 1 }, (_, index) => {
+  select.replaceChildren(...[year, year + 1].map((value, index) => {
     const option = document.createElement("option");
-    option.value = String(from + index);
-    option.textContent = label(from + index);
+    option.value = String(value);
+    option.textContent = index ? "Manage school year & history…" : label(year);
     return option;
   }));
   select.value = String(year);
-}
-async function isAdministrator(user) {
-  const profiles = await getDocs(query(collection(db, "users"), where("uid", "==", user.uid), limit(2)));
-  if (profiles.size !== 1) return false;
-  const profile = profiles.docs[0].data();
-  return profile.uid === user.uid && profile.role === "admin" && profile.active !== false &&
-    !["inactive", "disabled"].includes(profile.status);
 }
 
 displayYear(savedYear()?.startYear ?? confirmedYear);
@@ -85,7 +75,7 @@ onAuthStateChanged(auth, async user => {
   if (saved) displayYear(saved.startYear);
   if (select) {
     canEdit = user.role === "admin";
-    if (!canEdit) { showStatus("Only administrators can change the school year.", true); return; }
+    if (!canEdit) { showStatus("Only administrators can manage school-year history.", true); return; }
     if (saved && Date.now() - saved.checkedAt < EDITOR_FRESH_FOR_MS) {
       loaded = true;
       refreshControl();
@@ -113,29 +103,8 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
-select?.addEventListener("change", async () => {
-  const year = Number(select.value);
-  if (!canEdit || !loaded || saving || !validYear(year)) { select.value = String(confirmedYear); return; }
-  const currentGeneration = generation;
-  const user = auth.currentUser;
-  saving = true;
-  refreshControl();
-  showStatus();
-  try {
-    if (!user || !await isAdministrator(user) || auth.currentUser?.uid !== user.uid || currentGeneration !== generation) {
-      throw new Error("Administrator access required");
-    }
-    await setDoc(reference, { startYear: year, endYear: year + 1, updatedBy: user.uid, updatedAt: serverTimestamp() }, { merge: true });
-    if (currentGeneration !== generation) return;
-    displayYear(year);
-    rememberYear(year);
-    showStatus("Saved for all teachers");
-  } catch (error) {
-    if (currentGeneration !== generation) return;
-    select.value = String(confirmedYear);
-    showStatus(error.code === "cancelled" ? "School year unchanged." : "Could not save the school year. Please try again.", error.code !== "cancelled");
-  } finally {
-    saving = false;
-    refreshControl();
-  }
+select?.addEventListener("change", () => {
+  if (!canEdit || !loaded || saving) { select.value = String(confirmedYear); return; }
+  select.value = String(confirmedYear);
+  window.location.href = "admin-school-years.html";
 });

@@ -156,14 +156,14 @@ export class SupabaseAppStore {
     }));
     if (lessonPaths.length) {
       const profiles = [...new Set(lessonPaths.map(path => path.split("/").slice(0, 2).join("/")))];
-      const identityFields = ["uid", "role", "classCode", "schoolId"];
+    const identityFields = ["uid", "role", "classCode", "schoolId", "legacyResultsArchived"];
       const [currentProfiles, legacyProfiles] = await Promise.all([
         this.rawDocuments(profiles, identityFields), this.legacyLessons.getAll(profiles, { fieldPaths: identityFields })
       ]);
       const accepted = new Set(profiles.filter(path => {
         const current = currentProfiles.get(path), legacy = legacyProfiles.get(path)?.data;
         const data = current && this.projected(current, identityFields).data;
-        return data?.role === "student" && legacy?.role === "student" && part.test(data.classCode || "") && data.classCode === legacy.classCode &&
+        return data?.role === "student" && data.legacyResultsArchived !== true && legacy?.role === "student" && part.test(data.classCode || "") && data.classCode === legacy.classCode &&
           (!data.uid || data.uid === legacy.uid) && (!legacy.schoolId || legacy.schoolId === path.split("/")[1]);
       }));
       const requested = lessonPaths.filter(path => accepted.has(path.split("/").slice(0, 2).join("/")));

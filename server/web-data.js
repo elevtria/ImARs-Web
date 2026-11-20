@@ -31,6 +31,7 @@ const classDisplayFields = ["SectionName", "sectionName", "name", "gradeLevel", 
 const schoolYears = new WeakMap();
 const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
+export const invalidateSchoolYearCache = store => schoolYears.delete(schoolYearCacheKey(store));
 
 const directorySyncs = new Map();
 
@@ -431,6 +432,9 @@ class Scope {
         names(["requestedFiles", "updatedAt"]) && timestamp(data.updatedAt) && data.requestedFiles?.$type === "arrayUnion" &&
         Array.isArray(data.requestedFiles.values) && data.requestedFiles.values.length <= 24 &&
         data.requestedFiles.values.every(value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.zip$/.test(value))) return { ...input, updateTime: row?.updateTime };
+    if (ref.path === "webSettings/schoolYear" && actor.role === "admin" && data.startYear !== previous?.startYear) {
+      throw fail("Use School Year & History to archive the current year before starting a new one.", 409);
+    }
     if (ref.path === "webSettings/schoolYear" && actor.role === "admin" && input.merge === true &&
         names(["startYear", "endYear", "updatedBy", "updatedAt"]) && Number.isInteger(data.startYear) && data.startYear >= 2000 && data.startYear <= 2100 &&
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
@@ -616,7 +620,8 @@ async function reportActivityGrades(env, appData, students, termIds, fetcher, le
     for (let offset = 0; offset < students.length; offset += 25) {
       groups.push(students.slice(offset, offset + 25).map(row => row.document.id));
     }
-    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? new FirestoreAdmin(env, legacyFetcher) : null;
+    const history = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? await appData.get("webSettings/schoolYear") : null;
+    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" && history?.data.legacyResultsArchived !== true ? new FirestoreAdmin(env, legacyFetcher) : null;
     const [saved, current] = await Promise.all([
       Promise.all(groups.map(ids => appData.activityResultsForRoster(ids))),
       legacy ? Promise.allSettled(groups.map(ids => legacy.activityResultsForRoster(ids))) : []

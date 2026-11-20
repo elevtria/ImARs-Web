@@ -10,6 +10,8 @@ const active = data => data?.active !== false && !["inactive", "disabled", "arch
 const json = (body, status = 200) => Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 const roleFilter = role => [{ field: "role", op: "==", value: role }];
 
+export { confirmAdministratorPassword };
+
 export async function adminSecurity({ request, env }, { store, authenticate = requireStaff, fetcher = fetch, callState = stateCall } = {}) {
   let transaction = false;
   try {

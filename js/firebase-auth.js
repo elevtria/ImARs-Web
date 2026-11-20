@@ -12,7 +12,7 @@ export const initializeApp = () => app;
 export const getApps = () => [app];
 const loginPage = () => /^\/(?:admin-)?login(?:\.html)?\/?$/.test(window.location.pathname);
 const adminLoginPage = () => /^\/admin-login(?:\.html)?\/?$/.test(window.location.pathname);
-const portalRole = () => /^\/(?:admin-security|admin-dashboard|admin-profile|admin-manual|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
+const portalRole = () => /^\/(?:admin-school-years|admin-security|admin-dashboard|admin-profile|admin-manual|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
 const sharedPage = () => /^\/teacher-manual(?:\.html)?\/?$/.test(window.location.pathname);
 const hidePortal = () => {
   if (loginPage()) return;

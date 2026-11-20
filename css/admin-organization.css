@@ -25,6 +25,7 @@
 .admin-attention div{padding:18px;border:1px solid #bdd8ef;border-radius:16px}
 .admin-attention dt{font-size:.9rem;color:#526e89}.admin-attention dd{font-size:1.6rem;font-weight:800;margin:10px 0 0}
 .admin-note{font-size:.88rem;line-height:1.7;color:#526e89;margin-top:24px}
+.school-year-steps{padding-left:24px;margin:20px 0;line-height:1.8}.school-year-steps li+li{margin-top:12px}
 .admin-portal .panel>p{line-height:1.6;margin-top:12px}
 .admin-portal #moreAudit{margin-top:20px}
 .admin-portal [hidden]{display:none!important}

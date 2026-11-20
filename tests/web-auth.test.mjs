@@ -231,7 +231,7 @@ function fixture() {
           const body = JSON.parse(options.body);
           if (body.password !== "correct") return Response.json({ error: { message: "INVALID_LOGIN_CREDENTIALS" } }, { status: 400 });
           const account = accounts.find(item => item.email === body.email);
-          return Response.json({ localId: wrongUid ? "different-person" : account.uid, idToken: "upstream-token", refreshToken: "upstream-refresh" });
+          return Response.json({ localId: wrongUid ? "different-person" : account.uid, email: account.email, idToken: "upstream-token", refreshToken: "upstream-refresh" });
         } }));
       }
       return { fetch: (url, options) => actors.get(name).fetch(new Request(url, options)) };
@@ -394,7 +394,7 @@ test("an administrator can clear an identifier cooldown after wrong-portal attem
   const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
   for (let index = 0; index < 3; index++) await app.login("TEACH1000", "wrong", "admin");
   assert.equal((await app.login("TEACH1000", "correct")).status, 429);
-  assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, admin)).status, 200);
+  assert.equal((await app.call("unlock", { identifier: "TEACH1000", password: "correct" }, admin)).status, 200);
   assert.equal((await app.login("TEACH1000", "correct")).status, 200);
 });
 
@@ -492,9 +492,9 @@ test("teachers cannot unlock themselves or others; approved admins can restore t
   for (let i = 0; i < 3; i++) await app.login();
   assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, teacher)).status, 403);
   assert.equal((await app.call("unlock", { identifier: "TEACH1000" })).status, 403);
-  assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, admin)).status, 200);
+  assert.equal((await app.call("unlock", { identifier: "TEACH1000", password: "correct" }, admin)).status, 200);
   assert.equal((await app.login("TEACH1000", "correct")).status, 200);
-  assert.equal((await app.call("unlock", { identifier: "ADMIN1000" }, admin)).status, 403);
+  assert.equal((await app.call("unlock", { identifier: "ADMIN1000", password: "correct" }, admin)).status, 403);
 });
 
 test("only the private maintenance key can recover an administrator and it never authenticates portal pages", async () => {

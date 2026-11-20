@@ -54,10 +54,13 @@ async function request(body) {
     const { confirmAdminAction } = await import("./admin-account-action.js");
     const year = body.writes?.find(write => write.path === "webSettings/schoolYear");
     const creating = body.action === "create-teacher";
-    const result = await confirmAdminAction(body, creating ? "Create teacher account?" : year ? "Change school-year setting?" : "Confirm administrative change?",
+    const change = body.writes?.[0];
+    const targetId = change?.path?.split("/").at(-1) || "this account";
+    const changeTitle = change?.operation === "delete" ? "Remove teacher?" : typeof change?.data?.active === "boolean" ? (change.data.active ? "Activate teacher?" : "Deactivate teacher?") : "Confirm administrative change?";
+    const result = await confirmAdminAction(body, creating ? "Create teacher account?" : year ? "Change school-year setting?" : changeTitle,
       creating ? `Create a staff account for ${body.profile.name}? Confirm your own administrator password.` : year
         ? "This changes the school-year label for all teachers. It does not archive records. Confirm your own administrator password."
-        : "Save this account change? Removed teachers remain disabled in the database; student and learning records are preserved. Confirm your own administrator password.",
+        : `Save this change to ${targetId}? Removed teachers remain disabled in the database; student and learning records are preserved. Confirm your own administrator password.`,
       { endpoint: "/api/web-data" });
     if (!result) throw Object.assign(new Error("The action was canceled."), { code: "cancelled" });
     return result;

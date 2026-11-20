@@ -792,7 +792,7 @@ test("public school-year reads expose only the year, and disabled Auth identitie
   await assert.rejects(staffProfile(accounts[0], app.store), error => error.status === 401);
 });
 
-test("Supabase school year is shared by public reads and authorized admin saves", async () => {
+test("Supabase school-year reads stay public and direct year changes require the archive workflow", async () => {
   const app = fixture(), teacher = await app.login(), admin = await app.login("ADMIN1000", "admin");
   const dataset = "dff51df7-8387-4afe-9871-536eff43ea2c";
   const revision = "b95916dc-8e8b-4870-8ae8-8cde9c3e9033";
@@ -827,9 +827,9 @@ test("Supabase school year is shared by public reads and authorized admin saves"
   assert.equal((await save(teacher, [write])).status, 403);
   assert.equal((await save(admin, [write, { ...write, path: "webSettings/other" }])).status, 400);
   assert.equal(commits, 0);
-  assert.equal((await save(admin, [write])).status, 200);
-  assert.equal(commits, 1);
-  assert.deepEqual(await (await read()).json(), { startYear: 2030 });
+  assert.equal((await save(admin, [write])).status, 409);
+  assert.equal(commits, 0);
+  assert.deepEqual(await (await read()).json(), { startYear: 2027 });
   assert.deepEqual(app.data.get(path), original);
 });
 
