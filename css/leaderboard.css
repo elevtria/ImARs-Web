@@ -30,6 +30,7 @@
 .leaderboard-section select { min-width: 180px; max-width: 100%; padding: 12px 16px; border: 1px solid #91bce0; border-radius: 12px; color: #102e54; background: #fff; font: inherit; }
 .leaderboard-section[hidden], .leaderboard-content [hidden] { display: none; }
 .leaderboard-status { margin-bottom: 18px; color: #375c7e; font-size: 12px; min-height: 18px; }
+.leaderboard-status:empty { display: none; }
 .leaderboard-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(340px, .85fr); gap: 24px; align-items: stretch; }
 .leaderboard-stage, .leaderboard-rankings { border: 1px solid #91bce0; border-radius: 24px; box-shadow: 0 16px 42px #367bb21f; }
 .leaderboard-stage { display: flex; flex-direction: column; position: relative; isolation: isolate; overflow: hidden; padding: 30px 26px 0; background: radial-gradient(ellipse at 50% 48%, #fffbea 0, #e5f5ff80 38%, transparent 68%), linear-gradient(145deg, #eaf8ff, #9bd4ff); }

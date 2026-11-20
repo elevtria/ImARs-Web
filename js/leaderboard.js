@@ -127,9 +127,7 @@ async function loadLeaderboard() {
     complete = true;
     render();
     cache.put(user.uid, cacheKey, { students, sections }, version);
-    status.textContent = sections.length ? "Latest synced app points · Updated " +
-      new Intl.DateTimeFormat("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(new Date()) :
-      "No sections are assigned to your account yet.";
+    status.textContent = sections.length ? "" : "No sections are assigned to your account yet.";
   } catch (error) {
     if (!current() || error.name === "AbortError") return;
     if (["permission-denied", "unauthenticated"].includes(error.code)) {
