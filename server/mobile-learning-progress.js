@@ -60,7 +60,7 @@ export async function readLearningProgress(body, scope, profile, store) {
 
 export async function saveLearningProgress(request, body, scope, profile, store, now, onSaved) {
   const { termId, lessonId, requestId, deviceId, revision, expectedClassCode, expectedTeacherProfileId } = body || {};
-  if (!keysAllowed(body, ["termId", "lessonId", "requestId", "deviceId", "revision", "expectedClassCode", "expectedTeacherProfileId",
+  if (!keysAllowed(body, ["termId", "lessonId", "requestId", "deviceId", "revision", "expectedClassCode", "expectedTeacherProfileId", "expectedDatasetEpoch",
       ...Object.keys(counters), ...Object.keys(flags)]) || !terms.includes(termId) || !lessons.includes(lessonId) ||
       typeof deviceId !== "string" || !/^[A-Za-z0-9_-]{1,80}$/.test(deviceId) ||
       !Number.isSafeInteger(revision) || revision < 1 || requestId !== [deviceId, termId, lessonId, revision].join("-") ||
@@ -69,6 +69,9 @@ export async function saveLearningProgress(request, body, scope, profile, store,
       Object.keys(flags).some(key => typeof body[key] !== "boolean")) throw invalid();
   if (scope.classCode !== expectedClassCode || scope.teacherProfileId !== expectedTeacherProfileId) {
     throw problem("SCOPE_CHANGED", 403, "Your class or account has changed.");
+  }
+  if (profile.data.schoolYearEpoch && body.expectedDatasetEpoch !== scope.datasetEpoch) {
+    throw problem("SCOPE_CHANGED", 403, "The school year changed. Reload your account before syncing new-year learning progress.");
   }
 
   const path = resultPath(scope, termId, lessonId);

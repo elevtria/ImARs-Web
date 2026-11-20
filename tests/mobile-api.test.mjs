@@ -78,6 +78,19 @@ function fixture() {
   return { env, post, records, results, store, at: time => { clock = Date.parse(time); } };
 }
 
+test("reenrolled students cannot replay prior-year lesson progress", async () => {
+  const app = fixture();
+  Object.assign(app.env, { IMARS_SUPABASE_WEB_DATA: "true", MOBILE_ACTIVITY_STAGING_ENABLED: "false", MOBILE_ACTIVITY_PRODUCTION_ENABLED: "true", IMARS_MOBILE_DATASET_EPOCH: "mobile-production-v1" });
+  app.records.get("users/S1").schoolYearEpoch = "2027:archive-id";
+  const body = { requestId: "phone-term_01-lesson_01-1", deviceId: "phone", revision: 1, termId: "term_01", lessonId: "lesson_01",
+    expectedClassCode: "A", expectedTeacherProfileId: "T1", lessonSeconds: 60, arSeconds: 120, arNavigationSeconds: 0, lessonDone: true, lessonOpened: true, arDone: true };
+  const current = await app.post("me");
+  assert.equal(current.scope.datasetEpoch, "mobile-production-v1:2027:archive-id");
+  assert.equal((await app.post("lesson-progress", body)).code, "SCOPE_CHANGED");
+  assert.equal((await app.post("lesson-progress", { ...body, expectedDatasetEpoch: "mobile-production-v1" })).code, "SCOPE_CHANGED");
+  assert.equal((await app.post("lesson-progress", { ...body, expectedDatasetEpoch: current.scope.datasetEpoch })).status, 200);
+});
+
 test("a completed section transfer restores mobile schedule access without granting another section", async () => {
   const app = fixture();
   app.records.get("users/S1").teacherId = "T1";

@@ -167,5 +167,5 @@ test("all admin pages link account security and protected routing recognizes it"
     assert.match(html, /href="admin-security.html"/); assert.match(html, /admin-organization.css/);
   }
   const auth = readFileSync(new URL("../server/web-auth.js", import.meta.url), "utf8");
-  assert.match(auth, /const adminOnly = \["\/admin-security"/);
+  assert.match(auth, /const adminOnly = \[[^\n]*"\/admin-security"/);
 });

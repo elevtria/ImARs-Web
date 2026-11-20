@@ -9,7 +9,7 @@ const account = document.getElementById("securityAccount"), status = document.ge
 const table = document.getElementById("securityAudit"), auditStatus = document.getElementById("auditStatus");
 const more = document.getElementById("moreAudit"), refresh = document.getElementById("refreshAudit");
 let ready = false, cursor = null, loading = false;
-const actionLabels = { "teacher-created": "Teacher created", "teacher-activated": "Teacher activated", "teacher-deactivated": "Teacher deactivated", "teacher-removed": "Teacher removed", "school-year-updated": "School year updated", "section-transferred": "Section transferred", "password-reset-requested": "Recovery requested", "password-reset-sent": "Recovery email accepted", "password-reset-failed": "Recovery delivery failed", "portal-sessions-requested": "Session termination requested", "portal-sessions-ended": "Portal sessions ended" };
+const actionLabels = { "school-year-closed": "School year archived", "teacher-created": "Teacher created", "teacher-activated": "Teacher activated", "teacher-deactivated": "Teacher deactivated", "teacher-removed": "Teacher removed", "school-year-updated": "School year updated", "section-transferred": "Section transferred", "password-reset-requested": "Recovery requested", "password-reset-sent": "Recovery email accepted", "password-reset-failed": "Recovery delivery failed", "portal-sessions-requested": "Session termination requested", "portal-sessions-ended": "Portal sessions ended" };
 async function loadAudit(append = false) {
   if (loading || !ready) return;
   loading = true; more.disabled = refresh.disabled = true;

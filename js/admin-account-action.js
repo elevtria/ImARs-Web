@@ -3,7 +3,7 @@ import { teacherViewCache } from "./view-cache.js";
 
 let active = false;
 // Native dialog traps focus and blocks pointer/keyboard access to the background.
-export function confirmAdminAction(body, title, message) {
+export function confirmAdminAction(body, title, message, options = {}) {
   if (active) return Promise.resolve(null);
   active = true;
   const dialog = document.createElement("dialog");
@@ -13,6 +13,13 @@ export function confirmAdminAction(body, title, message) {
   dialog.querySelector("h2").textContent = title;
   dialog.querySelector("p").textContent = message;
   const form = dialog.querySelector("form"), input = form.elements.password, status = dialog.querySelector('[role="status"]');
+  if (options.confirmationText) {
+    const label = document.createElement("label");
+    label.textContent = `Type ${options.confirmationText} to confirm`;
+    const confirmation = document.createElement("input");
+    confirmation.name = "confirmation"; confirmation.required = true; confirmation.autocomplete = "off";
+    label.append(confirmation); form.insertBefore(label, input.closest("label"));
+  }
   const submit = dialog.querySelector('[type="submit"]'), cancel = dialog.querySelector('[type="button"]');
   let busy = false, result = null;
   document.body.append(dialog);
@@ -25,7 +32,9 @@ export function confirmAdminAction(body, title, message) {
       if (busy) return;
       busy = true; submit.disabled = cancel.disabled = true; status.textContent = "Confirming and saving…";
       try {
-        result = await webRequest("/api/admin-security/action", { ...body, password: input.value });
+        if (options.confirmationText && form.elements.confirmation.value !== options.confirmationText) throw new Error("Type the confirmation phrase exactly as shown.");
+        result = await webRequest(options.endpoint || "/api/admin-security/action", { ...body, password: input.value,
+          ...(options.confirmationText ? { confirmation: form.elements.confirmation.value } : {}) });
         teacherViewCache().invalidate();
         dialog.close();
       } catch (error) { status.textContent = error.message; }
