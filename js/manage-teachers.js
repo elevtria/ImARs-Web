@@ -7,6 +7,7 @@ import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
 import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
 import { confirmAction } from "./confirm-action.js";
+import { teacherViewCache, encodeView } from "./view-cache.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -119,14 +120,48 @@ function render() {
 
 // Reuse the shared school report when moving between admin pages.
 const addTeacherButton = document.getElementById("addTeacherButton");
+const refreshTeachersButton = document.getElementById("refreshTeachersButton");
+refreshTeachersButton?.addEventListener("click", async () => {
+  if (!adminReady || !auth.currentUser) return;
+  const uid = auth.currentUser.uid;
+  refreshTeachersButton.disabled = true;
+  refreshTeachersButton.textContent = "Refreshing…";
+  let status = document.getElementById("teacherDirectoryStatus");
+  if (!status) {
+    status = document.createElement("p");
+    status.id = "teacherDirectoryStatus";
+    status.className = "view-data-status";
+    status.setAttribute("role", "status");
+    document.querySelector(".manage-heading")?.after(status);
+  }
+  status.textContent = "Checking teacher profiles in Firebase…";
+  try {
+    const report = await getAdminReport({ refreshDirectory: true });
+    if (auth.currentUser?.uid !== uid) return;
+    const cache = teacherViewCache();
+    cache.invalidate();
+    cache.put(uid, "admin:reports-v2", encodeView(report));
+    teachers = report.teachers;
+    render();
+    status.textContent = report.directory?.ok === false
+      ? "Portal records refreshed, but Firebase synchronization is incomplete. Please retry or contact website maintenance."
+      : "Teacher records refreshed. Deleted profiles remain excluded.";
+  } catch (error) {
+    if (auth.currentUser?.uid === uid) status.textContent = "Unable to refresh teachers. Please try again. " + error.message;
+  } finally {
+    refreshTeachersButton.disabled = !adminReady;
+    refreshTeachersButton.textContent = "Refresh teachers";
+  }
+});
 if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
   adminReady = false;
+  if (refreshTeachersButton) refreshTeachersButton.disabled = true;
   if (!user) { window.location.href = "admin-login.html"; return; }
   const timing = createPagePerformance("Manage Teachers");
   try {
     await showAdminView({ app, user,
-      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
+      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; if (refreshTeachersButton) refreshTeachersButton.disabled = false; render(); },
       load: () => timing.data(getAdminReport),
       render: report => timing.render(() => { teachers = report.teachers; render(); }),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
@@ -187,7 +222,7 @@ if (list) {
       if (!teacher) return;
 
       const uid = auth.currentUser.uid;
-      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name}’s staff profile? This cannot be undone.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
+      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name} from the portal and block their staff access? A deleted profile is retained in the database to prevent reactivation. Student and learning records are kept.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
       try {
         await deleteDoc(doc(db, "users", teacherId));
         teachers = teachers.filter((t) => t.id !== teacherId);

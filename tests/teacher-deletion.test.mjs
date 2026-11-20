@@ -1,9 +1,51 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fixture } from "./fixtures/web-data.js";
-import { syncClassesAndTeachersFromFirestore } from "../server/web-data.js";
+import { syncClassesAndTeachersFromFirestore, webData } from "../server/web-data.js";
+import { FirestoreAdmin } from "../server/firestore-admin.js";
+import { SupabaseAppStore } from "../server/supabase-app-store.js";
 import { resolveStaff, stateCall } from "../server/web-auth.js";
 import { loadAdminReports } from "../server/admin-report-data.js";
+
+test("mirrors update existing Firestore profiles without create-only preconditions", async () => {
+  const firestore = new FirestoreAdmin({});
+  let saved;
+  firestore.request = async (_path, options) => { saved = JSON.parse(options.body).writes; };
+  const store = Object.create(SupabaseAppStore.prototype);
+  store.firestoreMirror = firestore;
+  await store.mirrorWritesToFirestore([{ operation: "update", path: "users/TEACH1004", updateTime: "supabase-revision",
+    data: { active: false, status: "deleted" } }]);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].currentDocument, undefined);
+  assert.deepEqual(saved[0].updateMask.fieldPaths, ["active", "status"]);
+  assert.equal(saved[0].update.fields.active.booleanValue, false);
+  // Ordinary Firestore transactions still retain their conflict protection.
+  await firestore.commit([{ operation: "set", path: "users/TEACH1004", data: { active: true } }]);
+  assert.deepEqual(saved[0].currentDocument, { exists: false });
+});
+
+test("admin refresh waits for directory import and surfaces synchronization failures", async () => {
+  const app = await admin();
+  const teacher = await app.login();
+  app.env.IMARS_SUPABASE_WEB_DATA = "true";
+  const body = { action: "admin-report", refreshDirectory: true };
+  let refreshed = 0;
+  const dependencies = { store: app.store, directorySync: () => { throw Error("Must not race explicit refresh"); },
+    refreshDirectory: async store => {
+      refreshed++;
+      await store.commit([{ operation: "set", path: "users/TEACH1004", data: { role: "teacher", active: true, displayName: "Imported Teacher" } }]);
+      return { ok: true };
+    } };
+  const call = cookie => webData({ env: app.env, request: app.request("/api/web-data", body, cookie) }, dependencies);
+  const report = await (await call(app.cookie)).json();
+  assert.equal(refreshed, 1);
+  assert.ok(report.teachers.some(row => row.id === "TEACH1004"));
+  assert.deepEqual(report.directory, { ok: true });
+  dependencies.refreshDirectory = async () => ({ ok: false });
+  assert.deepEqual((await (await call(app.cookie)).json()).directory, { ok: false });
+  assert.equal((await call(teacher)).status, 403);
+  assert.equal(refreshed, 1);
+});
 
 async function admin() {
   const app = fixture();
@@ -43,7 +85,13 @@ test("teacher removal survives repeated directory imports and report refreshes",
     assert.equal(report.status, 200);
     assert.deepEqual((await report.json()).teachers.map(row => row.id), ["TEACH1001"]);
   }
-  assert.deepEqual(firestoreWrites, []);
+  assert.equal(firestoreWrites.length, 2);
+  for (const write of firestoreWrites) {
+    assert.equal(write.path, path);
+    assert.equal(write.data.active, false);
+    assert.equal(write.data.status, "deleted");
+    assert.equal(write.merge, true);
+  }
   assert.equal([...app.data.values()].some(row => row.SectionName === "New Section"), false);
   assert.deepEqual(app.data.get("users/0026271000"), originalStudent);
   assert.equal(app.data.get("classes/A").teacherId, "TEACH1000");
@@ -93,7 +141,9 @@ test("removing an invitation disables its reservation and imports respect tombst
   await syncClassesAndTeachersFromFirestore(app.store, app.env, null, { firestore: {
     async query(collection, { filters = [] } = {}) {
       return collection === "users" && filters[0]?.value === "teacher" ? [{ id, data: oldTeacher }] : [];
-    }
+    },
+    async begin() {},
+    async commit() {}
   } });
   assert.equal(app.data.get("users/" + id).status, "deleted");
   assert.equal(app.data.get("users/" + id).active, false);

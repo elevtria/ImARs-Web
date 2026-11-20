@@ -113,7 +113,14 @@ export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, {
       if (sbUser) sbStaffMap.set(fsUser.id, sbUser);
       const isTeacher = fsUser.data.role === "teacher";
       // A failed mirror must never let an older source restore a removed teacher.
-      if (isTeacher && String(sbUser?.data?.status || "").toLowerCase() === "deleted") continue;
+      if (isTeacher && String(sbUser?.data?.status || "").toLowerCase() === "deleted") {
+        if (fsUser.data.active !== false || String(fsUser.data.status || "").toLowerCase() !== "deleted") {
+          fsBackfillWrites.push({ operation: "set", path: "users/" + fsUser.id, merge: true,
+            updateTime: fsUser.updateTime, data: { active: false, status: "deleted",
+              deletedAt: sbUser.data.deletedAt || { $type: "serverTimestamp" } } });
+        }
+        continue;
+      }
 
       if (isTeacher) {
         if (fsUser.data.uid) affectedTeacherUids.add(fsUser.data.uid);
@@ -179,12 +186,15 @@ export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, {
       }
     }
 
+    let mirrorComplete = true;
     if (fsBackfillWrites.length) {
       try {
         await firestore.begin();
         await firestore.commit(fsBackfillWrites);
       } catch (err) {
-        console.warn("Firestore class backfill skipped:", err?.message || err);
+        mirrorComplete = false;
+        await firestore.rollback?.().catch(() => {});
+        console.warn("Firestore directory reconciliation skipped:", err?.message || err);
       }
     }
 
@@ -197,8 +207,10 @@ export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, {
         await stateCall(env, "dashboard:" + uid, "dashboard-dirty", { ids: ["_section_sync"] }).catch(() => {});
       }
     }
+    return { ok: mirrorComplete };
   } catch (err) {
     console.warn("Firestore -> Supabase class/staff sync skipped:", err?.message || err);
+    return { ok: false };
   }
 }
 
@@ -747,7 +759,8 @@ async function teacherTopicOverview(scope) {
 }
 
 export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
-  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch, directorySync = queueClassDirectorySync } = {}) {
+  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch, directorySync = queueClassDirectorySync,
+  refreshDirectory = syncClassesAndTeachersFromFirestore } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -764,9 +777,9 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     const actorBefore = await authenticate(request, env, store);
     // Compatibility maintenance runs after authorization and off the page's
     // response path. Ordinary reads no longer wait for a school-wide sync.
-    directorySync(env, settingsFetcher, waitUntil);
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
+    if (!(body.action === "admin-report" && body.refreshDirectory === true)) directorySync(env, settingsFetcher, waitUntil);
     if (["commit", "create-teacher"].includes(body.action)) {
       const changesSchoolYear = body.action === "commit" && Array.isArray(body.writes) && body.writes.some(write => write?.path === schoolYearPath);
       if (supabaseSettings && changesSchoolYear) {
@@ -787,7 +800,9 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "admin-report") {
       if (actor.role !== "admin") throw fail();
-      return respond(await loadAdminReports(store));
+      const directory = body.refreshDirectory === true && supabaseWebData(env)
+        ? await refreshDirectory(store, env, settingsFetcher) : undefined;
+      return respond({ ...await loadAdminReports(store), ...(directory ? { directory } : {}) });
     }
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));

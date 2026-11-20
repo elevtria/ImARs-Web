@@ -82,7 +82,7 @@ export class SupabaseAppStore {
           merge: write.operation === "update" ? true : Boolean(write.merge)
         })
       }));
-      await this.firestoreMirror.commit(mirroredWrites);
+      await this.firestoreMirror.commit(mirroredWrites, { unconditional: true });
     } catch (err) {
       console.warn("Firestore mirror commit warning:", err?.message || err);
     }

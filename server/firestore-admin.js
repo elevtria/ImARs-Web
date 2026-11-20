@@ -223,12 +223,14 @@ export class FirestoreAdmin {
   identity(uid) {
     return firebaseIdentity(this.env, uid, this.fetcher);
   }
-  async commit(writes) {
+  async commit(writes, { unconditional = false } = {}) {
     const prepared = [];
     for (const write of writes) {
-      const currentDocument = write.updateTime ? { updateTime: write.updateTime } : { exists: false };
+      // Mirrored writes have already passed the primary database transaction.
+      // Its revision is not a Firestore updateTime; use upsert semantics there.
+      const precondition = unconditional ? {} : { currentDocument: write.updateTime ? { updateTime: write.updateTime } : { exists: false } };
       if (write.operation === "delete") {
-        prepared.push({ delete: this.name(write.path), currentDocument });
+        prepared.push({ delete: this.name(write.path), ...precondition });
         continue;
       }
       const fields = {}, transforms = [];
@@ -238,7 +240,7 @@ export class FirestoreAdmin {
           appendMissingElements: { values: value.values.map(item => encodeFields({ value: item }).value) } });
         else fields[field] = value?.$type === "timestamp" ? new Date(value.value) : value;
       }
-      prepared.push({ update: { name: this.name(write.path), fields: encodeFields(fields) }, currentDocument,
+      prepared.push({ update: { name: this.name(write.path), fields: encodeFields(fields) }, ...precondition,
         ...(write.merge || write.operation === "update" ? { updateMask: { fieldPaths: Object.keys(fields) } } : {}),
         ...(transforms.length ? { updateTransforms: transforms } : {}) });
     }
