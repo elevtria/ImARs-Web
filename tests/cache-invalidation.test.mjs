@@ -7,7 +7,7 @@ import { wrapFirestoreReads } from "../js/firebase-loading.js";
 
 test("student changes refresh matching roster listeners without re-reading unrelated schedules or settings", async () => {
   const paths = [];
-  const context = vm.createContext({ createReadPool, wrapFirestoreReads, performance, queueMicrotask,
+  const context = vm.createContext({ createReadPool, wrapFirestoreReads, performance, getAuth: () => ({ currentUser: { role: "teacher" } }), queueMicrotask,
     invalidateTeacherViews() {}, startLoading: () => () => {}, withLoading: action => action(),
     setTimeout: () => 0, clearTimeout() {},
     window: { location: { pathname: "/student-records.html" }, addEventListener() {}, removeEventListener() {} },
@@ -37,7 +37,7 @@ test("successful Firestore writes and committed batches invalidate views; denied
   let invalidated = 0, rejectWrite = true;
   const operation = async () => { if (rejectWrite) throw new Error("permission-denied"); return "saved"; };
   const context = vm.createContext({
-    createReadPool, wrapFirestoreReads, performance,
+    createReadPool, wrapFirestoreReads, performance, getAuth: () => ({ currentUser: { role: "teacher" } }),
     webRequest: operation, crypto,
     readDocument: async () => ({}), readCollection: async () => ({}), listen: () => () => {},
     queryEqual: (a, b) => a === b, refEqual: (a, b) => a === b,

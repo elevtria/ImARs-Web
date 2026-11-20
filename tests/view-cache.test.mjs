@@ -202,6 +202,20 @@ test('reports paint the first 25 students before further background work and reu
   app.leave();await app.tick();assert.equal(app.calls.length,3,'leaving stops further background reads');
 });
 
+test('a fresh score summary supplies the matching selected-section report without repeating database reads', async () => {
+  const app = pagedReportHarness(50);
+  await app.open({ rawActivityScores: true });
+  await app.tick();
+  assert.equal(app.paints.at(-1).complete, true);
+  assert.equal(app.calls.length, 2);
+  await app.open({ sectionId: 'A' });
+  assert.equal(app.calls.length, 2);
+  assert.equal(app.paints.at(-1).loaded, 50);
+  assert.equal(app.paints.at(-1).sections[0].classDoc.id, 'A');
+  await app.open({ rawActivityScores: true });
+  assert.equal(app.calls.length, 2, 'returning to the score summary keeps its valid scoped cache');
+});
+
 test('changing terms cancels old work; a late old term or account response cannot paint',async()=>{
   const app=pagedReportHarness();let release;
   app.read(options=>options.termId==='term_02'?new Promise(resolve=>{release=()=>resolve(app.makePage(options));}):app.makePage(options));
@@ -210,6 +224,29 @@ test('changing terms cancels old work; a late old term or account response canno
   assert.ok(app.paints.every(value=>value.termId==='term_03'));
   app.document.visibilityState='hidden';await app.tick();assert.equal(app.calls.length,2,'hidden tabs do not continue the class report');
   app.document.visibilityState='visible';app.auth.currentUser={uid:'b'};await app.refresh();assert.equal(app.calls.length,2);
+});
+
+test('explicit term changes refresh cached Analytics scores in all three terms and beyond page one', async () => {
+  const app = pagedReportHarness(53), scores = { term_01: 1, term_02: 2, term_03: 3 };
+  app.read(options => {
+    const page = app.makePage(options);
+    const score = scores[options.termId];
+    for (const row of page.students) row.results[0].lessonsSnap.docs.push({ id: 'lesson_01', exists: () => true, data: () => ({ activityScore: score }) });
+    return page;
+  });
+  const load = async (termId, refresh = false) => {
+    await app.open({ termId, rawActivityScores: true, refresh });
+    while (!app.paints.at(-1).complete) await app.tick();
+    const students = app.paints.at(-1).sections[0].students;
+    assert.equal(students.length, 53);
+    for (const row of students) assert.equal(row.results[0].lessonsSnap.docs[0].data().activityScore, scores[termId]);
+  };
+  for (const termId of ['term_01', 'term_03', 'term_02']) await load(termId);
+  const previousReads = app.calls.length;
+  Object.assign(scores, { term_01: 11, term_02: 22, term_03: 33 });
+  for (const termId of ['term_01', 'term_03', 'term_02']) await load(termId, true);
+  assert.equal(app.calls.length - previousReads, 6, 'each manual switch refreshes the chosen term in two bounded pages');
+  assert.ok(app.calls.every(call => call.batchSize <= 100));
 });
 
 test('combined dashboard reports retain bounded loading and supply a fresh selected-term view without another download',async()=>{

@@ -1,7 +1,6 @@
 import { activityPercent } from "./activity-score.js";
 import { scoreOverride } from "./lesson-score.js";
-
-const asMinutes = value => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+import { recordedLearningMinutes } from "./learning-duration.js";
 
 export function testRawScore(result, kind) {
   const edited = scoreOverride(result, kind);
@@ -18,15 +17,8 @@ export function testRawScore(result, kind) {
 }
 
 export function activityMinutes(result) {
-  const direct = asMinutes(result?.lessonTimeMinutes) ?? asMinutes(result?.arTimeMinutes);
-  if (direct !== null) return direct;
-  const devices = result?.learningTimeByDevice;
-  if (!devices || typeof devices !== "object") return null;
-  const seconds = Object.values(devices).reduce((sum, device) => {
-    const amount = device?.lessonSeconds ?? device?.arSeconds;
-    return sum + (typeof amount === "number" && Number.isFinite(amount) && amount >= 0 ? amount : 0);
-  }, 0);
-  return seconds > 0 ? seconds / 60 : null;
+  return recordedLearningMinutes(result, "lessonTimeMinutes", "lessonSeconds") ??
+    recordedLearningMinutes(result, "arTimeMinutes", "arSeconds");
 }
 
 export function buildStudentActivityRecords(curriculum, sections, termLabels, termIds) {

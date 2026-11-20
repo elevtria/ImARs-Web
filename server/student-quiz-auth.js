@@ -43,6 +43,7 @@ export async function studentContext(identity, env, store) {
         String(access.data.authEmail || "").toLowerCase() !== identity.email) throw quizFailure("SCOPE_CHANGED");
     id = access.data.profileId;
   } else {
+    if (env.ACCOUNT_ACCESS_ENABLED === "true") throw quizFailure("SCOPE_CHANGED");
     let rows = await store.query("users", { filters: [{ field: "uid", op: "==", value: identity.uid }], limit: 2 });
 
     // If the student registered in Unity and linked their UID in Firebase Firestore,
@@ -81,11 +82,18 @@ export async function studentContext(identity, env, store) {
   if (!activeProfile(profile) || profile.uid !== identity.uid || profile.role !== "student" || !validPart(profile.classCode)) throw quizFailure("SCOPE_CHANGED");
   const section = (await store.get("classes/" + profile.classCode))?.data;
   if (!activeProfile(section) || !validPart(section.teacherId)) throw quizFailure("SCOPE_CHANGED");
+  if (profile.teacherId != null && profile.teacherId !== "" && profile.teacherId !== section.teacherId) throw quizFailure("SCOPE_CHANGED");
   const teacher = (await store.get("users/" + section.teacherId))?.data;
   if (!activeProfile(teacher) || teacher.role !== "teacher") throw quizFailure("SCOPE_CHANGED");
   if (validPart(teacher.uid)) {
     const teacherIdentity = await store.identity(teacher.uid);
     if (!teacherIdentity || teacherIdentity.disabled || teacherIdentity.emailVerified !== true) throw quizFailure("SCOPE_CHANGED");
+    const teacherAccess = (await store.get("_accountAccess/" + teacher.uid))?.data;
+    if (teacherAccess ? teacherAccess.active !== true || teacherAccess.role !== "teacher" || teacherAccess.profileId !== section.teacherId ||
+        String(teacherAccess.authEmail || "").toLowerCase() !== String(teacherIdentity.email || "").toLowerCase()
+      : env.ACCOUNT_ACCESS_ENABLED === "true") throw quizFailure("SCOPE_CHANGED");
+  } else if (env.ACCOUNT_ACCESS_ENABLED === "true") {
+    throw quizFailure("SCOPE_CHANGED");
   }
   return { context: { uid: identity.uid, studentId: id, sectionId: profile.classCode, teacherProfileId: section.teacherId, teacherUid: teacher.uid || "" },
     teacherName: String(teacher.displayName || teacher.fullName || "Your teacher").slice(0, 200) };

@@ -6,6 +6,8 @@ import vm from "node:vm";
 import { activityPercent } from "../js/activity-score.js";
 import { scoreOverride } from "../js/lesson-score.js";
 import { buildStudentActivityRecords, testRawScore } from "../js/student-activity-record.js";
+import { analyticsScoreMatrix, scoreTerms, scoreLessons } from "./fixtures/analytics-score-matrix.js";
+import { buildAnalyticsOverview } from "../js/analytics-overview.js";
 import { buildPostTestHeatmap } from "../js/post-test-heatmap.js";
 import { setLoadingState } from "../js/loading.js";
 import { encodeView } from "../js/view-cache.js";
@@ -46,12 +48,12 @@ function page(file, report, resolveReport) {
   const requests = [], controllers = [], revealed = [], quizRequests = [];
   let refreshQuizzes;
   const timing = { data: action => action(), render: action => action(), finish() {} };
-  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, matchesSearch, normalizeSearch, personSearchText, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
+  const context = vm.createContext({ console: { error() {} }, ...adminFormatting, escapeHtml, matchesSearch, normalizeSearch, personSearchText, activityPercent, buildStudentActivityRecords, testRawScore, buildPostTestHeatmap, buildAnalyticsOverview, AbortController, getHeatmapQuestions: async () => snapshot([]), heatmapCollection: (...args) => args, heatmapDatabase: () => ({}), setLoadingState, revealContent: groups => revealed.push(...groups.split(/\s+/)),
     initializeApp: () => ({}), getAuth: () => ({ currentUser: { uid: "teacher-a" } }), getFirestore: () => ({}),
     onAuthStateChanged: (_, callback) => { authChanged = callback; }, createPagePerformance: () => timing,
     initAdminIdleTimeout() {}, webProtectionEnabled: async () => false,
     getDashboardSummary: async () => report?.preparedSummary || { enabled: false },
-    showTeacherView: async options => options.render(options.page === "dashboard-summary-v1" ? await options.load() : file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
+    showTeacherView: async options => options.render(options.page.startsWith("dashboard-summary-") ? await options.load() : file === "dashboard.js" ? report.topicOverview || { sectionIds: (report.sections || []).map(row => row.classDoc.id),
       terms: [{id:'term_01',lessons:(report.curriculumSnap?.docs || []).map(row=>({id:row.id,title:row.data().title,isLocked:false,sectionSchedules:{}}))}] } : report),
     currentScheduledTerm, schoolTodayISO, teacherSectionSchedule, topicAvailability,
     setTimeout:()=>1,clearTimeout(){},
@@ -61,6 +63,7 @@ function page(file, report, resolveReport) {
     watchVisibleData: (_app, _user, refresh) => { refreshQuizzes = refresh; return () => {}; },
     requestQuizReview: async (_, input) => {
       quizRequests.push(input);
+      if (input.action === "grading-summary") return { learners: 1, quizCount: 0, items: [] };
       return { quizzes: [{ id: "Q1", title: attack }, { id: "Q2", title: "Scheduled Quiz" }], items: input.studentIds.slice(0, 1).map(studentId => ({ quizId: "Q1", studentId, status: "graded", score: 2, maximum: 3 })) };
     },
     createTeacherReport: options => {
@@ -71,10 +74,11 @@ function page(file, report, resolveReport) {
     getDocs: async () => snapshot([record("scan", { moduleName: attack })]),
     collection: (...args) => args, query: (...args) => args, orderBy: (...args) => args, limit: value => value,
     window: { location: {},addEventListener(){} },
-    document: { getElementById: element, querySelector: element, querySelectorAll: selector => selector === ".term-tab-btn" ? termButtons : [], addEventListener() {},
+    document: { getElementById: element, querySelector: element, querySelectorAll: selector => selector.endsWith(".term-tab-btn") ? termButtons : [], addEventListener() {},
       createElement: () => new Element(), createDocumentFragment: () => Object.assign(new Element(), { fragment: true }) }
   });
-  vm.runInContext(source(file), context);
+  const code = file === "student-score-summary.js" ? source(file).replaceAll('document.getElementById("score-" + id)', 'document.getElementById(id)').replaceAll("#score-studentGrid", "#studentGrid") : source(file);
+  vm.runInContext(code, context);
   return { element, termButtons, context, requested:()=>requested, requests, controllers, revealed, quizRequests,
     refreshQuizzes: () => refreshQuizzes(),
     async render() { await authChanged({ uid: "teacher-a" }); await new Promise(setImmediate); } };
@@ -88,7 +92,7 @@ function assertTextOnly(html) {
 }
 
 test("report actions capture the selected scope and cancel before delivering a report after a term change", async () => {
-  const app = page("analytics.js", null, input => activityReportData(["A"], { termId: input.termId, count: 2 }));
+  const app = page("student-score-summary.js", null, input => activityReportData(["A"], { termId: input.termId, count: 2 }));
   const prepared = [], delivered = [];
   app.context.createScoreReportOutput = async options => { prepared.push(options); return { students: 2, pageCount: 3 }; };
   app.context.showScoreReport = async (output, options) => delivered.push({ output, options });
@@ -115,7 +119,7 @@ test("report actions capture the selected scope and cancel before delivering a r
 test("score editing requires the Edit scores button and saves the selected student, term, and topic", async () => {
   const data = activityReportData(["A"], { count: 1 });
   data.sections[0].students[0].studentDoc = record("S1", { displayName: attack });
-  const app = page("analytics.js", data);
+  const app = page("student-score-summary.js", data);
   const editors = [], writes = [];
   app.context.openLessonScoreEditor = options => editors.push(options);
   app.context.doc = (_, ...parts) => ({ path: parts.join("/") });
@@ -193,7 +197,7 @@ test('Batch Upload templates and validation preserve full middle names through t
 
 test('middle initials block import until edited, while full compound names and no-middle-name students work',async()=>{
   const app=batchPage({rows:[['First Name','Middle Name','Last Name','Student ID','Email'],['Ana','M.','Santos','123456789','ana@example.test'],['Luis','','Reyes','123456788','luis@example.test']]});await app.load();await app.file('students.xlsx');
-  assert.equal(app.preview()[0].isValid,false);assert.match(app.preview()[0].errors.join(' '),/full Middle Name/);assert.equal(app.preview()[1].isValid,true);
+  assert.equal(app.preview()[0].isValid,false);assert.match(app.preview()[0].errors.join(' '),/full Middle Name|Middle Name must contain letters only/);assert.equal(app.preview()[1].isValid,true);
   app.edit(0,'middleName','De la Cruz');assert.equal(app.preview()[0].isValid,true);assert.equal(app.preview()[0].fullName,'Ana De la Cruz Santos');
   await app.import();assert.equal(app.imports.length,2);assert.equal(app.imports[1].data.middleName,'');assert.equal(app.imports[1].data.fullName,'Luis Reyes');
 });
@@ -285,19 +289,44 @@ test("the prepared dashboard renders safe summaries without starting the full st
   assertTextOnly(app.element("studentTableBody").html());
 });
 
-test("analytics names, sections, and topic titles cannot inject HTML into reports", async () => {
+test("score summary names, sections, and topic titles cannot inject HTML into reports", async () => {
   const lesson = record("lesson_01", { isPreTestCompleted: true, preTestScore: 4, preTestTotalQuestions: 5,
     isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10,
     activityScore: 3, activityTotalQuestions: 4 });
-  const app = page("analytics.js", { curriculumSnap: snapshot([record("lesson_01", { title: attack })]), termId: "term_01", total: 1, complete: true,
+  const app = page("student-score-summary.js", { curriculumSnap: snapshot([record("lesson_01", { title: attack })]), termId: "term_01", total: 1, complete: true,
     classes: [record("A", { SectionName: attack })], counts: [{ classId: "A", active: 1 }],
     sections: [{ classDoc: record("A", { SectionName: attack }), students: [{ studentDoc: record("S1", { displayName: attack }),
       results: [{ termId: "term_01", lessonsSnap: snapshot([lesson]) }] }] }] });
   await app.render();
   assertTextOnly(app.element("#studentGrid tbody").html());
   assert.ok(app.element("#studentGrid tbody").html().includes("3/4"));
-  assertTextOnly(app.element("topicsContainer").html());
   assertTextOnly(app.element("scoreSummaryHead").html());
+});
+
+test("Analytics overview connects lesson averages, support links and grading counts to one selected scope", async () => {
+  const app = page("analytics.js", null, input => {
+    const data = activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId });
+    const student = data.sections[0].students[0];
+    student.studentDoc = record("S1", { displayName: attack });
+    student.results[0].lessonsSnap = snapshot([record("lesson_01", { isPreTestCompleted: true, preTestScore: 0, preTestTotalQuestions: 5,
+      isPostTestCompleted: true, postTestScore: 4, postTestTotalQuestions: 10, arTimeMinutes: 0, lessonTimeMinutes: 3 })]);
+    return data;
+  });
+  await app.render();
+  assert.match(app.element("analyticsMetrics").html(), /Average post-test.*40%/);
+  assert.match(app.element("lessonComparison").html(), /Shared topic/);
+  assert.match(app.element("learningTimeOverview").html(), /<th scope="col">AR average<\/th><th scope="col">Module average<\/th>/);
+  assert.match(app.element("learningTimeOverview").html(), /<td>0 min<small>.*<td>3 min<small>/);
+  assert.match(app.element("supportStudents").html(), /<th scope="col">Student<\/th>.*<th scope="col">Lesson to review<\/th>.*Post-test score/);
+  assertTextOnly(app.element("supportStudents").html());
+  assert.match(app.element("supportStudents").html(), /student-records.html\?student=S1/);
+  assert.equal(app.quizRequests.at(-1).action, "grading-summary");
+  assert.equal(app.quizRequests.at(-1).sectionId, "A");
+  app.element("sectionFilter").value = "B";
+  await app.element("sectionFilter").events.change(); await new Promise(setImmediate);
+  await app.termButtons[1].events.click(); await new Promise(setImmediate);
+  assert.equal(app.quizRequests.at(-1).sectionId, "B");
+  assert.equal(app.quizRequests.at(-1).termId, "term_02");
 });
 
 function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", classes = ["A", "B"], count = 1 } = {}) {
@@ -312,7 +341,7 @@ function activityReportData(sectionIds = ["A", "B"], { termId = "term_01", class
 }
 
 test("the score summary and quiz request use one section and term", async () => {
-  const app = page("analytics.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
+  const app = page("student-score-summary.js", null, input => activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId }));
   await app.render();
   assert.equal(app.quizRequests.at(-1).sectionId, "A");
   const filter = app.element("sectionFilter");
@@ -335,7 +364,7 @@ test("the score summary and quiz request use one section and term", async () => 
 test("all lessons and quiz scores appear together without another request", async () => {
   const data = activityReportData(["A"]);
   data.curriculumSnap = snapshot([record("lesson_01", { title: "Food Webs" }), record("lesson_02", { title: "Circulatory System" })]);
-  const app = page("analytics.js", data);
+  const app = page("student-score-summary.js", data);
   await app.render();
   const header = app.element("scoreSummaryHead");
   assert.match(header.html(), /colspan="3">Food Webs/);
@@ -346,6 +375,67 @@ test("all lessons and quiz scores appear together without another request", asyn
   assert.equal((grid.html().match(/data-score-label="Activity"/g) || []).length, 2);
   assert.equal(app.requests.length, 1);
   assert.equal(app.quizRequests.length, 1);
+});
+
+test("Analytics places one student's individual scores in the correct lesson and category", async () => {
+  const data = activityReportData(["A"]);
+  data.curriculumSnap = snapshot([record("lesson_01", { title: "States of Matter" }), record("lesson_02", { title: "Physical and Chemical Changes" })]);
+  const one = { activityScore: 3, activityTotalQuestions: 4, isPreTestCompleted: true, preTestScore: 0, preTestTotalQuestions: 5,
+    isPostTestCompleted: true, postTestScore: 8, postTestTotalQuestions: 10 };
+  const two = { activityScore: 6, activityTotalQuestions: 7, isPreTestCompleted: true, preTestScore: 2, preTestTotalQuestions: 5,
+    isPostTestCompleted: true, postTestScore: 9, postTestTotalQuestions: 10 };
+  data.sections[0].students[0].results = [
+    { termId: "term_02", lessonsSnap: snapshot([record("lesson_01", { ...one, activityScore: 4, preTestScore: 5, postTestScore: 10 })]) },
+    { termId: "term_01", lessonsSnap: snapshot([record("lesson_02", two), record("lesson_01", one)]) }
+  ];
+  const individual = buildStudentActivityRecords([data.curriculumSnap], data.sections, { term_01: "Term 1" }, ["term_01"]);
+  assert.deepEqual(individual.map(row => {
+    const learner = row.learners[0];
+    return [row.title, `${learner.rawScore}/${learner.totalScore}`, `${learner.preTest.score}/${learner.preTest.total}`, `${learner.postTest.score}/${learner.postTest.total}`];
+  }), [["States of Matter", "3/4", "0/5", "8/10"], ["Physical and Chemical Changes", "6/7", "2/5", "9/10"]]);
+  const app = page("student-score-summary.js", data);
+  await app.render();
+  const cells = [...app.element("#studentGrid tbody").html().matchAll(/data-score-label="([^"]+)">([^<]*)<\/td>/g)]
+    .map(([, category, score]) => [category, score]);
+  assert.deepEqual(cells, [["Activity", "3/4"], ["Pre-test", "0/5"], ["Post-test", "8/10"],
+    ["Activity", "6/7"], ["Pre-test", "2/5"], ["Post-test", "9/10"]]);
+  assert.match(app.element("scoreSummaryHead").html(), /States of Matter.*Physical and Chemical Changes/s);
+});
+
+test("Analytics preserves raw scores, zeroes and missing cells across three terms and three student pages", async () => {
+  const matrix = analyticsScoreMatrix();
+  const app = page("student-score-summary.js", null, input => ({ termId: input.termId, total: matrix.roster.length, complete: true,
+    curriculumSnap: matrix.curriculum(input.termId), classes: [record("A", { SectionName: "Section A" })],
+    counts: [{ classId: "A", active: matrix.roster.length }],
+    sections: [{ classDoc: record("A", { SectionName: "Section A" }), students: matrix.roster }] }));
+  await app.render();
+  let checked = 0;
+  for (const [termIndex, termId] of scoreTerms.entries()) {
+    if (termIndex) await app.termButtons[termIndex].events.click();
+    await new Promise(setImmediate);
+    const head = app.element("scoreSummaryHead").html();
+    for (let lesson = 1; lesson <= scoreLessons.length; lesson++) assert.ok(head.includes(`${termId} Topic ${lesson}`));
+    for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+      const rows = [...app.element("#studentGrid tbody").html().matchAll(/<tr class="student-row"[^>]*>([\s\S]*?)<\/tr>/g)];
+      assert.equal(rows.length, pageIndex === 2 ? 3 : 25);
+      for (const [offset, [, html]] of rows.entries()) {
+        const index = pageIndex * 25 + offset;
+        assert.ok(html.includes(`Matrix Student ${String(index).padStart(2, "0")}`));
+        const cells = [...html.matchAll(/data-score-label="([^"]+)">([^<]*)<\/td>/g)].map(([, label, score]) => [label, score]);
+        const expected = matrix.expected(termId, index).flatMap(scores => scores.map((score, category) => [["Activity", "Pre-test", "Post-test"][category], score]));
+        assert.deepEqual(cells, expected, `${termId}, student ${index}, page ${pageIndex + 1}`);
+        checked += cells.length;
+      }
+      assert.equal(app.element("analyticsNext").disabled, pageIndex === 2);
+      if (pageIndex < 2) {
+        app.element("analyticsNext").events.click();
+        await new Promise(setImmediate);
+      }
+    }
+    assert.equal(app.requested().termId, termId);
+    if (termIndex) assert.equal(app.requested().refresh, false, "term changes reuse valid scoped caches; stale pages refresh through the report controller");
+  }
+  assert.equal(checked, 1908);
 });
 
 test("post-test heatmap escapes question text and switching loaded topics adds no report requests", async () => {
@@ -381,7 +471,7 @@ test("the heatmap explains why attempts with invalid question order cannot be sh
 test("the summary includes all students and requests quizzes for the 25 visible rows", async () => {
   const data = activityReportData(["A"], { count: 30 });
   for (const student of data.sections[0].students.slice(24)) student.results = [];
-  const app = page("analytics.js", data);
+  const app = page("student-score-summary.js", data);
   await app.render();
   const table = app.element("#studentGrid tbody");
   assert.match(table.html(), /Learner A 24[\s\S]*?<td[^>]*data-score-label="Activity">—<\/td>/);
@@ -396,7 +486,7 @@ test("the summary includes all students and requests quizzes for the 25 visible 
 
 test("a term switch keeps the section and ignores an older report", async () => {
   let finishTerm;
-  const app = page("analytics.js", null, input => {
+  const app = page("student-score-summary.js", null, input => {
     const data = activityReportData([input.sectionId === "first" ? "A" : input.sectionId], { termId: input.termId });
     if (input.termId === "term_03") return new Promise(resolve => { finishTerm = () => resolve(data); });
     return data;
@@ -445,6 +535,39 @@ test("the shared term and activity section drive completion rates without anothe
   assert.equal(topics.html(), before, "late Term 2 results must not overwrite Term 3");
 });
 
+test("Topic Completion Rate displays 40% for two completed learners out of five and excludes incomplete work", async () => {
+  const app = page("analytics.js", null, input => {
+    const data = activityReportData(["A"], { termId: input.termId, count: 5 });
+    data.curriculumSnap = snapshot([record("lesson_01", { title: "Completion sample" })]);
+    const results = [
+      { isLessonCompleted: true },
+      { isARCompleted: true },
+      { isLessonOpened: true, lessonTimeMinutes: 20, isLessonCompleted: false, isARCompleted: false },
+      { isPreTestCompleted: true, preTestScore: 5, preTestTotalQuestions: 5,
+        isPostTestCompleted: true, postTestScore: 10, postTestTotalQuestions: 10, activityScore: 100, activityTotalQuestions: 100 },
+      null
+    ];
+    for (const [index, student] of data.sections[0].students.entries()) student.results = [
+      { termId: input.termId, lessonsSnap: snapshot(results[index] ? [record("lesson_01", results[index])]
+        : [record("lesson_02", { isLessonCompleted: true })]) },
+      { termId: input.termId === "term_01" ? "term_03" : "term_01",
+        lessonsSnap: snapshot([record("lesson_01", { isLessonCompleted: true })]) }
+    ];
+    const [topic] = buildStudentActivityRecords([data.curriculumSnap], data.sections, {}, [input.termId]);
+    assert.equal(topic.learnerCount, 5, input.termId);
+    assert.equal(topic.completedCount, 2, input.termId);
+    assert.deepEqual(topic.learners.map(learner => learner.completed), [true, true, false, false, false]);
+    return data;
+  });
+  await app.render();
+  for (let term = 0; term < 3; term++) {
+    if (term) await app.termButtons[term].events.click();
+    assert.match(app.element("topicsContainer").html(), /<strong[^>]*>40%<\/strong>/);
+    assert.match(app.element("topicsContainer").html(), /Completion sample/);
+    assert.equal(app.element("topicCompletionScope").textContent, `Term ${term + 1} · Section A`);
+  }
+});
+
 test("scan-history labels cannot execute markup saved from a scanned code", async () => {
   const app = page("sync-offline-results.js");
   await vm.runInContext('activeTeacherId = "T1"; loadRecentScans();', app.context);
@@ -461,10 +584,36 @@ test("teacher document IDs cannot break out of action-button attributes", async 
   assert.ok(html.includes('data-toggle-id="&lt;img'));
 });
 
+test("Add Teacher sends only the name and email and rejects numbers in names", async () => {
+  const app = page("manage-teachers.js", { teachers: [] });
+  await app.render();
+  const values = { name: "Alex Reyes2", email: "new@example.test" }, created = [], messages = [];
+  app.context.FormData = class { get(name) { return values[name]; } };
+  app.context.createTeacher = async profile => { created.push(JSON.parse(JSON.stringify(profile))); return { id: "TEACH1002" }; };
+  app.context.alert = message => messages.push(message);
+  app.element("teacherForm").querySelector = () => ({ disabled: false });
+  app.element("teacherForm").reset = () => {};
+  app.element("teacherDialog").close = () => {};
+  const submit = () => app.element("teacherForm").events.submit({ preventDefault() {} });
+  await submit();
+  assert.equal(created.length, 0);
+  assert.match(messages[0], /Numbers are not allowed/);
+  values.name = "Ma. José Niño O’Connor";
+  await submit();
+  assert.deepEqual(created, [{ name: values.name, email: values.email }]);
+  assert.match(app.element("teacherList").html(), /Ma\. José Niño O’Connor/);
+  const html = readFileSync(new URL("../manage-teachers.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /<input\b[^>]*name="(?:subject|sections)"/);
+  assert.match(html, /name="name"[^>]*pattern=/);
+  const namePattern = new RegExp("^(?:" + html.match(/name="name"[^>]*pattern="([^"]+)"/)[1] + ")$", "v");
+  assert.equal(namePattern.test(values.name), true);
+  assert.equal(namePattern.test("Alex Reyes2"), false);
+});
+
 test("Analytics searches names and IDs with the same rules as Student Records", async () => {
   const data = activityReportData(["A"], { count: 2 });
   data.sections[0].students[0].studentDoc = record("0026270123", { displayName: "Kurt S. Amor", middleName: "Maria Pilar" });
-  const app = page("analytics.js", data);
+  const app = page("student-score-summary.js", data);
   await app.render();
   for (const query of ["  AMOR KURT S ", "0026270123", "MARIA PILAR"]) {
     app.element("studentSearch").value = query;

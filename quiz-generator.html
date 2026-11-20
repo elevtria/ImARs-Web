@@ -37,7 +37,7 @@
     </header>
 
     <main class="content quiz-content" inert data-auth-shell>
-      <section class="hero quiz-hero" data-auth-shell>
+      <section class="hero quiz-hero" id="quizIntro" data-auth-shell>
         <div>
           <p class="quiz-eyebrow">TEACHER TOOLS</p>
           <h1 data-auth-shell>Quiz Generator</h1>
@@ -46,9 +46,10 @@
         <button class="ghost-btn" id="openLibrary" type="button">My quizzes <span class="quiz-library-count" id="libraryCount">0</span></button>
       </section>
 
-      <div class="quiz-view-tabs" role="tablist" aria-label="Quiz generator views">
+      <div class="quiz-view-tabs" id="quizViewTabs" role="tablist" aria-label="Quiz generator views">
         <button class="quiz-view-tab active" id="createTab" type="button" role="tab" aria-selected="true">Create a quiz</button>
         <button class="quiz-view-tab" id="libraryTab" type="button" role="tab" aria-selected="false">My quizzes <span id="libraryTabCount">0</span></button>
+        <button class="quiz-view-tab" id="gradingTab" type="button" role="tab" aria-selected="false">Submissions &amp; grading</button>
       </div>
       <div class="quiz-job-status" id="quizJobStatus" hidden>
         <p id="quizJobMessage" role="status"></p>
@@ -172,6 +173,16 @@
         <div id="quizLibraryList" class="quiz-library-list"></div>
         <div class="quiz-empty-state" id="emptyLibrary"><div class="quiz-empty-icon">▤</div><h3>No quizzes yet</h3><p>Upload a PDF, DOCX, or presentation to make your first quiz.</p><button class="primary-btn quiz-primary" id="emptyCreateQuiz" type="button">Create your first quiz</button></div>
       </section>
+      <section id="gradingView" class="quiz-view" hidden data-auth-shell>
+        <div class="quiz-library-heading"><div><span class="quiz-section-tag">STUDENT SUBMISSIONS</span><h2>Submissions &amp; grading</h2><p>View student answers and grade written responses. Saved submissions remain available when a quiz is locked or past its deadline.</p></div><button class="ghost-btn" id="refreshGrading" type="button">Refresh results</button></div>
+        <div class="quiz-library-filters">
+          <label class="quiz-field"><span class="quiz-field-label">Term</span><select class="quiz-input" id="gradingTermFilter"><option value="">All terms</option><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select></label>
+          <label class="quiz-field"><span class="quiz-field-label">Section</span><select class="quiz-input" id="gradingSectionFilter" disabled><option value="">All sections</option></select></label>
+        </div>
+        <p class="quiz-status" id="gradingStatus" role="status" aria-live="polite"></p>
+        <div id="gradingQuizList" class="quiz-library-list"></div>
+      </section>
+      <section id="quizGradingWorkspace" class="quiz-view" hidden data-auth-shell aria-label="Quiz submissions and grading"></section>
     </main>
   </div>
 

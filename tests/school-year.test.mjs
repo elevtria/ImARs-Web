@@ -42,51 +42,24 @@ async function mount(store, { role = "teacher", selector = false, storage = new 
   });
   vm.runInContext(source, context);
   await authenticate(auth.currentUser);
-  return { labels, select, status, profile, storage, events, restore: () => authenticate(auth.currentUser),
+  return { labels, select, status, profile, storage, events, location: context.window.location, restore: () => authenticate(auth.currentUser),
     change: async year => { select.value = String(year); await select.events.change(); } };
 }
 
-test("an admin change persists a shared school year and updates teacher labels and later page loads", async () => {
-  const store = database(), storage = new Map();
+test("the school-year chip opens the managed rollover page without changing data or labels", async () => {
+  const store = database(), storage = new Map(); store.publish(2026);
   const admin = await mount(store, { role: "admin", selector: true, storage });
   const teacher = await mount(store, { storage });
-  assert.equal(admin.select.disabled, false);
   await admin.change(2027);
-  teacher.events.get("storage")({ key: "imars-school-year-v1" });
-  assert.equal(store.writes.length, 1);
-  assert.deepEqual(store.writes[0], { path: ["webSettings", "schoolYear"], fields: {
-    startYear: 2027, endYear: 2028, updatedBy: "admin-uid", updatedAt: "server-time"
-  } });
-  assert.ok(teacher.labels.every(element => element.textContent === "SY 2027–28"));
-  assert.match(admin.status.textContent, /Saved for all teachers/);
-  const reopened = await mount(store);
-  assert.ok(reopened.labels.every(element => element.textContent === "SY 2027–28"));
+  assert.equal(store.writes.length, 0);
+  assert.equal(admin.select.value, "2026");
+  assert.equal(admin.location.href, "admin-school-years.html");
+  assert.ok(teacher.labels.every(element => element.textContent === "SY 2026–27"));
 });
-
-test("a failed save restores the confirmed year without changing teacher labels", async () => {
-  const store = database(); store.publish(2027);
-  const admin = await mount(store, { role: "admin", selector: true });
-  const teacher = await mount(store);
-  store.failSave = true;
-  await admin.change(2028);
-  assert.equal(admin.select.value, "2027");
-  assert.equal(admin.select.disabled, false);
-  assert.equal(store.writes.length, 0);
-  assert.match(admin.status.textContent, /Could not save/);
-  assert.ok(teacher.labels.every(element => element.textContent === "SY 2027–28"));
-});
-
-test("the control refuses non-admins and rechecks an administrator's role before saving", async () => {
-  const store = database();
-  const teacher = await mount(store, { selector: true });
-  assert.equal(teacher.select.disabled, true);
-  await teacher.change(2029);
-  assert.equal(store.writes.length, 0);
-  const admin = await mount(store, { role: "admin", selector: true });
-  admin.profile.role = "teacher";
-  await admin.change(2029);
-  assert.equal(store.writes.length, 0);
-  assert.match(admin.status.textContent, /Could not save/);
+test("non-admins cannot use the school-year control", async () => {
+  const store = database(); const teacher = await mount(store, { selector: true });
+  assert.equal(teacher.select.disabled, true); await teacher.change(2029);
+  assert.equal(store.writes.length, 0); assert.equal(teacher.location.href, undefined);
 });
 
 test("navigation and history restoration reuse a fresh school year without polling", async () => {

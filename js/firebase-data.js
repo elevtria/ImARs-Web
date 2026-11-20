@@ -49,7 +49,22 @@ function snapshot(record) {
   return { id: record.id, ref: { kind: "document", path: record.path, id: record.id }, metadata: { fromCache: false, hasPendingWrites: false }, exists: () => record.data !== null, data: () => decode(record.data) };
 }
 let reads = [], scheduled = false;
-function request(body) {
+async function request(body) {
+  if (["commit", "create-teacher"].includes(body.action) && getAuth().currentUser?.role === "admin") {
+    const { confirmAdminAction } = await import("./admin-account-action.js");
+    const year = body.writes?.find(write => write.path === "webSettings/schoolYear");
+    const creating = body.action === "create-teacher";
+    const change = body.writes?.[0];
+    const targetId = change?.path?.split("/").at(-1) || "this account";
+    const changeTitle = change?.operation === "delete" ? "Remove teacher?" : typeof change?.data?.active === "boolean" ? (change.data.active ? "Activate teacher?" : "Deactivate teacher?") : "Confirm administrative change?";
+    const result = await confirmAdminAction(body, creating ? "Create teacher account?" : year ? "Change school-year setting?" : changeTitle,
+      creating ? `Create a staff account for ${body.profile.name}? Confirm your own administrator password.` : year
+        ? "This changes the school-year label for all teachers. It does not archive records. Confirm your own administrator password."
+        : `Save this change to ${targetId}? Removed teachers remain disabled in the database; student and learning records are preserved. Confirm your own administrator password.`,
+      { endpoint: "/api/web-data" });
+    if (!result) throw Object.assign(new Error("The action was canceled."), { code: "cancelled" });
+    return result;
+  }
   if (!["get", "query"].includes(body.action)) return webRequest("/api/web-data", encode(body));
   const pending = new Promise((resolve, reject) => reads.push({ body, resolve, reject }));
   if (!scheduled) {
@@ -196,7 +211,7 @@ export function writeBatch() {
   return batch;
 }
 export const checkStudentIds = ids => request({ action: "check-student-ids", ids }).then(result => result.existing);
-export const getAdminReport = () => request({ action: "admin-report" });
+export const getAdminReport = ({ refreshDirectory = false, termId = "", sectionId = "" } = {}) => request({ action: "admin-report", termId, sectionId, ...(refreshDirectory ? { refreshDirectory: true } : {}) });
 export const getTeacherTopicOverview = () => request({ action: "teacher-topic-overview" });
 export function getDashboardSummary() {
   const uid = visitUser();

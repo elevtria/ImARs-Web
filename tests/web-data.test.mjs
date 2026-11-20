@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { webData } from "../server/web-data.js";
+import { webData, transferredRosterWrites } from "../server/web-data.js";
 import { mobileApi } from "../server/mobile-api.js";
 import { FirestoreAdmin } from "../server/firestore-admin.js";
 import { requireStaff, protectWebsite, staffProfile } from "../server/web-auth.js";
@@ -8,6 +8,24 @@ import { onRequestPost as generateQuiz } from "../functions/api/generate-quiz.js
 
 import { fixture, accounts } from "./fixtures/web-data.js";
 import { accountAccess } from "../server/account-access.js";
+
+test("section transfer updates student teacher references without changing accounts or scores", async () => {
+  const app = fixture();
+  app.data.set("users/archived", { role: "student", classCode: "A", teacherId: "TEACH1000", active: false });
+  app.data.set("users/foreign", { role: "student", classCode: "B", teacherId: "TEACH1000" });
+  app.data.set("users/conflicting", { role: "student", classCode: "A", teacherId: "TEACH9999" });
+  const original = structuredClone(app.data.get("users/0026271000"));
+  const resultPath = "users/0026271000/test_results/term_01/lessons/lesson_01";
+  app.data.set(resultPath, { preTestScore: 3, postTestScore: 9 });
+  const writes = await transferredRosterWrites(app.store, [{ sectionId: "A", previousTeacherId: "TEACH1000", teacherId: "TEACH1001" }]);
+  assert.deepEqual(writes.map(write => write.path).sort(), ["users/0026271000", "users/archived"]);
+  assert.ok(writes.every(write => JSON.stringify(write.data) === JSON.stringify({ teacherId: "TEACH1001" })));
+  await app.store.begin(); await app.store.commit(writes);
+  assert.deepEqual(app.data.get("users/0026271000"), { ...original, teacherId: "TEACH1001" });
+  assert.equal(app.data.get("users/archived").active, false);
+  assert.deepEqual(app.data.get(resultPath), { preTestScore: 3, postTestScore: 9 });
+  assert.deepEqual(await transferredRosterWrites(app.store, [{ sectionId: "A", previousTeacherId: "TEACH1000", teacherId: "TEACH1001" }]), []);
+});
 import { currentScheduledTerm } from "../js/topic-availability.js";
 const stamp = { $type: "serverTimestamp" };
 
@@ -278,7 +296,7 @@ test("successful teacher web sign-in invalidates only that teacher's password-is
   assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'wrong',portal:'teacher'})).status,401);
   assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed web login cannot sign out mobile');
   app.data.get('users/TEACH1000').active=false;
-  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'correct',portal:'teacher'})).status,403);
+  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'correct',portal:'teacher'})).status,401);
   app.data.get('users/TEACH1000').active=true;
   assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed live profile check must not revoke mobile');
   await app.login('ADMIN1000','admin');assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
@@ -329,7 +347,7 @@ const union = (...values) => ({ $type: "arrayUnion", values });
 
 const get = path => ({ action: "get", reference: { kind: "document", path } });
 const query = (path, filters = []) => ({ action: "query", reference: { kind: "query", path, filters: filters.map(([field, value]) => ({ field, op: "==", value })) } });
-const save = (path, data, merge = true) => ({ action: "commit", writes: [{ operation: "set", path, data, merge }] });
+const save = (path, data, merge = true) => ({ action: "commit", password: "correct", writes: [{ operation: "set", path, data, merge }] });
 
 test("Firestore pagination uses a document cursor and totals use COUNT without downloading profiles", async () => {
   const store = new FirestoreAdmin({}), requests = [];
@@ -501,7 +519,7 @@ test("website identity uses an HttpOnly cookie; anonymous, forged, cross-site an
   }
   assert.equal(app.store.began, 0); assert.equal(app.store.committed, 0);
   app.data.get("users/TEACH1000").active = false;
-  assert.equal((await app.call(get("users/TEACH1000"), cookie)).status, 403);
+  assert.equal((await app.call(get("users/TEACH1000"), cookie)).status, 401);
 });
 
 test("teacher dashboard, class reports, QR history, schedules and marker progress load only within the teacher's scope", async () => {
@@ -707,12 +725,33 @@ test("forged roles, UIDs, ownership, credentials, scores and arbitrary fields ca
   assert.equal(app.store.committed, 0); assert.equal(app.store.rolledBack, app.store.began);
 });
 
+test("a section change cannot take another teacher's student, while moves within owned sections preserve results", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  const foreign = structuredClone(app.data.get("users/0026271001"));
+  const resultPath = "users/0026271000/test_results/term_01/lessons/lesson_01";
+  app.data.set(resultPath, { preTestScore: 0, postTestScore: 8 });
+  for (const operation of ["set", "update"]) {
+    const denied = await app.call({ action: "commit", writes: [{ operation, merge: true, path: "users/0026271001",
+      data: { classCode: "A", teacherId: "TEACH1000", active: true } }] }, cookie);
+    assert.equal(denied.status, 403);
+    assert.deepEqual(app.data.get("users/0026271001"), foreign);
+  }
+  assert.equal(app.store.committed, 0);
+  const moved = await app.call({ action: "commit", writes: [{ operation: "update", path: "users/0026271000",
+    data: { classCode: "C" } }] }, cookie);
+  assert.equal(moved.status, 200);
+  assert.equal(app.data.get("users/0026271000").classCode, "C");
+  assert.equal(app.data.get("users/0026271000").uid, "student-a");
+  assert.deepEqual(app.data.get(resultPath), { preTestScore: 0, postTestScore: 8 });
+});
+
 test("batched writes are all-or-nothing and actor access is checked again inside the transaction", async () => {
   const app = fixture(), cookie = await app.login();
   const response = await app.call({ action: "commit", writes: [{ operation: "update", path: "users/0026271000", data: { displayName: "Must not save" } }, { operation: "update", path: "users/0026271001", data: { displayName: "Forbidden" } }] }, cookie);
   assert.equal(response.status, 403); assert.equal(app.data.get("users/0026271000").displayName, "Student A");
   app.store.onBegin = () => { app.data.get("users/TEACH1000").active = false; };
-  assert.equal((await app.call(save("users/0026271000", { displayName: "Must not save" }), cookie)).status, 403);
+  assert.equal((await app.call(save("users/0026271000", { displayName: "Must not save" }), cookie)).status, 401);
   assert.equal(app.store.committed, 0);
 });
 
@@ -721,7 +760,7 @@ test("admin data access works through middleware, invitations use private reserv
   const response = await protectWebsite({ env: app.env, request: new Request("https://imars.example.test/api/web-data", { headers: { Cookie: admin } }), next: async () => new Response("data") });
   assert.equal(response.status, 200);
   assert.equal((await app.call(query("users", [["role", "teacher"]]), admin)).status, 200);
-  const invite = { action: "create-teacher", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["C"] } };
+  const invite = { action: "create-teacher", password: "correct", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["C"] } };
   assert.equal((await app.call(invite, teacher)).status, 403);
   const created = await app.call(invite, admin); assert.equal(created.status, 200);
   const { id } = await created.json(); assert.equal(id, "TEACH1002");
@@ -730,7 +769,7 @@ test("admin data access works through middleware, invitations use private reserv
   app.data.get("users/" + id).uid = "new-teacher";
   app.data.get("users/" + id).authEmailVerified = true;
   const dynamic = await app.login(id); assert.equal((await app.auth("identity", {}, dynamic)).status, 200);
-  assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
+  assert.equal((await app.call({ action: "commit", password: "correct", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
   assert.equal((await app.auth("identity", {}, dynamic)).status, 401);
   const again = await app.call(invite, admin); assert.equal((await again.json()).id, "TEACH1003");
 });
@@ -744,7 +783,7 @@ test("a forged public teacher profile cannot enroll itself in the private websit
 
 test("a public invitation and an unverified Auth account cannot grant website access; verification permits a fresh login", async () => {
   const app = fixture(), admin = await app.login("ADMIN1000", "admin");
-  const created = await app.call({ action: "create-teacher", profile: { name: "Invited Teacher", email: "invited@example.test", subject: "Science", sections: ["C"] } }, admin);
+  const created = await app.call({ action: "create-teacher", password: "correct", profile: { name: "Invited Teacher", email: "invited@example.test", subject: "Science", sections: ["C"] } }, admin);
   assert.equal(created.status, 200);
   const { id } = await created.json(), profile = app.data.get("users/" + id);
   profile.uid = "invited-teacher";
@@ -774,7 +813,7 @@ test("public school-year reads expose only the year, and disabled Auth identitie
   await assert.rejects(staffProfile(accounts[0], app.store), error => error.status === 401);
 });
 
-test("Supabase school year is shared by public reads and authorized admin saves", async () => {
+test("Supabase school-year reads stay public and direct year changes require the archive workflow", async () => {
   const app = fixture(), teacher = await app.login(), admin = await app.login("ADMIN1000", "admin");
   const dataset = "dff51df7-8387-4afe-9871-536eff43ea2c";
   const revision = "b95916dc-8e8b-4870-8ae8-8cde9c3e9033";
@@ -803,15 +842,15 @@ test("Supabase school year is shared by public reads and authorized admin saves"
   const read = () => handle(new Request("https://imars.example.test/api/web-data/school-year"));
   const write = { operation: "set", path, merge: true,
     data: { startYear: 2030, endYear: 2031, updatedBy: "admin-a", updatedAt: stamp } };
-  const save = (cookie, writes) => handle(app.request("/api/web-data", { action: "commit", writes }, cookie));
+  const save = (cookie, writes) => handle(app.request("/api/web-data", { action: "commit", password: "correct", writes }, cookie));
   const original = structuredClone(app.data.get(path));
   assert.deepEqual(await (await read()).json(), { startYear: 2027 });
   assert.equal((await save(teacher, [write])).status, 403);
   assert.equal((await save(admin, [write, { ...write, path: "webSettings/other" }])).status, 400);
   assert.equal(commits, 0);
-  assert.equal((await save(admin, [write])).status, 200);
-  assert.equal(commits, 1);
-  assert.deepEqual(await (await read()).json(), { startYear: 2030 });
+  assert.equal((await save(admin, [write])).status, 409);
+  assert.equal(commits, 0);
+  assert.deepEqual(await (await read()).json(), { startYear: 2027 });
   assert.deepEqual(app.data.get(path), original);
 });
 
@@ -955,10 +994,10 @@ test("middleware and data share one request's session verification while account
   app.env.WEB_LOGIN_STATE={idFromName:binding.idFromName,get(name){const stub=binding.get(name);return {fetch(url,options){if(url.endsWith('/session'))checks++;return stub.fetch(url,options);}};}};
   const body={action:'teacher-report-page',termId:'term_01'};
   const request=app.request('/api/web-data',body,cookie);
-  const response=await protectWebsite({env:app.env,request,next:()=>webData({env:app.env,request},{store:app.store})});
+  const response=await protectWebsite({env:app.env,request,next:()=>webData({env:app.env,request},{store:app.store})},Date.now(),{store:app.store});
   assert.equal(response.status,200);assert.equal(checks,1,'the same request must not verify the session twice');
   const denied=app.request('/api/web-data',body,cookie);
-  const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}});
+  const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}},Date.now(),{store:app.store});
   assert.equal(blocked.status,403,'a verified session cannot bypass a disabled account');
 });
 

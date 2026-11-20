@@ -58,9 +58,40 @@ test("token authentication rejects missing, expired, wrong project, unverified, 
 });
 test("strict profile linkage rejects wrong section, teacher, inactive profiles and account changes", async () => {
   for (const [path, changes] of [["users/S1", { teacherId: "TEACH2" }], ["users/S1", { role: "teacher" }], ["users/S1", { active: false }], ["users/TEACH1", { active: false }], ["classes/A", { teacherId: "TEACH2" }], ["_accountAccess/student-a", { active: false }], ["_accountAccess/teacher-a", { active: false }]]) {
-    const f = fixture(); f.put(path, { ...f.data.get(path), ...changes }); assert.equal((await f.call("list", { limit: 20, cursor: "" })).status, 403); assert.equal(f.store.queries.length, 0);
+    const f = fixture(); f.put(path, { ...f.data.get(path), ...changes }); assert.equal((await f.call("list", { limit: 20, cursor: "" })).status, 403, path + " " + JSON.stringify(changes)); assert.equal(f.store.queries.length, 0);
   }
   const f = fixture(); f.put("users/S1", { ...f.data.get("users/S1"), teacherId: "" }); assert.equal((await f.call("list", { limit: 20, cursor: "" })).status, 200);
+});
+
+test("quiz access verifies both private account bindings and preserves explicitly enabled legacy linkage", async () => {
+  for (const changes of [{ role: "student" }, { profileId: "TEACH2" }, { authEmail: "other@example.test" }]) {
+    const f = fixture();
+    f.put("_accountAccess/teacher-a", { ...f.data.get("_accountAccess/teacher-a"), ...changes });
+    assert.equal((await f.call("list", { limit: 20, cursor: "" })).status, 403);
+    assert.equal(f.store.queries.length, 0);
+  }
+  for (const path of ["_accountAccess/student-a", "_accountAccess/teacher-a"]) {
+    const f = fixture();
+    f.data.delete(path);
+    assert.equal((await f.call("list", { limit: 20, cursor: "" })).status, 403);
+  }
+  const legacy = fixture();
+  legacy.env.ACCOUNT_ACCESS_ENABLED = "false";
+  legacy.data.delete("_accountAccess/student-a");
+  legacy.data.delete("_accountAccess/teacher-a");
+  assert.equal((await legacy.call("list", { limit: 20, cursor: "" })).status, 200);
+  legacy.put("_accountAccess/teacher-a", { profileId: "TEACH1", role: "teacher", active: false, authEmail: "teacher-a@example.test" });
+  assert.equal((await legacy.call("list", { limit: 20, cursor: "" })).status, 403);
+});
+
+test("revoking the teacher binding blocks a reserved quiz without saving another attempt or submission", async () => {
+  const f = fixture(), { request } = await f.begin();
+  const commits = f.store.commits;
+  f.put("_accountAccess/teacher-a", { ...f.data.get("_accountAccess/teacher-a"), active: false });
+  for (const [action, body] of [["list", { limit: 20, cursor: "" }], ["start", request], ["access", request], ["submit", f.submission(request)]]) {
+    assert.equal((await f.call(action, body)).status, 403, action);
+    assert.equal(f.store.commits, commits);
+  }
 });
 test("1000 records paginate with 20 summaries, one projected query per page and no question reads", async () => {
   const f = fixture(); f.data.delete("generatedQuizzes/quiz1");
@@ -150,6 +181,10 @@ for (const type of ["multiple-choice", "true-false", "essay", "identification-ex
   const bad = structuredClone(body); bad.answers[0].questionId = "unknown"; assert.equal((await f.call("submit", bad)).status, 400);
   const response = await f.call("submit", body); assert.equal(response.status, 200); const receipt = await response.json(); assert.equal(receipt.persisted, true);
   assert.equal(receipt.status, ["multiple-choice", "true-false"].includes(type) ? "graded" : "pending-review"); assert.equal(f.data.get("users/S1/generated_quiz_attempts/" + request.attemptId).answers[0].questionId, "q-original");
+  const saved = f.data.get("users/S1/generated_quiz_attempts/" + request.attemptId);
+  assert.deepEqual(saved.preliminary, type === "identification-explanation" ? { score: 0, maximum: 3 }
+    : type === "modified-true-false" ? { score: 0, maximum: 1 } : undefined);
+  assert.equal(Object.hasOwn(receipt, "preliminary"), false);
   assert.equal([...f.data.keys()].some(path => path.includes("test_results")), false);
   const commits = f.store.commits; assert.deepEqual(await (await f.call("submit", body)).json(), receipt); assert.equal(f.store.commits, commits);
 });

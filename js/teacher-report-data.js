@@ -94,8 +94,9 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
       }
     } finally { if (current(token)) running = false; }
   };
-  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false }) {
-    const key = (rawActivityScores ? "teacher-raw-report:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
+  return { stop, async open({ user: account, termId = "term_01", sectionId = "first", allTerms = false, includeCurriculum = true, rawActivityScores = false, restoredPage = false, refresh = false }) {
+    // v2 includes learning durations; older score-only cache entries omit them.
+    const key = (rawActivityScores ? "teacher-raw-report-v2:" : "teacher-report:") + (allTerms ? "all-terms-v1" : termId) + ":" + (sectionId || "all");
     const nextCache = prepareTeacherCache(app, account);
     const nextVersion = nextCache.version();
     const keep = restoredPage && user?.uid === account.uid && options?.key === key && options.termId === termId &&
@@ -119,9 +120,12 @@ export function createTeacherReport({ app, render, progress = () => {}, failed =
         }
       }
     }
+    // A deliberate filter change reloads the chosen term in bounded pages.
+    // Keep the saved view painted until the first fresh page arrives.
+    if (refresh) state = { pages: [], classes: [], counts: [], cursor: null, refreshCursor: null, complete: false };
     // Report pages contain many lesson records. A five-minute background step
     // avoids repeatedly rereading entire class reports on the free database.
-    stopUpdates = watchVisibleData(app, user, () => update(token), 300_000);
+    stopUpdates = watchVisibleData(app, user, () => update(token), 300_000, rawActivityScores);
     if (!state.pages.length || (includeCurriculum && !state.curriculumSnap) || Date.now() - state.checkedAt >= 300_000) await update(token);
     else if (!state.complete) timer = setTimeout(() => { void update(token); }, 0);
   } };

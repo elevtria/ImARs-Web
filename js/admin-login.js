@@ -24,7 +24,7 @@ const showAdminError = (msg) => {
   adminError.classList.remove("hidden");
 };
 
-if (new URLSearchParams(window.location.search).get("reason") === "signed-out") {
+if (["signed-out", "web-session"].includes(new URLSearchParams(window.location.search).get("reason"))) {
   showAdminError("You’ve been signed out. Please sign in again.");
 }
 

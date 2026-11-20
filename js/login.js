@@ -76,10 +76,10 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
 });
 
 const urlParams = new URLSearchParams(window.location.search);
-if (["signed-out", "access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
+if (["signed-out", "web-session", "access-denied", "access-unavailable"].includes(urlParams.get("reason"))) {
   const message = document.getElementById("error");
   message.classList.remove("hidden");
-  message.textContent = urlParams.get("reason") === "signed-out"
+  message.textContent = ["signed-out", "web-session"].includes(urlParams.get("reason"))
     ? "You’ve been signed out. Please sign in again."
     : urlParams.get("reason") === "access-denied"
     ? "This account does not have access to this portal. Please contact your administrator."

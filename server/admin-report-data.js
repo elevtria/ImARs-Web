@@ -18,7 +18,7 @@ function duration(minutes) {
 
 export function summarizeAdminReports(teacherDocs, students, classes = []) {
   const sectionsById = new Map(classes.map(row => [row.id, row.data]));
-  const teachers = new Map(teacherDocs.map(({ id, data }) => {
+  const teachers = new Map(teacherDocs.filter(({ data }) => String(data.status || "").toLowerCase() !== "deleted").map(({ id, data }) => {
     let joined = data.joined || "Recently";
     if (data.createdAt?.$type === "timestamp" && Number.isFinite(Date.parse(data.createdAt.value))) {
       joined = new Date(data.createdAt.value).toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" });
@@ -75,20 +75,21 @@ export function summarizeAdminReports(teacherDocs, students, classes = []) {
   };
 }
 
-export async function loadAdminReports(store) {
+export async function loadAdminReports(store, { termId = "", sectionId = "" } = {}) {
   const roster = (role, fieldPaths) => store.query("users", { filters: [{ field: "role", op: "==", value: role }], fieldPaths });
   const [teachers, rosterRows, classes, rows] = await Promise.all([
     roster("teacher", teacherFields), roster("student", studentFields),
     store.query("classes", { fieldPaths: ["SectionName", "sectionName", "teacherId"] }),
-    store.adminLessonResults?.(resultFields)
+    store.adminLessonResults?.(resultFields, { termId })
   ]);
   const students = new Map(rosterRows.filter(({ data }) => data.active !== false &&
     !["inactive", "disabled", "deleted", "archived"].includes(String(data.status || "").toLowerCase()))
+    .filter(({ data }) => !sectionId || data.classCode === sectionId)
     .map(({ id, data }) => [id, { data, lessons: [] }]));
   if (rows) {
-    for (const row of rows) students.get(row.path.split("/")[1])?.lessons.push(row.data);
+    for (const row of rows) if (!termId || row.path.split("/")[3] === termId) students.get(row.path.split("/")[1])?.lessons.push(row.data);
   } else {
-    const paths = [...students.keys()].flatMap(lessonPaths);
+    const paths = [...students.keys()].flatMap(lessonPaths).filter(path => !termId || path.split("/")[3] === termId);
     for (let offset = 0; offset < paths.length; offset += 400) {
       const batches = [];
       for (let start = offset; start < Math.min(offset + 400, paths.length); start += 100) {
@@ -99,5 +100,15 @@ export async function loadAdminReports(store) {
       }
     }
   }
-  return summarizeAdminReports(teachers.map(row => ({ id: row.id, data: row.wire || row.data })), [...students.values()], classes);
+  const report = summarizeAdminReports(teachers.map(row => ({ id: row.id, data: row.wire || row.data })), [...students.values()], classes);
+  const directory = classes.map(({ id, data }) => ({ id, name: data.SectionName || data.sectionName || id, teacherId: data.teacherId || "" }));
+  for (const teacher of report.teachers) {
+    teacher.sections = directory.filter(section => section.teacherId === teacher.id).map(section => section.name);
+    teacher.analyticsSections = teacher.sections.join(", ") || "No assigned sections";
+  }
+  if (sectionId) report.teachers = report.teachers.filter(teacher => directory.some(section => section.id === sectionId && section.teacherId === teacher.id));
+  return { ...report, sectionDirectory: directory, termId, sectionId,
+    preCount: report.sections.reduce((sum, row) => sum + row.preCount, 0),
+    postCount: report.sections.reduce((sum, row) => sum + row.postCount, 0),
+    expectedTests: students.size * (termId ? 8 : 24) };
 }

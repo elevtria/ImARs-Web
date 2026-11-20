@@ -2,7 +2,7 @@ import { escapeHtml } from "./teacher-view.js";
 
 export function quizScoreLabel(row) {
   if (row.status === "not-submitted") return "Not submitted";
-  if (row.status === "pending-review") return "Pending review";
+  if (row.status === "pending-review") return "Awaiting grade";
   return row.score == null || row.maximum == null ? "Score unavailable" : `${row.score}/${row.maximum}`;
 }
 
@@ -11,7 +11,7 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
   element.innerHTML = `<div class="activity-record-detail-head"><div><strong>Student quiz results</strong><small>Latest submission per student</small></div></div>
     <div class="activity-record-results-wrap" hidden><table class="performance-table activity-record-results teacher-quiz-results">
     <thead><tr><th scope="col">Student</th>${compact ? "" : '<th scope="col">Score</th>'}<th scope="col">Status</th>
-    ${compact ? "" : '<th scope="col">Submitted</th><th scope="col">Review</th>'}</tr></thead><tbody></tbody></table></div>
+    ${compact ? '<th scope="col">Grading</th>' : '<th scope="col">Submitted</th><th scope="col">Review</th>'}</tr></thead><tbody></tbody></table></div>
     ${compact ? "" : '<p class="activity-record-empty">Scores show earned points / total points for this quiz.</p>'}
     <p class="activity-record-empty" role="status"></p>
     <div class="student-detail-navigation" role="group" aria-label="Student quiz result pages">
@@ -37,29 +37,40 @@ export function createQuizResultsTable({ fetchPage, reviewAnswers, signal, compa
         const initials = student.name.trim().split(/\s+/).slice(0, 2).map(part => part.charAt(0)).join("").toUpperCase();
         const completed = student.status === "graded" || student.status === "reviewed";
         const badge = completed ? "is-completed" : student.status === "pending-review" ? "is-pending" : "is-empty";
-        const label = completed ? "Completed" : quizScoreLabel(student);
+        const label = completed ? "Graded" : student.status === "pending-review" ? "Awaiting grade"
+          : student.status === "not-submitted" ? "Not submitted" : "Submitted";
+        const points = student.score == null || student.maximum == null ? "—" : `${student.score}/${student.maximum}`;
+        const preliminary = points !== "—" && student.status === "pending-review" ? ' title="Preliminary score before teacher review"' : "";
         line.innerHTML = `<th scope="row"><span class="table-avatar" aria-hidden="true">${escapeHtml(initials)}</span><span>${escapeHtml(student.name)}</span></th>
-          ${compact ? "" : `<td class="quiz-result-points">${escapeHtml(completed ? quizScoreLabel(student) : "—")}</td>`}
+          ${compact ? "" : `<td class="quiz-result-points"${preliminary}>${escapeHtml(points)}</td>`}
           <td><span class="activity-result-score quiz-result-status ${badge}">${escapeHtml(label)}</span></td>
-          ${compact ? "" : `<td>${escapeHtml(date)}</td><td></td>`}`;
+          ${compact ? '<td class="quiz-grading-action">—</td>' : `<td>${escapeHtml(date)}</td><td></td>`}`;
         if (!student.attemptId) continue;
         const review = document.createElement("button");
         review.type = "button";
-        review.className = compact ? "quiz-result-student" : "ghost-btn";
-        review.textContent = compact ? student.name : "Review answers";
-        review.setAttribute("aria-label", `Review answers for ${student.name}`);
+        review.className = "ghost-btn";
+        review.textContent = compact ? completed ? "View / edit grade" : "Grade submission" : "Review answers";
+        review.setAttribute("aria-label", `${review.textContent} for ${student.name}`);
         review.addEventListener("click", () => reviewAnswers(student, review, grade => {
           if (signal.aborted || !line.isConnected) return;
           const status = line.querySelector(".quiz-result-status");
-          status.textContent = "Completed";
+          status.textContent = "Graded";
           status.classList.remove("is-pending", "is-empty");
           status.classList.add("is-completed");
-          if (!compact) line.querySelector(".quiz-result-points").textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+          if (compact) {
+            review.textContent = "View / edit grade";
+            review.setAttribute("aria-label", `View / edit grade for ${student.name}`);
+          }
+          if (!compact) {
+            const score = line.querySelector(".quiz-result-points");
+            score.textContent = quizScoreLabel({ ...grade, status: "reviewed" });
+            score.removeAttribute("title");
+          }
           review.focus();
           message.textContent = "Grade saved.";
         }));
-        if (compact) line.cells[0].lastElementChild.replaceWith(review);
-        else line.lastElementChild.append(review);
+        if (compact) line.lastElementChild.textContent = "";
+        line.lastElementChild.append(review);
       }
       loaded = true;
       pageIndex = index;

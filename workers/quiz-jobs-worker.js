@@ -58,7 +58,7 @@ export class QuizGenerationJob {
     const now = Date.now();
     const job = await this.storage.transaction(async txn => {
       const current = await txn.get("job");
-      if (!current) return null;
+      if (!current) { await txn.delete("execution"); return null; }
       if (current.expiresAt <= now) {
         await txn.delete("job");
         return null;

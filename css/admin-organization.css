@@ -1,0 +1,69 @@
+.admin-portal .admin-filters,.admin-portal .admin-security-form{display:flex;align-items:end;gap:20px;flex-wrap:wrap;margin:24px 0}
+.admin-portal .admin-filters label,.admin-portal .admin-security-form label{display:grid;gap:9px;min-width:220px;flex:1;font-weight:700}
+.admin-portal .admin-filters select,.admin-portal .admin-security-form select,.admin-portal .admin-transfer-select{width:100%;padding:13px 16px;border:1px solid var(--line,#aaccea);border-radius:14px;background:var(--surface,#fff);color:inherit;font:inherit}
+.admin-portal .admin-filters p{flex-basis:100%;margin:0;font-size:.88rem}
+.admin-actions{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-top:22px}
+.admin-actions h2{margin:0;flex:1}
+.admin-tabs{display:inline-flex;align-self:start;gap:5px;padding:5px;background:#e8f2fc;border:1px solid #afcce4;border-radius:16px;margin:24px 0;width:fit-content;max-width:100%}
+.admin-tabs button{border:0;border-radius:11px;background:transparent;padding:13px 20px;font:inherit;font-weight:700;color:#224567;cursor:pointer}
+.admin-tabs button[aria-selected=true]{background:#315e83;color:#fff;box-shadow:0 3px 8px #12365026}
+.admin-table-wrap{width:100%;overflow-x:auto;margin:24px 0}
+.admin-table-wrap table{width:100%;border-collapse:collapse;text-align:left}
+.admin-table-wrap th,.admin-table-wrap td{padding:16px;border-bottom:1px solid #b8d7ef;vertical-align:middle}
+.admin-table-wrap th{background:#e0edf9;color:#315e83}
+.admin-table-wrap td small,.admin-table-wrap th small{display:block;margin-top:5px}
+.admin-portal .analytics-overview{grid-template-columns:minmax(0,1fr)}
+.admin-portal .analytics-overview .teacher-analytics-card{display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px 24px;text-align:left;padding:24px}
+.analytics-overview .analytics-avatar{display:none}
+.analytics-overview .analytics-teacher-name,.analytics-overview .analytics-teacher-sections{grid-column:1;text-align:left;margin:0}
+.analytics-overview .analytics-donut{grid-column:2;grid-row:1 / span 4;align-self:center;justify-self:center;margin:0}
+.analytics-overview .analytics-post-result,.analytics-overview .analytics-card-footer{grid-column:1;text-align:left;margin:0}
+.analytics-overview .analytics-performance-details{grid-column:1 / -1;margin:0}
+.admin-table-wrap .admin-actions{margin:0;gap:10px}
+.admin-table-wrap .admin-transfer-select{min-width:160px;max-width:250px}
+.admin-attention{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px;margin:24px 0}
+.admin-attention div{padding:18px;border:1px solid #bdd8ef;border-radius:16px}
+.admin-attention dt{font-size:.9rem;color:#526e89}.admin-attention dd{font-size:1.6rem;font-weight:800;margin:10px 0 0}
+.admin-note{font-size:.88rem;line-height:1.7;color:#526e89;margin-top:24px}
+.school-year-steps{padding-left:24px;margin:20px 0;line-height:1.8}.school-year-steps li+li{margin-top:12px}
+.admin-portal .panel>p{line-height:1.6;margin-top:12px}
+.admin-portal #moreAudit{margin-top:20px}
+.admin-portal [hidden]{display:none!important}
+.admin-reauth{position:fixed;inset:0;margin:auto;height:fit-content;max-height:calc(100dvh - 32px);overflow-y:auto;border:1px solid #abcce8;border-radius:24px;padding:0;width:min(500px,calc(100vw - 32px));max-width:calc(100vw - 32px);color:#173d60;background:#fff;box-shadow:0 24px 80px #10273d40}
+.admin-reauth::backdrop{background:#10273d88;backdrop-filter:blur(4px)}
+.admin-reauth form{padding:28px;display:grid;gap:20px}.admin-reauth h2,.admin-reauth p{margin:0;line-height:1.6}
+.admin-reauth label{display:grid;gap:10px;font-weight:700}.admin-reauth input{font:inherit;padding:13px;border:1px solid #9fbfda;border-radius:12px;width:100%;box-sizing:border-box}
+.admin-reauth .admin-actions{margin:0;justify-content:flex-end}
+html[data-theme=dark] .admin-tabs{background:#132f49;border-color:#46627d}html[data-theme=dark] .admin-tabs button{color:#d2e8fa}html[data-theme=dark] .admin-tabs button[aria-selected=true]{background:#4177a5;color:white}
+html[data-theme=dark] .admin-portal select,html[data-theme=dark] .admin-reauth,html[data-theme=dark] .admin-reauth input{background:#172f47;color:#e2effb;border-color:#53728c}
+html[data-theme=dark] .admin-table-wrap th{background:#234461;color:#dfedfa}html[data-theme=dark] .admin-table-wrap td{border-color:#46627d}html[data-theme=dark] .admin-note,html[data-theme=dark] .admin-attention dt{color:#b8cde0}
+@media(max-width:640px){.admin-tabs{display:flex;width:auto}.admin-tabs button{flex:1;padding:12px}.admin-portal .admin-filters label,.admin-portal .admin-security-form label{min-width:100%}.admin-table-wrap th,.admin-table-wrap td{padding:12px}.admin-reauth form{padding:22px}}
+@media(max-width:640px){.admin-portal .analytics-overview .teacher-analytics-card{display:block}.analytics-overview .analytics-donut{margin:20px auto}.analytics-overview .analytics-card-footer{margin-top:20px}.analytics-overview .analytics-performance-details{margin-top:20px}}
+
+/* Give manual sections consistent breathing room and expand the overview chart. */
+@media screen {
+  .admin-portal .manual-page .manual-section-nav { gap: 18px; margin-top: 24px; margin-bottom: 28px; }
+  .admin-portal .manual-page .manual-section-nav-card { padding: 22px 24px; }
+  .admin-portal .manual-page > .manual-sheet { padding: 28px; }
+  .admin-portal .manual-page .manual-sheet h2 { margin-bottom: 16px; }
+  .admin-portal .manual-page .manual-checklist { gap: 12px; line-height: 1.75; }
+  .admin-portal .manual-page .manual-link { display: inline-block; margin-top: 18px; }
+  .admin-portal .learning-panel .learning-content { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 48px); padding: 24px 0 4px; align-items: stretch; }
+  .admin-portal .learning-panel .school-score-chart { width: 100%; }
+  .admin-portal .learning-panel .school-score-chart > p { font-size: 13px; line-height: 1.5; }
+  .admin-portal .learning-panel .learning-metrics { width: 100%; gap: 16px; padding-block: 20px; }
+  .admin-portal .learning-panel .learning-row { display: flex; flex-direction: column; justify-content: center; padding: 20px 22px; }
+  .admin-portal .learning-panel .learning-meta { font-size: 15px; }
+  .admin-portal .learning-panel .learning-meta strong { font-size: clamp(22px, 2vw, 30px); }
+  .admin-portal .learning-panel .learning-row small { font-size: 12px; line-height: 1.6; margin-top: 8px; }
+}
+@media screen and (max-width: 800px) {
+  .admin-portal .learning-panel .learning-content { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .admin-portal .learning-panel .learning-metrics { padding-block: 0; }
+}
+@media screen and (max-width: 640px) {
+  .admin-portal .manual-page .manual-section-nav-card { padding: 18px; }
+  .admin-portal .manual-page > .manual-sheet { padding: 22px; }
+  .admin-portal .learning-panel .learning-row { padding: 16px; }
+  .admin-portal .learning-panel .learning-meta { font-size: 13px; }
+}

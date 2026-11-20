@@ -125,6 +125,8 @@ export function decodeView(value) {
 // view may use an existing all-section/all-term report, never the reverse.
 export function reuseTeacherReport(cache, uid, { termId = "term_01", sectionId = "", allTerms = false, now = Date.now() } = {}) {
   const keys = [...new Set([
+    ...(!allTerms ? [`teacher-raw-report-v2:${termId}:${sectionId || "all"}`, `teacher-raw-report-v2:${termId}:all`,
+      ...(sectionId ? [`teacher-raw-report-v2:${termId}:first`] : [])] : []),
     ...(!allTerms ? [`teacher-report:${termId}:${sectionId || "all"}`, `teacher-report:${termId}:all`] : []),
     `teacher-report:all-terms-v1:${sectionId || "all"}`, "teacher-report:all-terms-v1:all"
   ])];

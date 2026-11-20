@@ -1,67 +1,29 @@
-import { matchesSearch, normalizeSearch, personSearchText } from "./search.js";
+import { initializeApp, getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { escapeHtml, watchVisibleData } from "./teacher-view.js";
-import { initializeApp } from "./firebase-auth.js";
-import { setLoadingState, revealContent } from "./loading.js";
-import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { createTeacherReport } from "./teacher-report-data.js";
-import { buildStudentActivityRecords, testRawScore } from "./student-activity-record.js";
+import { setLoadingState, revealContent } from "./loading.js";
 import { buildPostTestHeatmap } from "./post-test-heatmap.js";
-import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
-import { scoreOverride } from "./lesson-score.js";
-import { openLessonScoreEditor, closeLessonScoreEditor } from "./lesson-score-editor.js";
-import { doc, getDoc, setDoc, serverTimestamp } from "./firebase-data.js";
-import { createScoreReportOutput, showScoreReport, warmScoreReportResources } from "./score-report-actions.js";
-import { installAnalyticsPrint } from "./analytics-print.js";
+import { buildStudentActivityRecords } from "./student-activity-record.js";
+import { buildAnalyticsOverview } from "./analytics-overview.js";
+import { requestQuizReview } from "./quiz-review.js";
 import { getDocs as getHeatmapQuestions, collection as heatmapCollection, getFirestore as heatmapDatabase, getTeacherReportPage } from "./firebase-data.js";
-
-const app = initializeApp();
-const auth = getAuth(app);
-
-const search = document.getElementById("studentSearch");
-const sectionFilter = document.getElementById("sectionFilter");
-const sectionSummary = document.getElementById("sectionSummary");
-const studentCount = document.getElementById("studentCount");
-const studentGrid = document.querySelector("#studentGrid tbody");
-const editScores = document.getElementById("editScores");
-const scoreEditStatus = document.getElementById("scoreEditStatus");
-let editingScores = false;
-const printScoreReport = document.getElementById("printScoreReport");
-const downloadScoreReport = document.getElementById("downloadScoreReport");
-const scoreReportStatus = document.getElementById("scoreReportStatus");
-let scoreReportExport;
-function cancelScoreReport() {
-  scoreReportExport?.controller.abort();
-  scoreReportExport = null;
-}
-window.addEventListener("pagehide", cancelScoreReport);
-const topicsContainer = document.getElementById("topicsContainer");
-const questionHeatmapScope = document.getElementById("questionHeatmapScope");
-const topicCompletionScope = document.getElementById("topicCompletionScope");
-const studentsPerPage = 25;
-let activitySection = "";
-const scoreHead = document.getElementById("scoreSummaryHead");
-const emptyScoreHeader = scoreHead.innerHTML;
-let scoreColumnCount = 2;
-const quizStatus = document.getElementById("teacherQuizStatus");
-const quizRetry = document.getElementById("teacherQuizRefresh");
-let quizPage;
-let stopQuizRefresh;
-window.addEventListener("pagehide", () => quizPage?.controller.abort());
-let currentTermFilter = "term_01";
-let lastAnalyticsTerm = currentTermFilter;
-let selectedSection = "first", lastReport, tablePage = 0;
-const heatmapTopicSelect = document.getElementById("heatmapTopicFilter");
-const heatmapRows = document.getElementById("questionHeatmapRows");
-const heatmapStatus = document.getElementById("questionHeatmapStatus");
-const heatmapMore = document.getElementById("heatmapMore");
-let heatmapTopic = "", heatmapLessons = [], heatmapPage, heatmapOwner;
+const app = initializeApp(), auth = getAuth(app);
+const sectionFilter = document.getElementById('sectionFilter');
+const sectionSummary = document.getElementById('sectionSummary');
+const studentCount = document.getElementById('studentCount');
+const topicsContainer = document.getElementById('topicsContainer');
+const questionHeatmapScope = document.getElementById('questionHeatmapScope');
+const topicCompletionScope = document.getElementById('topicCompletionScope');
+const heatmapTopicSelect = document.getElementById('heatmapTopicFilter');
+const heatmapRows = document.getElementById('questionHeatmapRows');
+const heatmapStatus = document.getElementById('questionHeatmapStatus');
+const heatmapMore = document.getElementById('heatmapMore');
+let heatmapTopic = '', heatmapLessons = [], heatmapPage, heatmapOwner;
 const heatmapQuestionLoads = new Map();
-
-const termLabels = {
-  term_01: "Term 1",
-  term_02: "Term 2",
-  term_03: "Term 3"
-};
+const termLabels = {term_01:'Term 1',term_02:'Term 2',term_03:'Term 3'};
+let currentTermFilter = 'term_01', selectedSection = 'first', activitySection = '', lastReport, supportLimit = 10;
+let quizSummary, quizRequest, quizRequestKey, stopQuizUpdates;
+const quizCache = new Map();
 
 function renderQuestionHeatmap(result, partial = false) {
   setLoadingState(heatmapStatus, false);
@@ -206,221 +168,6 @@ heatmapTopicSelect?.addEventListener("change", () => {
 });
 heatmapMore?.addEventListener("click", () => openQuestionHeatmap(true));
 
-function raw(score, max) {
-  return Number.isFinite(score) && Number.isFinite(max) && max > 0 && score >= 0 && score <= max ? score + "/" + max : "—";
-}
-
-function lessonCells(data = {}, student, lesson) {
-  const pre = testRawScore(data, "pre"), post = testRawScore(data, "post");
-  const edited = scoreOverride(data, "activity");
-  const activity = edited ? raw(edited.score, edited.maximum) : Object.hasOwn(data, "activityRawMaximum")
-    ? raw(data.activityRawScore, data.activityRawMaximum)
-    : raw(data.activityScore, data.activityTotalQuestions ?? data.activityTotalPoints);
-  return [["activity", "Activity", activity], ["pre", "Pre-test", raw(pre?.score, pre?.total)], ["post", "Post-test", raw(post?.score, post?.total)]].map(([kind, label, value], index) => {
-    const content = editingScores
-      ? `<button class="score-edit" type="button" data-edit-score="${kind}" data-student="${escapeHtml(student.studentDoc.id)}" data-lesson="${escapeHtml(lesson.id)}" aria-label="${escapeHtml(`Edit ${label.toLowerCase()} score for ${student.name} · ${lesson.title}: ${value}`)}">${value}<span aria-hidden="true"> ✎</span></button>`
-      : value;
-    return `<td class="${index === 0 ? "score-lesson-start" : ""}" role="cell" data-score-label="${label}">${content}</td>`;
-  }).join("");
-}
-
-function renderScores(refresh = true) {
-  if (!lastReport) return;
-  studentGrid.removeAttribute("aria-busy");
-  const curriculum = lastReport?.curriculumSnap?.docs || [];
-  const lessons = curriculum.map(lesson => {
-    const data = lesson.data();
-    return { id: lesson.id, title: data.title || data.name || data.topicTitle || lesson.id };
-  });
-  const section = lastReport?.sections.find(item => item.classDoc.id === activitySection);
-  const termId = currentTermFilter;
-  const query = normalizeSearch(search.value);
-  const students = (section?.students || []).map(row => {
-    const student = row.studentDoc.data();
-    return { ...row, name: student.displayName || student.fullName || "Student" };
-  }).filter(row => matchesSearch(query, personSearchText(row.studentDoc.id, row.studentDoc.data())));
-  tablePage = Math.min(tablePage, Math.max(0, Math.ceil(students.length / studentsPerPage) - 1));
-  const start = tablePage * studentsPerPage, visible = students.slice(start, start + studentsPerPage);
-  editScores.disabled = !lessons.length || !visible.length;
-  printScoreReport.disabled = downloadScoreReport.disabled = editScores.disabled || Boolean(scoreReportExport);
-  if (refresh) void loadQuizScores(visible.map(row => row.studentDoc.id));
-  const quizzes = quizPage?.quizzes || [];
-  const quizColumnCount = Math.max(1, quizzes.length);
-  const scoreLabels = ["Activity", "Pre-test", "Post-test"];
-  scoreColumnCount = 1 + quizColumnCount + lessons.length * scoreLabels.length;
-  scoreHead.innerHTML = `<tr role="row"><th class="score-student" scope="col" rowspan="2">Student / Section</th>
-    ${lessons.map(lesson => `<th class="score-lesson-start" scope="colgroup" colspan="${scoreLabels.length}">${escapeHtml(lesson.title)}</th>`).join("")}<th class="score-quiz-column" scope="colgroup" colspan="${quizColumnCount}">Quiz</th></tr>
-    <tr role="row">${lessons.map(() => scoreLabels.map((label, index) => `<th class="${index === 0 ? "score-lesson-start" : ""}" scope="col">${label}</th>`).join("")).join("")}
-    ${quizzes.length ? quizzes.map((quiz, index) => `<th class="score-quiz-title${index === 0 ? " score-quiz-column" : " score-lesson-start"}" scope="col">${escapeHtml(quiz.title || "Quiz")}</th>`).join("") : '<th class="score-quiz-title score-quiz-column" scope="col">Generated quizzes</th>'}</tr>`;
-  studentGrid.innerHTML = visible.map(row => {
-    const results = new Map((row.results.find(result => result.termId === termId)?.lessonsSnap.docs || []).map(doc => [doc.id, doc.data()]));
-    const cells = lessons.map(lesson => lessonCells(results.get(lesson.id), row, lesson)).join("");
-    const name = `<th class="score-student" scope="row" role="rowheader">${escapeHtml(row.name)}<span>${escapeHtml(sectionSummary.textContent)}</span></th>`;
-    const quizCells = quizzes.map((quiz, index) => {
-      const item = quizPage.scores.get(quiz.id)?.get(row.studentDoc.id);
-      const score = item?.status === "pending-review" ? "Awaiting grade" : raw(item?.score, item?.maximum);
-      const value = item?.attemptId
-        ? `<button class="score-review" type="button" data-quiz="${escapeHtml(quiz.id)}" data-student="${escapeHtml(row.studentDoc.id)}" aria-label="${escapeHtml(row.name)} · ${escapeHtml(quiz.title || "Quiz")} · ${score}. Open submission">${score}</button>`
-        : score;
-      return `<td class="${index === 0 ? "score-quiz-column" : "score-lesson-start"}" role="cell">${value}</td>`;
-    });
-    return `<tr class="student-row" role="row">${name}${cells}${quizCells.join("") || '<td class="score-quiz-column" role="cell">—</td>'}</tr>`;
-  }).join("") || `<tr class="empty-row"><td colspan="${scoreColumnCount}">${query ? "No students match that search." : "No students in this section."}</td></tr>`;
-  document.getElementById("analyticsPageStatus").textContent = students.length
-    ? `Showing ${start + 1}–${start + visible.length} of ${students.length} students${lastReport?.complete === false ? " loaded" : ""}` : "0 students";
-  document.getElementById("analyticsPrevious").disabled = tablePage === 0;
-  document.getElementById("analyticsNext").disabled = start + visible.length >= students.length;
-}
-
-async function exportScoreReport() {
-  const user = auth.currentUser;
-  if (!user || !activitySection || !lastReport || scoreReportExport) return;
-  const controller = new AbortController(), task = { controller };
-  scoreReportExport = task;
-  printScoreReport.disabled = downloadScoreReport.disabled = true;
-  scoreReportStatus.textContent = "Preparing the complete section report…";
-  const termId = currentTermFilter, sectionId = activitySection;
-  try {
-    const output = await createScoreReportOutput({ mode: "download", termId, sectionId, search: search.value,
-      teacherName: user.displayName || lastReport.teacherName || "Signed-in teacher", signal: controller.signal,
-      onStage: message => { if (scoreReportExport === task) scoreReportStatus.textContent = message; },
-      onProgress: count => { if (scoreReportExport === task) scoreReportStatus.textContent = `Preparing report: ${count} students loaded…`; }
-    }, {
-      fetchPage: options => getTeacherReportPage(options, { signal: controller.signal }),
-      fetchQuizzes: studentIds => requestQuizReview(user.uid, { action: "term-results", termId, sectionId, studentIds }, controller.signal),
-      fetchSchoolYear: async () => (await getDoc(doc(heatmapDatabase(app), "webSettings", "schoolYear"))).data()?.startYear
-    });
-    controller.signal.throwIfAborted();
-    if (auth.currentUser?.uid !== user.uid || currentTermFilter !== termId || activitySection !== sectionId) return;
-    await showScoreReport(output, { mode: "download", signal: controller.signal });
-    scoreReportStatus.textContent = `${output.students} students · ${output.pageCount} pages. PDF downloaded.`;
-  } catch (error) {
-    if (scoreReportExport === task && !controller.signal.aborted) scoreReportStatus.textContent = error.message || "Could not prepare the report. Please try again.";
-  } finally {
-    if (scoreReportExport === task) {
-      scoreReportExport = null;
-      printScoreReport.disabled = downloadScoreReport.disabled = editScores.disabled;
-    }
-  }
-}
-const printAnalytics = installAnalyticsPrint({
-  available: () => Boolean(auth.currentUser && lastReport && !printScoreReport.disabled),
-  notify: message => { scoreReportStatus.textContent = message; },
-  readView: () => ({ table: document.getElementById("studentGrid"), section: sectionSummary.textContent,
-    term: termLabels[currentTermFilter], schoolYear: document.querySelector("[data-school-year]")?.textContent || "",
-    teacher: auth.currentUser.displayName || lastReport.teacherName || "Signed-in teacher",
-    scope: document.getElementById("analyticsPageStatus").textContent,
-    generatedLabel: new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Taipei" }).format(new Date()) })
-});
-printScoreReport.addEventListener("click", printAnalytics);
-downloadScoreReport.addEventListener("click", () => { void exportScoreReport(); });
-downloadScoreReport.addEventListener("mouseenter", warmScoreReportResources);
-downloadScoreReport.addEventListener("focus", warmScoreReportResources);
-
-editScores.addEventListener("click", () => {
-  editingScores = !editingScores;
-  editScores.setAttribute("aria-pressed", String(editingScores));
-  editScores.textContent = editingScores ? "Done editing" : "Edit scores";
-  scoreEditStatus.textContent = editingScores ? "Choose a score to edit, including a dash to add a missing score." : "";
-  renderScores(false);
-});
-function editLessonScore(event) {
-  const button = event.target.closest("button[data-edit-score]");
-  const user = auth.currentUser;
-  if (!button || !editingScores || !user || !lastReport) return;
-  const kind = button.dataset.editScore, termId = currentTermFilter, sectionId = activitySection;
-  const row = lastReport.sections.find(section => section.classDoc.id === sectionId)?.students.find(row => row.studentDoc.id === button.dataset.student);
-  const lesson = lastReport.curriculumSnap?.docs.find(lesson => lesson.id === button.dataset.lesson);
-  if (!row || !lesson) return;
-  const result = row.results.find(result => result.termId === termId)?.lessonsSnap.docs.find(doc => doc.id === lesson.id)?.data() || {};
-  const edited = scoreOverride(result, kind);
-  const test = kind === "activity" ? null : testRawScore(result, kind);
-  const score = edited?.score ?? (test ? test.score : kind === "activity" ? (Object.hasOwn(result, "activityRawMaximum") ? result.activityRawScore : result.activityScore) : null);
-  const maximum = edited?.maximum ?? (kind === "pre" ? 5 : kind === "post" ? 10 : Object.hasOwn(result, "activityRawMaximum") ? result.activityRawMaximum : result.activityTotalQuestions ?? result.activityTotalPoints);
-  const details = row.studentDoc.data(), topic = lesson.data();
-  const current = () => auth.currentUser?.uid === user.uid && currentTermFilter === termId && activitySection === sectionId;
-  openLessonScoreEditor({ kind, studentName: details.displayName || details.fullName || "Student", lessonTitle: topic.title || topic.name || lesson.id,
-    score, maximum,
-    onSave: async value => {
-      if (!current()) throw new Error("The selected class or sign-in changed. Reopen the score to try again.");
-      await setDoc(doc(heatmapDatabase(app), "users", row.studentDoc.id, "test_results", termId, "lessons", lesson.id), {
-        lessonId: lesson.id, timestamp: serverTimestamp(), teacherScoreOverrides: { [kind]: value }
-      }, { merge: true });
-    },
-    onSaved: () => {
-      if (!current()) return;
-      scoreEditStatus.textContent = "Score saved.";
-      void openReport();
-    }
-  });
-}
-
-function resetQuizScores() {
-  stopQuizRefresh?.();
-  stopQuizRefresh = undefined;
-  quizPage?.controller.abort();
-  quizPage = undefined;
-  closeQuizReview();
-  quizStatus.textContent = "";
-  quizRetry.hidden = true;
-}
-
-async function loadQuizScores(studentIds, force = false) {
-  const user = auth.currentUser;
-  if (!activitySection || !user) return;
-  stopQuizRefresh ||= watchVisibleData(app, user, () => {
-    if (quizPage && !quizPage.loading) return loadQuizScores(quizPage.studentIds, true);
-  }, 60_000, true);
-  const key = JSON.stringify([user.uid, currentTermFilter, activitySection, studentIds]);
-  const old = quizPage;
-  if (!force && old?.key === key && !old.controller.signal.aborted && Date.now() - old.checkedAt < 300_000) return;
-  old?.controller.abort();
-  const page = { key, studentIds, checkedAt: Date.now(), loading: true, controller: new AbortController(),
-    quizzes: old?.quizzes || [], scores: old?.scores || new Map() };
-  quizPage = page;
-  quizRetry.hidden = true;
-  quizStatus.textContent = page.quizzes.length ? "" : "Loading quiz scores…";
-  try {
-    const response = await requestQuizReview(user.uid, { action: "term-results", termId: currentTermFilter, sectionId: activitySection, studentIds }, page.controller.signal);
-    if (quizPage !== page) return;
-    page.quizzes = response.quizzes;
-    page.scores = new Map(response.quizzes.map(quiz => [quiz.id, new Map()]));
-    for (const item of response.items) page.scores.get(item.quizId)?.set(item.studentId, item);
-    quizStatus.textContent = response.quizzes.length ? "" : "No quizzes assigned to this term and section. Set a quiz’s term in My quizzes.";
-    renderScores(false);
-  } catch {
-    if (quizPage !== page || page.controller.signal.aborted) return;
-    quizStatus.textContent = "Could not load quiz scores.";
-    quizRetry.hidden = false;
-  } finally { page.loading = false; }
-}
-
-quizRetry.addEventListener("click", () => { if (quizPage) void loadQuizScores(quizPage.studentIds, true); });
-studentGrid.addEventListener("click", event => {
-  if (event.target.closest("button[data-edit-score]")) { editLessonScore(event); return; }
-  const button = event.target.closest("button[data-quiz]");
-  const page = quizPage, user = auth.currentUser;
-  if (!button || !page || !user) return;
-  const quiz = page.quizzes.find(item => item.id === button.dataset.quiz);
-  const submission = page.scores.get(quiz?.id)?.get(button.dataset.student);
-  if (!submission?.attemptId) return;
-  const section = { id: activitySection, label: sectionSummary.textContent, name: sectionSummary.textContent };
-  const student = lastReport?.sections.find(row => row.classDoc.id === section.id)?.students.find(row => row.studentDoc.id === submission.studentId)?.studentDoc.data();
-  void openQuizReview(user, quiz, [section], section.id, { submission: { ...submission, name: student?.displayName || student?.fullName }, onReviewed: grade => {
-    if (quizPage !== page) return;
-    Object.assign(submission, { score: grade.score, maximum: grade.maximum, status: "reviewed" });
-    renderScores(false);
-  } });
-});
-search.addEventListener("input", () => { tablePage = 0; renderScores(); });
-sectionFilter.addEventListener("change", () => {
-  if (!lastReport?.classes.some(item => item.id === sectionFilter.value)) return;
-  selectedSection = sectionFilter.value;
-  tablePage = 0;
-  return openReport();
-});
-document.getElementById("analyticsPrevious").addEventListener("click", () => { if (tablePage > 0) { tablePage--; renderScores(); } });
-document.getElementById("analyticsNext").addEventListener("click", () => { tablePage++; renderScores(); });
 
 function showTopicsPending() {
   topicsContainer.setAttribute("aria-busy", "true");
@@ -454,140 +201,117 @@ function renderTopics(records, emptyMessage = "No lessons found for this term.")
   revealContent("analytics-topics");
 }
 
-const termButtons = document.querySelectorAll(".term-tab-btn");
-termButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (currentTermFilter === btn.dataset.term) return;
-    termButtons.forEach(button => button.setAttribute("aria-pressed", String(button === btn)));
-    currentTermFilter = btn.dataset.term;
-    tablePage = 0;
-    return openReport();
-  });
-});
 
+const percent = value => value === null ? '—' : Math.round(value) + '%';
+const recordedPeople = count => count + (count === 1 ? ' student' : ' students') + ' with recorded time';
+const minutes = value => value === null ? 'Not recorded' : Math.round(value * 10) / 10 + ' min';
+function renderOverview() {
+  if (!lastReport) return;
+  const overview = buildAnalyticsOverview(lastReport, activitySection, currentTermFilter);
+  const quizzes = quizSummary;
+  const metrics = [['Students', String(lastReport.total ?? overview.students)], ['Recorded pre/post tests', overview.assessments + '/' + overview.possibleAssessments],
+    ['Average pre-test', percent(overview.pre)], ['Average post-test', percent(overview.post)],
+    ['Change in paired scores', overview.change === null ? '—' : (overview.change > 0 ? '+' : '') + Math.round(overview.change) + ' pp'],
+    ['Awaiting grading', quizzes ? String(quizzes.items.reduce((sum, row) => sum + row.awaitingGrade, 0)) : '—']];
+  document.getElementById('analyticsMetrics').innerHTML = metrics.map(([label, value]) => '<article class="card analytics-metric"><span>' + escapeHtml(label) + '</span><strong>' + escapeHtml(value) + '</strong>' + (label === 'Recorded pre/post tests' ? '<small>Saved pre-tests + post-tests / expected lesson tests</small>' : label === 'Change in paired scores' ? '<small>From ' + overview.pairs + ' matched student–lesson pairs</small>' : '') + '</article>').join('');
+  document.getElementById('analyticsCoverage').textContent = (lastReport.complete ? 'Results for ' : 'Updating results: ') + overview.students + ' students loaded. ' +
+    (quizzes ? quizzes.items.reduce((sum, row) => sum + row.submitted, 0) + '/' + (quizzes.learners * quizzes.quizCount) + ' generated-quiz submissions. ' : '') +
+    'Only uploaded results are shown; a device may still have offline work. Missing tests are excluded from averages. pp = percentage points.' + (lastReport.activitySyncPending ? ' Older-app activity records could not be checked.' : '') + (Number.isFinite(lastReport.checkedAt) ? ' Last checked: ' + new Intl.DateTimeFormat('en-PH', { dateStyle:'medium', timeStyle:'short', timeZone:'Asia/Manila' }).format(new Date(lastReport.checkedAt)) + '.' : '');
+  document.getElementById('lessonComparison').innerHTML = overview.lessons.map(row => '<article class="analytics-lesson"><h3>' + escapeHtml(row.title) + '</h3>' +
+    [['Pre-test', row.pre, row.preCount], ['Post-test', row.post, row.postCount]].map(([label, value, count]) => '<div class="analytics-bar-row"><span>' + label + '</span><div class="analytics-bar"><i style="width:' + (value ?? 0) + '%"></i></div><strong>' + percent(value) + '</strong><small>' + count + ' recorded</small></div>').join('') +
+    '<p class="scheduler-progress-copy">Paired change: ' + (row.change === null ? '—' : (row.change > 0 ? '+' : '') + Math.round(row.change) + ' pp') + ' · ' + row.pairs + ' students with both tests</p></article>').join('') || '<p>No lesson records are available for this term.</p>';
+  document.getElementById('learningTimeOverview').innerHTML = overview.lessons.length ? '<div class="analytics-data-wrap"><table class="analytics-data-table analytics-time-table"><caption class="sr-only">Recorded learning time by lesson</caption><thead><tr><th scope="col">Lesson</th><th scope="col">AR average</th><th scope="col">Module average</th></tr></thead><tbody>' + overview.lessons.map(row => '<tr><th scope="row">' + escapeHtml(row.title) + '</th><td>' + minutes(row.ar) + '<small>' + recordedPeople(row.arCount) + '</small></td><td>' + minutes(row.module) + '<small>' + recordedPeople(row.moduleCount) + '</small></td></tr>').join('') + '</tbody></table></div>' : '<p>No recorded learning time is available.</p>';
+  const support = overview.support.slice(0, supportLimit);
+  document.getElementById('supportStudents').innerHTML = support.length ? '<div class="analytics-data-wrap"><table class="analytics-data-table analytics-support-table"><caption class="sr-only">Post-tests below the 60% review threshold</caption><thead><tr><th scope="col">Student</th><th scope="col">Lesson to review</th><th scope="col">Post-test score</th></tr></thead><tbody>' + support.map(row => row.lessons.map((lesson, index) => '<tr>' + (index === 0 ? '<th scope="rowgroup" rowspan="' + row.lessons.length + '"><a href="student-records.html?student=' + encodeURIComponent(row.id) + '">' + escapeHtml(row.name) + '</a></th>' : '') + '<td>' + escapeHtml(lesson.title) + '</td><td>' + lesson.score + '/' + lesson.maximum + '</td></tr>').join('')).join('') + '</tbody></table></div>' : '<p>' + (lastReport.complete ? 'No completed post-test results fall below the 60% review threshold.' : 'No students flagged in the results loaded so far.') + '</p>';
+  document.getElementById('supportMore').hidden = overview.support.length <= supportLimit;
+}
+async function loadQuizSummary() {
+  const user = auth.currentUser, sectionId = activitySection, termId = currentTermFilter;
+  if (!user || !sectionId) return;
+  const key = JSON.stringify([user.uid, sectionId, termId]);
+  const saved = quizCache.get(key);
+  quizSummary = saved?.data;
+  renderOverview();
+  if (saved && Date.now() - saved.at < 300000) return;
+  if (quizRequestKey === key && quizRequest && !quizRequest.signal.aborted) return;
+  quizRequest?.abort();
+  quizRequestKey = key;
+  const request = quizRequest = new AbortController();
+  try {
+    const result = await requestQuizReview(user.uid, { action: 'grading-summary', sectionId, termId }, request.signal);
+    if (request.signal.aborted || activitySection !== sectionId || currentTermFilter !== termId || auth.currentUser?.uid !== user.uid) return;
+    quizSummary = result; quizCache.set(key, {data:result, at:Date.now()}); renderOverview();
+  } catch {
+    if (!request.signal.aborted) document.getElementById('analyticsReportStatus').textContent = 'Quiz submission counts could not update. Lesson results remain available.';
+  } finally { if (quizRequest === request) quizRequestKey = undefined; }
+}
+document.getElementById('supportMore').addEventListener('click', () => { supportLimit += 10; renderOverview(); });
 const report = createTeacherReport({ app,
-  progress: ({ loaded, total, complete, termId }) => {
-    const status = document.getElementById("analyticsReportStatus");
-    setLoadingState(status, !complete, total === null ? "Updating results" : `Results: ${loaded} of ${total} students`);
-    status.textContent = "";
-    document.getElementById("analyticsTermLabel").textContent = termLabels[termId];
+  progress: ({ loaded, total, complete }) => {
+    const status = document.getElementById('analyticsReportStatus');
+    setLoadingState(status, !complete, 'Results: ' + loaded + ' of ' + (total ?? 'available') + ' students');
+    if (complete) status.textContent = '';
   },
-  failed: error => {
-    console.error("Analytics update failed:", error);
-    const status = document.getElementById("analyticsReportStatus");
-    setLoadingState(status, false);
-    if (lastReport) status.textContent = "Could not update results. Retrying automatically.";
-    else {
-      studentGrid.removeAttribute("aria-busy");
-      studentGrid.innerHTML = `<tr class="empty-row"><td colspan="${scoreColumnCount}">Could not load scores. Retrying automatically.</td></tr>`;
-    }
+  failed: () => {
+    const status = document.getElementById('analyticsReportStatus'); setLoadingState(status, false);
+    status.textContent = 'Could not update results. Retrying automatically.';
   },
   render: data => {
     if (data.termId !== currentTermFilter) return;
-    const section = data.sections.find(row => selectedSection === "first" || row.classDoc.id === selectedSection);
-    if (!section && data.classes.some(row => row.id === selectedSection)) return;
-    if (!section && data.classes.length && selectedSection !== "first") {
-      selectedSection = "first";
-      return openReport();
-    }
-    lastReport = data;
-    const nextSection = section?.classDoc.id || "";
-    if (activitySection && activitySection !== nextSection) resetQuizScores();
-    activitySection = nextSection;
-    const options = data.classes.map(row => {
-      const option = document.createElement("option"), info = row.data();
-      option.value = row.id;
-      option.textContent = info.SectionName || info.sectionName || info.name || row.id;
-      return option;
-    });
-    const signature = JSON.stringify(options.map(option => [option.value, option.textContent]));
-    if (sectionFilter.dataset.sections !== signature) {
-      sectionFilter.replaceChildren(...options);
-      sectionFilter.dataset.sections = signature;
-    }
-    sectionFilter.value = activitySection;
-    sectionFilter.disabled = !activitySection;
-    sectionSummary.textContent = options.find(option => option.value === activitySection)?.textContent || "No section";
-    studentCount.textContent = data.total ?? "—";
-    const sync = document.getElementById("activitySyncStatus");
-    sync.hidden = !data.activitySyncPending;
-    sync.textContent = data.activitySyncPending ? "Recent submissions from older app versions could not be checked." : "";
-    renderScores();
-    const scope = activitySection ? termLabels[currentTermFilter] + " · " + sectionSummary.textContent : termLabels[currentTermFilter];
-    questionHeatmapScope.textContent = topicCompletionScope.textContent = scope;
-    if (!section) renderTopics([], "No sections are assigned to your account.");
+    const section = data.sections.find(row => selectedSection === 'first' || row.classDoc.id === selectedSection);
+    if (!section && data.classes.length && selectedSection !== 'first') { selectedSection = 'first'; void openReport(); return; }
+    const scopeChanged = lastReport?.termId !== data.termId || activitySection !== (section?.classDoc.id || '');
+    lastReport = data; activitySection = section?.classDoc.id || '';
+    if (scopeChanged) showTopicsPending();
+    const options = data.classes.map(row => '<option value="' + escapeHtml(row.id) + '">' + escapeHtml(row.data().SectionName || row.data().sectionName || row.id) + '</option>').join('');
+    if (sectionFilter.innerHTML !== options) sectionFilter.innerHTML = options;
+    sectionFilter.value = activitySection; sectionFilter.disabled = !activitySection;
+    sectionSummary.textContent = section?.classDoc.data().SectionName || 'No section';
+    studentCount.textContent = data.total ?? data.loaded;
+    document.getElementById('analyticsTermLabel').textContent = termLabels[currentTermFilter];
+    questionHeatmapScope.textContent = topicCompletionScope.textContent = termLabels[currentTermFilter] + ' · ' + sectionSummary.textContent;
+    renderOverview(); void loadQuizSummary();
+    if (!section) renderTopics([], 'No sections are assigned to your account.');
     else if (data.complete && data.curriculumSnap) renderTopics(buildStudentActivityRecords([data.curriculumSnap], [section], termLabels, [data.termId]));
-    updateHeatmap();
-    revealContent("analytics-students");
+    updateHeatmap(); revealContent('analytics-students');
   }
 });
 function openReport({ restoredPage = false } = {}) {
-  cancelScoreReport();
-  scoreReportStatus.textContent = "";
-  closeLessonScoreEditor();
   if (!auth.currentUser) return;
-  const termChanged = lastAnalyticsTerm !== currentTermFilter;
-  if (termChanged) {
-    lastAnalyticsTerm = currentTermFilter;
-    heatmapTopic = "";
-    heatmapLessons = [];
-    heatmapTopicSelect.value = "";
-    heatmapTopicSelect.disabled = true;
-    clearHeatmapResults();
-    heatmapStatus.textContent = "";
-    questionHeatmapScope.textContent = topicCompletionScope.textContent = termLabels[currentTermFilter];
-    showTopicsPending();
-  }
-  if (lastReport && (lastReport.termId !== currentTermFilter || (selectedSection !== "first" && selectedSection !== activitySection))) {
-    lastReport = null; activitySection = "";
-    resetQuizScores(); clearHeatmapResults(); showTopicsPending();
-  }
-  if (!lastReport) {
-    editScores.disabled = true;
-    printScoreReport.disabled = downloadScoreReport.disabled = true;
-    sectionFilter.disabled = true;
-    if (termChanged) {
-      scoreHead.innerHTML = emptyScoreHeader;
-      scoreColumnCount = 2;
-    }
-    studentCount.textContent = "—";
-    studentGrid.setAttribute("aria-busy", "true");
-    studentGrid.innerHTML = `<tr class="empty-row"><td colspan="${scoreColumnCount}"><span data-loading="true" role="status" aria-label="Loading scores"></span></td></tr>`;
-    document.getElementById("analyticsPrevious").disabled = true;
-    document.getElementById("analyticsNext").disabled = true;
-    document.getElementById("analyticsPageStatus").textContent = "";
-  }
-  if (!lastReport) {
-    const status = document.getElementById("analyticsReportStatus");
-    setLoadingState(status, false);
-    status.textContent = "";
-  }
-  return report.open({ user: auth.currentUser, termId: currentTermFilter, sectionId: selectedSection, rawActivityScores: true, restoredPage });
+  quizRequest?.abort(); quizSummary = undefined; supportLimit = 10;
+  heatmapTopic = ''; heatmapLessons = []; heatmapTopicSelect.value = ''; heatmapTopicSelect.disabled = true; clearHeatmapResults();
+  return report.open({ user:auth.currentUser, termId:currentTermFilter, sectionId:selectedSection, rawActivityScores:true, restoredPage });
 }
-onAuthStateChanged(auth, (user, { restored = false } = {}) => {
-  if (heatmapOwner !== user?.uid) {
-    cancelScoreReport();
-    scoreReportStatus.textContent = "";
-    closeLessonScoreEditor();
-    editingScores = false;
-    editScores.setAttribute("aria-pressed", "false");
-    editScores.textContent = "Edit scores";
-    scoreEditStatus.textContent = "";
-    heatmapOwner = user?.uid;
-    clearHeatmapResults();
-    heatmapQuestionLoads.clear();
-    heatmapLessons = [];
-    heatmapTopic = "";
-    heatmapTopicSelect.value = "";
-    heatmapTopicSelect.disabled = true;
-    lastReport = null;
-    selectedSection = "first"; tablePage = 0;
-    resetQuizScores();
-    activitySection = "";
-    scoreHead.innerHTML = emptyScoreHeader;
-    scoreColumnCount = 2;
-    studentGrid.replaceChildren();
-  }
-  if (!user) { report.stop(); window.location.href = "login.html"; return; }
-  void openReport({ restoredPage: restored });
+sectionFilter.addEventListener('change', () => {
+  if (!lastReport?.classes.some(row => row.id === sectionFilter.value)) return;
+  selectedSection = sectionFilter.value; return openReport();
 });
+const termButtons = document.querySelectorAll('#termSwitch .term-tab-btn');
+termButtons.forEach(button => button.addEventListener('click', () => {
+  if (currentTermFilter === button.dataset.term) return;
+  currentTermFilter = button.dataset.term;
+  document.getElementById('analyticsTermPanel').setAttribute('aria-label', termLabels[currentTermFilter] + ' analytics');
+  termButtons.forEach(tab => { tab.setAttribute('aria-pressed', String(tab === button)); tab.setAttribute('aria-selected', String(tab === button)); tab.setAttribute('tabindex', tab === button ? '0' : '-1'); });
+  return openReport();
+}));
+onAuthStateChanged(auth, (user, { restored = false } = {}) => {
+  stopQuizUpdates?.();
+  if (heatmapOwner !== user?.uid) {
+    quizRequest?.abort(); quizCache.clear(); quizSummary = undefined; lastReport = null;
+    heatmapOwner = user?.uid; heatmapQuestionLoads.clear(); clearHeatmapResults(); selectedSection = 'first'; activitySection = '';
+    document.querySelectorAll('#analyticsMetrics strong').forEach(value => { value.textContent = '—'; });
+    for (const id of ['lessonComparison','learningTimeOverview','supportStudents','topicsContainer']) document.getElementById(id).replaceChildren();
+  }
+  if (!user) { report.stop(); window.location.href = 'login.html'; return; }
+  stopQuizUpdates = watchVisibleData(app, user, loadQuizSummary, 300000);
+  void openReport({ restoredPage:restored });
+});
+window.addEventListener('pagehide', () => quizRequest?.abort());
+
+termButtons.forEach((button, index) => button.addEventListener('keydown', event => {
+  const keys = ['ArrowLeft','ArrowRight','Home','End'];
+  if (!keys.includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? termButtons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + termButtons.length) % termButtons.length;
+  termButtons[next].focus(); termButtons[next].click();
+}));

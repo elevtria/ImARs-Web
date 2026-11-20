@@ -59,7 +59,7 @@ async function accountScope(request, env, store, row, uid, verifySession = true)
     throw failure("SESSION_REVOKED", 401, "Sign in again to continue.");
   }
   const scope = { uid, profileId: row.id, role: profile.role, classCode: "", teacherProfileId: "", teacherUid: "",
-    datasetEpoch: env.IMARS_MOBILE_DATASET_EPOCH || "firestore-v1" };
+    datasetEpoch: (env.IMARS_MOBILE_DATASET_EPOCH || "firestore-v1") + (profile.schoolYearEpoch ? ":" + profile.schoolYearEpoch : "") };
   if (profile.role === "student" && profile.classCode) {
     if (!validPart(profile.classCode)) throw scopeChanged();
     const section = (await store.get("classes/" + profile.classCode))?.data;

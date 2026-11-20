@@ -7,7 +7,7 @@ import { WebLoginState } from "../workers/web-auth-worker.js";
 function fixture() {
   const records = new Map([
     ["users/0026271000", { uid: "student-a", role: "student", providedEmail: "student@example.test", classCode: "A" }],
-    ["users/TEACH1000", { uid: "teacher-a", role: "teacher", providedEmail: "teacher@example.test", active: true }],
+    ["users/TEACH1000", { uid: "teacher-a", role: "teacher", providedEmail: "teacher@example.test", active: true, isRegistered: true }],
     ["users/TEACH1001", { role: "teacher", providedEmail: "invited@example.test", active: true, isRegistered: false }],
     ["users/0026271001", { classCode: "A", providedEmail: "invited-student@example.test", isRegistered: false }],
     ["_accountAccess/student-a", { profileId: "0026271000", role: "student", active: true, authEmail: "student@example.test" }],
@@ -174,6 +174,19 @@ test("a concurrent activation of the same profile requests a retry instead of a 
   app.store.findUser = async () => ({ id: "TEACH1001" });
   assert.equal((await app.call("claim", { identifier: "TEACH1001" })).status, 409);
   assert.equal(app.commits(), 0);
+});
+
+test("activation conflicts and storage failures never fall back to unchecked profile writes", async () => {
+  for (const status of [409, 503]) {
+    const app = fixture();
+    app.store.activate = async () => { throw Object.assign(new Error("Activation failed"), { status }); };
+    app.store.begin = async () => { assert.fail("A failed atomic activation must not start a fallback transaction"); };
+    const before = structuredClone([...app.records]);
+    const response = await app.call("claim", { identifier: "TEACH1001" });
+    assert.equal(response.status, status);
+    assert.deepEqual([...app.records], before);
+    assert.equal(app.commits(), 0);
+  }
 });
 test("disabled profiles, disabled Auth users, missing credentials, rate limits and upstream failures fail closed", async () => {
   const app = fixture();

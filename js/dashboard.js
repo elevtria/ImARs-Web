@@ -135,7 +135,7 @@ onAuthStateChanged(auth, async user => {
         revealContent("dashboard-topics");
       }
     });
-  const summaryOptions = { app, user, page: "dashboard-summary-v1", freshForMs: 300_000, refreshIntervalMs: 300_000, load: async () => {
+  const summaryOptions = { app, user, page: "dashboard-summary-v2", freshForMs: 300_000, refreshIntervalMs: 300_000, load: async () => {
     let result = await getDashboardSummary();
     if (!result.enabled) return { legacy: true };
     // Only the first preparation waits. Subsequent visits get the durable

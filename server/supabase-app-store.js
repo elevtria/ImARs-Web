@@ -1,5 +1,6 @@
 import { FirestoreAdmin, decodeFields, encodeFields, firebaseIdentity } from "./firestore-admin.js";
 import { legacyActivityFields } from "./mobile-activity-store.js";
+import { lessonResultPath, lessonResultFields, lessonMergeFields, mergeLegacyLesson } from "./legacy-lesson-results.js";
 
 import { RESULT_LIMIT, SUMMARY_FIELDS } from "./student-quiz-store.js";
 
@@ -67,9 +68,15 @@ export class SupabaseAppStore {
     } catch {
       this.firestoreMirror = null;
     }
+    this.legacyLessons = mirrorToFirestore && env.WEB_LEGACY_LESSON_READS_ENABLED === "true" ? new FirestoreAdmin(env, fetcher) : null;
   }
 
   async mirrorWritesToFirestore(writes) {
+    // Security events, recovery cooldowns and platform session ownership belong
+    // only to the authoritative backend, never a best-effort legacy mirror.
+    writes = writes.filter(write => !write.path.startsWith("webSettings/security/") &&
+      !/^_accountAccess\/[^/]+\/sessions\//.test(write.path));
+    if (!writes.length) return;
     if (!this.firestoreMirror) return;
     try {
       const mirroredWrites = writes.map(write => ({
@@ -80,7 +87,7 @@ export class SupabaseAppStore {
           merge: write.operation === "update" ? true : Boolean(write.merge)
         })
       }));
-      await this.firestoreMirror.commit(mirroredWrites);
+      await this.firestoreMirror.commit(mirroredWrites, { unconditional: true });
     } catch (err) {
       console.warn("Firestore mirror commit warning:", err?.message || err);
     }
@@ -142,15 +149,41 @@ export class SupabaseAppStore {
   }
 
   async getAll(paths, { fieldPaths } = {}) {
-    const rows = await this.rawDocuments(paths, fieldPaths);
-    return new Map(paths.map(path => {
+    const lessonPaths = this.legacyLessons ? paths.filter(lessonResultPath) : [];
+    const selected = lessonPaths.length && fieldPaths ? [...new Set([...fieldPaths, ...lessonMergeFields])] : fieldPaths;
+    const rows = await this.rawDocuments(paths, selected);
+    const records = new Map(paths.map(path => {
       const row = rows.get(supabaseDocumentPath(path));
-      return [path, row ? this.projected(row, fieldPaths) : null];
+      return [path, row ? this.projected(row, selected) : null];
     }));
+    if (lessonPaths.length) {
+      const profiles = [...new Set(lessonPaths.map(path => path.split("/").slice(0, 2).join("/")))];
+    const identityFields = ["uid", "role", "classCode", "schoolId", "legacyResultsArchived"];
+      const [currentProfiles, legacyProfiles] = await Promise.all([
+        this.rawDocuments(profiles, identityFields), this.legacyLessons.getAll(profiles, { fieldPaths: identityFields })
+      ]);
+      const accepted = new Set(profiles.filter(path => {
+        const current = currentProfiles.get(path), legacy = legacyProfiles.get(path)?.data;
+        const data = current && this.projected(current, identityFields).data;
+        return data?.role === "student" && data.legacyResultsArchived !== true && legacy?.role === "student" && part.test(data.classCode || "") && data.classCode === legacy.classCode &&
+          (!data.uid || data.uid === legacy.uid) && (!legacy.schoolId || legacy.schoolId === path.split("/")[1]);
+      }));
+      const requested = lessonPaths.filter(path => accepted.has(path.split("/").slice(0, 2).join("/")));
+      if (requested.length) {
+        const legacy = await this.legacyLessons.getAll(requested, { fieldPaths: lessonResultFields });
+        for (const path of requested) records.set(path, mergeLegacyLesson(records.get(path), legacy.get(path), fieldPaths));
+      }
+      if (fieldPaths) for (const [path, record] of records) if (record) {
+        const pick = data => Object.fromEntries(fieldPaths.filter(field => Object.hasOwn(data, field)).map(field => [field, data[field]]));
+        records.set(path, { ...record, data: pick(record.data), wire: pick(record.wire) });
+      }
+    }
+    return records;
   }
 
-  async adminLessonResults(fieldPaths) {
-    const pattern = "^users/[A-Za-z0-9_-]+/test_results/term_0[1-3]/lessons/lesson_0[1-4]$";
+  async adminLessonResults(fieldPaths, { termId = "" } = {}) {
+    if (termId && !/^term_0[1-3]$/.test(termId)) throw new Error("Invalid report term.");
+    const pattern = "^users/[A-Za-z0-9_-]+/test_results/" + (termId || "term_0[1-3]") + "/lessons/lesson_0[1-4]$";
     const select = this.selection(fieldPaths);
     const rows = [];
     let after;
@@ -256,6 +289,9 @@ export class SupabaseAppStore {
       throw Object.assign(new Error("This report is too large. Contact website maintenance."), { status: 409 });
     }
     const results = rows.slice(0, limit).map(row => this.projected(row, fieldPaths));
+    if (!fieldPaths && (path === "users" || path === "classes")) {
+      await this.mirrorDocsToFirestore(path, results);
+    }
     return results;
   }
 
@@ -321,7 +357,7 @@ export class SupabaseAppStore {
   }
 
   async scorePage(actor, studentId, sectionId, { quizId, after, limit = 21 } = {}) {
-    const fields = ["quizId", "status", "submittedAt", "receipt", "review"];
+    const fields = ["quizId", "status", "submittedAt", "receipt", "review", ...(quizId ? ["preliminary"] : [])];
     const submittedAt = "fields->submittedAt->>timestampValue";
     const context = { teacherUid: actor.uid, teacherProfileId: actor.id, sectionId };
     const boundary = after && quoted(sortableTimestamp(after[0]));

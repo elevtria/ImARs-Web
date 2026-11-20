@@ -20,9 +20,11 @@ body { min-height: 100vh; margin: 0; color: var(--admin-ink); }
 button, a { font: inherit; }
 button { cursor: pointer; }
 
-.school-year-control { position: relative; }
+.school-year-control { position: relative; display: flex; align-items: center; color: #3f5c78; }
+.school-year-control::after { content: ""; position: absolute; top: 50%; right: 15px; width: 6px; height: 6px; margin-top: -5px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); pointer-events: none; }
 .school-year-control label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-select.admin-year { min-height: 38px; padding-right: 10px; border: 1px solid transparent; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+select.admin-year { appearance: none; min-height: 40px; padding: 9px 38px 9px 14px; border: 1px solid #b5d5ee; border-radius: 12px; background: #e7f4ff; font: inherit; font-size: 13px; font-weight: 700; line-height: 20px; cursor: pointer; }
+select.admin-year:hover:not(:disabled) { border-color: #6fa8d5; }
 select.admin-year:focus-visible { outline: 3px solid rgba(77, 134, 176, .45); outline-offset: 3px; }
 select.admin-year:disabled { opacity: .7; cursor: wait; }
 .school-year-status { position: absolute; top: calc(100% + 3px); right: 0; width: max-content; max-width: min(270px, 80vw); color: #3f5c78; font-size: 11px; line-height: 1.35; text-align: right; }

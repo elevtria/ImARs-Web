@@ -12,7 +12,7 @@ import {
   updateDoc,
   writeBatch
 } from "./firebase-data.js";
-import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, teacherSectionSchedule, activityDeadlineInput, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
+import { todayISO, topicAvailability, termAvailability, manualAccessUpdate, scheduledAccessUpdate, teacherSectionSchedule, activityDeadlineInput, activityDeadlineMinimum, activityDeadlineFromInput, validateActivityDeadlineUtc } from "./topic-availability.js";
 import { prepareTeacherCache } from "./teacher-view.js";
 import { encodeView, decodeView } from "./view-cache.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -145,7 +145,7 @@ function renderActivitySchedule() {
         </select></label>
         <div class="quiz-schedule-dates">
           <label class="quiz-schedule-date" ${mode === "scheduled" ? "" : "hidden"}>Release date <input type="date" min="${todayISO()}" value="${mode === "scheduled" ? escapeHtml(date) : ""}" aria-label="Release date for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}></label>
-          <label>Deadline (optional, Philippine time)<input class="activity-schedule-deadline" type="datetime-local" value="${isReady ? escapeHtml(deadline) : ""}" ${mode === "scheduled" && date ? `min="${escapeHtml(date)}T00:00"` : ""} aria-label="Activity deadline for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}></label>
+          <label>Deadline (optional, Philippine time)<input class="activity-schedule-deadline" type="datetime-local" value="${isReady ? escapeHtml(deadline) : ""}" min="${activityDeadlineMinimum(mode === "scheduled" ? date : "")}" aria-label="Activity deadline for ${escapeHtml(topic.title)}" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}></label>
         </div>
         <button class="primary-btn activity-schedule-save" type="button" ${!isReady || !sectionsVerified || isSaving ? "disabled" : ""}>Save access</button>
       </div>
@@ -493,11 +493,17 @@ function rememberActivityDraft(event) {
   const date = card.querySelector(".quiz-schedule-date input").value;
   const deadlineInput = card.querySelector(".activity-schedule-deadline");
   activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date, deadline: deadlineInput.value });
-  deadlineInput.min = mode === "scheduled" && date ? `${date}T00:00` : "";
+  deadlineInput.min = activityDeadlineMinimum(mode === "scheduled" ? date : "");
   if (modeChanged) card.querySelector(".quiz-schedule-date").hidden = mode !== "scheduled";
 }
 activityList.addEventListener("change", rememberActivityDraft);
 activityList.addEventListener("input", rememberActivityDraft);
+activityList.addEventListener("focusin", event => {
+  if (!event.target.matches(".activity-schedule-deadline")) return;
+  const card = event.target.closest("[data-activity]");
+  const mode = card.querySelector(".activity-schedule-mode").value;
+  event.target.min = activityDeadlineMinimum(mode === "scheduled" ? card.querySelector(".quiz-schedule-date input").value : "");
+});
 
 async function makeTermActivitiesAvailable(termIndex) {
   if (!isReady || isSaving || !assignedSections.some(section => section.id === selectedSection)) return;
@@ -554,8 +560,10 @@ activityList.addEventListener("click", async event => {
   const deadlineInput = card.querySelector(".activity-schedule-deadline");
   activityDrafts.set(activityKey(termIndex, topicIndex), { mode, date: dateInput.value, deadline: deadlineInput.value });
   try {
-    if (!deadlineInput.checkValidity()) throw new Error("Enter a valid activity deadline after its release date.");
-    if (deadlineInput.value !== activityDeadlineInput(topic.activityDeadlineUtc))
+    deadlineInput.min = activityDeadlineMinimum(mode === "scheduled" ? dateInput.value : "");
+    const changed = deadlineInput.value !== activityDeadlineInput(topic.activityDeadlineUtc);
+    if (changed && !deadlineInput.checkValidity()) throw new Error("Choose a future activity deadline after its release date.");
+    if (changed)
       update.activityDeadlineUtc = activityDeadlineFromInput(deadlineInput.value);
     validateActivityDeadlineUtc(update.activityDeadlineUtc ?? topic.activityDeadlineUtc, update.scheduledDate);
   } catch (error) {

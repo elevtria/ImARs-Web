@@ -5,6 +5,7 @@ import test from "node:test";
 import vm from "node:vm";
 import { createViewCache, encodeView, decodeView, reuseTeacherReport } from "../js/view-cache.js";
 import { setLoadingState } from "../js/loading.js";
+import { recordedLearningMinutes } from "../js/learning-duration.js";
 const source = readFileSync(new URL("../js/student-records.js", import.meta.url), "utf8").replace(/^import[^\n]+\r?\n/gm, "");
 const doc = (id, data) => ({ id, exists: () => true, data: () => data });
 const snap = docs => ({ docs, size: docs.length, empty: !docs.length, forEach: action => docs.forEach(action) });
@@ -37,7 +38,7 @@ class Element {
   close() { this.open = false; }
   async emit(k,event={}) { for(const fn of this.listeners[k] || []) await fn({preventDefault(){},stopPropagation(){},...event}); }
 }
-function harness(size=3) {
+function harness(size=3, { visible = false } = {}) {
   const names=["recordsContainer","emptyState","studentSearch","sectionFilter","activeStudentsTab","archivedStudentsTab","activeStudentsCount","archivedStudentsCount","archiveStudentModal","archiveStudentForm","archiveReason","confirmArchiveStudent","archiveStudentError","cancelArchiveStudent","archiveStudentName","archiveStudentTitle","archiveSectionBtn","previousRecordsPage","nextRecordsPage","recordsPageStatus","recordsTerm"];
   const ids=Object.fromEntries(names.map(id=>[id,new Element(id === "sectionFilter" ? "select" : "div")]));
   const profiles=new Map(Array.from({length:size},(_,i)=>["S"+String(i).padStart(4,"0"),{displayName:i===0?'A <Student> "One"':"Student "+i,active:size===3&&i===1?false:true,classCode:"A"}]));
@@ -53,7 +54,7 @@ function harness(size=3) {
     const rows=matches.slice(0,options.limit||25);
     return {classes,students:rows.map(([id,row])=>({classId:"A",studentDoc:doc(id,{...row})})),counts:options.includeCounts===false?null:[{classId:"A",active:all.filter(([,r])=>r.active!==false).length,archived:all.filter(([,r])=>r.active===false).length}],cursor:matches.length>rows.length?{classId:"A",id:rows.at(-1)[0]}:null};
   }
-  const context=vm.createContext({matchesSearch,normalizeSearch,personSearchText,Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState, revealContent: () => {},console:{error(){}},
+  const context=vm.createContext({recordedLearningMinutes,matchesSearch,normalizeSearch,personSearchText,Date,Promise,AbortController,setTimeout,clearTimeout,encodeView,decodeView,reuseTeacherReport,setLoadingState, revealContent: () => {},console:{error(){}},
     initializeApp:()=>({}),getAuth:()=>auth,getFirestore:()=>({}),onAuthStateChanged:(_,fn)=>{authChanged=fn;},
     watchVisibleData:(_,user,fn)=>{refresh=fn;return ()=>{};},prepareTeacherCache:(_,user)=>{cache.setOwner(user.uid);return cache;},
     collection:(_, ...parts)=>({path:parts.join("/")}),doc:(_,name,id)=>({path:name+"/"+id,id}),
@@ -64,11 +65,11 @@ function harness(size=3) {
     writeBatch:()=>{const group=[];return {update(ref,data){group.push({ref,data});},async commit(){if(denied||++batches===failBatch)throw Error("Denied");for(const item of group){writes.push(item);Object.assign(profiles.get(item.ref.id),item.data);}cache.invalidate();}};},
     confirmAction: async () => confirmation,
     window:{innerHeight:800,alert:v=>alerts.push(v),location:{reload(){assert.fail("data changes must not reload the page");}}},
-    document:{getElementById:id=>ids[id],createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element("fragment")}
+    document:{getElementById:id=>ids[id],createElement:tag=>{const element=new Element(tag);if(visible)element.getBoundingClientRect=()=>({top:0,bottom:200});return element;},createDocumentFragment:()=>new Element("fragment")}
   });
   vm.runInContext(source,context);
   const click=async(selector,button)=>{await ids.recordsContainer.emit("click",{target:{closest:k=>k===selector?button:null}});await flush();};
-  const performance=async id=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id}});await flush();};
+  const performance=async (id, refresh = false)=>{await ids.recordsContainer.emit("student-record-open",{detail:{studentId:id,refresh}});await flush();};
   const archive=async id=>{await click(".archive-student-btn",ids.recordsContainer.children.find(c=>c.dataset.studentId===id).querySelector(".archive-student-btn"));ids.archiveReason.value="graduated";await ids.archiveStudentForm.emit("submit");};
   return {ids,cache,auth,profiles,pageReads,resultReads,writes,alerts,click,performance,archive,load:options=>authChanged(auth.currentUser,options),refresh:()=>refresh(),advanceCache:ms=>{cacheTime+=ms;},
     setEncoder:encode=>{context.encodeView=encode;},
@@ -81,6 +82,55 @@ test("1000 students render only 25 profile cards and fetching one visible studen
   assert.equal(app.ids.activeStudentsCount.textContent,1000);assert.doesNotMatch(app.ids.recordsContainer.children[0].innerHTML,/0% overall|No activity recorded/);
   await app.performance("S0000");assert.equal(app.resultReads.length,1);assert.ok(app.resultReads.every(r=>r.path.startsWith("users/S0000/")));
   assert.match(app.ids.recordsContainer.children[0].innerHTML,/50%/);await app.performance("S0000");assert.equal(app.resultReads.length,1);
+});
+
+test("individual duration displays keep a recorded zero different from missing time", async () => {
+  const app = harness(2);
+  app.setResultReader(async ref => snap([doc("lesson_01", ref.path.startsWith("users/S0000/")
+    ? { lessonTimeMinutes: 0, arTimeMinutes: 0 } : {})]));
+  await app.load();
+  await app.performance("S0000"); await app.performance("S0001");
+  const values = app.ids.recordsContainer.children.map(card => card.innerHTML.match(/<span>Module Time<\/span><b[^>]*>([^<]*)/)[1]);
+  assert.deepEqual(values, ["0 min", "-- min"]);
+});
+
+test("reopening a student record checks added minutes even while its saved results are fresh", async () => {
+  const app = harness(2); let minutes = 2;
+  app.setResultReader(async () => snap([doc("lesson_01", { lessonTimeMinutes: minutes })]));
+  await app.load(); await app.performance("S0000", true);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML, /Module Time<\/span><b[^>]*>2 min/);
+  minutes = 12;
+  await app.performance("S0000", true);
+  assert.match(app.ids.recordsContainer.children[0].innerHTML, /Module Time<\/span><b[^>]*>12 min/);
+  assert.equal(app.resultReads.length, 2);
+});
+
+test("switching back from Term 2 refreshes changed Term 1 and Term 3 durations instead of keeping cached records", async () => {
+  const app = harness(2, { visible: true }), minutes = { term_01: 1, term_02: 2, term_03: 3 };
+  app.setResultReader(async ref => snap([doc("lesson_01", { lessonTimeMinutes: minutes[ref.path.split("/")[3]] })]));
+  await app.load(); await app.performance("S0000");
+  const changeTerm = async term => { app.ids.recordsTerm.value = term; await app.ids.recordsTerm.emit("change"); await flush(); };
+  const firstDuration = () => app.ids.recordsContainer.children[0].innerHTML.match(/<span>Module Time<\/span><b[^>]*>([^<]*)/)[1];
+  await changeTerm("term_03"); assert.equal(firstDuration(), "3 min");
+  await changeTerm("term_02"); assert.equal(firstDuration(), "2 min");
+  minutes.term_01 = 11; minutes.term_03 = 33;
+  await changeTerm("term_01"); assert.equal(firstDuration(), "11 min");
+  await changeTerm("term_03"); assert.equal(firstDuration(), "33 min");
+  await changeTerm("term_02"); assert.equal(firstDuration(), "2 min");
+  assert.equal(app.pageReads.length, 1, "term changes refresh results without downloading the roster again");
+});
+
+test("returning to the original term cannot let its older pending request overwrite new results", async () => {
+  const app = harness(2), old = deferred(); let firstTermReads = 0;
+  app.setResultReader(async ref => {
+    if (ref.path.includes("/term_01/") && ++firstTermReads === 1) return old.promise;
+    return snap([doc("lesson_01", { lessonTimeMinutes: 30 })]);
+  });
+  await app.load(); await app.performance("S0000");
+  app.ids.recordsTerm.value = "term_02"; await app.ids.recordsTerm.emit("change"); await app.performance("S0000");
+  app.ids.recordsTerm.value = "term_01"; await app.ids.recordsTerm.emit("change"); await app.performance("S0000");
+  old.resolve(snap([doc("lesson_01", { lessonTimeMinutes: 1 })])); await flush();
+  assert.match(app.ids.recordsContainer.children[0].innerHTML, /Module Time<\/span><b[^>]*>30 min/);
 });
 
 test("Student Records keeps valid ID, full-name and middle-name matches visible after the server search", async () => {

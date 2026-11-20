@@ -9,6 +9,18 @@ import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } f
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
 import { decodeFields, encodeFields } from "../server/firestore-admin.js";
+import { SupabaseAppStore } from "../server/supabase-app-store.js";
+
+test("platform sessions stay in Supabase while permitted legacy profile mirrors remain available", async () => {
+  const store = Object.create(SupabaseAppStore.prototype);
+  const mirrored = [];
+  store.firestoreMirror = { commit: async writes => mirrored.push(...writes) };
+  const session = { operation: "set", path: "_accountAccess/teacher-a/sessions/teacher", data: { epoch: "private" } };
+  await store.mirrorWritesToFirestore([session]);
+  assert.deepEqual(mirrored, []);
+  await store.mirrorWritesToFirestore([session, { operation: "update", path: "users/TEACH1000", data: { active: false } }]);
+  assert.deepEqual(mirrored.map(write => write.path), ["users/TEACH1000"]);
+});
 
 const accounts = [
   { id: "TEACH1000", uid: "teacher-a", email: "teacher@example.test", role: "teacher" },
@@ -231,7 +243,7 @@ function fixture() {
           const body = JSON.parse(options.body);
           if (body.password !== "correct") return Response.json({ error: { message: "INVALID_LOGIN_CREDENTIALS" } }, { status: 400 });
           const account = accounts.find(item => item.email === body.email);
-          return Response.json({ localId: wrongUid ? "different-person" : account.uid, idToken: "upstream-token", refreshToken: "upstream-refresh" });
+          return Response.json({ localId: wrongUid ? "different-person" : account.uid, email: account.email, idToken: "upstream-token", refreshToken: "upstream-refresh" });
         } }));
       }
       return { fetch: (url, options) => actors.get(name).fetch(new Request(url, options)) };
@@ -261,7 +273,7 @@ test("teacher sign-in and session checks use Supabase even when Firestore is una
   const teacher = accounts[0];
   const sessionPath = "webSettings/accountAccess/accounts/" + teacher.uid + "/sessions/teacher";
   const time = "2026-11-08T07:00:00Z";
-  const rows = new Map([["users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: true }]]);
+  const rows = new Map([["users/" + teacher.id, { uid: teacher.uid, role: teacher.role, email: teacher.email, active: true }]]);
   Object.assign(app.env, {
     WEB_DATA_ENABLED: "true", TEACHER_SESSION_SYNC_ENABLED: "true", IMARS_SUPABASE_WEB_DATA: "true",
     IMARS_SUPABASE_URL: "https://fixture.supabase.co", IMARS_SUPABASE_APP_DATASET_ID: dataset,
@@ -298,8 +310,8 @@ test("teacher sign-in and session checks use Supabase even when Firestore is una
   const signedIn = await app.login(teacher.id, "correct");
   assert.equal(signedIn.status, 200);
   assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 200);
-  rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: false });
-  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 403);
+  rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, email: teacher.email, active: false });
+  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 401);
   assert.equal(identityCalls, 1);
   assert.equal(firestoreCalls, 0);
 });
@@ -394,7 +406,7 @@ test("an administrator can clear an identifier cooldown after wrong-portal attem
   const admin = app.cookieOf(await app.login("ADMIN1000", "correct", "admin"));
   for (let index = 0; index < 3; index++) await app.login("TEACH1000", "wrong", "admin");
   assert.equal((await app.login("TEACH1000", "correct")).status, 429);
-  assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, admin)).status, 200);
+  assert.equal((await app.call("unlock", { identifier: "TEACH1000", password: "correct" }, admin)).status, 200);
   assert.equal((await app.login("TEACH1000", "correct")).status, 200);
 });
 
@@ -492,9 +504,9 @@ test("teachers cannot unlock themselves or others; approved admins can restore t
   for (let i = 0; i < 3; i++) await app.login();
   assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, teacher)).status, 403);
   assert.equal((await app.call("unlock", { identifier: "TEACH1000" })).status, 403);
-  assert.equal((await app.call("unlock", { identifier: "TEACH1000" }, admin)).status, 200);
+  assert.equal((await app.call("unlock", { identifier: "TEACH1000", password: "correct" }, admin)).status, 200);
   assert.equal((await app.login("TEACH1000", "correct")).status, 200);
-  assert.equal((await app.call("unlock", { identifier: "ADMIN1000" }, admin)).status, 403);
+  assert.equal((await app.call("unlock", { identifier: "ADMIN1000", password: "correct" }, admin)).status, 403);
 });
 
 test("only the private maintenance key can recover an administrator and it never authenticates portal pages", async () => {

@@ -3,6 +3,7 @@ import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { requireStaff, readJson } from "./web-auth.js";
 import { quizFailure as fail, validPart, activeProfile } from "./student-quiz-auth.js";
 import { QUIZ_TYPES, quizAssignedToSection, quizReviewPoints } from "../js/quiz-limits.js";
+import { hasPreliminaryScore, preliminaryQuizScore } from "./quiz-preliminary-score.js";
 
 const bytes = value => new TextEncoder().encode(value);
 const b64 = value => btoa(String.fromCharCode(...value)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -15,7 +16,8 @@ export class QuizReviewStore extends FirestoreAdmin {
       ["context.sectionId", sectionId], ...(quizId ? [["quizId", quizId]] : [])]
       .map(([fieldPath, stringValue]) => ({ fieldFilter: { field: { fieldPath }, op: "EQUAL", value: { stringValue } } }));
     const parent = studentId ? `/users/${studentId}` : "";
-    const fields = ["quizId", "submittedAt", "status", "receipt.score", "receipt.maximum", "review.score", "review.maximum"];
+    const fields = ["quizId", "submittedAt", "status", "receipt.score", "receipt.maximum", "review.score", "review.maximum",
+      ...(quizId ? ["preliminary"] : [])];
     const rows = await this.request(`documents${parent}:runQuery`, { method: "POST", body: JSON.stringify({
       structuredQuery: {
         from: [{ collectionId: "generated_quiz_attempts", ...(!studentId ? { allDescendants: true } : {}) }],
@@ -66,10 +68,12 @@ async function ownedSection(actor, store, id) {
   if (!activeProfile(section) || section.teacherId !== actor.id) throw fail("FORBIDDEN");
 }
 function resultFor(row) {
-  const { status, submittedAt, receipt, review } = row.data;
-  const grade = status === "reviewed" ? review : status === "graded" ? receipt : null;
+  const { status, submittedAt, receipt, review, preliminary } = row.data;
+  const grade = status === "reviewed" ? review : preliminary || receipt;
+  const hasScore = Number.isFinite(grade?.score) && Number.isFinite(grade?.maximum)
+    && grade.maximum > 0 && grade.score >= 0 && grade.score <= grade.maximum;
   return { attemptId: row.path.split("/").at(-1), status, submittedAtUtc: submittedAt,
-    score: grade?.score ?? null, maximum: grade?.maximum ?? null };
+    score: hasScore ? grade.score : null, maximum: hasScore ? grade.maximum : null };
 }
 const rosterFilters = sectionId => [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }];
 const rosterMember = (actor, student) => activeProfile(student.data) && (!student.data.teacherId || student.data.teacherId === actor.id);
@@ -93,11 +97,12 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
         const submitted = latest.get(quizId);
         if (submitted.has(id)) continue;
         submitted.add(id);
-        if (!totals.has(quizId)) totals.set(quizId, { quizId, submitted: 0, graded: 0, percentTotal: 0 });
+        if (!totals.has(quizId)) totals.set(quizId, { quizId, submitted: 0, awaitingGrade: 0, graded: 0, percentTotal: 0 });
         const total = totals.get(quizId);
         total.submitted++;
+        if (row.data.status === "pending-review") total.awaitingGrade++;
         const { score, maximum } = resultFor(row);
-        if (score !== null && maximum > 0) {
+        if (score !== null && ["graded", "reviewed"].includes(row.data.status)) {
           total.graded++;
           total.percentTotal += score / maximum * 100;
         }
@@ -110,12 +115,23 @@ async function summarizeScores(actor, store, sectionId, students, studentId = nu
   return [...totals.values()];
 }
 
-async function sectionSummary(actor, store, sectionId) {
+async function sectionSummary(actor, store, sectionId, grading = false, termId) {
   await ownedSection(actor, store, sectionId);
-  if (store.quizReport) return store.quizReport(actor, sectionId);
+  if (store.quizReport && !grading) return store.quizReport(actor, sectionId);
   const roster = await store.query("users", { filters: rosterFilters(sectionId), fieldPaths: ["active", "status", "teacherId"] });
   const students = new Set(roster.filter(student => rosterMember(actor, student)).map(student => student.id));
   const totals = await summarizeScores(actor, store, sectionId, students);
+  if (grading) {
+    let assigned;
+    if (termId !== undefined) {
+      if (!["term_01", "term_02", "term_03"].includes(termId)) throw fail("INVALID_REQUEST", 400);
+      const quizzes = await store.query("generatedQuizzes", { filters: [{ field: "teacherUid", value: actor.uid }, { field: "termId", value: termId }],
+        fieldPaths: ["teacherProfileId", "sectionId", "assignmentScope"] });
+      assigned = new Set(quizzes.filter(row => row.data.teacherProfileId === actor.id && quizAssignedToSection(row.data, sectionId)).map(row => row.id));
+    }
+    return { learners: students.size, ...(assigned ? { quizCount: assigned.size } : {}), items: totals.filter(row => !assigned || assigned.has(row.quizId)).map(({ quizId, submitted, awaitingGrade, graded }) =>
+      ({ quizId, submitted, awaitingGrade, graded, notSubmitted: Math.max(0, students.size - submitted) })) };
+  }
   return { learners: students.size, items: [...totals.values()].map(({ quizId, submitted, graded, percentTotal }) =>
     ({ quizId, submitted, average: graded ? Math.round(percentTotal / graded) : null })) };
 }
@@ -150,11 +166,24 @@ async function sectionResults(actor, store, quiz, body) {
     ? await store.quizReport(actor, body.sectionId, body.quizId, page.map(student => student.id))
     : null;
   const scores = new Map(report?.items.map(item => [item.studentId, item]));
+  const snapshots = new Map();
   const items = await Promise.all(page.map(async ({ id, data }) => {
-    let result = scores.get(id);
+    let result = scores.get(id), latest;
     if (!store.quizReport) {
-      const [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
+      [latest] = await store.scorePage(actor, id, body.sectionId, { quizId: body.quizId, limit: 1 });
       if (latest) result = resultFor(latest);
+    }
+    if (result?.status === "pending-review" && result.score == null && hasPreliminaryScore(quiz.type)) {
+      const path = latest?.path || (validPart(result.attemptId) ? `users/${id}/generated_quiz_attempts/${result.attemptId}` : null);
+      const attempt = path ? (await store.get(path))?.data : null;
+      if (attempt?.quizId === body.quizId && attempt.status === "pending-review" && validPart(attempt.snapshotId)) {
+        if (!snapshots.has(attempt.snapshotId)) snapshots.set(attempt.snapshotId, store.get("generatedQuizRevisions/" + attempt.snapshotId));
+        const snapshot = (await snapshots.get(attempt.snapshotId))?.data;
+        if (snapshot?.quizId === body.quizId && snapshot.revision === attempt.revision) {
+          const preliminary = preliminaryQuizScore(snapshot, attempt.answers);
+          if (preliminary) Object.assign(result, preliminary);
+        }
+      }
     }
     if (!result && !currentlyAssigned) return null;
     return { ...result, studentId: id, name: studentName(data) || id, status: result?.status || "not-submitted" };
@@ -209,7 +238,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     store ??= supabaseWebData(env) ? appStore(env) : new QuizReviewStore(env);
     const initialActor = await authenticate(request, env, store);
     const body = await readJson(request, 65536);
-    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback", "termId", "studentIds"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary", "term-results"].includes(body.action) ||
+    if (!only(body, ["action", "quizId", "sectionId", "cursor", "studentId", "attemptId", "revision", "scores", "feedback", "termId", "studentIds"]) || !["list", "open", "grade", "student-average", "section-results", "section-summary", "grading-summary", "term-results"].includes(body.action) ||
         (body.sectionId !== undefined && body.sectionId !== "" && !validPart(body.sectionId))) throw fail("INVALID_REQUEST", 400);
     if (body.action === "grade") { await store.begin(); transaction = true; }
     const actor = transaction ? await authenticate(request, env, store) : initialActor;
@@ -217,6 +246,7 @@ export async function quizReview({ request, env }, { store, authenticate = requi
     if (body.action === "term-results") return respond(await termResults(actor, store, body));
     if (body.action === "student-average") return respond(await studentAverage(actor, store, body.studentId));
     if (body.action === "section-summary") return respond(await sectionSummary(actor, store, body.sectionId));
+    if (body.action === "grading-summary") return respond(await sectionSummary(actor, store, body.sectionId, true, body.termId));
     const q = await ownedQuiz(actor, store, body.quizId);
     const sectionId = body.sectionId || "";
     if (sectionId) await ownedSection(actor, store, sectionId);

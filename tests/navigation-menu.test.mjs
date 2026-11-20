@@ -51,39 +51,51 @@ function menu({ desktop = true, inheritedHover = false } = {}) {
     flush() { const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback()); } };
 }
 
-test("sidebar does not inherit a stale expanded hover state after navigation", () => {
-  const f = menu({ inheritedHover: true });
+test("desktop sidebar expands on hover and returns to icons even when a clicked link retains focus", () => {
+  const f = menu();
   assert.equal(f.compact(), true);
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
-  f.panel.emit("pointerleave"); f.flush(); assert.equal(f.compact(), true);
-});
-
-test("moving outside collapses the sidebar even when its pointerleave event is missed", () => {
-  const f = menu();
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); assert.equal(f.compact(), false);
+  assert.equal(f.drawer.inert, false);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  assert.equal(f.compact(), false);
+  f.document.activeElement = f.focusedLink;
+  f.panel.emit("focusin");
+  f.panel.emit("pointerleave", { pointerType: "mouse" });
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
   f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" });
-  f.flush(); assert.equal(f.compact(), true);
-  f.document.emit("pointermove", { target: f.panel, pointerType: "mouse" }); assert.equal(f.compact(), false);
-  f.document.emit("pointerdown", { target: f.outside }); assert.equal(f.compact(), true);
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  f.panel.emit("pointercancel");
+  assert.equal(f.compact(), true);
+  f.panel.emit("pointerenter", { pointerType: "mouse" });
+  f.window.emit("blur");
+  assert.equal(f.compact(), true);
 });
 
-test("reentering cancels collapse and window blur or history restoration clears the hover state", () => {
-  const f = menu();
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.panel.emit("pointerleave");
-  f.panel.emit("pointerenter", { pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), false);
-  for (const event of ["blur", "pagehide", "pageshow"]) {
-    f.panel.emit("pointerenter", { pointerType: "mouse" }); f.window.emit(event); assert.equal(f.compact(), true);
-  }
+test("desktop link navigation preserves the hover width and destination pages use the actual pointer position", () => {
+  const f = menu({ inheritedHover: true });
+  assert.equal(f.compact(), false);
+  const link = { href: "https://imars.test/analytics.html" };
+  f.drawer.emit("click", { target: { closest: () => link } });
+  f.window.emit("pagehide"); assert.equal(f.compact(), false);
+  assert.equal(menu({ inheritedHover: true }).compact(), false);
+  assert.equal(menu().compact(), true);
+  assert.match(style, /:not\(\[data-desktop-open\]\):hover/);
+  assert.match(style, /\.app\s*\{\s*margin-left:\s*82px;\s*transition:\s*none/);
 });
 
-test("keyboard focus keeps navigation accessible but pointer movement and Escape cannot leave it stuck", () => {
+test("keyboard navigation keeps labels open after pointer exit and Escape returns to icons without losing focus", () => {
   const f = menu();
   f.document.activeElement = f.focusedLink;
-  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
-  f.document.emit("pointermove", { target: f.outside, pointerType: "mouse" }); f.flush(); assert.equal(f.compact(), true);
-  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin"); assert.equal(f.compact(), false);
-  f.document.emit("keydown", { key: "Escape" }); assert.equal(f.compact(), true); assert.equal(f.document.activeElement, f.outside);
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
+  f.panel.emit("pointerleave", { pointerType: "mouse" });
+  assert.equal(f.compact(), false);
+  f.document.emit("keydown", { key: "Escape" });
+  assert.equal(f.compact(), true); assert.equal(f.document.activeElement, f.focusedLink);
+  f.document.emit("keydown", { key: "Tab" }); f.panel.emit("focusin");
+  f.document.activeElement = f.outside;
+  f.panel.emit("focusout");
+  assert.equal(f.compact(), true);
 });
 
 test("mobile close controls and breakpoint changes retain the drawer behavior", () => {

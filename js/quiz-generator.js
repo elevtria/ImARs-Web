@@ -1,6 +1,7 @@
+import { clearQuizWorkspace, readQuizWorkspace, saveQuizWorkspace } from "./quiz-workspace.js";
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { closeQuizReview, openQuizReview } from "./quiz-review.js";
+import { closeQuizReview, openQuizReview, requestQuizReview } from "./quiz-review.js";
 import { getFirestore, collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from "./firebase-data.js";
 import { discardQuizJob, readQuizJob, requestQuiz } from "./quiz-request.js";
 import { setLoadingState, revealContent } from "./loading.js";
@@ -29,6 +30,12 @@ const firestore = getFirestore(firebaseApp);
   const librarySectionFilter = document.getElementById("librarySectionFilter");
   const createView = document.getElementById("createView");
   const libraryView = document.getElementById("libraryView");
+  const gradingView = document.getElementById("gradingView");
+  const gradingWorkspace = document.getElementById("quizGradingWorkspace");
+  const quizViewTabs = document.getElementById("quizViewTabs");
+  const quizIntro = document.getElementById("quizIntro");
+  const gradingTermFilter = document.getElementById("gradingTermFilter");
+  const gradingSectionFilter = document.getElementById("gradingSectionFilter");
   const setupStep = document.getElementById("setupStep");
   const reviewStep = document.getElementById("reviewStep");
   const editorStep = document.getElementById("editorStep");
@@ -50,8 +57,15 @@ const firestore = getFirestore(firebaseApp);
   let jobCheck = 0;
   let activeGenerationId;
   let retryUpload;
+  let draftId;
+  let workspaceDirty = false, restoringWorkspace = true, sourceFileName = "";
+  const gradingSummaries = new Map();
+  let gradingRequest;
   const activeJob = () => ["queued", "running"].includes(backgroundJob?.status);
-  const updateGenerateButton = () => { generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile; };
+  const updateGenerateButton = () => {
+    generateButton.disabled = generating || activeJob() || backgroundJob?.status === "complete" || !selectedFile;
+    updateLeaveWarning();
+  };
   const jobStatus = document.getElementById("quizJobStatus");
   const jobMessage = document.getElementById("quizJobMessage");
   const reviewJob = document.getElementById("reviewQuizJob");
@@ -62,7 +76,7 @@ const firestore = getFirestore(firebaseApp);
     jobStatus.hidden = !status || status === "none" || (status === "complete" && reviewedJob?.id === backgroundJob.id);
     reviewJob.hidden = status !== "complete";
     jobMessage.textContent = status === "complete" ? "Your quiz is ready to review."
-      : status === "failed" ? backgroundJob.error : "Your quiz is generating. You can visit another page and come back here.";
+      : status === "failed" ? backgroundJob.error : "Upload accepted. Your quiz is generating. You can visit another page and come back here.";
     updateGenerateButton();
   }
 
@@ -72,8 +86,8 @@ const firestore = getFirestore(firebaseApp);
     try {
       const result = await readQuizJob(user.uid);
       if (check !== jobCheck || auth.currentUser?.uid !== user.uid) return;
-      backgroundJob = result.status === "none" && activeJob()
-        ? { status: "failed", id: backgroundJob.id, error: "The quiz job expired or was cleared. Generate it again." }
+      backgroundJob = result.status === "none" && (activeJob() || activeGenerationId)
+        ? { status: "failed", id: backgroundJob?.id || activeGenerationId, error: "The quiz job expired or was cleared. Generate it again." }
         : result;
       renderJob();
       if (backgroundJob.id === activeGenerationId && !createView.hidden && !setupStep.hidden) {
@@ -92,6 +106,8 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function openQuestions(questions) {
+    draftId = reviewedJob ? "quiz-" + reviewedJob.id : makeId();
+    workspaceDirty = true;
     generatedQuestions = questions.map(question => ({ ...question, id: makeId(), accepted: false, discarded: false }));
     document.getElementById("reviewSummary").dataset.requested = "";
     document.getElementById("demoNotice").hidden = false;
@@ -99,12 +115,14 @@ const firestore = getFirestore(firebaseApp);
     setStep("review");
   }
 
-  function openCompletedJob() {
+  async function openCompletedJob() {
     if (backgroundJob?.status !== "complete" || !Array.isArray(backgroundJob.questions)) return;
+    if (workspaceDirty && !await confirmAction({ title: "Review the generated quiz?", message: "Your current unsaved questions will be discarded. Save this quiz first to keep it in My quizzes.", confirmLabel: "Discard changes" })) return;
     const { title, questionType, difficulty: level } = backgroundJob.details;
     activeGenerationId = undefined;
     resetNewQuiz();
     reviewedJob = backgroundJob;
+    sourceFileName = backgroundJob.details.fileName || "";
     document.getElementById("quizTitle").value = title;
     const type = document.querySelector(`input[name='questionType'][value='${questionType}']`);
     if (type) type.checked = true;
@@ -115,12 +133,88 @@ const firestore = getFirestore(firebaseApp);
   }
   reviewJob.addEventListener("click", openCompletedJob);
   window.addEventListener("pagehide", () => {
+    gradingRequest?.abort();
+    persistWorkspace();
     ++jobCheck;
     clearTimeout(jobTimer);
   });
   document.addEventListener("visibilitychange", () => {
     const user = auth.currentUser;
+    if (document.visibilityState === "hidden") persistWorkspace();
     if (document.visibilityState === "visible" && user && (activeJob() || retryUpload)) void refreshJob(user);
+  });
+  let leaveWarningAttached = false;
+  const warnBeforeLeave = event => {
+    persistWorkspace();
+    if (auth.currentUser && (workspaceDirty || generating)) { event.preventDefault(); event.returnValue = ""; }
+  };
+  function updateLeaveWarning() {
+    const needed = Boolean(auth.currentUser && (workspaceDirty || generating));
+    if (needed === leaveWarningAttached) return;
+    leaveWarningAttached = needed;
+    if (needed) window.addEventListener("beforeunload", warnBeforeLeave);
+    else window.removeEventListener?.("beforeunload", warnBeforeLeave);
+  }
+
+  function persistWorkspace() {
+    updateLeaveWarning();
+    const user = auth.currentUser;
+    if (restoringWorkspace || !user || !teacherProfileId) return;
+    if (!generatedQuestions.length && !editorQuestions.length && !activeJob()) { clearQuizWorkspace(); return; }
+    const step = !editorStep.hidden ? "editor" : !reviewStep.hidden ? "review" : "setup";
+    const { questions: completedQuestions, ...reviewed } = reviewedJob || {};
+    const saved = saveQuizWorkspace(user.uid, {
+      profileId: teacherProfileId, step, view: !gradingView.hidden ? "grading" : createView.hidden ? "library" : "create", dirty: workspaceDirty,
+      title: document.getElementById("quizTitle").value, editorTitle: document.getElementById("editorTitle").value,
+      questionCount: document.getElementById("questionCount").value,
+      type: document.querySelector("input[name='questionType']:checked").value, difficulty,
+      generatedQuestions, editorQuestions, editingQuiz, reviewedJob: reviewedJob ? reviewed : null,
+      activeGenerationId, draftId, sourceFileName: selectedFile?.name || sourceFileName
+    });
+    if (!saved && workspaceDirty) showStatus(step === "editor" ? editorStatus : setupStatus,
+      "Your browser could not keep a recovery copy. Save this quiz before leaving.", true);
+  }
+
+  function restoreWorkspace(user) {
+    const saved = readQuizWorkspace(user.uid, teacherProfileId);
+    if (!saved) return false;
+    document.getElementById("quizTitle").value = saved.title;
+    document.getElementById("editorTitle").value = saved.editorTitle;
+    document.getElementById("questionCount").value = saved.questionCount;
+    const radio = document.querySelector(`input[name='questionType'][value='${saved.type}']`);
+    if (radio) radio.checked = true;
+    difficulty = saved.difficulty;
+    generatedQuestions = saved.generatedQuestions;
+    editorQuestions = saved.editorQuestions;
+    editingQuiz = saved.editingQuiz;
+    reviewedJob = saved.reviewedJob?.details ? saved.reviewedJob : null;
+    activeGenerationId = saved.activeGenerationId;
+    draftId = typeof saved.draftId === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(saved.draftId) ? saved.draftId : makeId();
+    sourceFileName = saved.sourceFileName || "";
+    workspaceDirty = saved.dirty === true;
+    selectedFile = null;
+    fileInput.value = "";
+    selectedFileRow.hidden = true;
+    updateTypeSelection();
+    document.querySelectorAll("[data-difficulty]").forEach(button => {
+      const selected = button.dataset.difficulty === difficulty;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    setView(saved.view);
+    setStep(saved.step);
+    if (saved.step !== "setup") showStatus(saved.step === "editor" ? editorStatus : setupStatus,
+      "Restored your quiz. Save it to keep your changes in My quizzes.", false);
+    return true;
+  }
+  document.addEventListener("input", event => {
+    if (event.target?.closest?.("#editorStep")) workspaceDirty = true;
+    persistWorkspace();
+  });
+  document.addEventListener("change", persistWorkspace);
+  document.addEventListener("click", event => {
+    if (event.target?.closest?.("[data-delete-question], [data-move], #addQuestion")) workspaceDirty = true;
+    persistWorkspace();
   });
 
   function escapeHtml(value) {
@@ -143,6 +237,10 @@ const firestore = getFirestore(firebaseApp);
     librarySectionFilter.innerHTML = '<option value="">All sections</option>' + teacherSections.map(section => `<option value="${escapeHtml(section.id)}">${escapeHtml(section.name)}</option>`).join("");
     librarySectionFilter.value = teacherSections.some(section => section.id === selected) ? selected : "";
     librarySectionFilter.disabled = teacherSections.length === 0 || scheduleBusy;
+    const gradingSection = gradingSectionFilter.value;
+    gradingSectionFilter.innerHTML = librarySectionFilter.innerHTML;
+    gradingSectionFilter.value = teacherSections.some(section => section.id === gradingSection) ? gradingSection : "";
+    gradingSectionFilter.disabled = teacherSections.length === 0;
   }
 
   async function loadTeacherSections(user) {
@@ -185,10 +283,12 @@ const firestore = getFirestore(firebaseApp);
         }, render: quizzes => {
           saveQuizzes(quizzes);
           if (!expandedScheduleQuizId) renderLibrary();
+          renderGrading();
         }, painted: () => revealContent("quiz-library") });
     } catch (error) {
       console.error("Could not load this teacher's quizzes:", error);
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
+      showStatus(document.getElementById("gradingStatus"), "Could not load quizzes. Please reopen Quiz Generator to retry.", true);
       revealContent("quiz-library");
     }
   }
@@ -235,16 +335,52 @@ const firestore = getFirestore(firebaseApp);
   function saveQuizzes(quizzes) { quizCache = quizSummaries(quizzes); }
 
   function setView(view) {
-    const showLibrary = view === "library";
-    createView.hidden = showLibrary;
-    libraryView.hidden = !showLibrary;
-    document.getElementById("createTab").classList.toggle("active", !showLibrary);
-    document.getElementById("libraryTab").classList.toggle("active", showLibrary);
-    document.getElementById("createTab").setAttribute("aria-selected", String(!showLibrary));
-    document.getElementById("libraryTab").setAttribute("aria-selected", String(showLibrary));
-    if (showLibrary) renderLibrary();
+    if (!gradingWorkspace.hidden) closeQuizReview();
+    gradingWorkspace.hidden = true;
+    quizViewTabs.hidden = false;
+    quizIntro.hidden = false;
+    for (const [name, panel] of [["create", createView], ["library", libraryView], ["grading", gradingView]]) {
+      panel.hidden = view !== name;
+      const tab = document.getElementById(name + "Tab");
+      tab.classList.toggle("active", view === name);
+      tab.setAttribute("aria-selected", String(view === name));
+    }
+    if (view === "library") renderLibrary();
+    if (view === "grading") { renderGrading(); void loadGradingSummaries(); }
+    persistWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  const gradingRouteMatch = () => window.location?.hash?.match(/^#submissions\/([A-Za-z0-9_-]{1,128})(?:\/([A-Za-z0-9_-]{1,128}))?$/);
+  const gradingRoute = () => gradingRouteMatch()?.[1];
+  function openGradingWorkspace(quiz, navigate = true) {
+    if (!auth.currentUser) return;
+    const routeSection = !navigate && gradingRouteMatch()?.[2];
+    if (routeSection && teacherSections.some(section => section.id === routeSection)) gradingSectionFilter.value = routeSection;
+    setView("grading");
+    gradingView.hidden = true;
+    gradingWorkspace.hidden = false;
+    quizViewTabs.hidden = true;
+    quizIntro.hidden = true;
+    if (navigate && window.history?.pushState) window.history.pushState({ ...window.history.state, imarsQuizGrading: true }, "", "#submissions/" + quiz.id + (gradingSectionFilter.value ? "/" + gradingSectionFilter.value : ""));
+    void openQuizReview(auth.currentUser, quiz, teacherSections, gradingSectionFilter.value, {
+      container: gradingWorkspace,
+      onReviewed: () => { gradingSummaries.clear(); void loadGradingSummaries(true); },
+      onClose: () => {
+        if (window.history?.state?.imarsQuizGrading && gradingRoute()) window.history.back();
+        else {
+          if (gradingRoute()) window.history?.replaceState(null, "", window.location.pathname + window.location.search);
+          setView("grading");
+        }
+      }
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  window.addEventListener("popstate", () => {
+    const quiz = loadQuizzes().find(item => item.id === gradingRoute());
+    if (quiz) openGradingWorkspace(quiz, false);
+    else if (!gradingWorkspace.hidden) setView("grading");
+  });
 
   function setStep(step) {
     setupStep.hidden = step !== "setup";
@@ -259,6 +395,7 @@ const firestore = getFirestore(firebaseApp);
     });
     if (step === "review") renderSuggestions();
     if (step === "editor") renderEditor();
+    persistWorkspace();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -346,13 +483,16 @@ const firestore = getFirestore(firebaseApp);
         activeGenerationId = undefined;
         retryUpload = undefined;
         renderJob();
+        sourceFileName = payload.fileName;
         openQuestions(result);
         if (interruptedJobId) void discardQuizJob(user.uid, interruptedJobId).catch(() => {});
       } else {
         backgroundJob = result;
         activeGenerationId = result.id;
         retryUpload = payload;
+        sourceFileName = file.name;
         renderJob();
+        persistWorkspace();
         void refreshJob(user);
       }
     } catch (generationError) {
@@ -371,7 +511,9 @@ const firestore = getFirestore(firebaseApp);
     const available = generatedQuestions.filter((question) => !question.discarded).length;
     const accepted = generatedQuestions.filter((question) => question.accepted && !question.discarded).length;
     const requested = Number(document.getElementById("reviewSummary").dataset.requested || 0);
-    document.getElementById("reviewSummary").innerHTML = "<span><strong>" + available + " AI suggestions</strong> for “" + escapeHtml(selectedFile ? selectedFile.name : "your file") + "”</span><span>" + escapeHtml(difficulty) + " · " + questionTypeLabel(document.querySelector("input[name='questionType']:checked").value) + "</span>";
+    const title = document.getElementById("quizTitle").value.trim() || "Untitled quiz";
+    const sourceFile = selectedFile?.name || sourceFileName || reviewedJob?.details?.fileName;
+    document.getElementById("reviewSummary").innerHTML = `<span class="quiz-review-details"><strong class="quiz-review-title">${escapeHtml(title)}</strong>${sourceFile ? `<span>Source: ${escapeHtml(sourceFile)}</span>` : ""}</span><span>${available} AI suggestions · ${escapeHtml(difficulty)} · ${questionTypeLabel(document.querySelector("input[name='questionType']:checked").value)}</span>`;
     if (requested > available) {
       document.getElementById("reviewSummary").innerHTML += "<span>Requested " + requested + " questions.</span>";
     }
@@ -475,13 +617,13 @@ const firestore = getFirestore(firebaseApp);
     const quizzes = loadQuizzes();
     const oldQuiz = editingQuiz;
     const quiz = {
-      id: oldQuiz?.id || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
+      id: oldQuiz?.id || draftId || (reviewedJob ? "quiz-" + reviewedJob.id : makeId()),
       title: title,
       section: oldQuiz?.section || "Not assigned",
       sectionId: oldQuiz?.sectionId || "",
       assignmentScope: oldQuiz ? quizAssignmentScope(oldQuiz) : "unassigned",
       ...(oldQuiz?.termId ? { termId: oldQuiz.termId } : {}),
-      sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || "Uploaded source",
+      sourceFile: oldQuiz?.sourceFile || reviewedJob?.details.fileName || selectedFile?.name || sourceFileName || "Uploaded source",
       type,
       schemaVersion: 2,
       gradingMode: writtenQuestion(type) || type === "modified-true-false" ? "teacher-review" : "automatic",
@@ -563,7 +705,62 @@ const firestore = getFirestore(firebaseApp);
     return quiz.availability || "draft";
   }
 
+  async function loadGradingSummaries(force = false) {
+    if (!auth.currentUser || gradingView.hidden) return;
+    gradingRequest?.abort();
+    const request = gradingRequest = new AbortController(), user = auth.currentUser;
+    const button = document.getElementById("refreshGrading");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      for (const section of teacherSections) {
+        if (gradingSectionFilter.value && gradingSectionFilter.value !== section.id) continue;
+        if (!loadQuizzes().some(quiz => quizAssignedToSection(quiz, section.id))) continue;
+        const cached = gradingSummaries.get(section.id);
+        if (!force && cached && Date.now() - cached.at < 300_000) continue;
+        const result = await requestQuizReview(user.uid, { action: "grading-summary", sectionId: section.id }, request.signal);
+        if (request.signal.aborted || auth.currentUser?.uid !== user.uid) return;
+        gradingSummaries.set(section.id, { ...result, at: Date.now() });
+        renderGrading();
+      }
+    } catch (error) {
+      if (!request.signal.aborted && auth.currentUser?.uid === user.uid) {
+        document.getElementById("gradingStatus").textContent = "Could not update submission counts. Use Refresh results to retry. Previously loaded counts remain visible.";
+      }
+    } finally {
+      if (gradingRequest === request) { button.disabled = false; button.setAttribute("aria-busy", "false"); }
+    }
+  }
+
+  function renderGrading() {
+    const quizzes = loadQuizzes().filter(quiz =>
+      (!gradingTermFilter.value || quiz.termId === gradingTermFilter.value) &&
+      (gradingSectionFilter.value ? quizAssignedToSection(quiz, gradingSectionFilter.value)
+        : teacherSections.some(section => quizAssignedToSection(quiz, section.id))));
+    document.getElementById("gradingStatus").textContent = quizzes.length
+      ? `${quizzes.length} ${quizzes.length === 1 ? "quiz" : "quizzes"}. Open submissions to view scores or review written answers.`
+      : "No assigned quizzes match these filters. Assign a section and term in My quizzes first.";
+    document.getElementById("gradingQuizList").innerHTML = quizzes.map(quiz => {
+      const term = terms.find(([id]) => id === quiz.termId)?.[1] || "Term not set";
+      const sections = teacherSections.filter(section => quizAssignedToSection(quiz, section.id) && (!gradingSectionFilter.value || section.id === gradingSectionFilter.value));
+      let learners = 0, submitted = 0, awaitingGrade = 0, graded = 0;
+      const ready = sections.every(section => gradingSummaries.has(section.id));
+      for (const section of sections) {
+        const summary = gradingSummaries.get(section.id);
+        if (!summary) continue;
+        learners += summary.learners;
+        const item = summary.items.find(row => row.quizId === quiz.id);
+        submitted += item?.submitted || 0; awaitingGrade += item?.awaitingGrade || 0; graded += item?.graded || 0;
+      }
+      const counts = ready ? `${submitted}/${learners} submitted · ${awaitingGrade} awaiting grade · ${graded} graded · ${Math.max(0, learners - submitted)} not submitted` : "Loading submission counts…";
+      const deadline = quiz.deadlineUtc ? (Date.parse(quiz.deadlineUtc) <= Date.now() ? "Closed " : "Due ") + formatDate(quiz.deadlineUtc) : "No deadline";
+      const sectionLabel = gradingSectionFilter.value ? sections[0]?.name || assignmentLabel(quiz) : assignmentLabel(quiz);
+      return `<article class="quiz-library-card"><div class="quiz-library-main"><h3>${escapeHtml(quiz.title)}</h3><div class="quiz-library-details"><span>${escapeHtml(term)}</span><span>${escapeHtml(sectionLabel)}</span><span>${escapeHtml(questionTypeLabel(quiz.type))}</span><span>${escapeHtml(deadline)}</span></div><p class="quiz-submission-counts">${escapeHtml(counts)}</p></div><div class="quiz-library-actions"><button type="button" class="primary-btn" data-grade-quiz="${escapeHtml(quiz.id)}">View submissions / grade</button></div></article>`;
+    }).join("");
+  }
+
   function renderLibrary() {
+    renderGrading();
     const allQuizzes = loadQuizzes().sort((left, right) => new Date(right.updatedAt || right.createdAt) - new Date(left.updatedAt || left.createdAt));
     const quizzes = librarySectionFilter.value ? allQuizzes.filter(quiz => quizAssignedToSection(quiz, librarySectionFilter.value)) : allQuizzes;
     const count = String(allQuizzes.length);
@@ -671,6 +868,8 @@ const firestore = getFirestore(firebaseApp);
   }
 
   async function editQuiz(id) {
+    if (workspaceDirty && editingQuiz?.id === id) { setView("create"); setStep("editor"); return; }
+    if (workspaceDirty && !await confirmAction({ title: "Open another quiz?", message: "Your current unsaved questions will be discarded. Save this quiz first to keep it in My quizzes.", confirmLabel: "Discard changes" })) return;
     const uid = auth.currentUser?.uid;
     if (!uid || !loadQuizzes().some(item => item.id === id)) return;
     const request = ++editRequest;
@@ -688,6 +887,7 @@ const firestore = getFirestore(firebaseApp);
       return;
     }
     editingQuiz = quiz;
+    workspaceDirty = false;
     reviewedJob = undefined;
     renderJob();
     editorQuestions = (editorQuestions || []).map((question) => ({
@@ -719,8 +919,12 @@ const firestore = getFirestore(firebaseApp);
   }
 
   function resetNewQuiz() {
-    reviewedJob = undefined;
     retryUpload = undefined;
+    draftId = undefined;
+    workspaceDirty = false;
+    sourceFileName = "";
+    clearQuizWorkspace();
+    reviewedJob = undefined;
     selectedFile = null;
     fileError.textContent = "";
     fileInput.setAttribute("aria-invalid", "false");
@@ -759,6 +963,12 @@ const firestore = getFirestore(firebaseApp);
     }
   } catch {}
   onAuthStateChanged(auth, async (user) => {
+    closeQuizReview(); gradingWorkspace.hidden = true; quizViewTabs.hidden = false; quizIntro.hidden = false;
+    gradingRequest?.abort();
+    gradingSummaries.clear();
+    gradingTermFilter.value = gradingSectionFilter.value = "";
+    restoringWorkspace = true;
+    workspaceDirty = false;
     activeGenerationId = undefined;
     retryUpload = undefined;
     ++jobCheck;
@@ -777,13 +987,19 @@ const firestore = getFirestore(firebaseApp);
     renderSectionFilter();
     quizCache = [];
     renderLibrary();
-    if (user) void refreshJob(user);
     await loadTeacherSections(user);
     if (user && teacherProfileId) await loadTeacherQuizzes(user);
     else if (user) {
       showStatus(document.getElementById("libraryStatus"), "Could not load quizzes. Please try again.", true);
       revealContent("quiz-library");
     }
+    if (user && auth.currentUser?.uid === user.uid && teacherProfileId) {
+      restoreWorkspace(user);
+      const selectedQuiz = loadQuizzes().find(quiz => quiz.id === gradingRoute());
+      if (selectedQuiz) openGradingWorkspace(selectedQuiz, false);
+      restoringWorkspace = false;
+      void refreshJob(user);
+    } else { clearQuizWorkspace(); restoringWorkspace = false; }
   });
 
   fileInput.addEventListener("change", () => handleFile(fileInput.files[0]));
@@ -859,6 +1075,9 @@ const firestore = getFirestore(firebaseApp);
       }
     }
     generatedQuestions = [];
+    editorQuestions = [];
+    workspaceDirty = false;
+    clearQuizWorkspace();
     setStep("setup");
   });
   document.getElementById("backToReview").addEventListener("click", () => setStep("review"));
@@ -913,9 +1132,22 @@ const firestore = getFirestore(firebaseApp);
   document.getElementById("saveQuiz").addEventListener("click", saveCurrentQuiz);
   document.getElementById("createTab").addEventListener("click", () => setView("create"));
   document.getElementById("libraryTab").addEventListener("click", () => setView("library"));
+  document.getElementById("gradingTab").addEventListener("click", () => setView("grading"));
+  gradingTermFilter.addEventListener("change", renderGrading);
+  gradingSectionFilter.addEventListener("change", () => { renderGrading(); void loadGradingSummaries(); });
+  document.getElementById("refreshGrading").addEventListener("click", () => void loadGradingSummaries(true));
+  document.getElementById("gradingQuizList").addEventListener("click", event => {
+    const button = event.target.closest("[data-grade-quiz]");
+    const quiz = button && loadQuizzes().find(item => item.id === button.dataset.gradeQuiz);
+    if (quiz && auth.currentUser) openGradingWorkspace(quiz);
+  });
   document.getElementById("openLibrary").addEventListener("click", () => setView("library"));
-  document.getElementById("newQuizFromLibrary").addEventListener("click", resetNewQuiz);
-  document.getElementById("emptyCreateQuiz").addEventListener("click", resetNewQuiz);
+  async function startNewQuiz() {
+    if (workspaceDirty && !await confirmAction({ title: "Start a new quiz?", message: "Your unsaved questions will be discarded. Save this quiz first to keep it in My quizzes.", confirmLabel: "Discard changes" })) return;
+    resetNewQuiz();
+  }
+  document.getElementById("newQuizFromLibrary").addEventListener("click", startNewQuiz);
+  document.getElementById("emptyCreateQuiz").addEventListener("click", startNewQuiz);
   librarySectionFilter.addEventListener("change", () => {
     expandedScheduleQuizId = null;
     showStatus(document.getElementById("libraryStatus"), "", false);

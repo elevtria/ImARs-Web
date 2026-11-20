@@ -5,7 +5,7 @@ import { createQuizResultsTable, quizScoreLabel } from "./quiz-results-table.js"
 let dialog, controller;
 export function closeQuizReview() {
   controller?.abort(); controller = null;
-  dialog?.close(); dialog?.remove(); dialog = null;
+  dialog?.close?.(); dialog?.remove(); dialog = null;
 }
 window.addEventListener("pagehide", closeQuizReview);
 const element = (tag, text, className) => { const item = document.createElement(tag); if (text !== undefined) item.textContent = text; if (className) item.className = className; return item; };
@@ -21,14 +21,15 @@ export async function requestQuizReview(uid, body, signal) {
   signal.throwIfAborted();
   return result;
 }
-export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection, { submission, onReviewed } = {}) {
+export async function openQuizReview(user, resultsQuiz, quizSections = [], selectedSection, { submission, onReviewed, container, onClose } = {}) {
   closeQuizReview(); controller = new AbortController();
   const uid = user.uid;
   const signal = controller.signal;
-  dialog = element("dialog", undefined, "quiz-review-dialog"); dialog.setAttribute("aria-labelledby", "quizReviewTitle");
+  dialog = element(container ? "section" : "dialog", undefined, container ? "quiz-review-page card" : "quiz-review-dialog"); dialog.setAttribute("aria-labelledby", "quizReviewTitle");
   if (!submission) dialog.classList.add("quiz-results-dialog");
-  const heading = element("h2", `Results for ${resultsQuiz.title}`); heading.id = "quizReviewTitle";
-  const close = element("button", "Close", "btn-ghost"); close.type = "button"; close.addEventListener("click", closeQuizReview);
+  const heading = element(container ? "h1" : "h2", `Results for ${resultsQuiz.title}`); heading.id = "quizReviewTitle";
+  const dismiss = () => { closeQuizReview(); onClose?.(); };
+  const close = element("button", container ? "← Back to quizzes" : "Close", "btn-ghost"); close.type = "button"; close.addEventListener("click", dismiss);
   const header = element("div", undefined, "quiz-review-header"); header.append(heading, close);
   const status = element("p", "", "quiz-status"); status.setAttribute("role", "status");
   const filters = element("div", undefined, "quiz-review-filters");
@@ -42,8 +43,13 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
   section.disabled = !choices.length;
   const content = element("div");
   dialog.append(header, filters, status, content);
-  dialog.addEventListener("cancel", event => { event.preventDefault(); closeQuizReview(); });
-  document.body.append(dialog); dialog.showModal();
+  if (container) {
+    container.replaceChildren(dialog);
+    heading.tabIndex = -1; heading.focus({ preventScroll: true });
+  } else {
+    dialog.addEventListener("cancel", event => { event.preventDefault(); dismiss(); });
+    document.body.append(dialog); dialog.showModal();
+  }
   let busy = false;
   async function api(body) {
     return requestQuizReview(uid, { ...body, quizId: resultsQuiz.id, sectionId: section.value }, signal);
@@ -121,6 +127,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
           }
           back();
           updateScore?.(result);
+          onReviewed?.(result);
           status.textContent = "";
         } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }
         finally { save.disabled = cancel.disabled = false; save.setAttribute("aria-busy", "false"); }
@@ -128,6 +135,7 @@ export async function openQuizReview(user, resultsQuiz, quizSections = [], selec
       content.hidden = filters.hidden = true;
       if (previousForm) previousForm.replaceWith(form);
       else dialog.append(form);
+      if (container) form.scrollIntoView({ behavior: "smooth", block: "start" });
       status.textContent = automatic.size ? "Review the written answers and save the scores." : "Review each answer and save the scores.";
       if (previousForm) scores.find(item => item.input)?.input.focus();
     } catch (error) { if (error.name !== "AbortError") status.textContent = error.message; }

@@ -3,6 +3,7 @@ import { QUIZ_TYPES, normalizeQuizQuestion, writtenQuestion, quizAssignedToSecti
 import { RESULT_LIMIT, StudentQuizStore } from "./student-quiz-store.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { authenticateStudent, studentContext, quizRate, quizFailure as fail, validPart } from "./student-quiz-auth.js";
+import { preliminaryQuizScore } from "./quiz-preliminary-score.js";
 
 const object = value => value && typeof value === "object" && !Array.isArray(value);
 const only = (value, keys) => object(value) && Object.keys(value).every(key => keys.includes(key));
@@ -180,6 +181,7 @@ export async function studentQuizzes({ request, env }, { store, authenticate = a
     }
     if (!reservation) throw fail("ATTEMPT_CONFLICT", 409);
     const submitted = answers(body, q);
+    const preliminary = preliminaryQuizScore(q, submitted);
     const automaticScores = q.questions.flatMap((question, index) => {
       const answer = submitted[index];
       if (writtenQuestion(q.type) || answer.correction) return [];
@@ -196,6 +198,7 @@ export async function studentQuizzes({ request, env }, { store, authenticate = a
       { operation: "set", path: completionPath, data: { uid: context.uid, quizId: safe.id, attemptId: body.attemptId } },
       { operation: "update", path, updateTime: reservation.updateTime, data: { status: receipt.status, answers: submitted,
       ...(q.type === "modified-true-false" && automaticScores.length ? { automaticScores } : {}),
+      ...(preliminary ? { preliminary } : {}),
       payloadHash: await hash(canonical(body)), receipt, submittedAt: { $type: "serverTimestamp" }, startedAtClientUtc: body.startedAtUtc, completedAtClientUtc: body.completedAtUtc } }]);
     transaction = false;
     return respond(receipt);

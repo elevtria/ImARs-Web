@@ -5,7 +5,7 @@
 .view-switch { display: inline-flex; flex: 0 0 auto; gap: 3px; padding: 4px; border: 1px solid #e4eaf3; border-radius: 13px; background: #fff; }
 .view-switch button { min-height: 36px; padding: 0 15px; border: 0; border-radius: 10px; color: #637691; background: transparent; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .view-switch button.selected { color: #fff; background: #7048ff; box-shadow: 0 2px 6px rgba(112,72,255,.18); }
-.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.analytics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; }
 .analytics-overview { margin-bottom: 20px; }
 .teacher-list-section[hidden] { display: none; }
 .teacher-list-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 4px 14px; }

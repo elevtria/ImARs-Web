@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="js/theme.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f5f7fb" />
+  <title>ImARs · Account &amp; Security</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/admin-dashboard.css" />
+  <link rel="stylesheet" href="css/school-analytics.css" />
+  <link rel="stylesheet" href="css/loading.css" />
+  <link rel="stylesheet" href="css/portal-design.css" />
+  <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/admin-organization.css" />
+  <link rel="stylesheet" href="css/theme.css" />
+</head>
+<body class="admin-portal" data-auth-pending>
+  <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
+  <div class="app">
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
+        </button>
+        <span class="page-title">Account &amp; Security</span>
+      </div>
+      <div class="topbar-right">
+        <div class="school-year-control">
+          <label for="schoolYearSelect">School year for all teachers</label>
+          <select class="sy-chip admin-year" id="schoolYearSelect" aria-describedby="schoolYearStatus" disabled><option value="2026">SY 2026–27</option></select>
+          <span class="school-year-status" id="schoolYearStatus" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard-content analytics-content" inert data-auth-shell>
+    <section class="hero"><div><h1>Account &amp; Security</h1><p>Manage staff recovery and portal access. Passwords remain in Firebase Authentication.</p></div></section>
+    <section class="panel" data-auth-shell data-await-content="admin-report">
+      <h2>Staff account access</h2><p>Recovery goes to the account’s verified Firebase email. Confirm your administrator password before a sensitive action.</p>
+      <form id="accountSecurityForm" class="admin-security-form">
+        <label>Account<select id="securityAccount" required></select></label>
+        <label>Action<select id="securityAction"><option value="reset-password">Send password recovery email</option><option value="end-sessions">End portal sessions</option></select></label>
+        <button class="primary-btn" type="submit">Continue</button>
+      </form>
+      <p id="securityStatus" role="status" aria-live="polite"></p>
+      <p class="admin-note">Ending portal sessions requires sign-in again on the next protected request. It does not erase previously downloaded content. Student recovery remains with the student support workflow.</p>
+    </section>
+    <section class="panel" data-auth-shell data-await-content="admin-report">
+      <div class="admin-actions"><h2>Admin activity log</h2><button type="button" class="ghost-btn" id="refreshAudit">Refresh log</button></div>
+      <p>New administrative actions are recorded from this release onward. Times use Philippine time.</p>
+      <p id="auditStatus" role="status"></p>
+      <div class="admin-table-wrap"><table class="performance-table"><thead><tr><th>When</th><th>Administrator</th><th>Action</th><th>Record</th><th>Details</th></tr></thead><tbody id="securityAudit"></tbody></table></div>
+      <button type="button" class="ghost-btn" id="moreAudit" hidden>Load older entries</button>
+    </section>
+  </main>
+  </div>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Admin portal">
+      <a class="brand" href="admin-dashboard.html" aria-label="Admin dashboard">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="" />
+        <div><strong>ImARs</strong><small>School Admin</small></div>
+      </a>
+      <nav class="side-nav">
+        <a class="nav-item" href="admin-dashboard.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
+        <a class="nav-item" href="manage-teachers.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Teachers &amp; Sections</a>
+        <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="nav-item active" href="admin-security.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Account &amp; Security</a>
+        <a class="nav-item" href="admin-school-years.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16m-11 5h6"/></svg>School Year &amp; History</a>
+        <a class="nav-item" href="admin-manual.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v14H6a2 2 0 1 1 0-4h12M4 18V6a2 2 0 0 1 2-2m2 4h6m-6 4h6"/></svg>Admin Manual</a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">A</div>
+        <div class="user-meta"><strong>Admin</strong><small>School Administrator</small></div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options" aria-expanded="false" aria-controls="accountMenu">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden><a href="admin-login.html">Log out</a></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <a class="help-button" href="admin-manual.html" aria-label="Open Admin Manual">?</a>
+  <script type="module" src="js/admin-security.js"></script>
+  <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/navigation-menu.js"></script>
+  <script type="module" src="js/school-year.js"></script>
+</body>
+</html>

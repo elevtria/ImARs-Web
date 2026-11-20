@@ -1,5 +1,6 @@
 import { closeWebSession, protectedWebLogin, webRequest } from "./web-login.js";
 import { invalidateTeacherViews } from "./view-cache.js";
+import { clearQuizWorkspace } from "./quiz-workspace.js";
 
 const VISIT = "imars-web-visit-v1";
 const SIGN_OUT = "imars-web-sign-out-v1";
@@ -11,7 +12,7 @@ export const initializeApp = () => app;
 export const getApps = () => [app];
 const loginPage = () => /^\/(?:admin-)?login(?:\.html)?\/?$/.test(window.location.pathname);
 const adminLoginPage = () => /^\/admin-login(?:\.html)?\/?$/.test(window.location.pathname);
-const portalRole = () => /^\/(?:admin-dashboard|admin-profile|admin-manual|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
+const portalRole = () => /^\/(?:admin-school-years|admin-security|admin-dashboard|admin-profile|admin-manual|manage-teachers|school-analytics)(?:\.html)?\/?$/.test(window.location.pathname) ? "admin" : "teacher";
 const sharedPage = () => /^\/teacher-manual(?:\.html)?\/?$/.test(window.location.pathname);
 const hidePortal = () => {
   if (loginPage()) return;
@@ -29,6 +30,7 @@ function visit() {
   return null;
 }
 function clearVisit() {
+  clearQuizWorkspace();
   try { window.sessionStorage.removeItem(VISIT); } catch {}
   if (window.name.startsWith("imars-web:")) window.name = "";
   invalidateTeacherViews();
@@ -73,13 +75,13 @@ function reuseVisitedPage(event, auth, state) {
 
 function denyAccess(auth, state, reason = "web-session") {
   if (state.denied) return;
-  if (reason === "web-session" && state.signedOut) reason = "signed-out";
+  if (state.signedOut) reason = "logout";
   state.denied = true;
   auth.currentUser = null;
   clearVisit();
   document.querySelector("main")?.replaceChildren();
   const loginPath = portalRole() === "admin" ? "/admin-login" : "/login";
-  window.location.replace(`${loginPath}?reason=${reason}`);
+  window.location.replace(reason === "logout" ? loginPath : `${loginPath}?reason=${reason}`);
 }
 async function identity(auth, state) {
   const saved = visit();
@@ -125,7 +127,7 @@ export function getAuth(application = app) {
   });
   window.addEventListener("storage", event => {
     if (event.key !== SIGN_OUT || !auth.currentUser) return;
-    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state, "signed-out"); } catch {}
+    try { if (JSON.parse(event.newValue)?.uid === auth.currentUser.uid) denyAccess(auth, state, "logout"); } catch {}
   });
   window.addEventListener("imars-session-ended", () => { if (!loginPage()) denyAccess(auth, state); });
   window.addEventListener("click", event => reuseVisitedPage(event, auth, state));

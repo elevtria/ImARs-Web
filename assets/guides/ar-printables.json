@@ -1,0 +1,332 @@
+{
+  "modelCount": 27,
+  "markerCount": 27,
+  "flashcardPages": 14,
+  "magazinePages": 24,
+  "markers": [
+    {
+      "number": 1,
+      "modelId": "model-1",
+      "title": "Water cycle",
+      "topic": "Changes of state",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "57aef1da104d0f21116ed10b0b11dbee19dabe717c91a80431905ba7cac4959d",
+      "marker": "/assets/teacher-ar/asset-85af6d0a0f731a80.png",
+      "sourceSha256": "85af6d0a0f731a800075a8b2b0b67cc64df47ea465254108efbe660b070ae469"
+    },
+    {
+      "number": 2,
+      "modelId": "model-2",
+      "title": "Big Dipper",
+      "topic": "Constellations",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "c9aa8246d3892aaf0094cb2be3a303c27c3096065878bcb36c0d02fd0fa439ef",
+      "marker": "/assets/teacher-ar/asset-fa3fc16f5271028c.png",
+      "sourceSha256": "fa3fc16f5271028c2a6bc9564623f2b3f52932e26a1b479a7580e43008224bfc"
+    },
+    {
+      "number": 3,
+      "modelId": "model-3",
+      "title": "Rotting apple",
+      "topic": "Physical and chemical changes",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "3524c52a3924edde97d98486d58da16255ebe5f16ec8911be47290449663205b",
+      "marker": "/assets/teacher-ar/asset-8e941796b208f4c8.png",
+      "sourceSha256": "8e941796b208f4c8bbceff04bf02f94b8cdb444fd251e33e848d900312311a33"
+    },
+    {
+      "number": 4,
+      "modelId": "model-4",
+      "title": "Water and sound waves",
+      "topic": "Properties of water and sound",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "c37f30af406ecf2ca5661caeccc8f9bc9981b092f961ef6c6142a940b5bed900",
+      "marker": "/assets/teacher-ar/asset-32e9f444b6b463b5.png",
+      "sourceSha256": "32e9f444b6b463b55b1a8a9f07ff86c07a249c1b084d78ab52721f66b6d018c4"
+    },
+    {
+      "number": 5,
+      "modelId": "model-5",
+      "title": "Food web",
+      "topic": "Food webs",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "e511c326b19d786c9a9db9b1749ab63dffcc3006df79517849034f047baef92b",
+      "marker": "/assets/teacher-ar/asset-06e43d9c7f607b0a.png",
+      "sourceSha256": "06e43d9c7f607b0a234ec692adee8a56ae0532a3e67c2853bc2acf5d555c2407"
+    },
+    {
+      "number": 6,
+      "modelId": "model-6",
+      "title": "Rusting nail",
+      "topic": "Physical and chemical changes",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "cfd126556672fccc2b4ae08b0b916c50f639f063ef254392002e56a690dae630",
+      "marker": "/assets/teacher-ar/asset-65361a8b806efcb6.png",
+      "sourceSha256": "65361a8b806efcb63b946d5dc49491f3e43ceebd8f71280beb3affc873941fa2"
+    },
+    {
+      "number": 7,
+      "modelId": "model-7",
+      "title": "Wedge",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "08f05873c4fe9a5b6d9d0251198472b1713a917cf0ac722a188bf742f4e3aa1a",
+      "marker": "/assets/teacher-ar/asset-a2b602375bb4eb93.png",
+      "sourceSha256": "a2b602375bb4eb933cfd9d18b8772bc3436b72469f691a3100523ea89c33b113"
+    },
+    {
+      "number": 8,
+      "modelId": "model-8",
+      "title": "Screw",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "09e4d9775139d60ac7655123fbb2e664ca068a4c9f3dd9de8796e48f6b3d78c5",
+      "marker": "/assets/teacher-ar/asset-6223bd20ab98d7b4.png",
+      "sourceSha256": "6223bd20ab98d7b48a7ef08ff6ac88337baea773abefc000dcbad2002147363b"
+    },
+    {
+      "number": 9,
+      "modelId": "model-9",
+      "title": "Longitudinal and transverse waves",
+      "topic": "Longitudinal and transverse waves",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "af7c056ea722ab6187f39cdfb4197e6844837892f2d813f96cf94f620d1fc36e",
+      "marker": "/assets/teacher-ar/asset-b56a2953d2f7f287.png",
+      "sourceSha256": "b56a2953d2f7f287e5ed80e4e104d74f60c7c0878d498c548c15bf2e91a672a8"
+    },
+    {
+      "number": 10,
+      "modelId": "model-10",
+      "title": "Circulation",
+      "topic": "The circulatory system",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "c1adf2200396bacb6457fdc5fdeb58f27be0f2ec432ed8ddb688b11a87d4778e",
+      "marker": "/assets/teacher-ar/asset-497d527f9014958b.png",
+      "sourceSha256": "497d527f9014958bd7cf3e24b160c77379eaeefb7259a671447d77ae30c21c66"
+    },
+    {
+      "number": 11,
+      "modelId": "model-11",
+      "title": "Melting ice",
+      "topic": "Physical and chemical changes",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "e0a587e6239df4be286bda19590a9e372174f009fe40ec99f6198cbbbce7e9b6",
+      "marker": "/assets/teacher-ar/asset-ffb46308709cbca5.png",
+      "sourceSha256": "ffb46308709cbca5bcf27c60bb1d9b0b7dc1263d74afa8720d15dd114edc5cd2"
+    },
+    {
+      "number": 12,
+      "modelId": "model-12",
+      "title": "Blood flow",
+      "topic": "The circulatory system",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "9a93d0e10dc60d1e6c6bbb7bc82d5c2e560a92a0ff12a33b09ae5c2b5e3212cb",
+      "marker": "/assets/teacher-ar/asset-474ae3d6514b006a.png",
+      "sourceSha256": "474ae3d6514b006ac3b3a28077d6d0793a48ce0af8324b8eb92e286163552edc"
+    },
+    {
+      "number": 13,
+      "modelId": "model-13",
+      "title": "Polaris",
+      "topic": "Constellations",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "8625fcb868a0dfcb23ac0dda4166ec7e1f20e8765c8284250d2a34c51b7dba2e",
+      "marker": "/assets/teacher-ar/asset-3ab78f6dd7e32bea.png",
+      "sourceSha256": "3ab78f6dd7e32bea490711e5a6437b61d3840eaba776a44cc3c8c35c7d1d1a15"
+    },
+    {
+      "number": 14,
+      "modelId": "model-14",
+      "title": "Heart",
+      "topic": "The circulatory system",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "dc0b9e8187b5f03defe8ece2abbbd76ef30ac808e40940436c0e1267d98dad0e",
+      "marker": "/assets/teacher-ar/asset-2da4ae9a370da7d6.png",
+      "sourceSha256": "2da4ae9a370da7d6a8808bbef008ff71885818e273a80086e0d18ab87085816d"
+    },
+    {
+      "number": 15,
+      "modelId": "model-15",
+      "title": "Volcano",
+      "topic": "Volcanic activity",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "200de042fe0bf1a83a8713717074cf7d448545d2d07790a8bace03f07baadc64",
+      "marker": "/assets/teacher-ar/asset-3958d96eb690cc57.png",
+      "sourceSha256": "3958d96eb690cc577e250d518753b27a0c7ea0ec16b238b0e844eb134465c789"
+    },
+    {
+      "number": 16,
+      "modelId": "model-16",
+      "title": "Seasons",
+      "topic": "Motion of the Earth",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "56b4d751e723f21d15cd4e57cdf17657078f9fc722e95fff697e3ea1fea3f833",
+      "marker": "/assets/teacher-ar/asset-7a2b8279988f0795.png",
+      "sourceSha256": "7a2b8279988f079553b4a949b9aefa7c78abf920be5675bb109e28f547ec1411"
+    },
+    {
+      "number": 17,
+      "modelId": "model-17",
+      "title": "Tearing paper",
+      "topic": "Physical and chemical changes",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "deeec6f7d6b071292de32820f094e5ab2a9161e2f6ed6701fa7c8c9d4f82d009",
+      "marker": "/assets/teacher-ar/asset-b7154214f29950ab.png",
+      "sourceSha256": "b7154214f29950ab68a17c14d54aaf2738a7d2cb87ef2e9c650e321290cf62ef"
+    },
+    {
+      "number": 18,
+      "modelId": "model-18",
+      "title": "Freezing",
+      "topic": "Physical and chemical changes",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "6a1ec7a0c477cd1b9d7b2da71c5cf6086c3726f71ca6599410f8174cd2a1b601",
+      "marker": "/assets/teacher-ar/asset-895792556f270a8f.png",
+      "sourceSha256": "895792556f270a8f83fef4a9985a97e0c2d4af2497dc79c30fc1fe9cf7d97f7f"
+    },
+    {
+      "number": 19,
+      "modelId": "model-19",
+      "title": "Solar and lunar eclipses",
+      "topic": "Motion of the Earth",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "ee78c026a5088bf05e392318e176dd29e69f34ceabac24769089eb72078d48bb",
+      "marker": "/assets/teacher-ar/asset-cd6a789e61b237a9.png",
+      "sourceSha256": "cd6a789e61b237a9a76fd9881cf55211548c43bb1dc7cbb9f701bdc9a0584f3c"
+    },
+    {
+      "number": 20,
+      "modelId": "model-20",
+      "title": "Magnetic separation",
+      "topic": "Mixtures and separation techniques",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "3daefe03faf76c941f2af1c35555660dba5414dd3beac34b305e3c6e81b25927",
+      "marker": "/assets/teacher-ar/asset-4c69cda30a332257.png",
+      "sourceSha256": "4c69cda30a3322572975a33f38c4b4f6b5f5f7a688baac1484d566118425ebad"
+    },
+    {
+      "number": 21,
+      "modelId": "model-21",
+      "title": "Orion",
+      "topic": "Constellations",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "ae506c6a08b6db644a76ecca5848fa6fb1dea0c4536c14db45f47778b7945e74",
+      "marker": "/assets/teacher-ar/asset-07fc73d19143ef4b.png",
+      "sourceSha256": "07fc73d19143ef4bc9119dbabd538a36a346aa1eb08c693f3026037ad92e56ae"
+    },
+    {
+      "number": 22,
+      "modelId": "model-22",
+      "title": "Axle",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "7fce1c5e7696c14f3c9511bee12e45669738cf3484bb79a8bae863f9b83802fa",
+      "marker": "/assets/teacher-ar/asset-4075baac8aced2b9.png",
+      "sourceSha256": "4075baac8aced2b988a8d57be0adcd1568f67ce061d32f9bb2ee29b95e980f1b"
+    },
+    {
+      "number": 23,
+      "modelId": "model-23",
+      "title": "Pulley",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "d3c333dfce9c6056e7ca30eb3c779f6257c51d588ec4d66232846087a71f80f8",
+      "marker": "/assets/teacher-ar/asset-17ff01b57b12e756.png",
+      "sourceSha256": "17ff01b57b12e7566db1e2411ca8bb355d459ce66eb98c9834d6f3512fbeb07c"
+    },
+    {
+      "number": 24,
+      "modelId": "model-24",
+      "title": "Inclined plane",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "8c77ac1cddea1063d5cf312663d18bf982d9f7141dcd3ac28814d106a012ffb3",
+      "marker": "/assets/teacher-ar/asset-a00b0a59d275ef7b.png",
+      "sourceSha256": "a00b0a59d275ef7b426490144c9bd40c1616f7839dde931690aa7a0e9542a87d"
+    },
+    {
+      "number": 25,
+      "modelId": "model-25",
+      "title": "Constellations",
+      "topic": "Constellations",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "7571be1c0d83edf013064c149f92bacc056afa5fd49f237877406802faac0b3c",
+      "marker": "/assets/teacher-ar/asset-d264bf0cfd0517b2.png",
+      "sourceSha256": "d264bf0cfd0517b28d922779507d7d8bef27ecb6b5a62c705e050d50233a1550"
+    },
+    {
+      "number": 26,
+      "modelId": "model-26",
+      "title": "Lever",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "56549218be32000c26f0b3184ad2bd62847a5bf1c69d1db1a7322f9e70002c3d",
+      "marker": "/assets/teacher-ar/asset-17de8a5764012d07.png",
+      "sourceSha256": "17de8a5764012d07378b93e9828259637ac2f679d9bd3502933d15986e04ea32"
+    },
+    {
+      "number": 27,
+      "modelId": "model-27",
+      "title": "Wheel",
+      "topic": "Simple machines",
+      "sources": [
+        "AR Classroom"
+      ],
+      "pixelHash": "6aa62bb851f420388dfba50037ec98c369c53081c987139d61ea4eb752035d3d",
+      "marker": "/assets/teacher-ar/asset-2570fcaa3eb0f3a8.png",
+      "sourceSha256": "2570fcaa3eb0f3a82dd6e2ddc245cb58540e2f7368cf33b68aa200f8be174389"
+    }
+  ]
+}

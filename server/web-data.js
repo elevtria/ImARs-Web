@@ -7,6 +7,8 @@ import { updateSectionSchedule } from "../js/topic-availability.js";
 import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
+import { securityAudit } from "./security-audit.js";
+import { confirmAdministratorPassword } from "./admin-reauth.js";
 import { activityPercent } from "../js/activity-score.js";
 import { scoreOverride, validLessonScore } from "../js/lesson-score.js";
 import { activeProfile } from "./student-quiz-auth.js";
@@ -29,14 +31,47 @@ const classDisplayFields = ["SectionName", "sectionName", "name", "gradeLevel", 
 const schoolYears = new WeakMap();
 const schoolYearPath = "webSettings/schoolYear";
 const schoolYearCacheKey = store => store.env?.staffIdentityCacheKey || store.env || store;
+export const invalidateSchoolYearCache = store => schoolYears.delete(schoolYearCacheKey(store));
 
-let lastFirestoreClassSync = 0;
+const directorySyncs = new Map();
 
-async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
-  if (!supabaseWebData(env) || Date.now() - lastFirestoreClassSync < 15_000) return;
-  lastFirestoreClassSync = Date.now();
+export function queueClassDirectorySync(env, fetcher, waitUntil, { now = Date.now, run } = {}) {
+  if (!supabaseWebData(env) || !waitUntil) return;
+  const key = env.IMARS_SUPABASE_URL + ":" + env.IMARS_SUPABASE_APP_DATASET_ID;
+  const previous = directorySyncs.get(key);
+  if (previous?.pending) { waitUntil(previous.pending); return previous.pending; }
+  if (previous && now() - previous.at < 300_000) return;
+  if (directorySyncs.size >= 10 && !directorySyncs.has(key)) directorySyncs.delete(directorySyncs.keys().next().value);
+  const state = { at: now(), pending: null };
+  // Use a separate store: maintenance must not share a request's transaction.
+  state.pending = Promise.resolve().then(() => run ? run() : syncClassesAndTeachersFromFirestore(new SupabaseAppStore(env, fetcher), env, fetcher))
+    .catch(() => console.warn("Class directory refresh will retry."))
+    .finally(() => { state.pending = null; });
+  directorySyncs.set(key, state);
+  waitUntil(state.pending);
+  return state.pending;
+}
+
+// Section transfers must move the redundant student teacher reference too.
+// Preserve identity, activation, section membership and all learning records.
+export async function transferredRosterWrites(store, transfers, { authoritative = false } = {}) {
+  const writes = [];
+  for (const { sectionId, previousTeacherId, teacherId } of transfers) {
+    if (!part(sectionId) || !part(teacherId) || (!part(previousTeacherId) && !(authoritative && previousTeacherId === "")) || teacherId === previousTeacherId) continue;
+    const students = await store.query("users", { filters: [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }],
+      fieldPaths: ["role", "classCode", "teacherId"] });
+    for (const student of students) {
+      if (student.data.role !== "student" || student.data.classCode !== sectionId || student.data.teacherId === teacherId ||
+          (!authoritative && student.data.teacherId && student.data.teacherId !== previousTeacherId)) continue;
+      writes.push({ operation: "update", path: "users/" + student.id, updateTime: student.updateTime, data: { teacherId } });
+    }
+  }
+  return writes;
+}
+
+export async function syncClassesAndTeachersFromFirestore(store, env, fetcher, { firestore } = {}) {
   try {
-    const firestore = new FirestoreAdmin(env, fetcher);
+    firestore ??= new FirestoreAdmin(env, fetcher);
     const [fsClasses, fsTeachersOnly, fsAdminsOnly, sbClasses, sbTeachersOnly, sbAdminsOnly] = await Promise.all([
       firestore.query("classes", { limit: 100 }),
       firestore.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }], limit: 100 }),
@@ -54,11 +89,15 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
     const writes = [];
     const fsBackfillWrites = [];
     const affectedTeacherUids = new Set();
+    const transfers = [];
 
     // 1. Sync any class ownership or section changes from Firebase Firestore -> Supabase
     for (const fsClass of fsClasses) {
       if (!fsClass?.id || !fsClass?.data) continue;
       const sbClass = sbClassMap.get(fsClass.id);
+      if (sbClass && sbClass.data.teacherId !== fsClass.data.teacherId) {
+        transfers.push({ sectionId: fsClass.id, previousTeacherId: sbClass.data.teacherId, teacherId: fsClass.data.teacherId });
+      }
       if (!sbClass || sbClass.data.teacherId !== fsClass.data.teacherId || sbClass.data.SectionName !== fsClass.data.SectionName) {
         writes.push({
           operation: "set",
@@ -73,8 +112,18 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
     // 2. Sync teacher & admin profiles (including ADMIN2) from Firebase Firestore -> Supabase
     for (const fsUser of fsStaff) {
       if (!fsUser?.id || !fsUser?.data) continue;
-      const sbUser = sbStaffMap.get(fsUser.id);
+      const sbUser = sbStaffMap.get(fsUser.id) || await store.get("users/" + fsUser.id);
+      if (sbUser) sbStaffMap.set(fsUser.id, sbUser);
       const isTeacher = fsUser.data.role === "teacher";
+      // A failed mirror must never let an older source restore a removed teacher.
+      if (isTeacher && String(sbUser?.data?.status || "").toLowerCase() === "deleted") {
+        if (fsUser.data.active !== false || String(fsUser.data.status || "").toLowerCase() !== "deleted") {
+          fsBackfillWrites.push({ operation: "set", path: "users/" + fsUser.id, merge: true,
+            updateTime: fsUser.updateTime, data: { active: false, status: "deleted",
+              deletedAt: sbUser.data.deletedAt || { $type: "serverTimestamp" } } });
+        }
+        continue;
+      }
 
       if (isTeacher) {
         if (fsUser.data.uid) affectedTeacherUids.add(fsUser.data.uid);
@@ -116,6 +165,8 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
 
     for (const fsUser of fsTeachersOnly) {
       if (!fsUser?.id || !Array.isArray(fsUser.data?.sections) || !fsUser.data.sections.length) continue;
+      if (String(sbStaffMap.get(fsUser.id)?.data?.status || "").toLowerCase() === "deleted" ||
+          String(fsUser.data.status || "").toLowerCase() === "deleted") continue;
       const teacherClasses = [...fsClasses, ...sbClasses].filter(c => c.data?.teacherId === fsUser.id);
       const existingNames = new Set(teacherClasses.map(c => normalizeSectionName(c.data?.SectionName || c.data?.sectionName || c.id).toLowerCase()));
 
@@ -138,15 +189,19 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
       }
     }
 
+    let mirrorComplete = true;
     if (fsBackfillWrites.length) {
       try {
         await firestore.begin();
         await firestore.commit(fsBackfillWrites);
       } catch (err) {
-        console.warn("Firestore class backfill skipped:", err?.message || err);
+        mirrorComplete = false;
+        await firestore.rollback?.().catch(() => {});
+        console.warn("Firestore directory reconciliation skipped:", err?.message || err);
       }
     }
 
+    writes.push(...await transferredRosterWrites(store, transfers));
     if (writes.length) {
       await store.begin();
       await store.commit(writes);
@@ -155,8 +210,10 @@ async function syncClassesAndTeachersFromFirestore(store, env, fetcher) {
         await stateCall(env, "dashboard:" + uid, "dashboard-dirty", { ids: ["_section_sync"] }).catch(() => {});
       }
     }
+    return { ok: mirrorComplete };
   } catch (err) {
     console.warn("Firestore -> Supabase class/staff sync skipped:", err?.message || err);
+    return { ok: false };
   }
 }
 
@@ -276,6 +333,11 @@ class Scope {
       else if (p[0] === "users" && p.length === 2 && actor.role === "teacher" && previous?.role === "student" && previous.active === false) await this.student(p[1]);
       else if (!(p[0] === "users" && p.length === 2 && actor.role === "admin" && previous?.role === "teacher")) throw fail();
       if (!row) throw fail("This record no longer exists.", 409);
+      if (p[0] === "users" && previous.role === "teacher") {
+        // Retain a deletion marker so periodic imports cannot recreate the account.
+        return { operation: "update", path: ref.path, updateTime: row.updateTime,
+          data: { active: false, status: "deleted", deletedAt: { $type: "serverTimestamp" } } };
+      }
       return { ...input, updateTime: row.updateTime };
     }
     if (row && input.operation === "set" && input.merge !== true && p[0] !== "generatedQuizzes") throw fail("Save edits without replacing the existing record.", 400);
@@ -289,7 +351,7 @@ class Scope {
           ["school", "department", "phone", "roleLabel"].every(key => data[key] === undefined || text(data[key], 200, true))) {
         return { ...input, updateTime: row.updateTime };
       }
-      if (actor.role === "admin" && previous?.role === "teacher" && input.operation === "update" &&
+      if (actor.role === "admin" && previous?.role === "teacher" && previous.status !== "deleted" && input.operation === "update" &&
           names(["active", "status"]) && typeof data.active === "boolean" && data.status === (data.active ? "active" : "inactive")) {
         return { ...input, updateTime: row.updateTime };
       }
@@ -298,8 +360,9 @@ class Scope {
         return { ...input, updateTime: row.updateTime };
       }
       if (actor.role !== "teacher" || (row && previous.role !== "student")) throw fail();
-      // Only enforce old class ownership if the teacher is not transferring/re-importing into their own classCode
-      if (row && (!data.classCode || previous.classCode === data.classCode)) await this.student(p[1]);
+      // Authorize the existing roster entry before considering its proposed
+      // section. Only the administrator's transfer workflow can move ownership.
+      if (row) await this.student(p[1]);
       const allowed = ["schoolId", "firstName", "middleName", "middleInitial", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt", "avatarId", "isClaimed", "completedQuizzes", "gamification", "createdAt"];
       if (!names(allowed) || (data.role !== undefined && data.role !== "student") || (data.schoolId !== undefined && data.schoolId !== p[1]) ||
           (data.teacherId !== undefined && data.teacherId !== actor.id) || (data.active !== undefined && typeof data.active !== "boolean") ||
@@ -370,6 +433,9 @@ class Scope {
         names(["requestedFiles", "updatedAt"]) && timestamp(data.updatedAt) && data.requestedFiles?.$type === "arrayUnion" &&
         Array.isArray(data.requestedFiles.values) && data.requestedFiles.values.length <= 24 &&
         data.requestedFiles.values.every(value => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}\.zip$/.test(value))) return { ...input, updateTime: row?.updateTime };
+    if (ref.path === "webSettings/schoolYear" && actor.role === "admin" && data.startYear !== previous?.startYear) {
+      throw fail("Use School Year & History to archive the current year before starting a new one.", 409);
+    }
     if (ref.path === "webSettings/schoolYear" && actor.role === "admin" && input.merge === true &&
         names(["startYear", "endYear", "updatedBy", "updatedAt"]) && Number.isInteger(data.startYear) && data.startYear >= 2000 && data.startYear <= 2100 &&
         data.endYear === data.startYear + 1 && data.updatedBy === actor.uid && timestamp(data.updatedAt)) return { ...input, updateTime: row?.updateTime };
@@ -464,6 +530,7 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
     throw fail("Invalid student performance page.", 400);
   }
   if (body.includeTeacher !== undefined && typeof body.includeTeacher !== "boolean") throw fail("Invalid teacher details request.", 400);
+  if (body.includePoints !== undefined && typeof body.includePoints !== "boolean") throw fail("Invalid points request.", 400);
   const classes = await scope.assignedClasses(body.rawActivityScores === true ? ["teacherId", ...classDisplayFields] : undefined);
   for (const row of classes) scope.reads.set("classes/" + row.id, Promise.resolve(row));
   classes.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -478,8 +545,11 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
   const queued = new Map();
   const queueClass = (position, size) => {
     const queryFilters = [...filters(selected[position].id), ...(status === "archived" ? [{ field: "active", op: "==", value: false }] : [])];
+    const fieldPaths = body.includePoints === true
+      ? ["active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName", "gamification"]
+      : body.rawActivityScores === true ? ["uid", "teacherId", "active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName"] : undefined;
     queued.set(position, { size, pending: scope.store.query("users", { filters: queryFilters, limit: size, after: position === index ? after : undefined,
-      ...(body.rawActivityScores === true ? { fieldPaths: ["uid", "teacherId", "active", "schoolId", "displayName", "fullName", "firstName", "middleName", "middleInitial", "lastName"] } : {}) })
+      ...(fieldPaths ? { fieldPaths } : {}) })
       .then(rows => ({ rows }), error => ({ error })) });
   };
   const countPromise = body.includeCounts === false ? null : (async () => {
@@ -508,7 +578,14 @@ async function studentPage(scope, body, { deferCounts = false, maximumLimit = 25
       after = row.id; consumed++; scanned++;
       const archived = row.data.active === false;
       const matches = matchesSearch(search, personSearchText(row.id, row.data));
-      if (archived === (status === "archived") && matches) students.push({ classId, document: output("users/" + row.id, row) });
+      if (archived === (status === "archived") && matches) {
+        const document = output("users/" + row.id, row);
+        if (body.includePoints === true) {
+          const points = row.data.gamification?.totalPoints;
+          document.data.totalPoints = Number.isSafeInteger(points) && points >= 0 ? points : 0;
+        }
+        students.push({ classId, document });
+      }
     }
     if (consumed === rows.length && rows.length < queuedClass.size) { index++; after = null; }
     else if (students.length === maximum || scanned >= 100) break;
@@ -544,7 +621,8 @@ async function reportActivityGrades(env, appData, students, termIds, fetcher, le
     for (let offset = 0; offset < students.length; offset += 25) {
       groups.push(students.slice(offset, offset + 25).map(row => row.document.id));
     }
-    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? new FirestoreAdmin(env, legacyFetcher) : null;
+    const history = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" ? await appData.get("webSettings/schoolYear") : null;
+    const legacy = supabaseWebData(env) && env.WEB_LEGACY_ACTIVITY_READS_ENABLED === "true" && history?.data.legacyResultsArchived !== true ? new FirestoreAdmin(env, legacyFetcher) : null;
     const [saved, current] = await Promise.all([
       Promise.all(groups.map(ids => appData.activityResultsForRoster(ids))),
       legacy ? Promise.allSettled(groups.map(ids => legacy.activityResultsForRoster(ids))) : []
@@ -613,7 +691,8 @@ async function teacherReportPage(scope, body, env, fetcher, legacyFetcher) {
   const lessonIds = heatmap ? [body.heatmapLesson] : ["lesson_01", "lesson_02", "lesson_03", "lesson_04"];
   const heatmapFields = ["isPostTestCompleted", "postTestTotalQuestions", "postTestScore", "postTestHeatmap", "postTestQuestionOrder"];
   const scoreFields = [...heatmapFields, "isPreTestCompleted", "preTestScore", "preTestTotalQuestions", "isLessonCompleted", "isARCompleted", "completed",
-    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum", "teacherScoreOverrides"];
+    "activityScore", "activityTotalQuestions", "activityTotalPoints", "activityRawScore", "activityRawMaximum", "teacherScoreOverrides",
+    "arTimeMinutes", "arNavigationTimeMinutes", "lessonTimeMinutes", "learningTimeByDevice"];
   const paths = page.students.flatMap(row => termIds.flatMap(termId => lessonIds.map(id => `users/${row.document.id}/test_results/${termId}/lessons/${id}`)));
   const gradeRequest = !heatmap && page.students.length
     ? reportActivityGrades(env, scope.store, page.students, termIds, fetcher, legacyFetcher).then(value => ({ value }), error => ({ error }))
@@ -688,7 +767,8 @@ async function teacherTopicOverview(scope) {
 }
 
 export async function webData({ request, env, waitUntil }, { store, authenticate = requireStaff,
-  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch } = {}) {
+  settingsFetcher = fetch, activityFetcher = fetch, legacyActivityFetcher = fetch, directorySync = queueClassDirectorySync,
+  refreshDirectory = syncClassesAndTeachersFromFirestore } = {}) {
   const requestStarted = Date.now(); let authenticationMs = 0;
   const respond = (value, status = 200) => json(value, status, { "Server-Timing": `auth;dur=${authenticationMs}, data;dur=${Math.max(0, Date.now() - requestStarted - authenticationMs)}` });
   if (!dataEnabled(env)) return respond({ error: "Website data setup is incomplete." }, 503);
@@ -697,16 +777,19 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
   const settingsStore = () => supabaseSettings ? new SupabaseAppStore(env, settingsFetcher) : store;
   try {
     store ??= appStore(env, settingsFetcher);
-    await syncClassesAndTeachersFromFirestore(store, env, settingsFetcher);
     if (request.method === "GET" && new URL(request.url).pathname.endsWith("/school-year")) {
       return respond(await readSchoolYear(settingsStore()));
     }
     if (request.method !== "POST") return respond({ error: "Use POST." }, 405);
     if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) return respond({ error: "Use JSON." }, 415);
     const actorBefore = await authenticate(request, env, store);
+    // Compatibility maintenance runs after authorization and off the page's
+    // response path. Ordinary reads no longer wait for a school-wide sync.
     const body = await readJson(request, 1_000_000);
     if (!object(body)) throw fail("Invalid data request.", 400);
+    if (!(body.action === "admin-report" && body.refreshDirectory === true)) directorySync(env, settingsFetcher, waitUntil);
     if (["commit", "create-teacher"].includes(body.action)) {
+      if (actorBefore.role === "admin") await confirmAdministratorPassword(env, store, actorBefore, body.password, stateCall);
       const changesSchoolYear = body.action === "commit" && Array.isArray(body.writes) && body.writes.some(write => write?.path === schoolYearPath);
       if (supabaseSettings && changesSchoolYear) {
         if (actorBefore.role !== "admin") throw fail();
@@ -722,40 +805,49 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if (actor.role !== "teacher") throw fail();
       return respond(await teacherDashboardSummary(env, store, actor.id, actor.uid, actor.profile));
     }
-    if (body.action === "student-page") return respond(await studentPage(scope, body));
+    if (body.action === "student-page") return respond(await studentPage(scope, body, { maximumLimit: body.includePoints === true ? 100 : 25 }));
     if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "admin-report") {
       if (actor.role !== "admin") throw fail();
-      return respond(await loadAdminReports(store));
+      if ((body.termId !== undefined && body.termId !== "" && !term(body.termId)) ||
+          (body.sectionId !== undefined && body.sectionId !== "" && !part(body.sectionId))) throw fail("Choose a valid term and section.", 400);
+      const directory = body.refreshDirectory === true && supabaseWebData(env)
+        ? await refreshDirectory(store, env, settingsFetcher) : undefined;
+      return respond({ ...await loadAdminReports(store, { termId: body.termId, sectionId: body.sectionId }), ...(directory ? { directory } : {}) });
     }
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
     if (body.action === "create-teacher") {
       const profile = body.profile;
       if (actor.role !== "admin") throw fail();
-      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections"]) || !text(profile.name) || !email(profile.email) || !text(profile.subject) ||
-          !Array.isArray(profile.sections) || profile.sections.length > 50 || profile.sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
+      if (!object(profile) || !fields(profile, ["name", "email", "subject", "sections"]) || !email(profile.email)) throw fail("Enter valid teacher details.", 400);
+      if (typeof profile.name !== "string" || profile.name.trim().length > 120 || !/^\p{L}[\p{L}\p{M} .'’\-]*$/u.test(profile.name.trim())) {
+        throw fail("Use letters, spaces, periods, hyphens, or apostrophes in the teacher name. Numbers are not allowed.", 400);
+      }
+      const subject = profile.subject === undefined ? "" : profile.subject;
+      const sections = profile.sections === undefined ? [] : profile.sections;
+      if ((subject !== "" && !text(subject)) || !Array.isArray(sections) || sections.length > 50 || sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
       const existing = await store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }] });
       const normalizedEmail = profile.email.toLowerCase();
-      if (existing.some(row => [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
+      if (existing.some(row => row.data.status !== "deleted" && [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
           settings(env).some(account => account.email.toLowerCase() === normalizedEmail)) throw fail("That email already belongs to a staff account. Restore or update that account instead.", 409);
       const ids = [...existing.map(row => row.id), ...settings(env).map(account => account.id)];
       const maximum = Math.max(999, ...ids.filter(id => /^TEACH\d{4,10}$/.test(id)).map(id => Number(id.slice(5))));
       const reserved = await stateCall(env, "staff-roster", "allocate-teacher", { minimum: maximum + 1, email: profile.email });
       if (!reserved.ok) throw new Error("Invitation allocation failed");
       const invitation = reserved.result;
-      const teacher = { schoolId: invitation.id, displayName: profile.name, fullName: profile.name, providedEmail: invitation.email, email: invitation.email,
-        subject: profile.subject, sections: profile.sections, role: "teacher", active: true, status: "invited", isRegistered: false,
+      const teacher = { schoolId: invitation.id, displayName: profile.name.trim(), fullName: profile.name.trim(), providedEmail: invitation.email, email: invitation.email,
+        subject, sections, role: "teacher", active: true, status: "invited", isRegistered: false,
         webInvitationNonce: invitation.nonce, createdAt: { $type: "serverTimestamp" } };
       await scope.get("users/" + invitation.id);
-      const existingClasses = await store.query("classes", { limit: 200 });
+      const existingClasses = sections.length ? await store.query("classes", { limit: 200 }) : [];
       let maxClassNum = 0;
       for (const row of existingClasses) {
         const m = /^SCIG6A(\d+)$/.exec(row.id);
         if (m) maxClassNum = Math.max(maxClassNum, Number(m[1]));
       }
       const createWrites = [{ operation: "set", path: "users/" + invitation.id, data: teacher }];
-      for (const rawSec of profile.sections) {
+      for (const rawSec of sections) {
         const cleanName = String(rawSec || "").replace(/^Grade\s+\d+\s*[-–—]\s*/i, "").trim();
         if (!cleanName) continue;
         maxClassNum += 1;
@@ -766,6 +858,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
           data: { SectionName: cleanName, teacherId: invitation.id, gradeLevel: "Grade 6", createdAt: { $type: "serverTimestamp" } }
         });
       }
+      createWrites.push(securityAudit(actor, "teacher-created", invitation.id));
       await transaction.commit(createWrites); transaction = null;
       return respond({ id: invitation.id });
     }
@@ -857,6 +950,13 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if (!Array.isArray(body.writes) || !body.writes.length || body.writes.length > 100 || new Set(body.writes.map(write => write?.path)).size !== body.writes.length) throw fail("Save between 1 and 100 distinct records at a time.", 400);
       const writes = [];
       for (const write of body.writes) writes.push(await scope.write(write));
+      if (actor.role === "admin") {
+        for (const write of [...writes]) {
+          if (/^users\/[^/]+$/.test(write.path) && typeof write.data?.active === "boolean") {
+            writes.push(securityAudit(actor, write.data.status === "deleted" ? "teacher-removed" : write.data.active ? "teacher-activated" : "teacher-deactivated", write.path.split("/")[1]));
+          } else if (write.path === schoolYearPath) writes.push(securityAudit(actor, "school-year-updated", "schoolYear", String(write.data.startYear)));
+        }
+      }
       await transaction.commit(writes);
       if (writes.some(write => write.path === schoolYearPath)) schoolYears.delete(schoolYearCacheKey(transaction));
       transaction = null;
@@ -870,7 +970,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       }
       for (const write of writes) if (/^users\/TEACH\d+$/.test(write.path) && actor.role === "admin") {
         const id = write.path.split("/")[1];
-        if (write.operation === "delete") {
+        if (write.operation === "delete" || write.data?.status === "deleted") {
           const disabled = await stateCall(env, "staff-roster", "roster-disable", { id });
           if (!disabled.ok) throw new Error("Invitation update failed");
         }
@@ -881,7 +981,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
   } catch (error) {
     if (transaction) await transaction.rollback().catch(() => {});
     if (databaseQuotaFailure(error)) return respond({ error: error.message, code: "DATABASE_QUOTA_EXCEEDED" }, 503);
-    const status = [400, 401, 403, 409, 413].includes(error.status) ? error.status : 503;
+    const status = [400, 401, 403, 409, 413, 429].includes(error.status) ? error.status : 503;
     return respond({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,
       code: status === 401 ? "unauthenticated" : status === 403 ? "permission-denied" : status === 409 ? "aborted" : "unavailable" }, status);
   }

@@ -6,7 +6,8 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
 import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
-import { confirmAction } from "./confirm-action.js";
+import { confirmAdminAction } from "./admin-account-action.js";
+import { teacherViewCache, encodeView } from "./view-cache.js";
 
 const app = initializeApp();
 const auth = getAuth(app);
@@ -75,9 +76,9 @@ function render() {
             <div class="teacher-name-line" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <strong>${escapeHtml(teacher.name)}</strong>
               <span class="teacher-status ${teacher.active ? "" : "inactive"}">${teacher.active ? "active" : "inactive"}</span>
-              <span class="teacher-id-badge" style="background: #eef2ff; color: #4f46e5; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
+              <span class="teacher-id-badge" style="background: var(--theme-info-bg, #eef2ff); color: var(--theme-link, #4f46e5); font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; letter-spacing: 0.03em;">ID: ${escapeHtml(teacher.schoolId || teacher.id)}</span>
             </div>
-            <small class="teacher-contact">${escapeHtml(teacher.email)} · ${escapeHtml(teacher.subject)} · Joined ${escapeHtml(teacher.joined)}</small>
+            <small class="teacher-contact">${escapeHtml(teacher.email)}${teacher.subject ? ` · ${escapeHtml(teacher.subject)}` : ""} · Joined ${escapeHtml(teacher.joined)}</small>
             <div class="section-chips">
               ${(teacher.sections || []).map((sec) => `<span class="section-chip">${escapeHtml(sec)}</span>`).join("")}
             </div>
@@ -119,14 +120,48 @@ function render() {
 
 // Reuse the shared school report when moving between admin pages.
 const addTeacherButton = document.getElementById("addTeacherButton");
+const refreshTeachersButton = document.getElementById("refreshTeachersButton");
+refreshTeachersButton?.addEventListener("click", async () => {
+  if (!adminReady || !auth.currentUser) return;
+  const uid = auth.currentUser.uid;
+  refreshTeachersButton.disabled = true;
+  refreshTeachersButton.textContent = "Refreshing…";
+  let status = document.getElementById("teacherDirectoryStatus");
+  if (!status) {
+    status = document.createElement("p");
+    status.id = "teacherDirectoryStatus";
+    status.className = "view-data-status";
+    status.setAttribute("role", "status");
+    document.querySelector(".manage-heading")?.after(status);
+  }
+  status.textContent = "Checking teacher profiles in Firebase…";
+  try {
+    const report = await getAdminReport({ refreshDirectory: true });
+    if (auth.currentUser?.uid !== uid) return;
+    const cache = teacherViewCache();
+    cache.invalidate();
+    cache.put(uid, "admin:reports-v3", encodeView(report));
+    teachers = report.teachers;
+    render();
+    status.textContent = report.directory?.ok === false
+      ? "Portal records refreshed, but Firebase synchronization is incomplete. Please retry or contact website maintenance."
+      : "Teacher records refreshed. Deleted profiles remain excluded.";
+  } catch (error) {
+    if (auth.currentUser?.uid === uid) status.textContent = "Unable to refresh teachers. Please try again. " + error.message;
+  } finally {
+    refreshTeachersButton.disabled = !adminReady;
+    refreshTeachersButton.textContent = "Refresh teachers";
+  }
+});
 if (addTeacherButton) addTeacherButton.disabled = true;
 onAuthStateChanged(auth, async user => {
   adminReady = false;
+  if (refreshTeachersButton) refreshTeachersButton.disabled = true;
   if (!user) { window.location.href = "admin-login.html"; return; }
   const timing = createPagePerformance("Manage Teachers");
   try {
     await showAdminView({ app, user,
-      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; render(); },
+      verified: () => { adminReady = true; if (addTeacherButton) addTeacherButton.disabled = false; if (refreshTeachersButton) refreshTeachersButton.disabled = false; render(); },
       load: () => timing.data(getAdminReport),
       render: report => timing.render(() => { teachers = report.teachers; render(); }),
       painted: cacheHit => timing.finish("loaded", { cacheHit })
@@ -145,11 +180,10 @@ if (list) {
     if (unlock) {
       const identifier = unlock.dataset.unlockWebId;
       const uid = auth.currentUser.uid;
-      if (!await confirmAction({ title: "Restore web login?", message: `Clear the failed-attempt history for ${identifier}.`, confirmLabel: "Restore login", destructive: false }) || auth.currentUser?.uid !== uid) return;
       unlock.disabled = true;
       try {
-        await webRequest("/api/web-auth/unlock", { identifier });
-        alert(`Web login restored for ${identifier}.`);
+        const result = await confirmAdminAction({ identifier }, "Restore web login?", `Clear the failed-attempt history for ${identifier}. Confirm your own administrator password.`, { endpoint: "/api/web-auth/unlock" });
+        if (result && auth.currentUser?.uid === uid) alert(`Web login restored for ${identifier}.`);
       } catch (error) { alert(error.message); }
       finally { unlock.disabled = false; }
       return;
@@ -163,7 +197,6 @@ if (list) {
 
       const nextStatus = !teacher.active;
       const uid = auth.currentUser.uid;
-      if (!nextStatus && !await confirmAction({ title: "Deactivate teacher?", message: `Deactivate ${teacher.name}’s staff profile?`, confirmLabel: "Deactivate teacher" })) return;
       if (auth.currentUser?.uid !== uid) return;
       try {
         await updateDoc(doc(db, "users", teacherId), {
@@ -173,6 +206,7 @@ if (list) {
         teacher.active = nextStatus;
         render();
       } catch (err) {
+        if (err.code === "cancelled") return;
         console.error("Failed to update status:", err);
         alert("Error updating teacher status.");
       }
@@ -187,12 +221,13 @@ if (list) {
       if (!teacher) return;
 
       const uid = auth.currentUser.uid;
-      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name}’s staff profile? This cannot be undone.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
+      if (auth.currentUser?.uid !== uid) return;
       try {
         await deleteDoc(doc(db, "users", teacherId));
         teachers = teachers.filter((t) => t.id !== teacherId);
         render();
       } catch (err) {
+        if (err.code === "cancelled") return;
         console.error("Failed to delete teacher:", err);
         alert("Error deleting teacher.");
       }
@@ -218,28 +253,26 @@ if (form) {
     const formData = new FormData(form);
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim().toLowerCase();
-    const subject = String(formData.get("subject") || "").trim();
-    const sections = String(formData.get("sections") || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (!name || !email || !subject) return;
+    if (!name || !email) return;
+    if (name.length > 120 || !/^\p{L}[\p{L}\p{M} .'’\-]*$/u.test(name)) {
+      alert("Use letters, spaces, periods, hyphens, or apostrophes in the teacher name. Numbers are not allowed.");
+      return;
+    }
 
     submitting = true;
     const submitButton = form.querySelector('[type="submit"]');
     if (submitButton) submitButton.disabled = true;
     try {
-      const { id: nextTeacherId } = await createTeacher({ name, email, subject, sections });
+      const { id: nextTeacherId } = await createTeacher({ name, email });
 
       teachers.unshift({
         id: nextTeacherId,
         schoolId: nextTeacherId,
         name,
         email,
-        subject,
+        subject: "",
         joined: "Just now",
-        sections,
+        sections: [],
         students: 0,
         pre: null,
         post: null,
@@ -254,6 +287,7 @@ if (form) {
 
       alert(`Teacher registered! Give the Teacher ID to the teacher:\n\nID: ${nextTeacherId}\nEmail: ${email}`);
     } catch (err) {
+      if (err.code === "cancelled") return;
       console.error("Failed to add teacher to Firestore:", err);
       alert("Error adding teacher: " + err.message);
     } finally {

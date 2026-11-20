@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="js/theme.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImARs · Leaderboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="js/tailwind.config.js"></script>
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/loading.css" />
+  <link rel="stylesheet" href="css/portal-design.css" />
+  <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/leaderboard.css" />
+  <link rel="stylesheet" href="css/theme.css" />
+</head>
+<body data-auth-pending class="leaderboard-page">
+  <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <span class="page-title">Leaderboard</span>
+      </div>
+      <div class="topbar-right">
+        <button class="icon-btn bell" aria-label="Notifications">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .5-.2 1-.6 1.4L4 17h5" />
+            <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
+          </svg>
+          <span class="dot"></span>
+        </button>
+        <span class="sy-chip" data-school-year>SY 2026–27</span>
+      </div>
+      </div>
+    </header>
+
+    <main class="content leaderboard-content" inert data-auth-shell>
+      <section class="hero" data-auth-shell>
+        <div><h1 data-public-label>Leaderboard</h1><p data-public-label>Total points earned in the ImARs app · Your assigned sections</p></div>
+        <button class="ghost-btn" id="refreshLeaderboard" type="button" data-public-label>Refresh</button>
+      </section>
+      <div class="leaderboard-toolbar" data-auth-shell>
+        <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard view">
+          <button id="overallTab" type="button" role="tab" aria-selected="true" aria-controls="leaderboardPanel" tabindex="0" data-scope="overall" data-public-label>Overall</button>
+          <button id="sectionTab" type="button" role="tab" aria-selected="false" aria-controls="leaderboardPanel" tabindex="-1" data-scope="section" data-public-label>By section</button>
+        </div>
+        <label class="leaderboard-section" id="leaderboardSectionControl" hidden>Section
+          <select id="leaderboardSection" disabled><option value="">Loading sections…</option></select>
+        </label>
+      </div>
+      <p class="leaderboard-status" id="leaderboardStatus" role="status" aria-live="polite" data-auth-shell>Loading student points…</p>
+      <section id="leaderboardPanel" class="leaderboard-layout" role="tabpanel" aria-labelledby="overallTab" aria-busy="true" data-auth-shell>
+        <section class="leaderboard-stage" aria-labelledby="podiumHeading" data-auth-shell>
+          <div class="leaderboard-floaters" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="leaderboard-stage-heading"><span class="leaderboard-trophy" aria-hidden="true" data-public-label>🏆</span><div><h2 id="podiumHeading" data-public-label>Top achievers</h2><p id="podiumScope">All assigned sections</p></div></div>
+          <div class="leaderboard-skeleton podium-skeleton" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="leaderboard-podium" id="leaderboardPodium"></div>
+          <p class="leaderboard-podium-empty" id="podiumEmpty" hidden>Earn points in the ImARs app to appear on the podium.</p>
+        </section>
+        <section class="leaderboard-rankings" aria-labelledby="rankingsHeading" data-auth-shell>
+          <div class="leaderboard-list-heading"><div><h2 id="rankingsHeading" data-public-label>All rankings</h2><p id="rankingsCount">Loading students…</p></div><span data-public-label>Points</span></div>
+          <div class="leaderboard-skeleton list-skeleton" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="leaderboard-list-scroll"><ol id="leaderboardList" class="leaderboard-list" aria-label="Student rankings"></ol></div>
+          <p class="leaderboard-empty" id="leaderboardEmpty" hidden>No active students in this section yet.</p>
+          <p class="leaderboard-tie-note">Students with equal points share a rank.</p>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <a class="help" href="teacher-manual.html" aria-label="Open Teacher Manual">?</a>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-panel" role="navigation" aria-label="Teacher portal">
+      <a class="brand" href="index.html" aria-label="Teacher dashboard">
+        <img class="brand-mark" src="assets/imars-logo.png" alt="" />
+        <div>
+          <strong>ImARs</strong>
+          <small>Teacher Portal</small>
+        </div>
+      </a>
+      <nav class="side-nav">
+        <a class="nav-item" href="index.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>
+          Dashboard
+        </a>
+        <a class="nav-item" href="topic-scheduler.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>
+          Topic Scheduler
+        </a>
+        <a class="nav-item" href="quiz-generator.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5M8 16h8"/><path d="m15 11 1.5 1.5L19 10"/></svg>
+          Quiz Generator
+        </a>
+        <a class="nav-item" href="analytics.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+          Analytics
+        </a>
+        <a class="nav-item" href="student-records.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 19a4 4 0 0 1 5-3.6"/></svg>
+          Student Records
+        </a>
+        <a class="nav-item" href="batch-upload.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M4 19h16"/></svg>
+          Batch Upload
+        </a>
+        <a class="nav-item" href="sync-offline-results.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><path d="M14 14h3v3h-3zM20 14v6M14 20h6"/></svg>
+          Scan QR (Offline Sync)
+        </a>
+        <a class="nav-item" href="teacher-manual.html">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="7" y="3" width="11" height="18" rx="2"/><path d="M7 6H5.5A1.5 1.5 0 0 0 4 7.5v11A2.5 2.5 0 0 0 6.5 21H18"/></svg>
+          Teacher Manual
+        </a>
+      </nav>
+      <div class="side-user">
+        <div class="user-avatar">T</div>
+        <div class="user-meta">
+          <strong>Teacher</strong>
+          <small>Teacher account</small>
+        </div>
+        <div class="account">
+          <button class="user-more" id="accountBtn" type="button" aria-label="Account options">⋮</button>
+          <div class="account-menu" id="accountMenu" hidden>
+            <a href="login.html">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <script type="module" src="js/leaderboard.js"></script>
+  <script type="module" src="js/teacher-nav.js"></script>
+  <script type="module" src="js/navigation-menu.js"></script>
+  <script type="module" src="js/school-year.js"></script>
+</body>
+</html>

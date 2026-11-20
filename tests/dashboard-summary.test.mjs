@@ -73,6 +73,27 @@ test("a confirmed mobile lesson change rereads only that lesson and updates tota
   assert.equal((await f.engine.read(f.scope)).summary.notifications.length, 6, "grading must not create another completion notification");
 });
 
+test("the first stale warm read requests background follow-up before reconciliation starts", async () => {
+  const f = setup(); await f.engine.configure(f.scope); await f.finish();
+  assert.equal((await f.engine.read(f.scope)).pending, false);
+  f.advance(300_001);
+  assert.equal((await f.engine.read(f.scope)).pending, true);
+  assert.equal(await f.storage.get("dashboard:job"), undefined);
+  await f.engine.configure(f.scope); await f.finish();
+  assert.equal((await f.engine.read(f.scope)).pending, false);
+});
+
+test("enabling legacy reconciliation rebuilds summaries for recent activity and notifications", async () => {
+  const f = setup(); await f.engine.configure(f.scope); await f.finish();
+  f.engine.env.WEB_LEGACY_LESSON_READS_ENABLED = "true";
+  assert.equal(await f.engine.read(f.scope), null);
+  assert.deepEqual(await f.engine.configure(f.scope), { ready: false });
+  await f.finish();
+  const { summary } = await f.engine.read(f.scope);
+  assert.equal(summary.recent.length, 1);
+  assert.equal(summary.notifications.length, 2);
+});
+
 test("completion markers refresh a warm dashboard without including timestamp-only classmates", async () => {
   const f = setup(2), lesson = "term_03/lessons/lesson_01";
   for (const id of ["S00000", "S00001"]) {

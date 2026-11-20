@@ -2,6 +2,19 @@
 const navigationDrawer = document.getElementById("drawer");
 if (navigationDrawer) {
   const teacherNavigation = !document.body.classList.contains("admin-portal") && navigationDrawer.querySelector(".side-nav");
+  if (teacherNavigation && !teacherNavigation.querySelector('a[href="leaderboard.html"]')) {
+    const link = document.createElement("a");
+    link.className = "nav-item";
+    link.href = "leaderboard.html";
+    if (/^\/leaderboard(?:\.html)?\/?$/.test(window.location.pathname)) {
+      link.classList.add("active");
+      link.setAttribute("aria-current", "page");
+    }
+    link.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v2a4 4 0 0 0 4 4m8-6h4v2a4 4 0 0 1-4 4M12 13v5m-4 3h8m-7-3h6v3H9z"/></svg>Leaderboard';
+    const records = teacherNavigation.querySelector('a[href="student-records.html"]');
+    if (records) records.after(link);
+    else teacherNavigation.append(link);
+  }
   if (teacherNavigation && !teacherNavigation.querySelector('a[href="teacher-ar.html"]')) {
     const link = document.createElement("a");
     link.className = "nav-item";
@@ -24,54 +37,12 @@ if (navigationDrawer) {
     };
     const svg = paths => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
     const desktop = window.matchMedia("(min-width:1000px)");
-    const hoverPointer = window.matchMedia("(hover:hover) and (pointer:fine)");
-    let pointerInside = false;
-    let keyboardNavigation = false;
-    let collapseTimer;
-    const updateCompact = () => {
-      const focused = keyboardNavigation && panel.contains(document.activeElement) && document.activeElement.matches(":focus-visible");
-      const compact = desktop.matches && hoverPointer.matches && !pointerInside && !focused;
-      navigationDrawer.classList.toggle("is-compact", compact);
-      if (compact) setAccountOpen(false);
-    };
-    const setPointerInside = inside => {
-      if (inside === pointerInside) return;
-      pointerInside = inside;
-      clearTimeout(collapseTimer);
-      if (inside) updateCompact();
-      else collapseTimer = setTimeout(updateCompact, 220);
-    };
-    const resetHover = () => {
-      pointerInside = false;
-      keyboardNavigation = false;
-      clearTimeout(collapseTimer);
-      updateCompact();
-    };
-    panel.addEventListener("pointerenter", event => { if (event.pointerType !== "touch") setPointerInside(true); });
-    panel.addEventListener("pointerleave", () => setPointerInside(false));
-    // Pointerleave can be missed when the page, window or hit-tested element
-    // changes. An outside pointer move must not leave the menu expanded.
-    document.addEventListener("pointermove", event => {
-      if (!desktop.matches || !hoverPointer.matches || event.pointerType === "touch") return;
-      const wasKeyboardNavigation = keyboardNavigation;
-      keyboardNavigation = false;
-      setPointerInside(panel.contains(event.target));
-      if (!pointerInside && wasKeyboardNavigation) updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerdown", event => {
-      keyboardNavigation = false;
-      if (desktop.matches && hoverPointer.matches) setPointerInside(panel.contains(event.target));
-      updateCompact();
-    }, { passive: true });
-    document.addEventListener("pointerleave", () => setPointerInside(false));
-    document.addEventListener("keydown", event => {
-      if (event.key === "Tab") keyboardNavigation = true;
-    });
-    window.addEventListener("blur", resetHover);
-    panel.addEventListener("focusin", updateCompact);
-    panel.addEventListener("focusout", () => queueMicrotask(updateCompact));
-    hoverPointer.addEventListener("change", resetHover);
+    let hovering = desktop.matches && panel.matches(":hover");
+    let keyboardFocus = false;
     const syncDrawer = () => {
+      const expanded = desktop.matches && (hovering || (keyboardFocus && panel.contains(document.activeElement)));
+      navigationDrawer.classList.toggle("is-compact", desktop.matches && !expanded);
+      navigationDrawer.setAttribute("data-desktop-open", String(expanded));
       const open = !desktop.matches && navigationDrawer.classList.contains("open");
       const hidden = !desktop.matches && !open;
       navigationDrawer.setAttribute("aria-hidden", String(hidden));
@@ -80,24 +51,55 @@ if (navigationDrawer) {
     };
     const closeNavigation = (restoreFocus = false) => {
       const wasOpen = navigationDrawer.classList.contains("open");
+      hovering = keyboardFocus = false;
       navigationDrawer.classList.remove("open");
       setAccountOpen(false);
       if (wasOpen && restoreFocus) menuButton?.focus();
       syncDrawer();
     };
-    const resetNavigation = () => {
-      resetHover();
-      closeNavigation();
+    panel.addEventListener("pointerenter", event => {
+      if (!desktop.matches || event.pointerType === "touch") return;
+      hovering = true;
+      syncDrawer();
+    });
+    const leavePanel = () => {
+      if (!desktop.matches) return;
+      hovering = false;
+      setAccountOpen(false);
+      syncDrawer();
     };
-    desktop.addEventListener("change", resetNavigation);
-    window.addEventListener("pagehide", resetNavigation);
-    window.addEventListener("pageshow", resetNavigation);
+    panel.addEventListener("pointerleave", leavePanel);
+    panel.addEventListener("pointercancel", leavePanel);
+    panel.addEventListener("focusin", syncDrawer);
+    panel.addEventListener("focusout", () => queueMicrotask(syncDrawer));
+    document.addEventListener("pointerdown", event => {
+      if (!desktop.matches) return;
+      keyboardFocus = false;
+      hovering = panel.contains(event.target);
+      syncDrawer();
+    });
+    document.addEventListener("pointermove", event => {
+      if (!desktop.matches || event.pointerType === "touch") return;
+      const inside = panel.contains(event.target);
+      if (inside === hovering) return;
+      hovering = inside;
+      if (!inside) setAccountOpen(false);
+      syncDrawer();
+    });
+    desktop.addEventListener("change", () => closeNavigation());
+    window.addEventListener("blur", () => closeNavigation());
+    window.addEventListener("pagehide", () => { if (!desktop.matches) closeNavigation(); });
+    window.addEventListener("pageshow", () => {
+      if (!desktop.matches) { closeNavigation(); return; }
+      hovering = panel.matches(":hover");
+      syncDrawer();
+    });
     menuButton?.addEventListener("click", () => {
+      if (desktop.matches) return;
       navigationDrawer.classList.add("open");
       syncDrawer();
       brand.focus();
     });
-    resetHover();
     syncDrawer();
 
     const close = document.createElement("button");
@@ -116,16 +118,15 @@ if (navigationDrawer) {
       if (!event.target.closest(".account")) setAccountOpen(false);
     });
     document.addEventListener("keydown", event => {
+      if (event.key === "Tab") { keyboardFocus = true; syncDrawer(); return; }
       if (event.key !== "Escape") return;
       if (accountMenu && !accountMenu.hidden) {
         setAccountOpen(false);
         accountButton?.focus();
         return;
       }
-      if (desktop.matches) {
-        resetHover();
-        if (panel.contains(document.activeElement)) document.activeElement.blur();
-      } else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
+      if (desktop.matches) closeNavigation();
+      else if (navigationDrawer.classList.contains("open")) closeNavigation(true);
     });
     panel.querySelectorAll(".nav-item").forEach(link => {
       const label = Array.from(link.childNodes).filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim();
