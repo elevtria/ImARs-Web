@@ -28,7 +28,7 @@
 .admin-portal .panel>p{line-height:1.6;margin-top:12px}
 .admin-portal #moreAudit{margin-top:20px}
 .admin-portal [hidden]{display:none!important}
-.admin-reauth{border:1px solid #abcce8;border-radius:24px;padding:0;width:min(500px,calc(100% - 32px));color:#173d60;background:#fff}
+.admin-reauth{position:fixed;inset:0;margin:auto;height:fit-content;max-height:calc(100dvh - 32px);overflow-y:auto;border:1px solid #abcce8;border-radius:24px;padding:0;width:min(500px,calc(100vw - 32px));max-width:calc(100vw - 32px);color:#173d60;background:#fff;box-shadow:0 24px 80px #10273d40}
 .admin-reauth::backdrop{background:#10273d88;backdrop-filter:blur(4px)}
 .admin-reauth form{padding:28px;display:grid;gap:20px}.admin-reauth h2,.admin-reauth p{margin:0;line-height:1.6}
 .admin-reauth label{display:grid;gap:10px;font-weight:700}.admin-reauth input{font:inherit;padding:13px;border:1px solid #9fbfda;border-radius:12px;width:100%;box-sizing:border-box}

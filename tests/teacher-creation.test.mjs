@@ -12,7 +12,7 @@ test("Add Teacher accepts a name and email without creating sections or requirin
   for (const name of ["Alex Reyes", "Ma. José Niño", "Mary-Jane O'Connor", "Ana O’Reyes", "李老师"]) {
     const app = await admin();
     const before = [...app.data.keys()].filter(path => path.startsWith("classes/"));
-    const response = await app.call({ action: "create-teacher", profile: { name, email: "new@example.test" } }, app.cookie);
+    const response = await app.call({ action: "create-teacher", password: "correct", profile: { name, email: "new@example.test" } }, app.cookie);
     assert.equal(response.status, 200, await response.clone().text());
     const { id } = await response.json();
     const saved = app.data.get("users/" + id);
@@ -28,7 +28,7 @@ test("Add Teacher accepts a name and email without creating sections or requirin
 test("numeric and malformed teacher names are rejected before any account is saved", async () => {
   const app = await admin();
   for (const name of [123, null, "", "   ", "123", "Alex Reyes2", "１２３", "Alex_Reyes", "<script>", "Alex\nReyes", "A".repeat(121)]) {
-    const response = await app.call({ action: "create-teacher", profile: { name, email: "new@example.test" } }, app.cookie);
+    const response = await app.call({ action: "create-teacher", password: "correct", profile: { name, email: "new@example.test" } }, app.cookie);
     assert.equal(response.status, 400, String(name));
   }
   assert.equal(app.store.committed, 0);
@@ -37,7 +37,7 @@ test("numeric and malformed teacher names are rejected before any account is sav
 
 test("teacher creation retains valid older invitations and still requires an administrator", async () => {
   const app = await admin();
-  const input = { action: "create-teacher", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["Hydrogen"] } };
+  const input = { action: "create-teacher", password: "correct", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["Hydrogen"] } };
   app.data.get("users/TEACH1000").authEmailVerified = true;
   const teacher = await app.login();
   assert.equal((await app.call(input, teacher)).status, 403);

@@ -2,6 +2,7 @@ import { ABSOLUTE_AFTER_MS, validSessionId } from "./web-session.js";
 import { FirestoreAdmin, serviceAccount, databaseQuotaFailure } from "./firestore-admin.js";
 import { appStore, supabaseWebData } from "./supabase-app-store.js";
 import { openTeacherSession, checkTeacherSession } from "./teacher-sessions.js";
+import { confirmAdministratorPassword } from "./admin-reauth.js";
 
 const cookieName = "__Host-imars-web";
 const encoder = new TextEncoder();
@@ -417,6 +418,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
       const owner = await maintenance(request, env);
       const caller = owner ? null : dataEnabled(env) ? await requireStaff(request, env, store || appStore(env)) : await webSession(request, env, now);
       if (!owner && caller?.role !== "admin") return json({ error: "Administrator or maintenance access is required." }, 403);
+      if (!owner) await confirmAdministratorPassword(env, store || appStore(env), caller, body.password, stateCall);
       const target = await resolveStaff(env, String(body.identifier || "").trim(), accounts, store);
       if (!target || (!owner && target.role !== "teacher")) return json({ error: "An administrator can unlock teachers. Maintenance must restore an administrator." }, 403);
       const result = await stateCall(env, `account:${target.uid}`, "unlock", {});
@@ -428,8 +430,8 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
     return json({ error: "Not found." }, 404);
   } catch (error) {
     if (databaseQuotaFailure(error)) return json({ error: "Sign-in is temporarily unavailable because the data service usage limit was reached. Please try again later.", code: "DATABASE_QUOTA_EXCEEDED" }, 503, { "Retry-After": "60" });
-    if (![400, 401, 403, 413].includes(error.status)) logAuthFailure("api:" + action, error);
-    return [400, 401, 403, 413].includes(error.status) ? json({ error: error.message }, error.status)
+    if (![400, 401, 403, 413, 429].includes(error.status)) logAuthFailure("api:" + action, error);
+    return [400, 401, 403, 413, 429].includes(error.status) ? json({ error: error.message }, error.status)
       : json({ error: "Login protection is temporarily unavailable. Contact website maintenance." }, 503);
   }
 }

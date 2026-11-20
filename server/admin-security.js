@@ -2,6 +2,7 @@ import { appStore } from "./supabase-app-store.js";
 import { requireStaff, stateCall, readJson } from "./web-auth.js";
 import { transferredRosterWrites } from "./web-data.js";
 import { auditCollection, securityAudit } from "./security-audit.js";
+import { confirmAdministratorPassword } from "./admin-reauth.js";
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const validId = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
@@ -37,11 +38,7 @@ export async function adminSecurity({ request, env }, { store, authenticate = re
         targetId: data.targetId, details: data.details, at: data.at })), cursor: rows.length > 25 ? rows[24].id : null });
     }
     if (!["reset-password", "end-sessions", "transfer-section"].includes(body.action)) throw fail("Unknown account operation.");
-    if (typeof body.password !== "string" || !body.password || body.password.length > 4096) throw fail("Confirm your administrator password.");
-    const identity = await store.identity(actor.uid);
-    if (!identity?.email || identity.disabled || identity.localId !== actor.uid) throw fail("Account verification is unavailable.", 503);
-    const checked = await callState(env, "admin-security:" + actor.uid, "mobile-password", { uid: actor.uid, email: identity.email, password: body.password });
-    if (!checked.ok) throw fail(checked.status === 429 ? "Too many incorrect confirmations. Try again after five minutes." : "Your administrator password could not be confirmed.", checked.status === 429 ? 429 : 400);
+    await confirmAdministratorPassword(env, store, actor, body.password, callState);
     await store.begin(); transaction = true;
     const current = await authenticate(request, env, store);
     if (current.role !== "admin" || current.uid !== actor.uid) throw fail("Administrator access is required.", 403);

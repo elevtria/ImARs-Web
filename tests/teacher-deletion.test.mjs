@@ -54,7 +54,7 @@ async function admin() {
   return { ...app, cookie: await app.login("ADMIN1000", "admin") };
 }
 
-const remove = id => ({ action: "commit", writes: [{ operation: "delete", path: "users/" + id }] });
+const remove = id => ({ action: "commit", password: "correct", writes: [{ operation: "delete", path: "users/" + id }] });
 
 test("teacher removal survives repeated directory imports and report refreshes", async () => {
   const app = await admin();
@@ -111,7 +111,7 @@ test("only administrators may remove teachers, and stale activation cannot undo 
   assert.equal(app.data.get("users/TEACH1001").active, true);
   assert.equal((await app.call(remove("ADMIN1000"), app.cookie)).status, 403);
   assert.equal((await app.call(remove("TEACH1001"), app.cookie)).status, 200);
-  assert.equal((await app.call({ action: "commit", writes: [{ operation: "update", path: "users/TEACH1001",
+  assert.equal((await app.call({ action: "commit", password: "correct", writes: [{ operation: "update", path: "users/TEACH1001",
     data: { active: true, status: "active" } }] }, app.cookie)).status, 403);
   assert.equal(app.data.get("users/TEACH1001").status, "deleted");
   assert.equal((await app.call(remove("TEACH1001"), app.cookie)).status, 200);
@@ -128,7 +128,7 @@ test("reports hide deleted teachers while retaining ordinary inactive staff", as
 
 test("removing an invitation disables its reservation and imports respect tombstones outside the roster page", async () => {
   const app = await admin();
-  const response = await app.call({ action: "create-teacher", profile: { name: "Test Teacher", email: "new@example.test" } }, app.cookie);
+  const response = await app.call({ action: "create-teacher", password: "correct", profile: { name: "Test Teacher", email: "new@example.test" } }, app.cookie);
   assert.equal(response.status, 200);
   const { id } = await response.json();
   const oldTeacher = structuredClone(app.data.get("users/" + id));

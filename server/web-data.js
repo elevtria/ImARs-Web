@@ -8,6 +8,7 @@ import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
 import { securityAudit } from "./security-audit.js";
+import { confirmAdministratorPassword } from "./admin-reauth.js";
 import { activityPercent } from "../js/activity-score.js";
 import { scoreOverride, validLessonScore } from "../js/lesson-score.js";
 import { activeProfile } from "./student-quiz-auth.js";
@@ -782,6 +783,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     if (!object(body)) throw fail("Invalid data request.", 400);
     if (!(body.action === "admin-report" && body.refreshDirectory === true)) directorySync(env, settingsFetcher, waitUntil);
     if (["commit", "create-teacher"].includes(body.action)) {
+      if (actorBefore.role === "admin") await confirmAdministratorPassword(env, store, actorBefore, body.password, stateCall);
       const changesSchoolYear = body.action === "commit" && Array.isArray(body.writes) && body.writes.some(write => write?.path === schoolYearPath);
       if (supabaseSettings && changesSchoolYear) {
         if (actorBefore.role !== "admin") throw fail();
@@ -973,7 +975,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
   } catch (error) {
     if (transaction) await transaction.rollback().catch(() => {});
     if (databaseQuotaFailure(error)) return respond({ error: error.message, code: "DATABASE_QUOTA_EXCEEDED" }, 503);
-    const status = [400, 401, 403, 409, 413].includes(error.status) ? error.status : 503;
+    const status = [400, 401, 403, 409, 413, 429].includes(error.status) ? error.status : 503;
     return respond({ error: status === 503 ? "Your data could not be loaded or saved. Please retry or contact website maintenance." : error.message,
       code: status === 401 ? "unauthenticated" : status === 403 ? "permission-denied" : status === 409 ? "aborted" : "unavailable" }, status);
   }

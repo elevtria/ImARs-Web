@@ -3,7 +3,7 @@ import { teacherViewCache } from "./view-cache.js";
 
 let active = false;
 // Native dialog traps focus and blocks pointer/keyboard access to the background.
-export function confirmAdminAction(body, title, message) {
+export function confirmAdminAction(body, title, message, options = {}) {
   if (active) return Promise.resolve(null);
   active = true;
   const dialog = document.createElement("dialog");
@@ -25,7 +25,7 @@ export function confirmAdminAction(body, title, message) {
       if (busy) return;
       busy = true; submit.disabled = cancel.disabled = true; status.textContent = "Confirming and saving…";
       try {
-        result = await webRequest("/api/admin-security/action", { ...body, password: input.value });
+        result = await webRequest(options.endpoint || "/api/admin-security/action", { ...body, password: input.value });
         teacherViewCache().invalidate();
         dialog.close();
       } catch (error) { status.textContent = error.message; }

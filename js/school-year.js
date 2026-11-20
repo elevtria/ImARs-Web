@@ -130,10 +130,10 @@ select?.addEventListener("change", async () => {
     displayYear(year);
     rememberYear(year);
     showStatus("Saved for all teachers");
-  } catch {
+  } catch (error) {
     if (currentGeneration !== generation) return;
     select.value = String(confirmedYear);
-    showStatus("Could not save the school year. Please try again.", true);
+    showStatus(error.code === "cancelled" ? "School year unchanged." : "Could not save the school year. Please try again.", error.code !== "cancelled");
   } finally {
     saving = false;
     refreshControl();

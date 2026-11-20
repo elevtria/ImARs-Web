@@ -62,7 +62,7 @@ export function fixture() {
         fetch: async (_url, options) => {
           const body = JSON.parse(options.body);
           const record = [...data.values()].find(row => row.email === body.email && row.uid);
-          return body.password === "correct" && record ? Response.json({ localId: record.uid, idToken: "private-token" }) : Response.json({ error: { message: "INVALID_PASSWORD" } }, { status: 400 });
+          return body.password === "correct" && record ? Response.json({ localId: record.uid, email: record.email, idToken: "private-token" }) : Response.json({ error: { message: "INVALID_PASSWORD" } }, { status: 400 });
         }
       }));
     }

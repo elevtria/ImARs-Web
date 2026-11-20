@@ -6,7 +6,7 @@ import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
 import { webRequest } from "./web-login.js";
 import { getFirestore, getAdminReport, doc, updateDoc, deleteDoc, createTeacher } from "./firebase-data.js";
-import { confirmAction } from "./confirm-action.js";
+import { confirmAdminAction } from "./admin-account-action.js";
 import { teacherViewCache, encodeView } from "./view-cache.js";
 
 const app = initializeApp();
@@ -180,11 +180,10 @@ if (list) {
     if (unlock) {
       const identifier = unlock.dataset.unlockWebId;
       const uid = auth.currentUser.uid;
-      if (!await confirmAction({ title: "Restore web login?", message: `Clear the failed-attempt history for ${identifier}.`, confirmLabel: "Restore login", destructive: false }) || auth.currentUser?.uid !== uid) return;
       unlock.disabled = true;
       try {
-        await webRequest("/api/web-auth/unlock", { identifier });
-        alert(`Web login restored for ${identifier}.`);
+        const result = await confirmAdminAction({ identifier }, "Restore web login?", `Clear the failed-attempt history for ${identifier}. Confirm your own administrator password.`, { endpoint: "/api/web-auth/unlock" });
+        if (result && auth.currentUser?.uid === uid) alert(`Web login restored for ${identifier}.`);
       } catch (error) { alert(error.message); }
       finally { unlock.disabled = false; }
       return;
@@ -198,7 +197,6 @@ if (list) {
 
       const nextStatus = !teacher.active;
       const uid = auth.currentUser.uid;
-      if (!nextStatus && !await confirmAction({ title: "Deactivate teacher?", message: `Deactivate ${teacher.name}’s staff profile?`, confirmLabel: "Deactivate teacher" })) return;
       if (auth.currentUser?.uid !== uid) return;
       try {
         await updateDoc(doc(db, "users", teacherId), {
@@ -208,6 +206,7 @@ if (list) {
         teacher.active = nextStatus;
         render();
       } catch (err) {
+        if (err.code === "cancelled") return;
         console.error("Failed to update status:", err);
         alert("Error updating teacher status.");
       }
@@ -222,12 +221,13 @@ if (list) {
       if (!teacher) return;
 
       const uid = auth.currentUser.uid;
-      if (!await confirmAction({ title: "Delete teacher profile?", message: `Remove ${teacher.name} from the portal and block their staff access? A deleted profile is retained in the database to prevent reactivation. Student and learning records are kept.`, confirmLabel: "Delete profile" }) || auth.currentUser?.uid !== uid) return;
+      if (auth.currentUser?.uid !== uid) return;
       try {
         await deleteDoc(doc(db, "users", teacherId));
         teachers = teachers.filter((t) => t.id !== teacherId);
         render();
       } catch (err) {
+        if (err.code === "cancelled") return;
         console.error("Failed to delete teacher:", err);
         alert("Error deleting teacher.");
       }
@@ -287,6 +287,7 @@ if (form) {
 
       alert(`Teacher registered! Give the Teacher ID to the teacher:\n\nID: ${nextTeacherId}\nEmail: ${email}`);
     } catch (err) {
+      if (err.code === "cancelled") return;
       console.error("Failed to add teacher to Firestore:", err);
       alert("Error adding teacher: " + err.message);
     } finally {

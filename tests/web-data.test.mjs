@@ -347,7 +347,7 @@ const union = (...values) => ({ $type: "arrayUnion", values });
 
 const get = path => ({ action: "get", reference: { kind: "document", path } });
 const query = (path, filters = []) => ({ action: "query", reference: { kind: "query", path, filters: filters.map(([field, value]) => ({ field, op: "==", value })) } });
-const save = (path, data, merge = true) => ({ action: "commit", writes: [{ operation: "set", path, data, merge }] });
+const save = (path, data, merge = true) => ({ action: "commit", password: "correct", writes: [{ operation: "set", path, data, merge }] });
 
 test("Firestore pagination uses a document cursor and totals use COUNT without downloading profiles", async () => {
   const store = new FirestoreAdmin({}), requests = [];
@@ -739,7 +739,7 @@ test("admin data access works through middleware, invitations use private reserv
   const response = await protectWebsite({ env: app.env, request: new Request("https://imars.example.test/api/web-data", { headers: { Cookie: admin } }), next: async () => new Response("data") });
   assert.equal(response.status, 200);
   assert.equal((await app.call(query("users", [["role", "teacher"]]), admin)).status, 200);
-  const invite = { action: "create-teacher", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["C"] } };
+  const invite = { action: "create-teacher", password: "correct", profile: { name: "New Teacher", email: "new@example.test", subject: "Science", sections: ["C"] } };
   assert.equal((await app.call(invite, teacher)).status, 403);
   const created = await app.call(invite, admin); assert.equal(created.status, 200);
   const { id } = await created.json(); assert.equal(id, "TEACH1002");
@@ -748,7 +748,7 @@ test("admin data access works through middleware, invitations use private reserv
   app.data.get("users/" + id).uid = "new-teacher";
   app.data.get("users/" + id).authEmailVerified = true;
   const dynamic = await app.login(id); assert.equal((await app.auth("identity", {}, dynamic)).status, 200);
-  assert.equal((await app.call({ action: "commit", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
+  assert.equal((await app.call({ action: "commit", password: "correct", writes: [{ operation: "delete", path: "users/" + id }] }, admin)).status, 200);
   assert.equal((await app.auth("identity", {}, dynamic)).status, 401);
   const again = await app.call(invite, admin); assert.equal((await again.json()).id, "TEACH1003");
 });
@@ -762,7 +762,7 @@ test("a forged public teacher profile cannot enroll itself in the private websit
 
 test("a public invitation and an unverified Auth account cannot grant website access; verification permits a fresh login", async () => {
   const app = fixture(), admin = await app.login("ADMIN1000", "admin");
-  const created = await app.call({ action: "create-teacher", profile: { name: "Invited Teacher", email: "invited@example.test", subject: "Science", sections: ["C"] } }, admin);
+  const created = await app.call({ action: "create-teacher", password: "correct", profile: { name: "Invited Teacher", email: "invited@example.test", subject: "Science", sections: ["C"] } }, admin);
   assert.equal(created.status, 200);
   const { id } = await created.json(), profile = app.data.get("users/" + id);
   profile.uid = "invited-teacher";
@@ -821,7 +821,7 @@ test("Supabase school year is shared by public reads and authorized admin saves"
   const read = () => handle(new Request("https://imars.example.test/api/web-data/school-year"));
   const write = { operation: "set", path, merge: true,
     data: { startYear: 2030, endYear: 2031, updatedBy: "admin-a", updatedAt: stamp } };
-  const save = (cookie, writes) => handle(app.request("/api/web-data", { action: "commit", writes }, cookie));
+  const save = (cookie, writes) => handle(app.request("/api/web-data", { action: "commit", password: "correct", writes }, cookie));
   const original = structuredClone(app.data.get(path));
   assert.deepEqual(await (await read()).json(), { startYear: 2027 });
   assert.equal((await save(teacher, [write])).status, 403);

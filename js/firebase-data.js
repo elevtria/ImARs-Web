@@ -49,7 +49,19 @@ function snapshot(record) {
   return { id: record.id, ref: { kind: "document", path: record.path, id: record.id }, metadata: { fromCache: false, hasPendingWrites: false }, exists: () => record.data !== null, data: () => decode(record.data) };
 }
 let reads = [], scheduled = false;
-function request(body) {
+async function request(body) {
+  if (["commit", "create-teacher"].includes(body.action) && getAuth().currentUser?.role === "admin") {
+    const { confirmAdminAction } = await import("./admin-account-action.js");
+    const year = body.writes?.find(write => write.path === "webSettings/schoolYear");
+    const creating = body.action === "create-teacher";
+    const result = await confirmAdminAction(body, creating ? "Create teacher account?" : year ? "Change school-year setting?" : "Confirm administrative change?",
+      creating ? `Create a staff account for ${body.profile.name}? Confirm your own administrator password.` : year
+        ? "This changes the school-year label for all teachers. It does not archive records. Confirm your own administrator password."
+        : "Save this account change? Removed teachers remain disabled in the database; student and learning records are preserved. Confirm your own administrator password.",
+      { endpoint: "/api/web-data" });
+    if (!result) throw Object.assign(new Error("The action was canceled."), { code: "cancelled" });
+    return result;
+  }
   if (!["get", "query"].includes(body.action)) return webRequest("/api/web-data", encode(body));
   const pending = new Promise((resolve, reject) => reads.push({ body, resolve, reject }));
   if (!scheduled) {
