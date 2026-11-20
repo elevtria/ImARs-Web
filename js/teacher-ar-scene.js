@@ -1,6 +1,10 @@
 // Loaded only when a signed-in teacher opens the AR classroom.
 import { THREE, GLTFLoader, MindARThree } from "./vendor/teacher-ar-engine.js";
 
+// MindAR processes the negotiated camera size on every tracking pass.
+const TRACKING_WIDTH = 960;
+const TRACKING_HEIGHT = 540;
+
 export function stopCameraTracks(stream) {
   stream?.getTracks().forEach(track => track.stop());
 }
@@ -21,7 +25,7 @@ export async function tuneTrackingCamera(stream) {
 export class TeacherMarkerTracker extends MindARThree {
   async _startVideo() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-      width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 },
+      width: { ideal: TRACKING_WIDTH }, height: { ideal: TRACKING_HEIGHT }, frameRate: { ideal: 30 },
       ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : { facingMode: "environment" })
     } });
     if (this.closed) { stopCameraTracks(stream); throw new DOMException("Camera closed", "AbortError"); }
@@ -67,6 +71,45 @@ export class TeacherMarkerTracker extends MindARThree {
   }
 }
 
+class MarkerPose {
+  constructor() {
+    this.position = new THREE.Vector3();
+    this.rotation = new THREE.Quaternion();
+    this.scale = new THREE.Vector3();
+    this.targetPosition = new THREE.Vector3();
+    this.targetRotation = new THREE.Quaternion();
+    this.targetScale = new THREE.Vector3();
+  }
+
+  update(group, elapsed) {
+    // MindAR replaces the anchor matrix when it has a new pose. Keep drawing
+    // toward that pose between tracker updates, at the display's frame rate.
+    const matrix = group.matrix;
+    if (matrix !== this.sample || group !== this.group) {
+      this.sample = matrix;
+      matrix.decompose(this.targetPosition, this.targetRotation, this.targetScale);
+      this.targetRotation.normalize();
+      if (this.group !== group) {
+        this.group = group;
+        this.position.copy(this.targetPosition);
+        this.rotation.copy(this.targetRotation);
+        this.scale.copy(this.targetScale);
+      }
+    }
+    const blend = 1 - Math.exp(-elapsed / .025);
+    this.position.lerp(this.targetPosition, blend);
+    this.rotation.slerp(this.targetRotation, blend);
+    this.scale.lerp(this.targetScale, blend);
+    matrix.compose(this.position, this.rotation, this.scale);
+    group.matrixWorldNeedsUpdate = true;
+  }
+
+  reset() {
+    this.group = null;
+    this.sample = null;
+  }
+}
+
 const safeName = name => THREE.PropertyBinding.sanitizeNodeName(name || "").toLowerCase();
 export class TeacherARScene {
   constructor({ stage, overlay, onStatus, onTracking, onSelect, onModelDetected, onDissection, onLabelAnchor }) {
@@ -91,8 +134,16 @@ export class TeacherARScene {
   }
   resize() {
     const width = this.stage.clientWidth, height = this.stage.clientHeight;
-    if (!width || !height) return;
-    this.tracker?.resize();
+    const tracker = this.tracker;
+    if (!width || !height || !tracker) return;
+    // Limit the number of rendered pixels in Low and Balanced, including when
+    // the stage fills the screen in presentation mode.
+    const limit = this.quality === "low" ? 1 : this.quality === "high" ? 2 : 1.5;
+    const pixelBudget = this.quality === "low" ? 640 * 480 : 960 * 720;
+    const budgetRatio = this.quality === "high" ? limit : Math.sqrt(pixelBudget / (width * height));
+    const ratio = Math.min(devicePixelRatio, limit, budgetRatio);
+    if (tracker.renderer.getPixelRatio() !== ratio) tracker.renderer.setPixelRatio(ratio);
+    tracker.resize();
   }
   async load(item) {
     this.tracked = false; this.onTracking(false);
@@ -225,15 +276,20 @@ export class TeacherARScene {
       button.type = "button"; button.className = "teacher-ar-hotspot"; button.textContent = label.title;
       button.setAttribute("aria-label", `Play narration: ${label.title}`);
       button.title = `Click to hear about ${label.title}`;
+      button.dataset.labels = "false";
       button.hidden = true;
       button.addEventListener("click", event => { event.stopPropagation(); this.onSelect(label.id); });
       this.overlay.append(button);
       return { label, parts, button };
     });
   }
-  anchorWorld(part) {
-    if (part.mesh) return part.mesh.localToWorld(part.mesh.getVertexPosition(part.vertexIndex, new THREE.Vector3()));
-    return this.model.localToWorld(part.modelPoint.clone());
+  anchorWorld(part, point = new THREE.Vector3(), matricesCurrent = false) {
+    if (part.mesh) part.mesh.getVertexPosition(part.vertexIndex, point);
+    else point.copy(part.modelPoint);
+    const object = part.mesh || this.model;
+    // The renderer already updated these matrices for this frame.
+    if (!matricesCurrent) object.updateWorldMatrix(true, false);
+    return point.applyMatrix4(object.matrixWorld);
   }
   setLabels(visible) { this.labelsVisible = visible; this.positionHotspots(); }
   setIndicators(visible) { this.indicatorsVisible = visible; this.positionHotspots(); }
@@ -241,24 +297,33 @@ export class TeacherARScene {
     for (let current = node; current && current !== this.model; current = current.parent) if (!current.visible) return false;
     return true;
   }
-  positionHotspots() {
+  positionHotspots(matricesCurrent = false) {
     if (!this.model) { this.onLabelAnchor?.(null); return; }
     const camera = this.tracker?.camera;
+    const tracking = camera && this.tracked;
+    const width = tracking ? this.stage.clientWidth : 0;
+    const height = tracking ? this.stage.clientHeight : 0;
+    const showIndicator = this.indicatorsVisible !== false;
     let anchor = null;
     for (const hotspot of this.hotspots) {
-      const part = hotspot.parts.find(part => this.partVisible(part.node));
-      const visible = this.tracker && this.tracked && Boolean(part);
-      hotspot.button.hidden = !visible;
-      // Names and descriptions live beside the view. Only light rings sit on it.
-      hotspot.button.dataset.labels = "false";
-      if (!visible) continue;
-      const point = this.anchorWorld(part);
+      const isSelected = hotspot.label.id === this.selectedLabelId;
+      const part = tracking && (showIndicator || isSelected) && hotspot.parts.find(part => this.partVisible(part.node));
+      if (!part) {
+        if (!hotspot.button.hidden) hotspot.button.hidden = true;
+        continue;
+      }
+      const point = this.anchorWorld(part, this.projectedPoint ||= new THREE.Vector3(), matricesCurrent);
       point.project(camera);
       const inView = point.z >= -1 && point.z <= 1 && Math.abs(point.x) <= 1 && Math.abs(point.y) <= 1;
-      const x = Math.round((point.x + 1) * this.stage.clientWidth / 2), y = Math.round((1 - point.y) * this.stage.clientHeight / 2);
-      hotspot.button.hidden = !inView || this.indicatorsVisible === false;
-      hotspot.button.style.left = `${x}px`; hotspot.button.style.top = `${y}px`;
-      if (inView && hotspot.label.id === this.selectedLabelId) anchor = { x, y };
+      const hidden = !inView || !showIndicator;
+      if (hotspot.button.hidden !== hidden) hotspot.button.hidden = hidden;
+      if (!inView) continue;
+      const x = Math.round((point.x + 1) * width / 2), y = Math.round((1 - point.y) * height / 2);
+      if (!hidden) {
+        if (hotspot.x !== x) { hotspot.x = x; hotspot.button.style.left = `${x}px`; }
+        if (hotspot.y !== y) { hotspot.y = y; hotspot.button.style.top = `${y}px`; }
+      }
+      if (isSelected) anchor = { x, y };
     }
     this.onLabelAnchor?.(anchor);
   }
@@ -297,8 +362,7 @@ export class TeacherARScene {
   setPaused(value) { this.paused = value; this.clock.getDelta(); }
   setQuality(value) {
     this.quality = value;
-    const ratio = Math.min(devicePixelRatio, value === "low" ? 1 : value === "high" ? 2 : 1.5);
-    this.tracker?.renderer.setPixelRatio(ratio); this.resize();
+    this.resize();
   }
   async startScanning(deviceId, scanner) {
     if (this.closed || !scanner?.targetModels?.length) return false;
@@ -312,6 +376,7 @@ export class TeacherARScene {
     if (this.model) this.model.visible = false;
     this.lights(tracker.scene);
     this.activeAnchor = null;
+    this.resize();
     scanner.targetModels.forEach((modelId, index) => {
       const anchor = tracker.addAnchor(index);
       anchor.modelId = modelId;
@@ -328,6 +393,7 @@ export class TeacherARScene {
       anchor.onTargetLost = () => {
         if (this.tracker !== tracker || this.activeAnchor !== anchor) return;
         this.activeAnchor = null; this.tracked = false;
+        this.markerPose?.reset();
         if (this.model) this.model.visible = false;
         tracker.renderer.clear(); this.onTracking(false); this.positionHotspots();
       };
@@ -335,7 +401,6 @@ export class TeacherARScene {
     try {
       await tracker.start();
       if (this.closed || generation !== this.scanGeneration) { tracker.close(); return false; }
-      this.setQuality(this.quality);
       tracker.renderer.setAnimationLoop(() => this.draw());
       this.resize();
       return true;
@@ -351,6 +416,7 @@ export class TeacherARScene {
     this.scanGeneration++;
     const tracker = this.tracker;
     this.tracker = null; this.tracked = false; this.activeAnchor = null;
+    this.markerPose?.reset();
     if (this.model) { this.scene.add(this.model); this.model.visible = false; }
     tracker?.close();
     this.onTracking(false);
@@ -395,12 +461,17 @@ export class TeacherARScene {
     if (this.closed || document.visibilityState === "hidden") return;
     if (this.model) this.model.visible = Boolean(this.tracker && this.tracked);
     const delta = Math.min(this.clock.getDelta(), .1);
+    const marker = this.activeAnchor?.group;
+    if (this.tracked && marker?.matrix) {
+      this.markerPose ||= new MarkerPose();
+      this.markerPose.update(marker, delta);
+    }
     if (!this.paused && this.tracker && this.tracked) {
       this.advanceDissection(delta);
       this.mixers?.forEach(mixer => mixer.update(delta));
     }
     if (this.tracker) this.tracker.renderer.render(this.tracker.scene, this.tracker.camera);
-    this.positionHotspots();
+    this.positionHotspots(true);
   }
   screenshot() {
     if (!this.tracker || !this.tracked || !this.model) throw new Error("Scan a marker before taking a screenshot.");

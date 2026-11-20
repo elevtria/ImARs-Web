@@ -105,8 +105,8 @@ test("camera startup requests no microphone and closing releases its stream", as
   await tracker._startVideo();
   assert.equal(constraints.audio, false);
   assert.equal(constraints.video.facingMode, "environment");
-  assert.equal(constraints.video.width.ideal, 1280);
-  assert.equal(constraints.video.height.ideal, 720);
+  assert.equal(constraints.video.width.ideal, 960);
+  assert.equal(constraints.video.height.ideal, 540);
   assert.equal(constraints.video.frameRate.ideal, 30);
   assert.equal(constraints.video.width.exact, undefined, "older webcams may negotiate a lower resolution");
   tracker.close();

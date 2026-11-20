@@ -49,7 +49,13 @@ export class TeacherARCallout {
     if (!value) this.hide(true);
   }
   update(anchor) {
-    if (!this.enabled || !anchor) { this.hide(true); return; }
+    if (!this.enabled || !anchor) {
+      this.anchor = null;
+      this.hide(true);
+      return;
+    }
+    if (!this.dirty && this.anchor?.x === anchor.x && this.anchor.y === anchor.y) return;
+    this.anchor = anchor;
     if (this.dirty) {
       this.bounds = { frame: this.frame.getBoundingClientRect(), viewport: this.viewport.getBoundingClientRect(), card: this.card.getBoundingClientRect(), rail: this.rail.getBoundingClientRect() };
       this.svg.setAttribute("viewBox", `0 0 ${this.bounds.frame.width} ${this.bounds.frame.height}`);
@@ -57,7 +63,10 @@ export class TeacherARCallout {
     }
     const { viewport, frame, card, rail } = this.bounds;
     const position = descriptionPlacement(anchor, viewport, rail, this.side); this.side = position.side;
-    this.rail.style.left = `${position.x}px`; this.rail.style.top = `${position.y}px`; this.rail.style.right = "auto";
+    const left = `${position.x}px`, topOffset = `${position.y}px`;
+    if (this.rail.style.left !== left) this.rail.style.left = left;
+    if (this.rail.style.top !== topOffset) this.rail.style.top = topOffset;
+    if (this.rail.style.right !== "auto") this.rail.style.right = "auto";
     const offset = card.top - rail.top, top = Math.max(0, offset), bottom = Math.min(rail.height, offset + card.height);
     const placed = { left: viewport.left + position.x + card.left - rail.left, top: viewport.top + position.y + top, width: card.width, height: Math.max(0, bottom - top) };
     const d = descriptionArrow(anchor, viewport, placed, frame);

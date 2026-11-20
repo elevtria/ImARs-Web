@@ -83,7 +83,7 @@ downloadable marker packs. Compilation composites images onto their print backgr
 before feature extraction, retains earlier app references, and deduplicates equivalent
 images. A combined target file maps every recognized image variant to its model,
 so the same running scanner can recognize markers across all lessons.
-The scanner requests an optional 1280×720 camera image and continuous focus /
+The scanner requests an optional 960×540 camera image and continuous focus /
 exposure where supported. Two successful tracked frames confirm recognition, while
 the model remains hidden until recognition. Unsupported camera settings are optional
 and do not block older laptop webcams.
