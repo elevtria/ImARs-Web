@@ -433,6 +433,12 @@
   :root.theme-switching[data-theme-from="light"] { color-scheme: light !important; }
   :root.theme-switching[data-theme-from="dark"] { color-scheme: dark !important; }
   :root.theme-switching * { view-transition-name: none !important; transition: none !important; }
+  /* Keep the admin background still while the browser reveals the new palette. */
+  :root.theme-switching .admin-portal .login-cubes::before,
+  :root.theme-switching .admin-portal .login-cubes::after,
+  :root.theme-switching .admin-portal .floating-cube {
+    animation-play-state: paused;
+  }
   :root.theme-switching::view-transition { pointer-events: none; }
   :root.theme-switching::view-transition-group(root) { animation: none; }
   :root.theme-switching::view-transition-image-pair(root) { isolation: isolate; }
