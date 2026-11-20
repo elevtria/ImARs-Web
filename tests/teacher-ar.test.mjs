@@ -107,7 +107,7 @@ test("camera startup requests no microphone and closing releases its stream", as
   assert.equal(constraints.video.facingMode, "environment");
   assert.equal(constraints.video.width.ideal, 960);
   assert.equal(constraints.video.height.ideal, 540);
-  assert.equal(constraints.video.frameRate.ideal, 30);
+  assert.equal(constraints.video.frameRate.ideal, 60);
   assert.equal(constraints.video.width.exact, undefined, "older webcams may negotiate a lower resolution");
   tracker.close();
   assert.equal(stopped, 1); assert.equal(video.removed, true);
@@ -160,7 +160,7 @@ test("automatic scan mode shows no model until its marker is recognized", async 
   const { scene, scanner } = markerScene();
   await scene.startScanning(undefined, scanner);
   const tracker = scene.tracker;
-  assert.equal(tracker.options.warmupTolerance, 1, "confirmation needs two valid tracked frames instead of six");
+  assert.equal(tracker.options.warmupTolerance, 0, "recognition can use the first frame with a valid match and pose");
   assert.equal(scene.model.visible, false);
   scene.draw(); assert.equal(tracker.renderer.lastModelVisible, false);
   tracker.anchor.group.visible = true; tracker.anchor.onTargetFound();

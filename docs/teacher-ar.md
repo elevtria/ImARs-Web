@@ -83,10 +83,11 @@ downloadable marker packs. Compilation composites images onto their print backgr
 before feature extraction, retains earlier app references, and deduplicates equivalent
 images. A combined target file maps every recognized image variant to its model,
 so the same running scanner can recognize markers across all lessons.
-The scanner requests an optional 960×540 camera image and continuous focus /
-exposure where supported. Two successful tracked frames confirm recognition, while
-the model remains hidden until recognition. Unsupported camera settings are optional
-and do not block older laptop webcams.
+The scanner requests 960×540 at up to 60 fps where supported, plus continuous
+focus and exposure. Recognition can start as soon as a frame has a valid match
+and tracking pose. If tracking drops, the scanner checks near the last movement
+alongside a sweep of the full camera frame. Older webcams can negotiate a
+supported resolution and frame rate.
 
 Only code/styles are in the shared versioned graph. The numerous content-hashed
 teaching files use their own stable URLs, avoiding the host's 100 header-rule limit.

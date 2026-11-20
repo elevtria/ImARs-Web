@@ -1,5 +1,6 @@
 // Loaded only when a signed-in teacher opens the AR classroom.
 import { THREE, GLTFLoader, MindARThree } from "./vendor/teacher-ar-engine.js";
+import { enableMotionRecovery } from "./teacher-marker-search.js";
 
 // MindAR processes the negotiated camera size on every tracking pass.
 const TRACKING_WIDTH = 960;
@@ -25,7 +26,7 @@ export async function tuneTrackingCamera(stream) {
 export class TeacherMarkerTracker extends MindARThree {
   async _startVideo() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-      width: { ideal: TRACKING_WIDTH }, height: { ideal: TRACKING_HEIGHT }, frameRate: { ideal: 30 },
+      width: { ideal: TRACKING_WIDTH }, height: { ideal: TRACKING_HEIGHT }, frameRate: { ideal: 60 },
       ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : { facingMode: "environment" })
     } });
     if (this.closed) { stopCameraTracks(stream); throw new DOMException("Camera closed", "AbortError"); }
@@ -44,6 +45,15 @@ export class TeacherMarkerTracker extends MindARThree {
     });
     if (this.closed) { stopCameraTracks(stream); throw new DOMException("Camera closed", "AbortError"); }
     await video.play();
+  }
+  async _startAR() {
+    if (this.closed) throw new DOMException("Camera closed", "AbortError");
+    await super._startAR();
+    if (this.closed) {
+      this.controller.stopProcessVideo();
+      throw new DOMException("Camera closed", "AbortError");
+    }
+    enableMotionRecovery(this.controller);
   }
   resize() { if (this.controller && this.video && !this.closed) super.resize(); }
   close() {
@@ -369,7 +379,7 @@ export class TeacherARScene {
     this.stopScanning();
     const generation = ++this.scanGeneration;
     const tracker = new TeacherMarkerTracker({ container: this.stage, imageTargetSrc: scanner.target,
-      maxTrack: 1, uiLoading: "no", uiScanning: "no", uiError: "no", warmupTolerance: 1, missTolerance: 8 });
+      maxTrack: 1, uiLoading: "no", uiScanning: "no", uiError: "no", warmupTolerance: 0, missTolerance: 8 });
     this.tracker = tracker; tracker.deviceId = deviceId;
     tracker.renderer.domElement.className = "teacher-ar-canvas";
     tracker.cssRenderer.domElement.hidden = true;
