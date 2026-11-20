@@ -139,10 +139,51 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   const id = clean.toUpperCase();
   if (!dataEnabled(env) || !/^TEACH\d{4,10}$/.test(id)) return initial;
 
-  // Local removal is authoritative even if the Firestore mirror is unavailable.
-  const localProfile = await store.get("users/" + id);
-  if (String(localProfile?.data?.status || "").toLowerCase() === "deleted") return null;
+  let localProfile = await store.get("users/" + id);
   let profile = null;
+
+  // If a teacher was manually restored in Firestore (active: true, status: "active", no deletedAt)
+  // while Supabase still marks them deleted/inactive, sync the restoration back to Supabase.
+  if (supabaseWebData(env) && env?.FIREBASE_SERVICE_ACCOUNT_JSON &&
+      (localProfile?.data?.active === false || String(localProfile?.data?.status || "").toLowerCase() === "deleted")) {
+    try {
+      const fbStore = new FirestoreAdmin(env);
+      const fbProfile = await fbStore.get("users/" + id);
+      if (fbProfile?.data?.uid &&
+          String(fbProfile.data.role || "").toLowerCase() === "teacher" &&
+          fbProfile.data.active === true &&
+          String(fbProfile.data.status || "").toLowerCase() === "active" &&
+          !fbProfile.data.deletedAt) {
+        const restored = { ...(localProfile?.data || {}), ...fbProfile.data, active: true, status: "active" };
+        delete restored.deletedAt;
+        const authEmail = String(restored.email || restored.providedEmail || "").trim();
+        const existingAccess = await store.get("_accountAccess/" + restored.uid);
+        await store.begin();
+        await store.commit([
+          {
+            operation: "set",
+            path: "users/" + id,
+            data: restored,
+            merge: false,
+            ...(localProfile ? { updateTime: localProfile.updateTime } : {})
+          },
+          {
+            operation: "set",
+            path: "_accountAccess/" + restored.uid,
+            data: { profileId: id, role: "teacher", authEmail, active: true },
+            merge: true,
+            ...(existingAccess ? { updateTime: existingAccess.updateTime } : {})
+          }
+        ]);
+        localProfile = await store.get("users/" + id);
+      }
+    } catch {
+      // Fall through to standard status check below
+    }
+  }
+
+  // Local removal is authoritative even if the Firestore mirror is unavailable.
+  if (String(localProfile?.data?.status || "").toLowerCase() === "deleted") return null;
 
   // Supabase is authoritative once a teacher is linked. Consult the legacy
   // directory only while completing an unlinked mobile registration.
