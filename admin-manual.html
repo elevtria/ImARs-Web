@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/admin-organization.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
 <body class="admin-portal" data-auth-pending>
@@ -55,7 +56,7 @@
           <ul class="manual-checklist">
             <li>Check the school year in the top bar. Selecting a different year updates the setting for all teachers.</li>
             <li>Review teacher and student totals, average test scores, and AR learning time on Overview.</li>
-            <li>Use the Teacher Performance Snapshot to compare average pre- and post-test scores and gains across teachers. A dash indicates a missing score.</li>
+            <li>Use Items needing attention to review unrecorded tests and sections without an active teacher. Open School Analytics for teacher and section comparisons. A dash indicates a missing score.</li>
           </ul>
           <a class="manual-link" href="admin-dashboard.html">Open Overview <span aria-hidden="true">↗</span></a>
         </section>
@@ -71,9 +72,9 @@
           <ul class="manual-checklist">
             <li>Choose <b>Add Teacher</b> and enter the name, email, subject, and sections. Separate multiple sections with commas. Share the assigned Teacher ID with the teacher.</li>
             <li>Find a profile by name, email, Teacher ID, subject, or section.</li>
-            <li>Use the controls on a teacher’s card to activate or deactivate the profile. If the unlock control is available, use it to clear failed web login attempts. Use Remove only when the profile should be deleted.</li>
+            <li>Use the controls on a teacher’s card to activate or deactivate the profile. If the unlock control is available, use it to clear failed web login attempts. Prefer Deactivate for temporary access changes. Remove retains a disabled record and preserves student results.</li>
           </ul>
-          <a class="manual-link" href="manage-teachers.html">Open Manage Teachers <span aria-hidden="true">↗</span></a>
+          <a class="manual-link" href="manage-teachers.html">Open Teachers &amp; Sections <span aria-hidden="true">↗</span></a>
         </section>
       </details>
 
@@ -85,14 +86,15 @@
         </summary>
         <section class="manual-sheet" aria-label="School performance">
           <ul class="manual-checklist">
-            <li>Open School Analytics and choose <b>By Teachers</b> to compare pre-test scores, post-test scores, and gains by teacher.</li>
+            <li>Open School Analytics and choose <b>By Teachers</b> to compare pre-test scores, post-test scores, and changes in average by teacher.</li>
             <li>Choose <b>By Sections</b> to see student counts and results for each section.</li>
-            <li>Read gain in percentage points. A move from 47% to 75% is a gain of 28 percentage points.</li>
+            <li>Use the term and section filters for all analytics cards. Change in average is the difference between independent completed-test averages, in percentage points; it does not establish a learning effect.</li>
           </ul>
           <a class="manual-link" href="school-analytics.html">Open School Analytics <span aria-hidden="true">↗</span></a>
         </section>
       </details>
     </div>
+    <section class="manual-sheet"><h2>Assignments and account security</h2><ul class="manual-checklist"><li>In Teachers &amp; Sections, open Sections &amp; assignments to transfer a section. Confirm the destination teacher and your administrator password. Student scores and activation status are preserved.</li><li>In Account &amp; Security, request recovery for your own account or a teacher with a verified Firebase email, or end portal sessions. Passwords are never displayed.</li><li>The activity log records new admin changes from this release onward. The school-year selector sets the current school year; it is not a historical archive filter.</li></ul><a class="manual-link" href="admin-security.html">Open Account &amp; Security</a></section>
   </main>
   </div>
 
@@ -104,8 +106,9 @@
       </a>
       <nav class="side-nav">
         <a class="nav-item" href="admin-dashboard.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
-        <a class="nav-item" href="manage-teachers.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="nav-item" href="manage-teachers.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Teachers &amp; Sections</a>
         <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="nav-item" href="admin-security.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Account &amp; Security</a>
         <a class="nav-item active" href="admin-manual.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v14H6a2 2 0 1 1 0-4h12M4 18V6a2 2 0 0 1 2-2m2 4h6m-6 4h6"/></svg>Admin Manual</a>
       </nav>
       <div class="side-user">

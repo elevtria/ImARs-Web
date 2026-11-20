@@ -8,74 +8,22 @@ import { summarizeAdminReports } from "../server/admin-report-data.js";
 const stripImports = source => source.replace(/^import[^\n]+\r?\n/gm, "").replace(/^export /gm, "");
 const source = file => stripImports(readFileSync(new URL(`../js/${file}`, import.meta.url), "utf8"));
 
-test("teacher snapshot labels distinguish the tests and tooltips explain counts and missing scores on keyboard focus", () => {
-  const elements = new Map(), documentEvents = {};
-  const element = id => {
-    if (!elements.has(id)) elements.set(id, { style: {}, events: {}, attributes: {}, hidden: true, children: [],
-      setAttribute(name, value) { this.attributes[name] = value; },
-      addEventListener(name, callback) { this.events[name] = callback; },
-      getBoundingClientRect: () => ({ width: 280, height: 80 }),
-      appendChild(child) { this.children.push(...(child.fragment ? child.children : [child])); } });
-    return elements.get(id);
-  };
-  const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {},
-    formatAdminPercent: value => Number.isFinite(value) ? `${value}%` : "—", formatAdminGain: value => Number.isFinite(value) ? `${value} pp` : "—",
-    document: { getElementById: element, querySelectorAll: () => [], addEventListener: (name, callback) => { documentEvents[name] = callback; },
-      createElement: () => ({ innerHTML: "" }), createDocumentFragment: () => ({ fragment: true, children: [], appendChild(row) { this.children.push(row); } }) },
-    window: { innerWidth: 1000, innerHeight: 600, addEventListener() {} } });
+test("admin Overview keeps the school comparison and attention counts without duplicate teacher panels", () => {
+  const elements = new Map();
+  const element = id => { if (!elements.has(id)) elements.set(id, { textContent: "", innerHTML: "", attributes: {}, setAttribute(name,value) { this.attributes[name]=value; } }); return elements.get(id); };
+  const context = vm.createContext({ initializeApp: () => ({}), getAuth: () => ({}), onAuthStateChanged() {}, formatAdminPercent: value => Number.isFinite(value) ? value + "%" : "—", formatAdminGain: value => Number.isFinite(value) ? value + " pp" : "—", document: { getElementById: element } });
   vm.runInContext(source("admin-dashboard.js"), context);
-  const hint = vm.runInContext("snapshotScoreHint", context);
-  assert.match(hint({ pre: 0, preCount: 12 }, "pre"), /Pre-test average: 0%.*12 completed.*before learning/);
-  assert.match(hint({ post: 80, postCount: 10 }, "post"), /Post-test average: 80%.*10 completed.*after learning/);
-  assert.match(hint({ pre: null }, "pre"), /No completed pre-test.*rather than counted as zero/);
-  const trigger = { dataset: { performanceTip: "Pre-test results before learning" }, getBoundingClientRect: () => ({ left: 930, top: 20, width: 50, bottom: 40 }) };
-  element("teacherSnapshot").events.focusin({ target: { closest: () => trigger } });
-  assert.equal(element("teacherPerformanceTooltip").hidden, false);
-  assert.equal(element("teacherPerformanceTooltip").textContent, trigger.dataset.performanceTip);
-  assert.equal(element("teacherPerformanceTooltip").style.left, "708px");
-  documentEvents.keydown({ key: "Escape" });
-  assert.equal(element("teacherPerformanceTooltip").hidden, true);
+  context.report = { teachers: [{ id: "T1", active: true }], totalStudents: 2, pre: 40, post: 80, gain: 40, hours: "9 min", preCount: 2, postCount: 1, expectedTests: 48, sectionDirectory: [{ id:"A", teacherId:"T1" }, { id:"B", teacherId:"missing" }] };
+  vm.runInContext("renderDashboard(report)", context);
+  assert.equal(element("schoolPreBar").attributes.height, "68");
+  assert.equal(element("schoolPostBar").attributes.height, "136");
+  assert.equal(element("totalStudentsVal").textContent, 2);
+  assert.match(element("adminAttention").innerHTML, /3\/48/);
+  assert.match(element("adminAttention").innerHTML, /<dd>45<\/dd>/);
+  assert.match(element("adminAttention").innerHTML, /active teacher<\/dt><dd>1<\/dd>/);
   const html = readFileSync(new URL("../admin-dashboard.html", import.meta.url), "utf8");
-  assert.ok(html.includes("Pre-test average"));
-  assert.ok(html.includes("Post-test average"));
-  assert.ok(html.includes('role="tooltip"'));
-  assert.ok(html.includes("Before learning"));
-  assert.ok(html.includes("After learning"));
-  assert.ok(html.includes("Teacher Performance Comparison"));
-  context.report = { teachers: [{ id: "T1", name: "Teacher", meta: "Science", students: 132, pre: 46, preCount: 120, post: 75, postCount: 110, gain: 29, hours: "9 min" }],
-    totalStudents: 132, pre: 46, post: 75, gain: 29, hours: "9 min" };
-  vm.runInContext("renderDashboard(report)", context);
-  assert.equal(element("schoolPreBar").attributes.height, "78.2");
-  assert.equal(element("schoolPostBar").attributes.height, "127.5");
-  assert.equal(element("schoolPreValue").textContent, "46%");
-  assert.equal(element("schoolPostValue").textContent, "75%");
-  assert.match(element("schoolScoreChart").attributes["aria-label"], /pre-test 46%, post-test 75%/);
-  assert.match(element("teacherScoreChart").innerHTML, /width:46%/);
-  assert.match(element("teacherScoreChart").innerHTML, /width:75%/);
-  assert.match(element("teacherStudentChart").innerHTML, /132 students/);
-  assert.match(element("teacherStudentChart").innerHTML, /width:100%/);
-  vm.runInContext('renderComparisonCharts([{ name: "No Results", students: 0, pre: null, post: null }])', context);
-  assert.match(element("teacherScoreChart").innerHTML, /<strong>—<\/strong>/);
-  assert.doesNotMatch(element("teacherScoreChart").innerHTML, /width:NaN%/);
-  const detail = element("teacherTableBody").children[1];
-  assert.equal(detail.hidden, true);
-  assert.match(detail.innerHTML, /120 completed lesson test results/);
-  assert.match(detail.innerHTML, /110 completed lesson test results/);
-  assert.match(detail.innerHTML, /75% post-test minus 46% pre-test/);
-  elements.set(detail.id, detail);
-  const attributes = { "aria-controls": detail.id, "aria-expanded": "false" };
-  const button = { dataset: { teacherId: "T1", teacherName: "Teacher" }, getAttribute: name => attributes[name], setAttribute: (name, value) => { attributes[name] = value; } };
-  element("teacherSnapshot").events.click({ target: { closest: () => button } });
-  assert.equal(detail.hidden, false);
-  assert.equal(attributes["aria-expanded"], "true");
-  element("teacherSnapshot").events.click({ target: { closest: () => button } });
-  assert.equal(detail.hidden, true);
-  context.report = { teachers: [], totalStudents: 0, pre: null, post: null, gain: null, hours: "0 min" };
-  vm.runInContext("renderDashboard(report)", context);
-  assert.equal(element("schoolPreBar").attributes.height, "0");
-  assert.equal(element("schoolPostBar").attributes.height, "0");
-  assert.equal(element("schoolPreValue").textContent, "—");
-  assert.equal(element("schoolPostValue").textContent, "—");
+  assert.match(html, /Pre-\/Post-test Comparison/);
+  assert.doesNotMatch(html, /teacherSnapshot|teacherScoreChart/);
 });
 
 test("admin and teacher summary cards share pointer movement, reset, and reduced-motion behavior", () => {
@@ -107,7 +55,7 @@ test("admin and teacher summary cards share pointer movement, reset, and reduced
   assert.equal(properties.size, 0);
 });
 
-test("both admin School Analytics cards show before/after labels, hover explanations, and expandable calculation details", () => {
+test("the school summary card show before/after labels, hover explanations, and expandable calculation details", () => {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { style: {}, addEventListener() {} });
@@ -123,9 +71,10 @@ test("both admin School Analytics cards show before/after labels, hover explanat
     sections: [{ name: "A", students: 132, pre: 46, post: 75, gain: 29, preCount: 20, postCount: 20 }] };
   vm.runInContext("renderSchoolAnalytics(report)", context);
   const html = element("overallAnalytics").innerHTML;
-  assert.equal((html.match(/class="analytics-performance-details"/g) || []).length, 2);
-  assert.equal((html.match(/View performance details/g) || []).length, 2);
-  assert.ok(html.includes("Overall Teacher Performance") && html.includes("Average School Performance"));
+  assert.equal((html.match(/class="analytics-performance-details"/g) || []).length, 1);
+  assert.equal((html.match(/View performance details/g) || []).length, 1);
+  assert.ok(html.includes("School Performance"));
+  assert.match(html, /not a paired student comparison/);
   assert.match(html, /Pre-test average/);
   assert.match(html, /Post-test average/);
   assert.match(html, /Before learning/);
@@ -208,6 +157,15 @@ test("an identity without the admin role cannot display or fetch a saved admin r
   assert.equal(app.context.window.location.href, "admin-login.html");
   assert.equal(app.cache.get("admin-a", "admin:reports-v2"), null);
   assert.equal(app.main.cleared, true);
+});
+
+test("admin report cache keys isolate terms and sections", async () => {
+  const app = adminHarness();
+  await app.display({ page: "admin:reports-v3:term_01:A", watchKey: "admin:analytics", load: async () => ({ post: 20 }) });
+  await app.display({ page: "admin:reports-v3:term_02:A", watchKey: "admin:analytics", load: async () => ({ post: 80 }) });
+  assert.equal(app.renders.at(-1).post, 80);
+  await app.display({ page: "admin:reports-v3:term_01:A", watchKey: "admin:analytics", load: async () => assert.fail("The matching term should reuse its own cached report") });
+  assert.equal(app.renders.at(-1).post, 20);
 });
 
 test("an admin write during background refresh discards older results and loads the new values", async () => {

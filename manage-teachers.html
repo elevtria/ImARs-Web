@@ -5,7 +5,7 @@
   <script src="js/theme.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#f5f7fb" />
-  <title>ImARs · Manage Teachers</title>
+  <title>ImARs · Teachers &amp; Sections</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/loading.css" />
   <link rel="stylesheet" href="css/portal-design.css" />
   <link rel="stylesheet" href="css/floating-cubes.css" />
+  <link rel="stylesheet" href="css/admin-organization.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
 <body class="admin-portal" data-auth-pending>
@@ -26,7 +27,7 @@
         <button class="icon-btn" id="menuBtn" type="button" aria-label="Open admin navigation" aria-expanded="false" aria-controls="drawer">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
         </button>
-        <span class="page-title">Manage Teachers</span>
+        <span class="page-title">Teachers &amp; Sections</span>
       </div>
       <div class="topbar-right">
         <div class="school-year-control">
@@ -41,7 +42,7 @@
   <main class="dashboard-content manage-content" inert data-auth-shell>
     <section class="manage-heading hero" data-auth-shell>
       <div>
-        <h1 data-auth-shell>Manage Teachers</h1>
+        <h1 data-auth-shell>Teachers &amp; Sections</h1>
         <p id="teacherSummary">Teacher accounts and assigned sections</p>
       </div>
       <div class="manage-tools">
@@ -56,6 +57,11 @@
       </div>
     </section>
 
+    <div class="admin-tabs" role="tablist" aria-label="Teachers and sections">
+      <button type="button" id="teachersTab" role="tab" aria-selected="true" aria-controls="teachersWorkspace">Teachers</button>
+      <button type="button" id="sectionsTab" role="tab" aria-selected="false" aria-controls="sectionsWorkspace" tabindex="-1">Sections &amp; assignments</button>
+    </div>
+    <div id="teachersWorkspace" role="tabpanel" aria-labelledby="teachersTab">
     <section class="teacher-metrics" aria-label="Teacher and class totals" data-auth-shell data-await-content="admin-report">
       <article class="teacher-metric" data-auth-shell><span class="metric-accent active-accent"></span><div><small>Active</small><strong id="activeCount">—</strong></div></article>
       <article class="teacher-metric" data-auth-shell><span class="metric-accent inactive-accent"></span><div><small>Inactive</small><strong id="inactiveCount">—</strong></div></article>
@@ -65,6 +71,12 @@
 
     <section class="teacher-list" id="teacherList" aria-label="Teacher accounts" data-loading-path="users classes" data-loading-label="Loading teacher records…" data-auth-shell data-await-content="admin-report"></section>
     <p class="no-teachers" id="noTeachers" hidden>No teachers match your search.</p>
+    </div>
+    <section id="sectionsWorkspace" class="panel" role="tabpanel" aria-labelledby="sectionsTab" hidden>
+      <h2>Sections &amp; assignments</h2><p>Transfer an entire section to an active teacher. Existing scores and student account status are preserved.</p>
+      <p id="sectionDirectoryStatus" role="status"></p>
+      <div class="admin-table-wrap"><table class="performance-table"><thead><tr><th>Section</th><th>Current teacher</th><th>Active students</th><th>Assignment</th></tr></thead><tbody id="adminSections"></tbody></table></div>
+    </section>
   </main>
   </div>
 
@@ -76,8 +88,9 @@
       </a>
       <nav class="side-nav">
         <a class="nav-item" href="admin-dashboard.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/></svg>Overview</a>
-        <a class="nav-item active" href="manage-teachers.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Manage Teachers</a>
+        <a class="nav-item active" href="manage-teachers.html" aria-current="page"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M4 19a5 5 0 0 1 10 0M17 11v6m-3-3h6"/></svg>Teachers &amp; Sections</a>
         <a class="nav-item" href="school-analytics.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9m6 10V5m6 14v-7m6 7H2"/></svg>School Analytics</a>
+        <a class="nav-item" href="admin-security.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Account &amp; Security</a>
         <a class="nav-item" href="admin-manual.html"><svg fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h11a2 2 0 0 1 2 2v14H6a2 2 0 1 1 0-4h12M4 18V6a2 2 0 0 1 2-2m2 4h6m-6 4h6"/></svg>Admin Manual</a>
       </nav>
       <div class="side-user">
@@ -108,6 +121,7 @@
 
   <a class="help-button" href="admin-manual.html" aria-label="Open Admin Manual">?</a>
   <script type="module" src="js/manage-teachers.js"></script>
+  <script type="module" src="js/admin-sections.js"></script>
   <script type="module" src="js/teacher-nav.js"></script>
   <script type="module" src="js/navigation-menu.js"></script>
   <script type="module" src="js/school-year.js"></script>

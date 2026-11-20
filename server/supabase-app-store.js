@@ -72,6 +72,9 @@ export class SupabaseAppStore {
   }
 
   async mirrorWritesToFirestore(writes) {
+    // Security events and recovery cooldowns belong only to the current backend.
+    writes = writes.filter(write => !write.path.startsWith("webSettings/security/"));
+    if (!writes.length) return;
     if (!this.firestoreMirror) return;
     try {
       const mirroredWrites = writes.map(write => ({
@@ -176,8 +179,9 @@ export class SupabaseAppStore {
     return records;
   }
 
-  async adminLessonResults(fieldPaths) {
-    const pattern = "^users/[A-Za-z0-9_-]+/test_results/term_0[1-3]/lessons/lesson_0[1-4]$";
+  async adminLessonResults(fieldPaths, { termId = "" } = {}) {
+    if (termId && !/^term_0[1-3]$/.test(termId)) throw new Error("Invalid report term.");
+    const pattern = "^users/[A-Za-z0-9_-]+/test_results/" + (termId || "term_0[1-3]") + "/lessons/lesson_0[1-4]$";
     const select = this.selection(fieldPaths);
     const rows = [];
     let after;

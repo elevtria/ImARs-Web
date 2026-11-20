@@ -13,7 +13,7 @@ export const dataEnabled = env => env.WEB_DATA_ENABLED === "true";
 const reusableShells = new WeakSet();
 export const isReusablePortalShell = response => reusableShells.has(response);
 const staticPortalShells = new Set(["", "/index", "/topic-scheduler", "/quiz-generator", "/analytics", "/student-records", "/batch-upload",
-  "/offline-sync", "/sync-offline-results", "/teacher-ar", "/teacher-manual", "/leaderboard", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
+  "/offline-sync", "/sync-offline-results", "/teacher-ar", "/teacher-manual", "/leaderboard", "/admin-security", "/admin-dashboard", "/admin-manual", "/manage-teachers", "/school-analytics"]);
 const cookie = (token, age) => `${cookieName}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict${age === 0 ? "; Max-Age=0" : ""}`;
 const base64 = bytes => btoa(String.fromCharCode(...bytes)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const unbase64 = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), char => char.charCodeAt(0));
@@ -214,7 +214,7 @@ async function inspectSession(request, env, { now = Date.now(), active = false, 
     const account = await resolveStaff(env, payload.id, accounts, store);
     if (!account || account.uid !== payload.uid || account.role !== payload.role) return null;
     if (!await checkTeacherSession(env, store || appStore(env), account, "web", payload.teacherSession)) return null;
-    return { account, ...checked.result, credentials, teacherSession: payload.teacherSession };
+    return { account: { ...account, authenticatedAt: checked.result.session.createdAt }, ...checked.result, credentials, teacherSession: payload.teacherSession };
   } catch (error) { throw new Error("Login state unavailable", { cause: error }); }
 }
 
@@ -267,6 +267,9 @@ export async function staffProfile(account, store, now = Date.now()) {
   }
   if (account.requiresVerifiedEmail && user.emailVerified !== true) {
     throw Object.assign(new Error("Verify your assigned email before signing in to the website."), { status: 403 });
+  }
+  if (Number.isFinite(account.authenticatedAt) && Number(user.validSince) * 1000 > account.authenticatedAt) {
+    throw Object.assign(new Error("Your password or account access changed. Please sign in again."), { status: 401 });
   }
   return { ...account, profile, row };
 }
@@ -449,7 +452,7 @@ export async function protectWebsite(context, now = Date.now()) {
   if (home && !hasSessionCookie) return new Response(null, { status: 302, headers: { Location: "/login", "Cache-Control": "no-store" } });
   if (path === "/login" || path === "/admin-login" || path === "/api/web-data/school-year" || path === "/api/run-quiz-job" || path.startsWith("/api/web-auth/") || path.startsWith("/api/account-access/") || path.startsWith("/api/student-quizzes/") || path.startsWith("/api/mobile/v1/")) return context.next();
   if (!enabled(env) && !dataEnabled(env)) return context.next();
-  const adminOnly = ["/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
+  const adminOnly = ["/admin-security", "/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
   try {
     const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
     const account = checked?.account;

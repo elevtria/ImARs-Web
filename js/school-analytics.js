@@ -57,13 +57,14 @@ const getInitials = (name) => {
   return parts.map((p) => p[0] || "").join("").toUpperCase();
 };
 
+let reportingPeriod = "All terms";
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
 function performanceCard({ name, details, initials, color, pre, post, gain, preCount, postCount, students }) {
   const countLabel = count => Number.isInteger(count) && count >= 0 ? `${count} completed lesson test result${count === 1 ? "" : "s"}` : "Completed-result count unavailable";
-  const preHint = `Pre-test: results before learning each topic. ${countLabel(preCount)} across all three terms. Missing tests are excluded.`;
-  const postHint = `Post-test: results after learning each topic. ${countLabel(postCount)} across all three terms. Missing tests are excluded.`;
-  const gainHint = "Post-test average minus pre-test average, measured in percentage points (pp). Both averages are needed.";
+  const preHint = `Pre-test: results before learning each topic. ${countLabel(preCount)} for ${reportingPeriod.toLowerCase()}. Missing tests are excluded.`;
+  const postHint = `Post-test: results after learning each topic. ${countLabel(postCount)} for ${reportingPeriod.toLowerCase()}. Missing tests are excluded.`;
+  const gainHint = "Post-test average minus pre-test average, measured in percentage points (pp). These are independent averages; this is not a paired student comparison. Both averages are needed.";
   return `
     <article class="teacher-analytics-card" style="--teacher-color:${color};--score:${post ?? 0}%">
       <span class="analytics-avatar">${escapeHtml(initials)}</span>
@@ -80,21 +81,30 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
       </div>
       <div class="analytics-card-footer">
         <div class="analytics-metric-help" tabindex="0" aria-describedby="${initials}-pre-help"><span>Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong>${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
-        <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Learning gain <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
+        <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Change in average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
       </div>
       <details class="analytics-performance-details"><summary>View performance details</summary><dl>
         <div><dt>Students included</dt><dd>${Number.isInteger(students) ? students : "Not available"}</dd></div>
         <div><dt>Pre-test · Before learning</dt><dd>${formatAdminPercent(pre)} · ${countLabel(preCount)}</dd></div>
         <div><dt>Post-test · After learning</dt><dd>${formatAdminPercent(post)} · ${countLabel(postCount)}</dd></div>
-        <div><dt>Learning gain</dt><dd>${formatAdminGain(gain)}${Number.isFinite(pre) && Number.isFinite(post) ? ` (${formatAdminPercent(post)} minus ${formatAdminPercent(pre)})` : " · Both test averages are needed"}</dd></div>
-        <div><dt>Reporting period</dt><dd>All three terms</dd></div>
-        </dl><p>Averages use completed lesson test results. Missing tests are excluded rather than counted as zero. Gain is measured in percentage points (pp).</p>
+        <div><dt>Change in average</dt><dd>${formatAdminGain(gain)}${Number.isFinite(pre) && Number.isFinite(post) ? ` (${formatAdminPercent(post)} minus ${formatAdminPercent(pre)})` : " · Both test averages are needed"}</dd></div>
+        <div><dt>Reporting period</dt><dd>${escapeHtml(reportingPeriod)}</dd></div>
+        </dl><p>Averages use completed lesson test results. Missing tests are excluded rather than counted as zero. Change in average is measured in percentage points (pp).</p>
       </details>
     </article>
   `;
 }
 
 function renderSchoolAnalytics(report) {
+    reportingPeriod = report.termId ? "Term " + Number(report.termId.slice(-2)) : "All terms";
+    const sectionSelect = document.getElementById("adminSection");
+    if (sectionSelect && Array.isArray(report.sectionDirectory)) {
+      const previous = report.sectionId || "";
+      sectionSelect.innerHTML = '<option value="">All sections</option>' + report.sectionDirectory.map(section => '<option value="' + escapeHtml(section.id) + '">' + escapeHtml(section.name) + '</option>').join("");
+      sectionSelect.value = previous;
+    }
+    const scope = document.getElementById("adminReportScope");
+    if (scope) scope.textContent = reportingPeriod + " · " + (report.sectionDirectory?.find(section => section.id === report.sectionId)?.name || "All sections") + ". Completed tests only. Change compares independent averages, not matched student pairs.";
     const teacherMap = new Map(report.teachers.map((teacher, index) => [teacher.id, {
       ...teacher, name: teacher.analyticsName, initials: getInitials(teacher.analyticsName),
       assignedSections: Array.isArray(teacher.sections) ? teacher.sections.filter(Boolean) : [],
@@ -103,22 +113,10 @@ function renderSchoolAnalytics(report) {
     const sectionMap = new Map(report.sections.map((section, index) => [section.name, { ...section, color: cardColors[index % cardColors.length] }]));
     if (teacherListCount) teacherListCount.textContent = `${teacherMap.size} ${teacherMap.size === 1 ? "teacher" : "teachers"}`;
 
-    const teacherTotals = report.teachers.reduce((totals, teacher) => {
-      totals.preSum += teacher.prePctSum || 0;
-      totals.preCount += teacher.preCount || 0;
-      totals.postSum += teacher.postPctSum || 0;
-      totals.postCount += teacher.postCount || 0;
-      return totals;
-    }, { preSum: 0, preCount: 0, postSum: 0, postCount: 0 });
-    const overallPre = teacherTotals.preCount ? Math.round(teacherTotals.preSum / teacherTotals.preCount) : null;
-    const overallPost = teacherTotals.postCount ? Math.round(teacherTotals.postSum / teacherTotals.postCount) : null;
-    const overallGain = overallPre === null || overallPost === null ? null : overallPost - overallPre;
     const schoolCounts = report.sections.reduce((totals, section) => ({ pre: totals.pre + (section.preCount || 0), post: totals.post + (section.postCount || 0) }), { pre: 0, post: 0 });
     if (overallContainer) {
       overallContainer.innerHTML = [
-        performanceCard({ name: "Overall Teacher Performance", details: "Students assigned to teachers", initials: "TR", color: "#7048ff", pre: overallPre, post: overallPost, gain: overallGain,
-          preCount: teacherTotals.preCount, postCount: teacherTotals.postCount, students: report.teachers.reduce((sum, teacher) => sum + teacher.students, 0) }),
-        performanceCard({ name: "Average School Performance", details: "All students across the school", initials: "SC", color: "#247bce", pre: report.pre, post: report.post, gain: report.gain,
+        performanceCard({ name: "School Performance", details: reportingPeriod + " · Selected sections", initials: "SC", color: "#247bce", pre: report.pre, post: report.post, gain: report.gain,
           preCount: schoolCounts.pre, postCount: schoolCounts.post, students: report.totalStudents })
       ].join("");
     }
@@ -144,7 +142,7 @@ function renderSchoolAnalytics(report) {
             <div><dt>Email</dt><dd>${escapeHtml(teacher.email)}</dd></div>
             <div><dt>Status</dt><dd>${teacher.active ? "Active" : "Inactive"}</dd></div>
             <div class="teacher-detail-sections"><dt>Assigned Sections</dt><dd class="teacher-section-list">${teacher.assignedSections.length ? teacher.assignedSections.map((section) => `<span>${escapeHtml(section)}</span>`).join("") : "No sections assigned"}</dd></div>
-            <div class="teacher-detail-mobile-score"><dt>Improvement</dt><dd>${formatAdminGain(teacher.gain)}</dd></div>
+            <div class="teacher-detail-mobile-score"><dt>Change in average</dt><dd>${formatAdminGain(teacher.gain)}</dd></div>
           </dl></td></tr>
         `).join("");
       }
@@ -182,16 +180,29 @@ function renderSchoolAnalytics(report) {
 
 }
 
-onAuthStateChanged(auth, async user => {
-  if (!user) { window.location.href = "admin-login.html"; return; }
+let currentUser;
+async function loadSelectedReport() {
+  const user = currentUser;
+  if (!user) return;
+  const termId = document.getElementById("adminTerm")?.value || "";
+  const sectionId = document.getElementById("adminSection")?.value || "";
+  const key = termId + ":" + sectionId;
   const timing = createPagePerformance("School Analytics");
   try {
-    await showAdminView({ app, user,
-      load: () => timing.data(getAdminReport),
-      render: report => timing.render(() => renderSchoolAnalytics(report)),
+    await showAdminView({ app, user, page: !termId && !sectionId ? "admin:reports-v3" : "admin:reports-v3:" + key, watchKey: "admin:analytics",
+      load: () => timing.data(() => getAdminReport({ termId, sectionId })),
+      render: report => {
+        if (currentUser?.uid !== user.uid || (document.getElementById("adminTerm")?.value || "") !== termId || (document.getElementById("adminSection")?.value || "") !== sectionId) return;
+        timing.render(() => renderSchoolAnalytics(report));
+      },
       painted: cacheHit => timing.finish("loaded", { cacheHit })
     });
   } catch (error) { timing.finish("error"); console.error("Error loading analytics data:", error); }
+}
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  if (!user) { window.location.href = "admin-login.html"; return; }
+  void loadSelectedReport();
 });
-
+for (const id of ["adminTerm", "adminSection"]) document.getElementById(id)?.addEventListener("change", () => { void loadSelectedReport(); });
 setAnalyticsView("teachers");

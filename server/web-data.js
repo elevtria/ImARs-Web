@@ -7,6 +7,7 @@ import { updateSectionSchedule } from "../js/topic-availability.js";
 import { teacherDashboardSummary } from "./dashboard-summary.js";
 import { activities, activityStorageDataset, MobileActivityStore } from "./mobile-activity-store.js";
 import { loadAdminReports } from "./admin-report-data.js";
+import { securityAudit } from "./security-audit.js";
 import { activityPercent } from "../js/activity-score.js";
 import { scoreOverride, validLessonScore } from "../js/lesson-score.js";
 import { activeProfile } from "./student-quiz-auth.js";
@@ -51,15 +52,15 @@ export function queueClassDirectorySync(env, fetcher, waitUntil, { now = Date.no
 
 // Section transfers must move the redundant student teacher reference too.
 // Preserve identity, activation, section membership and all learning records.
-export async function transferredRosterWrites(store, transfers) {
+export async function transferredRosterWrites(store, transfers, { authoritative = false } = {}) {
   const writes = [];
   for (const { sectionId, previousTeacherId, teacherId } of transfers) {
-    if (!part(sectionId) || !part(teacherId) || !part(previousTeacherId) || teacherId === previousTeacherId) continue;
+    if (!part(sectionId) || !part(teacherId) || (!part(previousTeacherId) && !(authoritative && previousTeacherId === "")) || teacherId === previousTeacherId) continue;
     const students = await store.query("users", { filters: [{ field: "role", value: "student" }, { field: "classCode", value: sectionId }],
       fieldPaths: ["role", "classCode", "teacherId"] });
     for (const student of students) {
       if (student.data.role !== "student" || student.data.classCode !== sectionId || student.data.teacherId === teacherId ||
-          (student.data.teacherId && student.data.teacherId !== previousTeacherId)) continue;
+          (!authoritative && student.data.teacherId && student.data.teacherId !== previousTeacherId)) continue;
       writes.push({ operation: "update", path: "users/" + student.id, updateTime: student.updateTime, data: { teacherId } });
     }
   }
@@ -800,9 +801,11 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
     if (body.action === "student-activity-average") return respond(await studentActivityAverage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "admin-report") {
       if (actor.role !== "admin") throw fail();
+      if ((body.termId !== undefined && body.termId !== "" && !term(body.termId)) ||
+          (body.sectionId !== undefined && body.sectionId !== "" && !part(body.sectionId))) throw fail("Choose a valid term and section.", 400);
       const directory = body.refreshDirectory === true && supabaseWebData(env)
         ? await refreshDirectory(store, env, settingsFetcher) : undefined;
-      return respond({ ...await loadAdminReports(store), ...(directory ? { directory } : {}) });
+      return respond({ ...await loadAdminReports(store, { termId: body.termId, sectionId: body.sectionId }), ...(directory ? { directory } : {}) });
     }
     if (body.action === "teacher-report-page") return respond(await teacherReportPage(scope, body, env, activityFetcher, legacyActivityFetcher));
     if (body.action === "teacher-topic-overview") return respond(await teacherTopicOverview(scope));
@@ -847,6 +850,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
           data: { SectionName: cleanName, teacherId: invitation.id, gradeLevel: "Grade 6", createdAt: { $type: "serverTimestamp" } }
         });
       }
+      createWrites.push(securityAudit(actor, "teacher-created", invitation.id));
       await transaction.commit(createWrites); transaction = null;
       return respond({ id: invitation.id });
     }
@@ -938,6 +942,13 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if (!Array.isArray(body.writes) || !body.writes.length || body.writes.length > 100 || new Set(body.writes.map(write => write?.path)).size !== body.writes.length) throw fail("Save between 1 and 100 distinct records at a time.", 400);
       const writes = [];
       for (const write of body.writes) writes.push(await scope.write(write));
+      if (actor.role === "admin") {
+        for (const write of [...writes]) {
+          if (/^users\/[^/]+$/.test(write.path) && typeof write.data?.active === "boolean") {
+            writes.push(securityAudit(actor, write.data.status === "deleted" ? "teacher-removed" : write.data.active ? "teacher-activated" : "teacher-deactivated", write.path.split("/")[1]));
+          } else if (write.path === schoolYearPath) writes.push(securityAudit(actor, "school-year-updated", "schoolYear", String(write.data.startYear)));
+        }
+      }
       await transaction.commit(writes);
       if (writes.some(write => write.path === schoolYearPath)) schoolYears.delete(schoolYearCacheKey(transaction));
       transaction = null;

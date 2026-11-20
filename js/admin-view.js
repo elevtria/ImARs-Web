@@ -7,14 +7,14 @@ const reportIntervalMs = 5 * 60_000;
 export const formatAdminPercent = value => Number.isFinite(value) ? `${value}%` : "—";
 export const formatAdminGain = value => Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value} pp` : "—";
 
-export async function showAdminView({ app, user, load, render, verified = () => {}, painted }) {
+export async function showAdminView({ app, user, load, render, verified = () => {}, painted, page = "admin:reports-v3", watchKey = page }) {
   const auth = getAuth(app);
   if (auth.currentUser?.uid !== user.uid) return;
   try {
     // The shared sign-in flow verifies the live staff profile before this callback.
     if (auth.currentUser.role !== "admin") throw Object.assign(new Error("Administrator access is required."), { code: "permission-denied" });
     verified();
-    await showTeacherView({ app, user, page: "admin:reports-v2", load, painted,
+    await showTeacherView({ app, user, page, watchKey, load, painted,
       freshForMs: reportIntervalMs, refreshIntervalMs: reportIntervalMs,
       render: report => { render(report); revealContent("admin-report"); }
     });

@@ -63,6 +63,14 @@ function showState(state, message = "") {
 }
 
 export function showTeacherView(options) {
+  const { app, user, page, watchKey = page, refreshIntervalMs = 60000 } = options;
+  if (getAuth(app).currentUser?.uid !== user.uid) return Promise.resolve();
+  // Even when a request is already pending, returning to a filter must replace
+  // the previous filter's watcher rather than leave it polling in the background.
+  if (!options.refreshOnly) {
+    refreshViews.get(watchKey)?.();
+    refreshViews.set(watchKey, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true }), refreshIntervalMs, options.refreshOnFocus));
+  }
   const key = options.user.uid + ":" + options.page;
   if (pendingViews.has(key)) return pendingViews.get(key);
   const pending = renderTeacherView(options).finally(() => { if (pendingViews.get(key) === pending) pendingViews.delete(key); });
@@ -71,12 +79,8 @@ export function showTeacherView(options) {
 }
 
 async function renderTeacherView(options) {
-  const { app, user, page, load, render, painted = () => {}, freshForMs = 60000, refreshIntervalMs = 60000, refreshOnly = false } = options;
+  const { app, user, page, load, render, painted = () => {}, freshForMs = 60000, refreshOnly = false } = options;
   if (getAuth(app).currentUser?.uid !== user.uid) return;
-  if (!refreshOnly) {
-    refreshViews.get(page)?.();
-    refreshViews.set(page, watchVisibleData(app, user, () => showTeacherView({ ...options, refreshOnly: true }), refreshIntervalMs, options.refreshOnFocus));
-  }
   const cache = prepareTeacherCache(app, user);
   let version = cache.version();
   let saved = cache.get(user.uid, page);

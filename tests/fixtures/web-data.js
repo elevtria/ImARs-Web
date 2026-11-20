@@ -11,7 +11,7 @@ const stamp = { $type: "serverTimestamp" };
 const union = (...values) => ({ $type: "arrayUnion", values });
 export function fixture() {
   const data = new Map([
-    ...accounts.map(account => ["users/" + account.id, { ...account, active: true, password: "must-never-leave-server", webInvitationNonce: "private-marker" }]),
+    ...accounts.map(account => ["users/" + account.id, { ...account, active: true, authEmailVerified: true, password: "must-never-leave-server", webInvitationNonce: "private-marker" }]),
     ["users/0026271000", { uid: "student-a", role: "student", classCode: "A", teacherId: "TEACH1000", displayName: "Student A" }],
     ["users/0026271001", { uid: "student-b", role: "student", classCode: "B", teacherId: "TEACH1001" }],
     ["classes/A", { teacherId: "TEACH1000", SectionName: "A" }], ["classes/B", { teacherId: "TEACH1001", SectionName: "B" }],

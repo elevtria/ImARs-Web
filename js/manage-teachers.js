@@ -140,7 +140,7 @@ refreshTeachersButton?.addEventListener("click", async () => {
     if (auth.currentUser?.uid !== uid) return;
     const cache = teacherViewCache();
     cache.invalidate();
-    cache.put(uid, "admin:reports-v2", encodeView(report));
+    cache.put(uid, "admin:reports-v3", encodeView(report));
     teachers = report.teachers;
     render();
     status.textContent = report.directory?.ok === false
