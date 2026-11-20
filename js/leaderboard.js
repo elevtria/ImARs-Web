@@ -42,7 +42,7 @@ function render() {
   podium.innerHTML = winners.map((student, index) => {
     const position = index + 1;
     return `<article class="podium-place podium-place-${position}" data-rank="${student.rank}" aria-label="Rank ${student.rank}: ${escapeHtml(student.name)}, ${student.points} points">
-      <div class="podium-award" aria-hidden="true"><span><svg viewBox="0 0 48 48"><path d="M14 8h20v12a10 10 0 0 1-20 0Z"/><path d="M14 12H8v5a8 8 0 0 0 8 8m18-13h6v5a8 8 0 0 1-8 8M24 30v8m-8 3h16m-13-3h10"/><path class="award-star" d="m24 12 2.1 4.4 4.9.7-3.5 3.5.8 4.8-4.3-2.3-4.3 2.3.8-4.8-3.5-3.5 4.9-.7Z"/></svg></span><b>RANK ${student.rank}</b></div>
+      <div class="podium-award" aria-hidden="true"><span>★</span><b>${student.rank}</b></div>
       <div class="podium-name"><strong>${escapeHtml(student.name)}</strong><span>${escapeHtml(student.sectionName)}</span><b>${number.format(student.points)} <small>pts</small></b></div>
       <div class="podium-column"><span class="podium-medal" aria-hidden="true">${position === 1 ? "★" : "✦"}</span><span class="podium-rank">${student.rank}</span></div>
     </article>`;
