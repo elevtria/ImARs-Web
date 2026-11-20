@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/admin-organization.css" />
   <link rel="stylesheet" href="css/theme.css" />
 </head>
-<body class="admin-portal" data-auth-pending>
+<body class="admin-portal school-analytics-page" data-auth-pending>
   <div class="login-cubes" aria-hidden="true"><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span><span class="floating-cube"><i></i><i></i><i></i></span></div>
   <div class="app">
   <header class="topbar">
@@ -54,7 +54,9 @@
     <section class="admin-filters" aria-label="School analytics filters">
       <label>Term<select id="adminTerm"><option value="">All terms</option><option value="term_01">Term 1</option><option value="term_02">Term 2</option><option value="term_03">Term 3</option></select></label>
       <label>Section<select id="adminSection"><option value="">All sections</option></select></label>
+      <div class="analytics-report-downloads"><button class="ghost-btn" id="downloadSchoolPdf" type="button" disabled>Download PDF</button><button class="ghost-btn" id="downloadSchoolCsv" type="button" disabled>Download CSV</button></div>
       <p id="adminReportScope" role="status">Completed results only; missing tests are excluded.</p>
+      <p id="schoolExportStatus" role="status" aria-live="polite"></p>
     </section>
     <section class="analytics-grid analytics-overview" id="overallAnalytics" aria-label="Overall teacher and school performance" data-loading-path="users" data-loading-label="Loading overall performance…" data-auth-shell data-await-content="admin-report"></section>
     <section class="teacher-list-section" id="teacherListSection" aria-labelledby="teacherListTitle" data-auth-shell data-await-content="admin-report">

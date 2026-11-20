@@ -18,8 +18,8 @@ test("rankings filter sections before ranking and preserve ties without mutating
     { id: "d", name: "Dan", classId: "A", points: 0 }
   ];
   const overall = rankStudents(students);
-  assert.deepEqual(overall.map(row => [row.name, row.rank]), [["Cara", 1], ["Ana", 2], ["Bella", 2], ["Dan", 4]]);
-  assert.deepEqual(rankStudents(students, "A").map(row => [row.name, row.rank]), [["Ana", 1], ["Bella", 1], ["Dan", 3]]);
+  assert.deepEqual(overall.map(row => [row.name, row.rank]), [["Cara", 1], ["Ana", 2], ["Bella", 2], ["Dan", 3]]);
+  assert.deepEqual(rankStudents(students, "A").map(row => [row.name, row.rank]), [["Ana", 1], ["Bella", 1], ["Dan", 2]]);
   assert.equal(students[0].name, "Bella");
   assert.equal(students[0].rank, undefined);
   assert.deepEqual(rankStudents([], "A"), []);

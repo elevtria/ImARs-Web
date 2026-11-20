@@ -1,6 +1,7 @@
 import { initializeApp } from "./firebase-auth.js";
 import { getAuth, onAuthStateChanged } from "./firebase-auth.js";
-import { getAdminReport } from "./firebase-data.js";
+import { getAdminReport, getFirestore, doc, getDoc } from "./firebase-data.js";
+import { buildSchoolAnalyticsReport, schoolAnalyticsCsv, schoolTrend } from "./school-analytics-report-data.js";
 import { formatAdminGain, formatAdminPercent, showAdminView } from "./admin-view.js";
 import { createPagePerformance } from "./page-performance.js";
 
@@ -14,8 +15,15 @@ const teacherListCount = document.getElementById("teacherListCount");
 const overallContainer = document.getElementById("overallAnalytics");
 const sectionContainer = document.getElementById("sectionAnalytics");
 const viewButtons = [...document.querySelectorAll("[data-view]")];
+let analyticsView = "teachers", reportReady = false, exporting = false, exportController;
+const downloadButtons = [document.getElementById("downloadSchoolPdf"), document.getElementById("downloadSchoolCsv")];
+const exportStatus = document.getElementById("schoolExportStatus");
+const syncDownloads = () => downloadButtons.forEach(button => { if (button) button.disabled = exporting || !reportReady; });
+const cancelExport = () => { exportController?.abort(); };
 
 function setAnalyticsView(view) {
+  if (view !== analyticsView) cancelExport();
+  analyticsView = view;
   const showTeachers = view === "teachers";
 
   viewButtons.forEach((button) => {
@@ -60,6 +68,19 @@ const getInitials = (name) => {
 let reportingPeriod = "All terms";
 const cardColors = ["#7048ff", "#ec168d", "#12a8df", "#10b981"];
 
+function arrowGraph(pre, post) {
+  const trend = schoolTrend(pre, post);
+  if (!trend) return '<div class="school-trend school-trend-empty"><h3>Pre-test to post-test</h3><p>Both test averages are needed to show the comparison.</p></div>';
+  return `<div class="school-trend school-trend-${trend.direction}"><div class="school-trend-heading"><h3>Pre-test to post-test</h3><span>${formatAdminGain(trend.change)}</span></div>
+    <svg viewBox="0 0 640 185" role="img" aria-label="Pre-test ${pre} percent to post-test ${post} percent; change ${trend.change} percentage points">
+      <defs><marker id="school-trend-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor" /></marker></defs>
+      <g class="school-trend-grid"><path d="M60 40H590M60 90H590M60 140H590"/><text x="12" y="44">100%</text><text x="20" y="94">50%</text><text x="26" y="144">0%</text></g>
+      <path class="school-trend-line" d="M100 ${trend.preY} L550 ${trend.postY}" marker-end="url(#school-trend-arrow)"/><circle cx="100" cy="${trend.preY}" r="5" fill="currentColor"/>
+      <text class="school-trend-value" x="100" y="${trend.preY - 15}">${pre}%</text><text class="school-trend-value" x="550" y="${trend.postY - 15}">${post}%</text>
+      <text class="school-trend-label" x="100" y="173">Pre-test</text><text class="school-trend-label" x="550" y="173">Post-test</text>
+    </svg><p>Comparison of two averages, not a timeline of student progress.</p></div>`;
+}
+
 function performanceCard({ name, details, initials, color, pre, post, gain, preCount, postCount, students }) {
   const countLabel = count => Number.isInteger(count) && count >= 0 ? `${count} completed lesson test result${count === 1 ? "" : "s"}` : "Completed-result count unavailable";
   const preHint = `Pre-test: results before learning each topic. ${countLabel(preCount)} for ${reportingPeriod.toLowerCase()}. Missing tests are excluded.`;
@@ -83,6 +104,7 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
         <div class="analytics-metric-help" tabindex="0" aria-describedby="${initials}-pre-help"><span>Pre-test average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong>${formatAdminPercent(pre)}</strong><small class="analytics-test-stage">Before learning</small><span class="analytics-card-tooltip" id="${initials}-pre-help" role="tooltip">${escapeHtml(preHint)}</span></div>
         <div class="analytics-metric-help analytics-gain-result" tabindex="0" aria-describedby="${initials}-gain-help"><span>Change in average <span class="analytics-help-icon" aria-hidden="true">i</span></span><strong class="teacher-gain">${formatAdminGain(gain)}</strong><small class="analytics-test-stage">Post-test minus pre-test</small><span class="analytics-card-tooltip" id="${initials}-gain-help" role="tooltip">${gainHint}</span></div>
       </div>
+      ${arrowGraph(pre, post)}
       <details class="analytics-performance-details"><summary>View performance details</summary><dl>
         <div><dt>Students included</dt><dd>${Number.isInteger(students) ? students : "Not available"}</dd></div>
         <div><dt>Pre-test · Before learning</dt><dd>${formatAdminPercent(pre)} · ${countLabel(preCount)}</dd></div>
@@ -96,6 +118,7 @@ function performanceCard({ name, details, initials, color, pre, post, gain, preC
 }
 
 function renderSchoolAnalytics(report) {
+    reportReady = true; syncDownloads();
     reportingPeriod = report.termId ? "Term " + Number(report.termId.slice(-2)) : "All terms";
     const sectionSelect = document.getElementById("adminSection");
     if (sectionSelect && Array.isArray(report.sectionDirectory)) {
@@ -182,6 +205,7 @@ function renderSchoolAnalytics(report) {
 
 let currentUser;
 async function loadSelectedReport() {
+  cancelExport(); reportReady = false; syncDownloads();
   const user = currentUser;
   if (!user) return;
   const termId = document.getElementById("adminTerm")?.value || "";
@@ -200,9 +224,39 @@ async function loadSelectedReport() {
   } catch (error) { timing.finish("error"); console.error("Error loading analytics data:", error); }
 }
 onAuthStateChanged(auth, user => {
+  cancelExport(); reportReady = false; syncDownloads();
   currentUser = user;
   if (!user) { window.location.href = "admin-login.html"; return; }
   void loadSelectedReport();
 });
 for (const id of ["adminTerm", "adminSection"]) document.getElementById(id)?.addEventListener("change", () => { void loadSelectedReport(); });
 setAnalyticsView("teachers");
+
+async function downloadSchoolReport(format) {
+  if (!reportReady || exporting || auth.currentUser?.role !== "admin") return;
+  const user = auth.currentUser, termId = document.getElementById("adminTerm").value, sectionId = document.getElementById("adminSection").value;
+  const view = analyticsView, controller = new AbortController(); exportController = controller;
+  exporting = true; syncDownloads(); exportStatus.textContent = "Loading the complete report for your selection…";
+  const check = () => { controller.signal.throwIfAborted(); if (auth.currentUser?.uid !== user.uid) throw new DOMException("Sign-in changed.", "AbortError"); };
+  try {
+    const [data, year] = await Promise.all([getAdminReport({ termId, sectionId }), getDoc(doc(getFirestore(app), "webSettings", "schoolYear"))]);
+    check();
+    if ((data.termId || "") !== termId || (data.sectionId || "") !== sectionId) throw new Error("The report selection changed. Try again.");
+    const report = buildSchoolAnalyticsReport(data, { startYear: year.data()?.startYear, view, generatedBy: user.displayName || "Administrator" });
+    exportStatus.textContent = `Preparing ${format.toUpperCase()}…`;
+    let blob;
+    if (format === "pdf") {
+      const { schoolAnalyticsPdf } = await import("./school-analytics-report-pdf.js"); check();
+      const output = await schoolAnalyticsPdf(report); check();
+      blob = new Blob([output.pdfBytes], { type: "application/pdf" });
+    } else blob = new Blob([schoolAnalyticsCsv(report)], { type: "text/csv;charset=utf-8" });
+    check();
+    const url = URL.createObjectURL(blob), link = document.createElement("a");
+    link.href = url; link.download = report.filename + "." + format; document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    exportStatus.textContent = `${format.toUpperCase()} downloaded · ${report.period} · ${report.scope} · ${report.view}.`;
+  } catch (error) { exportStatus.textContent = error.name === "AbortError" ? "Selection or sign-in changed. Please download again." : "Unable to download. " + error.message; }
+  finally { exporting = false; if (exportController === controller) exportController = null; syncDownloads(); }
+}
+downloadButtons[0]?.addEventListener("click", () => downloadSchoolReport("pdf"));
+downloadButtons[1]?.addEventListener("click", () => downloadSchoolReport("csv"));

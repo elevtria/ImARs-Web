@@ -103,3 +103,36 @@
   .teacher-analytics-card { min-height: 270px; }
   .section-analytics-card { padding: 15px 13px; }
 }
+
+.analytics-report-downloads { display: flex; flex-wrap: wrap; gap: 10px; align-self: end; }
+.analytics-report-downloads button { min-height: 44px; white-space: nowrap; }
+.analytics-report-downloads button:disabled { opacity: .55; cursor: wait; }
+#schoolExportStatus:empty { display: none; }
+.admin-portal .analytics-overview .school-trend { grid-column: 1 / -1; border: 1px solid var(--line, #c0d9ed); border-radius: 18px; margin-top: 12px; padding: 20px 22px 14px; background: #f4faff; color: #219461; }
+.school-trend-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.school-trend-heading h3, .school-trend-empty h3 { color: var(--ink); font-size: 15px; font-weight: 700; margin: 0; }
+.school-trend-heading > span { font-size: 20px; font-weight: 800; }
+.school-trend svg { display: block; width: 100%; max-height: 225px; margin-top: 12px; overflow: visible; }
+.school-trend-line { fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
+.school-trend-grid path { fill: none; stroke: var(--line, #c0d9ed); stroke-width: 1; }
+.school-trend-grid text { fill: var(--muted); font-size: 11px; }
+.school-trend-value { fill: var(--ink); font-size: 15px; font-weight: 700; text-anchor: middle; }
+.school-trend-label { fill: var(--ink); font-size: 12px; text-anchor: middle; }
+.school-trend > p { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 6px 0 0; }
+.admin-portal .analytics-overview .school-trend-down { color: #bb4655; }
+.admin-portal .analytics-overview .school-trend-flat { color: #247bce; }
+[data-theme="dark"] .admin-portal .analytics-overview .school-trend { background: #1b3553; color: #5ed7a2; }
+[data-theme="dark"] .admin-portal .analytics-overview .school-trend-down { color: #ff9cab; }
+[data-theme="dark"] .admin-portal .analytics-overview .school-trend-flat { color: #8ccaff; }
+@media(max-width:640px) { .analytics-report-downloads { width: 100%; } .analytics-report-downloads button { flex: 1; } .admin-portal .analytics-overview .school-trend { padding: 16px 12px 12px; } .school-trend-heading h3 { font-size: 13px; } }
+
+@media(max-width:640px) {
+  .school-analytics-page .school-year-control { width: 150px; min-width: 0; }
+  .school-analytics-page select.admin-year { width: 100%; min-width: 0; max-width: 100%; }
+  .school-analytics-page .topbar-right { gap: 8px; }
+  .school-analytics-page .topbar-left .page-title { display: none; }
+  .school-trend-label { font-size: 24px; }
+  .school-trend-value { font-size: 28px; }
+  .school-trend-grid text { font-size: 20px; }
+  .school-trend-line { stroke-width: 6; }
+}

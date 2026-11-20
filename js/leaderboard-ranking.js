@@ -6,7 +6,7 @@ export function rankStudents(students, sectionId = "") {
     names.compare(first.name, second.name) || names.compare(first.id, second.id));
   let rank = 0;
   return rows.map((student, index) => {
-    if (index === 0 || student.points !== rows[index - 1].points) rank = index + 1;
+    if (index === 0 || student.points !== rows[index - 1].points) rank++;
     return { ...student, rank };
   });
 }
