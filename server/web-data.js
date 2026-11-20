@@ -360,8 +360,9 @@ class Scope {
         return { ...input, updateTime: row.updateTime };
       }
       if (actor.role !== "teacher" || (row && previous.role !== "student")) throw fail();
-      // Only enforce old class ownership if the teacher is not transferring/re-importing into their own classCode
-      if (row && (!data.classCode || previous.classCode === data.classCode)) await this.student(p[1]);
+      // Authorize the existing roster entry before considering its proposed
+      // section. Only the administrator's transfer workflow can move ownership.
+      if (row) await this.student(p[1]);
       const allowed = ["schoolId", "firstName", "middleName", "middleInitial", "lastName", "displayName", "fullName", "role", "classCode", "section", "teacherId", "providedEmail", "email", "active", "updatedAt", "deletedAt", "archiveReason", "lastQrSyncAt", "avatarId", "isClaimed", "completedQuizzes", "gamification", "createdAt"];
       if (!names(allowed) || (data.role !== undefined && data.role !== "student") || (data.schoolId !== undefined && data.schoolId !== p[1]) ||
           (data.teacherId !== undefined && data.teacherId !== actor.id) || (data.active !== undefined && typeof data.active !== "boolean") ||
@@ -828,7 +829,7 @@ export async function webData({ request, env, waitUntil }, { store, authenticate
       if ((subject !== "" && !text(subject)) || !Array.isArray(sections) || sections.length > 50 || sections.some(section => !text(section))) throw fail("Enter valid teacher details.", 400);
       const existing = await store.query("users", { filters: [{ field: "role", op: "==", value: "teacher" }] });
       const normalizedEmail = profile.email.toLowerCase();
-      if (existing.some(row => [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
+      if (existing.some(row => row.data.status !== "deleted" && [row.data.email, row.data.providedEmail].some(value => typeof value === "string" && value.toLowerCase() === normalizedEmail)) ||
           settings(env).some(account => account.email.toLowerCase() === normalizedEmail)) throw fail("That email already belongs to a staff account. Restore or update that account instead.", 409);
       const ids = [...existing.map(row => row.id), ...settings(env).map(account => account.id)];
       const maximum = Math.max(999, ...ids.filter(id => /^TEACH\d{4,10}$/.test(id)).map(id => Number(id.slice(5))));

@@ -143,8 +143,9 @@ export async function resolveStaff(env, identifier, accounts = settings(env), st
   if (String(localProfile?.data?.status || "").toLowerCase() === "deleted") return null;
   let profile = null;
 
-  // Always check live Firebase Firestore first so newly registered mobile teachers work immediately
-  if (supabaseWebData(env)) {
+  // Supabase is authoritative once a teacher is linked. Consult the legacy
+  // directory only while completing an unlinked mobile registration.
+  if (supabaseWebData(env) && !localProfile?.data?.uid) {
     try {
       const fbStore = new FirestoreAdmin(env);
       const fbProfile = await fbStore.get("users/" + id);
@@ -227,10 +228,10 @@ const identities = new WeakMap();
 // Share the middleware's verified session only inside this exact Request.
 // Roles and active status are still checked from the current staff profile.
 const requestSessions = new WeakMap();
-export async function staffProfile(account, store, now = Date.now()) {
+export async function staffProfile(account, store, now = Date.now(), { refreshProfile = false } = {}) {
   // The approved account supplies both IDs. Its live profile and Auth status
   // can be read independently; neither result grants access on its own.
-  const pendingProfile = (account.adminRow || account.profileRow)
+  const pendingProfile = !refreshProfile && (account.adminRow || account.profileRow)
     ? Promise.resolve({ row: account.adminRow || account.profileRow })
     : store.get("users/" + account.id).then(row => ({ row }), error => ({ error }));
   // Cache only Auth account status briefly; database role/active checks remain live.
@@ -286,7 +287,7 @@ export async function requireStaff(request, env, store = appStore(env)) {
   if (!account || (request.headers.has("X-Web-User") && request.headers.get("X-Web-User") !== account.uid)) {
     throw Object.assign(new Error("Please sign in to the website."), { status: 401 });
   }
-  return staffProfile(account, store);
+  return staffProfile(account, store, Date.now(), { refreshProfile: verified?.env === env });
 }
 
 const publicUser = account => ({ uid: account.uid, id: account.id, role: account.role,
@@ -439,7 +440,7 @@ export async function authApi({ request, env }, now = Date.now(), { store } = {}
   }
 }
 
-export async function protectWebsite(context, now = Date.now()) {
+export async function protectWebsite(context, now = Date.now(), { store } = {}) {
   const { request, env } = context;
   const url = new URL(request.url);
   let path;
@@ -459,7 +460,7 @@ export async function protectWebsite(context, now = Date.now()) {
   if (!enabled(env) && !dataEnabled(env)) return context.next();
   const adminOnly = ["/admin-school-years", "/admin-security", "/admin-dashboard", "/admin-profile", "/admin-manual", "/manage-teachers", "/school-analytics"].includes(path);
   try {
-    const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/") });
+    const checked = await inspectSession(request, env, { now, active: !path.startsWith("/api/"), store });
     const account = checked?.account;
     if (!account) {
       if (path.startsWith("/api/")) return json({ error: "Please sign in to the website." }, 401);

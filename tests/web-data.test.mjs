@@ -296,7 +296,7 @@ test("successful teacher web sign-in invalidates only that teacher's password-is
   assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'wrong',portal:'teacher'})).status,401);
   assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed web login cannot sign out mobile');
   app.data.get('users/TEACH1000').active=false;
-  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'correct',portal:'teacher'})).status,403);
+  assert.equal((await app.auth('login',{identifier:'TEACH1000',password:'correct',portal:'teacher'})).status,401);
   app.data.get('users/TEACH1000').active=true;
   assert.equal((await mobile('mobile-session',{mobileSession})).status,200,'a failed live profile check must not revoke mobile');
   await app.login('ADMIN1000','admin');assert.equal((await mobile('mobile-session',{mobileSession})).status,200);
@@ -519,7 +519,7 @@ test("website identity uses an HttpOnly cookie; anonymous, forged, cross-site an
   }
   assert.equal(app.store.began, 0); assert.equal(app.store.committed, 0);
   app.data.get("users/TEACH1000").active = false;
-  assert.equal((await app.call(get("users/TEACH1000"), cookie)).status, 403);
+  assert.equal((await app.call(get("users/TEACH1000"), cookie)).status, 401);
 });
 
 test("teacher dashboard, class reports, QR history, schedules and marker progress load only within the teacher's scope", async () => {
@@ -725,12 +725,33 @@ test("forged roles, UIDs, ownership, credentials, scores and arbitrary fields ca
   assert.equal(app.store.committed, 0); assert.equal(app.store.rolledBack, app.store.began);
 });
 
+test("a section change cannot take another teacher's student, while moves within owned sections preserve results", async () => {
+  const app = fixture(), cookie = await app.login();
+  app.data.set("classes/C", { teacherId: "TEACH1000", SectionName: "C" });
+  const foreign = structuredClone(app.data.get("users/0026271001"));
+  const resultPath = "users/0026271000/test_results/term_01/lessons/lesson_01";
+  app.data.set(resultPath, { preTestScore: 0, postTestScore: 8 });
+  for (const operation of ["set", "update"]) {
+    const denied = await app.call({ action: "commit", writes: [{ operation, merge: true, path: "users/0026271001",
+      data: { classCode: "A", teacherId: "TEACH1000", active: true } }] }, cookie);
+    assert.equal(denied.status, 403);
+    assert.deepEqual(app.data.get("users/0026271001"), foreign);
+  }
+  assert.equal(app.store.committed, 0);
+  const moved = await app.call({ action: "commit", writes: [{ operation: "update", path: "users/0026271000",
+    data: { classCode: "C" } }] }, cookie);
+  assert.equal(moved.status, 200);
+  assert.equal(app.data.get("users/0026271000").classCode, "C");
+  assert.equal(app.data.get("users/0026271000").uid, "student-a");
+  assert.deepEqual(app.data.get(resultPath), { preTestScore: 0, postTestScore: 8 });
+});
+
 test("batched writes are all-or-nothing and actor access is checked again inside the transaction", async () => {
   const app = fixture(), cookie = await app.login();
   const response = await app.call({ action: "commit", writes: [{ operation: "update", path: "users/0026271000", data: { displayName: "Must not save" } }, { operation: "update", path: "users/0026271001", data: { displayName: "Forbidden" } }] }, cookie);
   assert.equal(response.status, 403); assert.equal(app.data.get("users/0026271000").displayName, "Student A");
   app.store.onBegin = () => { app.data.get("users/TEACH1000").active = false; };
-  assert.equal((await app.call(save("users/0026271000", { displayName: "Must not save" }), cookie)).status, 403);
+  assert.equal((await app.call(save("users/0026271000", { displayName: "Must not save" }), cookie)).status, 401);
   assert.equal(app.store.committed, 0);
 });
 
@@ -973,10 +994,10 @@ test("middleware and data share one request's session verification while account
   app.env.WEB_LOGIN_STATE={idFromName:binding.idFromName,get(name){const stub=binding.get(name);return {fetch(url,options){if(url.endsWith('/session'))checks++;return stub.fetch(url,options);}};}};
   const body={action:'teacher-report-page',termId:'term_01'};
   const request=app.request('/api/web-data',body,cookie);
-  const response=await protectWebsite({env:app.env,request,next:()=>webData({env:app.env,request},{store:app.store})});
+  const response=await protectWebsite({env:app.env,request,next:()=>webData({env:app.env,request},{store:app.store})},Date.now(),{store:app.store});
   assert.equal(response.status,200);assert.equal(checks,1,'the same request must not verify the session twice');
   const denied=app.request('/api/web-data',body,cookie);
-  const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}});
+  const blocked=await protectWebsite({env:app.env,request:denied,next:()=>{app.data.get('users/TEACH1000').active=false;return webData({env:app.env,request:denied},{store:app.store});}},Date.now(),{store:app.store});
   assert.equal(blocked.status,403,'a verified session cannot bypass a disabled account');
 });
 

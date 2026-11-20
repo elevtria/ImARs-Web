@@ -9,6 +9,18 @@ import { RENEW_AFTER_MS, IDLE_AFTER_MS, ABSOLUTE_AFTER_MS, PREVIOUS_GRACE_MS } f
 import { accountAccess } from "../server/account-access.js";
 import { onRequest, CONTENT_SECURITY_POLICY } from "../functions/_middleware.js";
 import { decodeFields, encodeFields } from "../server/firestore-admin.js";
+import { SupabaseAppStore } from "../server/supabase-app-store.js";
+
+test("platform sessions stay in Supabase while permitted legacy profile mirrors remain available", async () => {
+  const store = Object.create(SupabaseAppStore.prototype);
+  const mirrored = [];
+  store.firestoreMirror = { commit: async writes => mirrored.push(...writes) };
+  const session = { operation: "set", path: "_accountAccess/teacher-a/sessions/teacher", data: { epoch: "private" } };
+  await store.mirrorWritesToFirestore([session]);
+  assert.deepEqual(mirrored, []);
+  await store.mirrorWritesToFirestore([session, { operation: "update", path: "users/TEACH1000", data: { active: false } }]);
+  assert.deepEqual(mirrored.map(write => write.path), ["users/TEACH1000"]);
+});
 
 const accounts = [
   { id: "TEACH1000", uid: "teacher-a", email: "teacher@example.test", role: "teacher" },
@@ -261,7 +273,7 @@ test("teacher sign-in and session checks use Supabase even when Firestore is una
   const teacher = accounts[0];
   const sessionPath = "webSettings/accountAccess/accounts/" + teacher.uid + "/sessions/teacher";
   const time = "2026-11-08T07:00:00Z";
-  const rows = new Map([["users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: true }]]);
+  const rows = new Map([["users/" + teacher.id, { uid: teacher.uid, role: teacher.role, email: teacher.email, active: true }]]);
   Object.assign(app.env, {
     WEB_DATA_ENABLED: "true", TEACHER_SESSION_SYNC_ENABLED: "true", IMARS_SUPABASE_WEB_DATA: "true",
     IMARS_SUPABASE_URL: "https://fixture.supabase.co", IMARS_SUPABASE_APP_DATASET_ID: dataset,
@@ -298,8 +310,8 @@ test("teacher sign-in and session checks use Supabase even when Firestore is una
   const signedIn = await app.login(teacher.id, "correct");
   assert.equal(signedIn.status, 200);
   assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 200);
-  rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, active: false });
-  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 403);
+  rows.set("users/" + teacher.id, { uid: teacher.uid, role: teacher.role, email: teacher.email, active: false });
+  assert.equal((await app.call("identity", {}, app.cookieOf(signedIn))).status, 401);
   assert.equal(identityCalls, 1);
   assert.equal(firestoreCalls, 0);
 });

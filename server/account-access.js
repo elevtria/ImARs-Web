@@ -240,9 +240,10 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
         }
         return json({ ok: true, profileId: id, role });
       }
-      if ((data.uid && data.uid !== uid) || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);
+      if (data.uid || data.isRegistered === true || !["student", "teacher"].includes(role)) throw fail("Account access needs administrator setup.", 403);
       const linked = await store.findUser(uid);
       if (linked && linked.id !== id) throw fail("This sign-in is already linked to a school profile. Contact your administrator.", 403);
+      if (linked) throw fail("Account activation changed. Please retry.", 409);
       const name = String(user.displayName || data.displayName || data.fullName || "").trim().slice(0, 200);
       const updates = { uid, role, isClaimed: true, isRegistered: true, active: true, displayName: name, fullName: name };
       if (role === "student") Object.assign(updates, { hasSeenClassCode: false,
@@ -250,12 +251,11 @@ export async function accountAccess({ request, env }, { store, fetcher = fetch, 
       if (role === "teacher") updates.status = "active";
       try {
         await store.activate(id, profile, uid, updates, role, email(user.email));
-      } catch {
-        await store.begin();
-        await store.commit([
-          { operation: "set", path: "users/" + id, data: updates, merge: true },
-          { operation: "set", path: "_accountAccess/" + uid, data: { profileId: id, role, authEmail: email(user.email), active: true }, merge: true }
-        ]);
+      } catch (error) {
+        if (error.status === 409 || error.upstreamStatus === 409 || error.upstreamStatus === 412) {
+          throw fail("Account activation changed. Please retry.", 409);
+        }
+        throw error;
       }
       return json({ ok: true, profileId: id, role });
     }

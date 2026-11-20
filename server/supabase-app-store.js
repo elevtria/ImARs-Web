@@ -72,8 +72,10 @@ export class SupabaseAppStore {
   }
 
   async mirrorWritesToFirestore(writes) {
-    // Security events and recovery cooldowns belong only to the current backend.
-    writes = writes.filter(write => !write.path.startsWith("webSettings/security/"));
+    // Security events, recovery cooldowns and platform session ownership belong
+    // only to the authoritative backend, never a best-effort legacy mirror.
+    writes = writes.filter(write => !write.path.startsWith("webSettings/security/") &&
+      !/^_accountAccess\/[^/]+\/sessions\//.test(write.path));
     if (!writes.length) return;
     if (!this.firestoreMirror) return;
     try {
