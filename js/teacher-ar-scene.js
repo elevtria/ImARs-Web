@@ -53,7 +53,7 @@ export class TeacherMarkerTracker extends MindARThree {
       this.controller.stopProcessVideo();
       throw new DOMException("Camera closed", "AbortError");
     }
-    enableMotionRecovery(this.controller);
+    this.expireStalePoses = enableMotionRecovery(this.controller);
   }
   resize() { if (this.controller && this.video && !this.closed) super.resize(); }
   close() {
@@ -426,6 +426,7 @@ export class TeacherARScene {
     this.scanGeneration++;
     const tracker = this.tracker;
     this.tracker = null; this.tracked = false; this.activeAnchor = null;
+    this.emptyFrameRendered = false;
     this.markerPose?.reset();
     if (this.model) { this.scene.add(this.model); this.model.visible = false; }
     tracker?.close();
@@ -469,6 +470,7 @@ export class TeacherARScene {
   }
   draw() {
     if (this.closed || document.visibilityState === "hidden") return;
+    this.tracker?.expireStalePoses?.();
     if (this.model) this.model.visible = Boolean(this.tracker && this.tracked);
     const delta = Math.min(this.clock.getDelta(), .1);
     const marker = this.activeAnchor?.group;
@@ -480,7 +482,11 @@ export class TeacherARScene {
       this.advanceDissection(delta);
       this.mixers?.forEach(mixer => mixer.update(delta));
     }
-    if (this.tracker) this.tracker.renderer.render(this.tracker.scene, this.tracker.camera);
+    // Leave graphics time for marker detection while the camera is searching.
+    if (this.tracker && (this.tracked || !this.emptyFrameRendered)) {
+      this.tracker.renderer.render(this.tracker.scene, this.tracker.camera);
+      this.emptyFrameRendered = !this.tracked;
+    }
     this.positionHotspots(true);
   }
   screenshot() {
