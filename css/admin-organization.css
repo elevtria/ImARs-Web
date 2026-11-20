@@ -38,3 +38,31 @@ html[data-theme=dark] .admin-portal select,html[data-theme=dark] .admin-reauth,h
 html[data-theme=dark] .admin-table-wrap th{background:#234461;color:#dfedfa}html[data-theme=dark] .admin-table-wrap td{border-color:#46627d}html[data-theme=dark] .admin-note,html[data-theme=dark] .admin-attention dt{color:#b8cde0}
 @media(max-width:640px){.admin-tabs{display:flex;width:auto}.admin-tabs button{flex:1;padding:12px}.admin-portal .admin-filters label,.admin-portal .admin-security-form label{min-width:100%}.admin-table-wrap th,.admin-table-wrap td{padding:12px}.admin-reauth form{padding:22px}}
 @media(max-width:640px){.admin-portal .analytics-overview .teacher-analytics-card{display:block}.analytics-overview .analytics-donut{margin:20px auto}.analytics-overview .analytics-card-footer{margin-top:20px}.analytics-overview .analytics-performance-details{margin-top:20px}}
+
+/* Give manual sections consistent breathing room and expand the overview chart. */
+@media screen {
+  .admin-portal .manual-page .manual-section-nav { gap: 18px; margin-top: 24px; margin-bottom: 28px; }
+  .admin-portal .manual-page .manual-section-nav-card { padding: 22px 24px; }
+  .admin-portal .manual-page > .manual-sheet { padding: 28px; }
+  .admin-portal .manual-page .manual-sheet h2 { margin-bottom: 16px; }
+  .admin-portal .manual-page .manual-checklist { gap: 12px; line-height: 1.75; }
+  .admin-portal .manual-page .manual-link { display: inline-block; margin-top: 18px; }
+  .admin-portal .learning-panel .learning-content { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 48px); padding: 24px 0 4px; align-items: stretch; }
+  .admin-portal .learning-panel .school-score-chart { width: 100%; }
+  .admin-portal .learning-panel .school-score-chart > p { font-size: 13px; line-height: 1.5; }
+  .admin-portal .learning-panel .learning-metrics { width: 100%; gap: 16px; padding-block: 20px; }
+  .admin-portal .learning-panel .learning-row { display: flex; flex-direction: column; justify-content: center; padding: 20px 22px; }
+  .admin-portal .learning-panel .learning-meta { font-size: 15px; }
+  .admin-portal .learning-panel .learning-meta strong { font-size: clamp(22px, 2vw, 30px); }
+  .admin-portal .learning-panel .learning-row small { font-size: 12px; line-height: 1.6; margin-top: 8px; }
+}
+@media screen and (max-width: 800px) {
+  .admin-portal .learning-panel .learning-content { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .admin-portal .learning-panel .learning-metrics { padding-block: 0; }
+}
+@media screen and (max-width: 640px) {
+  .admin-portal .manual-page .manual-section-nav-card { padding: 18px; }
+  .admin-portal .manual-page > .manual-sheet { padding: 22px; }
+  .admin-portal .learning-panel .learning-row { padding: 16px; }
+  .admin-portal .learning-panel .learning-meta { font-size: 13px; }
+}
